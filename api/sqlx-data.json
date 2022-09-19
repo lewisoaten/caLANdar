@@ -1,0 +1,21 @@
+{
+  "db": "PostgreSQL",
+  "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT id FROM test"
+  }
+}
