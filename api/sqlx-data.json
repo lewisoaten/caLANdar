@@ -9,9 +9,7 @@
           "type_info": "Int4"
         }
       ],
-      "nullable": [
-        false
-      ],
+      "nullable": [false],
       "parameters": {
         "Left": []
       }

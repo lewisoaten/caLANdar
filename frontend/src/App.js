@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import logo from './logo.svg';
-import './App.css';
+import logo from "./logo.svg";
+import "./App.css";
 
 function App() {
   // useEffect(() => {
@@ -8,21 +8,21 @@ function App() {
   //   .then((response) => console.log(response));
   // }, []);
 
-  const [test, setTest] = useState([])
+  const [test, setTest] = useState([]);
 
   const fetchData = () => {
     fetch("/api")
-      .then(response => {
-        return response.text()
+      .then((response) => {
+        return response.text();
       })
-      .then(data => {
-        setTest(data)
-      })
-  }
+      .then((data) => {
+        setTest(data);
+      });
+  };
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
   return (
     <div className="App">
@@ -31,9 +31,7 @@ function App() {
         <p>
           Edit <code>src/App.js</code> and save to reload.
         </p>
-        <p>
-        {test}
-        </p>
+        <p>{test}</p>
         <a
           className="App-link"
           href="https://reactjs.org"
