@@ -23,8 +23,12 @@ async fn index(pool: &rocket::State<PgPool>) -> String {
     output
 }
 
-#[launch]
-async fn rocket() -> _ {
+// #[launch]
+// async fn rocket() -> _ {
+
+// }
+#[rocket::main]
+async fn main() -> Result<(), rocket::Error> {
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect("postgres://postgres:password@db/calandar")
@@ -36,7 +40,12 @@ async fn rocket() -> _ {
         .await
         .expect("Failed to migrate database.");
 
-    rocket::build()
+    #[allow(clippy::no_effect_underscore_binding)]
+    let rocket = rocket::build()
         .manage::<PgPool>(pool)
-        .mount("/api", routes![index])
+        .mount("/api", routes![index]);
+
+    let _rocket = rocket.launch().await?;
+
+    Ok(())
 }

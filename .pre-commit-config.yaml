@@ -36,6 +36,20 @@ repos:
     rev: v1.0
     hooks:
       - id: fmt
-        args: ["--manifest-path", "api/Cargo.toml", "--"]
+        args: ["--manifest-path", "api/Cargo.toml", "--all", "--"]
       - id: clippy
-        args: ["--manifest-path", "api/Cargo.toml", "--", "-D", "warnings"]
+        args:
+          [
+            "--manifest-path",
+            "api/Cargo.toml",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+            "-D",
+            "clippy::pedantic",
+            "-D",
+            "clippy::nursery",
+            "-D",
+            "clippy::unwrap_used",
+          ]
