@@ -7,6 +7,8 @@ services:
     environment:
       - ROCKET_ENV=production
       - DATABASE_URL=postgres://postgres:password@db/calandar
+      - ROCKET_DATABASE_URL=postgres://postgres:password@db/calandar
+      - ROCKET_PASETO_SECRET_KEY=wubbalubbadubdubwubbalubbadubdub
 
   frontend:
     build: frontend
@@ -23,8 +25,11 @@ services:
       # - asdf:/usr/share/nginx/html:ro
 
   db:
-    image: "postgres"
+    image: "postgres:14.5"
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=postgres
       - POSTGRES_DB=calandar
+
+  redis:
+    image: "redis:7.0.4"
