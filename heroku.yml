@@ -5,6 +5,6 @@ setup:
 build:
   docker:
     api: api/Dockerfile
-    frontend: frotend/Dockerfile
-run:
-  web: bundle exec puma -C config/puma.rb
+    frontend: frontend/Dockerfile
+# run:
+#   web: bundle exec puma -C config/puma.rb
