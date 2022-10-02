@@ -5,7 +5,7 @@ services:
     volumes:
       - ./api:/usr/src/app/calandar
     environment:
-      - ROCKET_ENV=production
+      - ROCKET_ENV=development
       - DATABASE_URL=postgres://postgres:password@db/calandar
       - ROCKET_DATABASE_URL=postgres://postgres:password@db/calandar
       - ROCKET_PASETO_SECRET_KEY=wubbalubbadubdubwubbalubbadubdub
