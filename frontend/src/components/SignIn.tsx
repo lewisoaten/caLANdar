@@ -40,6 +40,8 @@ export default function SignIn() {
     if (isSignedIn()) {
       navigate(location.state?.from || "/home");
     }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

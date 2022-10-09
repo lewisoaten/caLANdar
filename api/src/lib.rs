@@ -1,10 +1,14 @@
 extern crate rocket;
 
 use rocket::{
-    get, post,
+    fairing::{Fairing, Info, Kind},
+    get,
+    http::Header,
+    options, post,
     request::{self, FromRequest, Outcome},
+    routes,
     serde::{json, json::Json, Deserialize, Serialize},
-    State,
+    Request, Response, State,
 };
 use rocket_okapi::okapi::openapi3::{
     Object, SecurityRequirement, SecurityScheme, SecuritySchemeData,
@@ -18,8 +22,8 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
+use shuttle_service::{error::CustomError, SecretStore, ShuttleRocket};
 use sqlx::postgres::PgPool;
-use sqlx::postgres::PgPoolOptions;
 
 pub struct User {
     email: String,
@@ -195,39 +199,60 @@ fn login(
     Ok(Json(LoginResponse { token }))
 }
 
-#[rocket::main]
-async fn main() -> Result<(), rocket::Error> {
-    #[derive(Deserialize)]
-    #[serde(crate = "rocket::serde")]
-    struct Config {
-        database_url: String,
-        paseto_secret_key: String,
+#[allow(clippy::needless_pass_by_value)]
+#[options("/<_..>")]
+const fn all_options() -> rocket::response::status::NoContent {
+    rocket::response::status::NoContent
+}
+
+pub struct CORS;
+
+#[rocket::async_trait]
+impl Fairing for CORS {
+    fn info(&self) -> Info {
+        Info {
+            name: "Attaching CORS headers to responses",
+            kind: Kind::Response,
+        }
     }
 
-    let rocket = rocket::build();
-    let figment = rocket.figment();
+    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
+        response.set_header(Header::new(
+            "Access-Control-Allow-Origin",
+            "https://calandar.netlify.app",
+        ));
+        response.set_header(Header::new(
+            "Access-Control-Allow-Methods",
+            "POST, GET, PATCH, OPTIONS",
+        ));
+        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+    }
+}
 
-    let config: Config = figment
-        .extract()
-        .expect("Rocket figment should have parsed the config.");
-
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&config.database_url)
+#[shuttle_service::main]
+async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("PASETO_SECRET_KEY")
         .await
-        .expect("Database connection established and pool created.");
+        .map_err(CustomError::new)?;
+
+    let rocket = rocket::build();
 
     sqlx::migrate!()
         .run(&pool)
         .await
         .expect("Database migrated to latest version.");
 
-    let key = PasetoSymmetricKey::<V4, Local>::from(Key::from(config.paseto_secret_key.as_bytes()));
+    let key = PasetoSymmetricKey::<V4, Local>::from(Key::from(token.as_bytes()));
 
     #[allow(clippy::no_effect_underscore_binding)]
     let rocket = rocket
+        .attach(CORS)
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(key)
+        .mount("/api", routes![all_options])
         .mount("/api", openapi_get_routes![index, login])
         .mount(
             "/api/docs/",
@@ -237,7 +262,5 @@ async fn main() -> Result<(), rocket::Error> {
             }),
         );
 
-    let _rocket = rocket.launch().await?;
-
-    Ok(())
+    Ok(rocket)
 }

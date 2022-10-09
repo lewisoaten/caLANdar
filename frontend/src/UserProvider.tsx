@@ -1,4 +1,4 @@
-import React, { Dispatch, ReactNode, createContext, useState } from "react";
+import React, { ReactNode, createContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 interface IUserContext {
@@ -35,7 +35,7 @@ function UserProvider({ children }: Props) {
       return user_details;
     }
 
-    fetch("/api/login", {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
