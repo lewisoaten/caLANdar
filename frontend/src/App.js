@@ -11,7 +11,7 @@ function App() {
   const [test, setTest] = useState([]);
 
   const fetchData = () => {
-    fetch("/api")
+    fetch("${process.env.REACT_APP_API_PROXY}/api")
       .then((response) => {
         return response.text();
       })
