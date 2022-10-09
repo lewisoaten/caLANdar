@@ -21,7 +21,7 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
-use shuttle_service::ShuttleRocket;
+use shuttle_service::{error::CustomError, SecretStore, ShuttleRocket};
 use sqlx::postgres::PgPool;
 
 pub struct User {
@@ -222,25 +222,20 @@ impl Fairing for CORS {
 
 #[shuttle_service::main]
 async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
-    #[derive(Deserialize)]
-    #[serde(crate = "rocket::serde")]
-    struct Config {
-        paseto_secret_key: String,
-    }
+    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    let token = pool
+        .get_secret("PASETO_SECRET_KEY")
+        .await
+        .map_err(CustomError::new)?;
 
     let rocket = rocket::build();
-    let figment = rocket.figment();
-
-    let config: Config = figment
-        .extract()
-        .expect("Rocket figment should have parsed the config.");
 
     sqlx::migrate!()
         .run(&pool)
         .await
         .expect("Database migrated to latest version.");
 
-    let key = PasetoSymmetricKey::<V4, Local>::from(Key::from(config.paseto_secret_key.as_bytes()));
+    let key = PasetoSymmetricKey::<V4, Local>::from(Key::from(token.as_bytes()));
 
     #[allow(clippy::no_effect_underscore_binding)]
     let rocket = rocket

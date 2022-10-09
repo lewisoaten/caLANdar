@@ -1,5 +1,4 @@
 import React from "react";
-import { createContext, useState } from "react";
 import "./App.css";
 import { UserProvider } from "./UserProvider";
 import Views from "./Views";

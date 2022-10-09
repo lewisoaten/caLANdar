@@ -10,7 +10,7 @@ const Home = () => {
   const token = userDetails?.token;
   const [test, setTest] = useState();
 
-  const fetchData = () => {
+  useEffect(() => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api`, {
       headers: {
         Authorization: "Bearer " + token,
@@ -22,10 +22,6 @@ const Home = () => {
       .then((data) => {
         setTest(data.value);
       });
-  };
-
-  useEffect(() => {
-    fetchData();
   }, []);
 
   return (
