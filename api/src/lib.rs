@@ -4,8 +4,9 @@ use rocket::{
     fairing::{Fairing, Info, Kind},
     get,
     http::Header,
-    post,
+    options, post,
     request::{self, FromRequest, Outcome},
+    routes,
     serde::{json, json::Json, Deserialize, Serialize},
     Request, Response, State,
 };
@@ -198,6 +199,12 @@ fn login(
     Ok(Json(LoginResponse { token }))
 }
 
+#[allow(clippy::needless_pass_by_value)]
+#[options("/<_..>")]
+const fn all_options() -> rocket::response::status::NoContent {
+    rocket::response::status::NoContent
+}
+
 pub struct CORS;
 
 #[rocket::async_trait]
@@ -210,7 +217,10 @@ impl Fairing for CORS {
     }
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        response.set_header(Header::new(
+            "Access-Control-Allow-Origin",
+            "https://calandar.netlify.app",
+        ));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
             "POST, GET, PATCH, OPTIONS",
@@ -242,6 +252,7 @@ async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
         .attach(CORS)
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(key)
+        .mount("/api", routes![all_options])
         .mount("/api", openapi_get_routes![index, login])
         .mount(
             "/api/docs/",
