@@ -222,6 +222,10 @@ impl Fairing for CORS {
             "https://calandar.netlify.app",
         ));
         response.set_header(Header::new(
+            "Access-Control-Allow-Origin",
+            "https://calandar.org",
+        ));
+        response.set_header(Header::new(
             "Access-Control-Allow-Methods",
             "POST, GET, PATCH, OPTIONS",
         ));
