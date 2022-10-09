@@ -216,21 +216,23 @@ impl Fairing for CORS {
         }
     }
 
-    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        response.set_header(Header::new(
-            "Access-Control-Allow-Origin",
-            "https://calandar.netlify.app",
-        ));
-        response.set_header(Header::new(
-            "Access-Control-Allow-Origin",
-            "https://calandar.org",
-        ));
-        response.set_header(Header::new(
-            "Access-Control-Allow-Methods",
-            "POST, GET, PATCH, OPTIONS",
-        ));
-        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
-        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+    async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
+        if let Some(origin_header) = request.headers().get_one("Origin") {
+            if origin_header == "https://calandar.org"
+                || origin_header.ends_with("calandar.netlify.app")
+            {
+                response.set_header(rocket::http::Header::new(
+                    "Access-Control-Allow-Origin",
+                    origin_header,
+                ));
+                response.set_header(Header::new(
+                    "Access-Control-Allow-Methods",
+                    "POST, GET, PATCH, OPTIONS",
+                ));
+                response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+                response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+            };
+        };
     }
 }
 
