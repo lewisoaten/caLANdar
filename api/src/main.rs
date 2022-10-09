@@ -56,7 +56,7 @@ impl<'r> FromRequest<'r> for User {
                         let key = request
                             .rocket()
                             .state::<PasetoSymmetricKey<V4, Local>>()
-                            .expect("No key found");
+                            .expect("PASETO encryption key found in config.");
 
                         let generic_token = match PasetoParser::<V4, Local>::default()
                             // you can check any claim even custom claims
@@ -207,18 +207,20 @@ async fn main() -> Result<(), rocket::Error> {
     let rocket = rocket::build();
     let figment = rocket.figment();
 
-    let config: Config = figment.extract().expect("Failed to extract config.");
+    let config: Config = figment
+        .extract()
+        .expect("Rocket figment should have parsed the config.");
 
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&config.database_url)
         .await
-        .expect("Failed to create pool.");
+        .expect("Database connection established and pool created.");
 
     sqlx::migrate!()
         .run(&pool)
         .await
-        .expect("Failed to migrate database.");
+        .expect("Database migrated to latest version.");
 
     let key = PasetoSymmetricKey::<V4, Local>::from(Key::from(config.paseto_secret_key.as_bytes()));
 
