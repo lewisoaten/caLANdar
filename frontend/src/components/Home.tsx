@@ -10,6 +10,7 @@ const Home = () => {
   const token = userDetails?.token;
   const [test, setTest] = useState();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api`, {
       headers: {
@@ -22,8 +23,6 @@ const Home = () => {
       .then((data) => {
         setTest(data.value);
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
