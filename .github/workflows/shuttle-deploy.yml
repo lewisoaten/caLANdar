@@ -13,3 +13,4 @@ jobs:
       - uses: shuttle-hq/deploy-action@v0.0.3
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
+          working-directory: api
