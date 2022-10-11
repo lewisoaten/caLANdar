@@ -12,7 +12,8 @@ interface IUserContext {
 // UserDispatchContext: to mutate the context state
 const UserContext = createContext({} as IUserContext);
 const UserDispatchContext = createContext({
-  signIn: (email: string, redirectTo: string) => {},
+  signIn: (email: string) => Promise<Response>,
+  verifyEmail: (token: string) => Promise<Response>,
   signOut: () => {},
   isSignedIn: () => false as boolean,
 });
@@ -29,39 +30,63 @@ function UserProvider({ children }: Props) {
 
   const navigate = useNavigate();
 
-  function signIn(email: string, redirectTo: string = "/home") {
+  function signIn(email: string) {
     const user_details = getStoredAccount();
     if (user_details.loggedIn) {
       return user_details;
     }
 
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/login`, {
+    const signin_promise = fetch(
+      `${process.env.REACT_APP_API_PROXY}/api/login`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: email }),
+      },
+    ).then((response) => {
+      if (response.status === 200) {
+        return response.json();
+      } else {
+        alert("Invalid email");
+        throw new Error("Invalid email");
+      }
+    });
+
+    return signin_promise;
+  }
+
+  function verifyEmail(token: string) {
+    const user_details = getStoredAccount();
+    if (user_details.loggedIn) {
+      return user_details;
+    }
+
+    return fetch(`${process.env.REACT_APP_API_PROXY}/api/verify-email`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ email: email }),
+      body: JSON.stringify({ token: token }),
     })
       .then((response) => {
         if (response.status === 200) {
           return response.json();
         } else {
-          alert("Invalid email");
-          throw new Error("Invalid email");
+          alert("Invalid verification token");
+          throw new Error("Invalid verification token");
         }
       })
       .then((response) => {
         const accountDetails = {
-          email: email,
+          email: response.email,
           token: response.token,
           loggedIn: true,
         };
         setAccount(accountDetails);
-        navigate(redirectTo);
         return accountDetails;
       });
-
-    return {} as IUserContext;
   }
 
   function signOut() {
@@ -85,6 +110,7 @@ function UserProvider({ children }: Props) {
 
   const dispatchContext = {
     signIn,
+    verifyEmail,
     signOut,
     isSignedIn,
   };
