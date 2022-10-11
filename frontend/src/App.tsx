@@ -2,15 +2,19 @@ import React from "react";
 import "./App.css";
 import { UserProvider } from "./UserProvider";
 import Views from "./Views";
-import Menu from "./components/Menu";
+import Dashboard from "./components/Dashboard";
+import { createTheme, ThemeProvider } from "@mui/material/styles";
 
 function App() {
+  const theme = createTheme();
+
   return (
     <UserProvider>
-      <div>
-        <Menu />
-        <Views />
-      </div>
+      <ThemeProvider theme={theme}>
+        <Dashboard>
+          <Views />
+        </Dashboard>
+      </ThemeProvider>
     </UserProvider>
   );
 }
