@@ -1,0 +1,54 @@
+# To get started with Dependabot version updates, you'll need to specify which
+# package ecosystems to update and where the package manifests are located.
+# Please see the documentation for all configuration options:
+# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
+
+# e.g.
+# version: 2
+
+# updates:
+#   - package-ecosystem: npm
+#     directory: "/"
+#     schedule:
+#       interval: daily
+#     open-pull-requests-limit: 10
+#     labels:
+#       - dependencies
+#     versioning-strategy: increase
+#     ignore:
+#       - dependency-name: "@types/node"
+#         versions:
+#           - ">= 11.a"
+
+version: 2
+updates:
+  - package-ecosystem: "npm" # See documentation for possible values
+    directory: "/frontend/" # Location of package manifests
+    schedule:
+      interval: "daily"
+      time: "21:00"
+    open-pull-requests-limit: 10
+  - package-ecosystem: "docker"
+    directory: "/frontend/"
+    schedule:
+      interval: "daily"
+      time: "21:00"
+    open-pull-requests-limit: 10
+  - package-ecosystem: "cargo"
+    directory: "/api/"
+    schedule:
+      interval: "daily"
+      time: "21:00"
+    open-pull-requests-limit: 10
+  - package-ecosystem: "docker"
+    directory: "/api/"
+    schedule:
+      interval: "daily"
+      time: "21:00"
+    open-pull-requests-limit: 10
+  - package-ecosystem: "github-actions"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "daily"
+      time: "21:00"
+    open-pull-requests-limit: 10
