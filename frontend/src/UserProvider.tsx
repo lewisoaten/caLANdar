@@ -10,7 +10,11 @@ interface IUserContext {
 // Create two context:
 // UserContext: to query the context state
 // UserDispatchContext: to mutate the context state
-const UserContext = createContext({} as IUserContext);
+const UserContext = createContext({
+  email: "",
+  token: "",
+  loggedIn: false,
+} as IUserContext);
 const UserDispatchContext = createContext({
   signIn: (email: string) => Promise<Response>,
   verifyEmail: (token: string) => Promise<Response>,
@@ -84,28 +88,27 @@ function UserProvider({ children }: Props) {
           token: response.token,
           loggedIn: true,
         };
-        setAccount(accountDetails);
+        localStorage.setItem("user_context", JSON.stringify(accountDetails));
+        setUserDetails(accountDetails);
         return accountDetails;
       });
   }
 
   function signOut() {
     localStorage.removeItem("user_context");
+    setUserDetails({ email: "", token: "", loggedIn: false });
     navigate("/");
   }
 
   function getStoredAccount() {
     const user = localStorage.getItem("user_context");
-    return user ? JSON.parse(user) : ({} as IUserContext);
+    return user
+      ? JSON.parse(user)
+      : ({ email: "", token: "", loggedIn: false } as IUserContext);
   }
 
   function isSignedIn() {
     return getStoredAccount().loggedIn;
-  }
-
-  function setAccount(user_context: IUserContext) {
-    localStorage.setItem("user_context", JSON.stringify(user_context));
-    setUserDetails(user_context);
   }
 
   const dispatchContext = {
