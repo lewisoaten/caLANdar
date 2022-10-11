@@ -1,27 +1,27 @@
 import React from "react";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect } from "react";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
 import TextField from "@mui/material/TextField";
 import Box from "@mui/material/Box";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import Alert from "@mui/material/Alert";
 import Typography from "@mui/material/Typography";
 import Container from "@mui/material/Container";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import { UserDispatchContext } from "../UserProvider";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 const theme = createTheme();
 
-export default function SignIn() {
-  const { signIn, isSignedIn } = useContext(UserDispatchContext);
+export default function VerifyEmail() {
+  const { verifyEmail, isSignedIn } = useContext(UserDispatchContext);
 
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [submitted, setSubmitted] = useState(false);
+  const [searchParams] = useSearchParams();
+  let [urlToken, setUrlToken] = React.useState(searchParams.get("token"));
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     // Prevent page reload
@@ -30,16 +30,16 @@ export default function SignIn() {
     const data = new FormData(event.currentTarget);
 
     //Validate email
-    const email = data.get("email") as string;
-    if (!email) {
-      alert("Please enter an email");
+    const token = data.get("token") as string;
+    if (!token) {
+      alert("Please enter your verification token.");
       return;
     }
 
-    signIn(email)
+    verifyEmail(token)
       // @ts-ignore: Cannot possibly work out why this is complaining about type.
       .then(() => {
-        setSubmitted(true);
+        navigate(location.state?.from || "/home");
       });
   };
 
@@ -67,40 +67,34 @@ export default function SignIn() {
             <LockOutlinedIcon />
           </Avatar>
           <Typography component="h1" variant="h5">
-            Sign In
+            Verify Email Token
           </Typography>
-          {!submitted ? (
-            <Box
-              component="form"
-              onSubmit={handleSubmit}
-              noValidate
-              sx={{ mt: 1 }}
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            noValidate
+            sx={{ mt: 1 }}
+          >
+            <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="token"
+              label="Token"
+              name="token"
+              autoComplete="token"
+              defaultValue={urlToken}
+              autoFocus
+            />
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              sx={{ mt: 3, mb: 2 }}
             >
-              <TextField
-                margin="normal"
-                required
-                fullWidth
-                id="email"
-                label="Email Address"
-                name="email"
-                autoComplete="email"
-                autoFocus
-              />
-              <Button
-                type="submit"
-                fullWidth
-                variant="contained"
-                sx={{ mt: 3, mb: 2 }}
-              >
-                Submit Email Verification
-              </Button>
-            </Box>
-          ) : (
-            <Alert severity="success">
-              Verification email sent, please click the link in your email to
-              continue.
-            </Alert>
-          )}
+              Sign In
+            </Button>
+          </Box>
         </Box>
       </Container>
     </ThemeProvider>
