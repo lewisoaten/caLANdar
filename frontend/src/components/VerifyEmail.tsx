@@ -21,7 +21,7 @@ export default function VerifyEmail() {
   const location = useLocation();
 
   const [searchParams] = useSearchParams();
-  let [urlToken, setUrlToken] = React.useState(searchParams.get("token"));
+  let [urlToken] = React.useState(searchParams.get("token"));
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     // Prevent page reload
