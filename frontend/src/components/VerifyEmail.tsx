@@ -1,5 +1,5 @@
 import React from "react";
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useState } from "react";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -18,7 +18,7 @@ export default function VerifyEmail() {
   const location = useLocation();
 
   const [searchParams] = useSearchParams();
-  let [urlToken] = React.useState(searchParams.get("token"));
+  let [urlToken] = useState(searchParams.get("token"));
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     // Prevent page reload
@@ -36,13 +36,13 @@ export default function VerifyEmail() {
     verifyEmail(token)
       // @ts-ignore: Cannot possibly work out why this is complaining about type.
       .then(() => {
-        navigate(location.state?.from || "/home");
+        navigate(location.state?.from || "/events");
       });
   };
 
   useEffect(() => {
     if (isSignedIn()) {
-      navigate(location.state?.from || "/home");
+      navigate(location.state?.from || "/events");
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

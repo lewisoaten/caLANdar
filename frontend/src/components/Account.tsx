@@ -1,14 +1,11 @@
 import React from "react";
-import Button from "@mui/material/Button";
-import Container from "@mui/material/Container";
-import Grid from "@mui/material/Grid";
-import Paper from "@mui/material/Paper";
+import { Button, Container, Grid, Paper, Typography } from "@mui/material";
 import { useContext } from "react";
-import { UserDispatchContext } from "../UserProvider";
-import Title from "./Title";
+import { UserDispatchContext, UserContext } from "../UserProvider";
 
 const Account = () => {
   const { signOut } = useContext(UserDispatchContext);
+  const { email } = useContext(UserContext);
 
   const onClick = () => {
     signOut();
@@ -26,7 +23,17 @@ const Account = () => {
               height: 240,
             }}
           >
-            <Title>Account page</Title>
+            <Typography
+              component="h2"
+              variant="h6"
+              color="primary"
+              gutterBottom
+            >
+              Account page
+            </Typography>
+            <Typography variant="subtitle1" gutterBottom>
+              {email}
+            </Typography>
             <Button onClick={onClick}>Sign Out</Button>
           </Paper>
         </Grid>

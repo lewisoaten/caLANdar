@@ -1,12 +1,15 @@
 extern crate rocket;
 
-use chrono::{prelude::Utc, Duration};
+use anyhow::anyhow;
+use chrono::{prelude::Utc, DateTime, Duration};
 use rocket::{
+    delete,
     fairing::{Fairing, Info, Kind},
     get,
     http::Header,
     options, post,
     request::{self, FromRequest, Outcome},
+    response::status,
     routes,
     serde::{json, json::Json, Deserialize, Serialize},
     Request, Response, State,
@@ -24,12 +27,9 @@ use rocket_okapi::{
 };
 use rusty_paseto::prelude::*;
 use sendgrid::v3::{Content, Email as SendGridEmail, Message, Personalization, Sender};
-use shuttle_service::{error::CustomError, SecretStore, ShuttleRocket};
+use shuttle_secrets::SecretStore;
+use shuttle_service::ShuttleRocket;
 use sqlx::postgres::PgPool;
-
-pub struct User {
-    email: String,
-}
 
 #[derive(Debug)]
 pub enum UserError {
@@ -47,6 +47,45 @@ struct PasetoToken {
     sub: String,
 }
 
+fn authorise_paseto_header(
+    key: &PasetoSymmetricKey<V4, Local>,
+    authorization_header: &str,
+    must_be_admin: bool,
+) -> Result<String, UserError> {
+    match authorization_header.strip_prefix("Bearer ") {
+        Some(token) => {
+            let generic_token = match PasetoParser::<V4, Local>::default()
+                .check_claim(IssuerClaim::from("calandar.org"))
+                .check_claim(TokenIdentifierClaim::from("api"))
+                .parse(token, key)
+            {
+                Ok(generic_token) => generic_token,
+                Err(_) => {
+                    return Err(UserError::TokenError);
+                }
+            };
+
+            let typed_token: PasetoToken = match json::from_value(generic_token) {
+                Ok(typed_token) => typed_token,
+                Err(_) => {
+                    return Err(UserError::TokenError);
+                }
+            };
+
+            if must_be_admin && typed_token.sub != "lewis@oaten.name" {
+                return Err(UserError::TokenError);
+            }
+
+            Ok(typed_token.sub)
+        }
+        None => Err(UserError::MissingToken),
+    }
+}
+
+pub struct User {
+    email: String,
+}
+
 #[rocket::async_trait]
 impl<'r> FromRequest<'r> for User {
     type Error = UserError;
@@ -55,43 +94,20 @@ impl<'r> FromRequest<'r> for User {
         let authorization_header = request.headers().get_one("Authorization");
 
         match authorization_header {
-            Some(encrypted_token) => encrypted_token.split_once("Bearer ").map_or(
-                Outcome::Failure((rocket::http::Status::BadRequest, UserError::TokenError)),
-                |(_, token)| {
-                    let key = request
-                        .rocket()
-                        .state::<PasetoSymmetricKey<V4, Local>>()
-                        .expect("PASETO encryption key found in config.");
+            Some(authorization_header) => {
+                let key = request
+                    .rocket()
+                    .state::<PasetoSymmetricKey<V4, Local>>()
+                    .expect("PASETO encryption key found in config.");
 
-                    let generic_token = match PasetoParser::<V4, Local>::default()
-                        .check_claim(IssuerClaim::from("calandar.org"))
-                        .check_claim(TokenIdentifierClaim::from("api"))
-                        .parse(token, key)
-                    {
-                        Ok(generic_token) => generic_token,
-                        Err(_) => {
-                            return Outcome::Failure((
-                                rocket::http::Status::Unauthorized,
-                                UserError::TokenError,
-                            ))
-                        }
-                    };
-
-                    let typed_token: PasetoToken = match json::from_value(generic_token) {
-                        Ok(typed_token) => typed_token,
-                        Err(_) => {
-                            return Outcome::Failure((
-                                rocket::http::Status::Unauthorized,
-                                UserError::TokenError,
-                            ))
-                        }
-                    };
-
-                    Outcome::Success(Self {
-                        email: typed_token.sub,
-                    })
-                },
-            ),
+                match authorise_paseto_header(key, authorization_header, false) {
+                    Ok(email) => Outcome::Success(Self { email }),
+                    Err(_) => Outcome::Failure((
+                        rocket::http::Status::Unauthorized,
+                        UserError::TokenError,
+                    )),
+                }
+            }
             None => request::Outcome::Failure((
                 rocket::http::Status::Unauthorized,
                 UserError::MissingToken,
@@ -134,8 +150,77 @@ impl<'a> OpenApiFromRequest<'a> for User {
     }
 }
 
-#[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+pub struct AdminUser {
+    #[allow(dead_code)]
+    email: String,
+}
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for AdminUser {
+    type Error = UserError;
+
+    async fn from_request(request: &'r rocket::Request<'_>) -> request::Outcome<Self, Self::Error> {
+        let authorization_header = request.headers().get_one("Authorization");
+
+        match authorization_header {
+            Some(authorization_header) => {
+                let key = request
+                    .rocket()
+                    .state::<PasetoSymmetricKey<V4, Local>>()
+                    .expect("PASETO encryption key found in config.");
+
+                match authorise_paseto_header(key, authorization_header, true) {
+                    Ok(email) => Outcome::Success(Self { email }),
+                    Err(_) => Outcome::Failure((
+                        rocket::http::Status::Unauthorized,
+                        UserError::TokenError,
+                    )),
+                }
+            }
+            None => request::Outcome::Failure((
+                rocket::http::Status::Unauthorized,
+                UserError::MissingToken,
+            )),
+        }
+    }
+}
+
+impl<'a> OpenApiFromRequest<'a> for AdminUser {
+    fn from_request_input(
+        _gen: &mut OpenApiGenerator,
+        _name: String,
+        _required: bool,
+    ) -> rocket_okapi::Result<RequestHeaderInput> {
+        // Setup global requirement for Security scheme
+        let security_scheme = SecurityScheme {
+            description: Some(
+                "Requires an Bearer token to access, token is: `mytoken`.".to_owned(),
+            ),
+            // Setup data requirements.
+            // In this case the header `Authorization: mytoken` needs to be set.
+            data: SecuritySchemeData::Http {
+                scheme: "bearer".to_owned(), // `basic`, `digest`, ...
+                // Just gives use a hint to the format used
+                bearer_format: Some("bearer".to_owned()),
+            },
+            extensions: Object::default(),
+        };
+        // Add the requirement for this route/endpoint
+        // This can change between routes.
+        let mut security_req = SecurityRequirement::new();
+        // Each security requirement needs to be met before access is allowed.
+        security_req.insert("User".to_owned(), Vec::new());
+        // These vvvvvvv-----^^^^^^^^ values need to match exactly!
+        Ok(RequestHeaderInput::Security(
+            "User".to_owned(),
+            security_scheme,
+            security_req,
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct RootResponse {
     value: String,
 }
@@ -165,11 +250,142 @@ async fn index(
 }
 
 #[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct EventsGetResponse {
+    id: i32,
+    created_at: DateTime<Utc>,
+    last_modified: DateTime<Utc>,
+    title: String,
+    description: String,
+    time_begin: DateTime<Utc>,
+    time_end: DateTime<Utc>,
+}
+
+#[openapi]
+#[get("/events", format = "json")]
+async fn events_get_all(
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
+    // Return all events
+    let events: Vec<EventsGetResponse> = match sqlx::query_as!(
+        EventsGetResponse,
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(events) => events,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(events))
+}
+
+#[openapi]
+#[get("/events/<id>", format = "json")]
+async fn events_get(
+    id: i32,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<EventsGetResponse>, rocket::response::status::BadRequest<String>> {
+    // Return requested event
+    let event: EventsGetResponse = match sqlx::query_as!(
+        EventsGetResponse,
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1",
+        id
+    ).fetch_one(pool.inner()).await
+    {
+        Ok(event) => event,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(event))
+}
+
+#[openapi]
+#[delete("/events/<id>", format = "json")]
+async fn events_delete(
+    id: i32,
+    pool: &State<PgPool>,
+    _user: AdminUser,
+) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
+    // Delete the event
+    match sqlx::query!("DELETE FROM event WHERE id = $1", id)
+        .execute(pool.inner())
+        .await
+    {
+        Ok(_) => Ok(rocket::response::status::NoContent),
+        Err(_) => Err(rocket::response::status::BadRequest(Some(
+            "Error getting database ID".to_string(),
+        ))),
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct EventsPostRequest {
+    title: String,
+    description: String,
+    time_begin: DateTime<Utc>,
+    time_end: DateTime<Utc>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct EventsPostResponse {
+    id: i32,
+    created_at: DateTime<Utc>,
+    last_modified: DateTime<Utc>,
+    title: String,
+    description: String,
+    time_begin: DateTime<Utc>,
+    time_end: DateTime<Utc>,
+}
+
+#[openapi]
+#[post("/events", format = "json", data = "<event_request>")]
+async fn events_post(
+    event_request: Json<EventsPostRequest>,
+    pool: &State<PgPool>,
+    _user: AdminUser,
+) -> Result<status::Created<Json<EventsPostResponse>>, rocket::response::status::BadRequest<String>>
+{
+    // Insert new event and return it
+    let event: EventsPostResponse = match sqlx::query_as!(
+        EventsPostResponse,
+        "INSERT INTO event (title, description, time_begin, time_end) VALUES ($1, $2, $3, $4) RETURNING id, created_at, last_modified, title, description, time_begin, time_end",
+        event_request.title,
+        event_request.description,
+        event_request.time_begin,
+        event_request.time_end
+    ).fetch_one(pool.inner()).await
+    {
+        Ok(event) => event,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)))
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct LoginResponse {}
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct LoginRequest {
     email: String,
 }
@@ -238,16 +454,17 @@ Lewis
 }
 
 #[derive(Deserialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct VerifyEmailRequest {
     token: String,
 }
 
 #[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct VerifyEmailResponse {
     token: String,
     email: String,
+    is_admin: bool,
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -307,9 +524,12 @@ fn verify_email(
         }
     };
 
+    let is_admin = typed_token.sub == "lewis@oaten.name";
+
     Ok(Json(VerifyEmailResponse {
         token,
         email: typed_token.sub,
+        is_admin,
     }))
 }
 
@@ -372,7 +592,7 @@ impl Fairing for CORS {
                 ));
                 response.set_header(Header::new(
                     "Access-Control-Allow-Methods",
-                    "POST, GET, PATCH, OPTIONS",
+                    "POST, GET, PATCH, DELETE, OPTIONS",
                 ));
                 response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
                 response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
@@ -382,25 +602,30 @@ impl Fairing for CORS {
 }
 
 #[shuttle_service::main]
-async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
+async fn rocket(
+    #[shuttle_shared_db::Postgres] pool: PgPool,
+    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+) -> ShuttleRocket {
     sqlx::migrate!()
         .run(&pool)
         .await
         .expect("Database migrated to latest version.");
 
     // Get the discord token set in `Secrets.toml` from the shared Postgres database
-    let paseto_secret_key = pool
-        .get_secret("PASETO_SECRET_KEY")
-        .await
-        .map_err(CustomError::new)?;
+    let paseto_secret_key = if let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") {
+        paseto_secret_key
+    } else {
+        return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
+    };
 
     let paseto_symmetric_key =
         PasetoSymmetricKey::<V4, Local>::from(Key::from(paseto_secret_key.as_bytes()));
 
-    let sendgrid_api_key = pool
-        .get_secret("SENDGRID_API_KEY")
-        .await
-        .map_err(CustomError::new)?;
+    let sendgrid_api_key = if let Some(sendgrid_api_key) = secret_store.get("SENDGRID_API_KEY") {
+        sendgrid_api_key
+    } else {
+        return Err(anyhow!("failed to get SENDGRID_API_KEY from secrets store").into());
+    };
 
     let email_sender = Sender::new(sendgrid_api_key);
 
@@ -410,8 +635,19 @@ async fn rocket(#[shared::Postgres] pool: PgPool) -> ShuttleRocket {
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(paseto_symmetric_key)
         .manage::<Sender>(email_sender)
-        .mount("/api", routes![all_options])
-        .mount("/api", openapi_get_routes![index, login, verify_email])
+        .mount("/", routes![all_options])
+        .mount(
+            "/api",
+            openapi_get_routes![
+                index,
+                login,
+                verify_email,
+                events_get_all,
+                events_get,
+                events_post,
+                events_delete
+            ],
+        )
         .mount(
             "/api/docs/",
             make_swagger_ui(&SwaggerUIConfig {

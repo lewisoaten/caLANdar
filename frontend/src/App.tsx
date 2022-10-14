@@ -6,7 +6,7 @@ import Dashboard from "./components/Dashboard";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 
 function App() {
-  const theme = createTheme();
+  const theme = createTheme({ palette: { mode: "dark" } });
 
   return (
     <UserProvider>

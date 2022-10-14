@@ -43,7 +43,7 @@ export default function SignIn() {
 
   useEffect(() => {
     if (isSignedIn()) {
-      navigate(location.state?.from || "/home");
+      navigate(location.state?.from || "/events");
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

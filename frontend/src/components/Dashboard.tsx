@@ -5,7 +5,6 @@ import MuiDrawer from "@mui/material/Drawer";
 import Box from "@mui/material/Box";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import List from "@mui/material/List";
 import Typography from "@mui/material/Typography";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
@@ -101,7 +100,7 @@ function DashboardContent(props: AppProps) {
             noWrap
             sx={{ flexGrow: 1 }}
           >
-            Dashboard
+            caLANdar
           </Typography>
           {/* <IconButton color="inherit">
               <Badge badgeContent={4} color="secondary">
@@ -124,9 +123,7 @@ function DashboardContent(props: AppProps) {
           </IconButton>
         </Toolbar>
         <Divider />
-        <List component="nav">
-          <MenuItems />
-        </List>
+        <MenuItems />
       </Drawer>
       <Box
         component="main"

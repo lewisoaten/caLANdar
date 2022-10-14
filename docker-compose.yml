@@ -9,12 +9,20 @@ services:
       - DATABASE_URL=postgres://postgres:password@db/calandar
       - ROCKET_DATABASE_URL=postgres://postgres:password@db/calandar
       - ROCKET_PASETO_SECRET_KEY=wubbalubbadubdubwubbalubbadubdub
+    user: ${CURRENT_UID} # Keep our cargo cache owned by the host user
+    command:
+      - bash
+      - -c
+      - |
+        cargo sqlx migrate run
+        sleep 10000
 
   frontend:
     build: frontend
     volumes:
       - ./frontend:/usr/src/app/calandar
     stdin_open: true
+    user: ${CURRENT_UID} # Keep our node_modules owned by the host user
 
   proxy:
     image: nginx:1.23.1
@@ -22,7 +30,6 @@ services:
       - 80:80
     volumes:
       - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
-      # - asdf:/usr/share/nginx/html:ro
 
   db:
     image: "postgres:14.5"
@@ -30,6 +37,3 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=postgres
       - POSTGRES_DB=calandar
-
-  redis:
-    image: "redis:7.0.4"
