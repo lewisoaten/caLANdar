@@ -101,7 +101,7 @@ function DashboardContent(props: AppProps) {
             noWrap
             sx={{ flexGrow: 1 }}
           >
-            Dashboard
+            caLANdar
           </Typography>
           {/* <IconButton color="inherit">
               <Badge badgeContent={4} color="secondary">
@@ -124,9 +124,7 @@ function DashboardContent(props: AppProps) {
           </IconButton>
         </Toolbar>
         <Divider />
-        <List component="nav">
-          <MenuItems />
-        </List>
+        <MenuItems />
       </Drawer>
       <Box
         component="main"

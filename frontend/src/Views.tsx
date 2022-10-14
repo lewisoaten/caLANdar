@@ -3,8 +3,11 @@ import { Route, Routes } from "react-router-dom";
 import SignIn from "./components/SignIn";
 import VerifyEmail from "./components/VerifyEmail";
 import Account from "./components/Account";
-import Home from "./components/Home";
+import EventSelection from "./components/EventSelection";
+import Event from "./components/Event";
+import EventManagement from "./components/EventManagement";
 import ProtectedRoutes from "./ProtectedRoutes";
+import EventsAdmin from "./components/EventsAdmin";
 
 const Views = () => {
   return (
@@ -15,7 +18,12 @@ const Views = () => {
         <Route path="" element={<VerifyEmail />} />
       </Route>
       <Route element={<ProtectedRoutes />}>
-        <Route path="/home" element={<Home />} />
+        <Route path="/events" element={<EventSelection />} />
+        <Route path="/events/:id" element={<Event />} />
+        <Route path="/admin/events">
+          <Route path="" element={<EventsAdmin />} />
+          <Route path=":id" element={<EventManagement />} />
+        </Route>
         <Route path="/account" element={<Account />} />
       </Route>
     </Routes>

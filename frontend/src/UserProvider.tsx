@@ -5,6 +5,7 @@ interface IUserContext {
   email: string;
   token: string;
   loggedIn: boolean;
+  isAdmin: boolean;
 }
 
 // Create two context:
@@ -14,7 +15,9 @@ const UserContext = createContext({
   email: "",
   token: "",
   loggedIn: false,
+  isAdmin: false,
 } as IUserContext);
+
 const UserDispatchContext = createContext({
   signIn: (email: string) => Promise<Response>,
   verifyEmail: (token: string) => Promise<Response>,
@@ -87,6 +90,7 @@ function UserProvider({ children }: Props) {
           email: response.email,
           token: response.token,
           loggedIn: true,
+          isAdmin: response.isAdmin,
         };
         localStorage.setItem("user_context", JSON.stringify(accountDetails));
         setUserDetails(accountDetails);
@@ -96,7 +100,7 @@ function UserProvider({ children }: Props) {
 
   function signOut() {
     localStorage.removeItem("user_context");
-    setUserDetails({ email: "", token: "", loggedIn: false });
+    setUserDetails(getStoredAccount());
     navigate("/");
   }
 
@@ -104,7 +108,12 @@ function UserProvider({ children }: Props) {
     const user = localStorage.getItem("user_context");
     return user
       ? JSON.parse(user)
-      : ({ email: "", token: "", loggedIn: false } as IUserContext);
+      : ({
+          email: "",
+          token: "",
+          loggedIn: false,
+          isAdmin: false,
+        } as IUserContext);
   }
 
   function isSignedIn() {
