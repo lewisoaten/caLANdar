@@ -7,13 +7,15 @@ Web application for helping organising LAN parties.
 
 ## Development
 
-Launch local development environment with:
-`docker-compose up`
+### Running
 
-Rust API and frontend will both live-reload following changes.
+Rust api can be launched with:
+`cargo shuttle run --working-directory api`
 
-If you get an error for the frontend, like:
+React frontend can be launched with:
+`REACT_APP_API_PROXY=http://localhost:8000 npm start`
 
-> sh: 1: react-scripts: not found
+### SQLx Database Operations
 
-Then run `npm install` before relaunching.
+When a query or database schema is modified, you will need to prepare the `sqlx-data.json` file. This can be performed after launching the application from within the `api/` directory with:
+`DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')/postgres" cargo sqlx prepare --merged -- --all-targets --all-features`

@@ -6,6 +6,7 @@ EXPOSE 8000
 
 RUN cargo install cargo-watch
 RUN cargo install sqlx-cli
+RUN cargo install cargo-shuttle
 
 COPY . .
 
@@ -13,4 +14,4 @@ COPY . .
 # RUN cargo build --release
 # CMD ["./target/release/api"]
 
-CMD ["cargo-watch", "-x sqlx migrate run", "-x run"]
+CMD ["cargo-watch", "-x sqlx migrate run", "-x shuttle run"]

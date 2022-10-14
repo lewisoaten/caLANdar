@@ -1,5 +1,51 @@
 {
   "db": "PostgreSQL",
+  "16980e366e093f877be75c84720fde27c22f46346be0cb6cafd161f222e95b48": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
+  },
   "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
     "describe": {
       "columns": [
@@ -15,5 +61,107 @@
       }
     },
     "query": "SELECT id FROM test"
+  },
+  "1cb5b22789b838b714b506c0f0d853713844c78bb7111e1a431cd229719b3c49": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "DELETE FROM event WHERE id = $1"
+  },
+  "845f07db364ad990ef08b77c1fa27f9908d9cfd25fedaa42b9340b3c0b2c8154": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1"
+  },
+  "9c0b3b9a9345ca926bdd6fc5a1b8786c5801b609ec657735eab31d0fd17b98c2": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Varchar", "Text", "Timestamptz", "Timestamptz"]
+      }
+    },
+    "query": "INSERT INTO event (title, description, time_begin, time_end) VALUES ($1, $2, $3, $4) RETURNING id, created_at, last_modified, title, description, time_begin, time_end"
   }
 }
