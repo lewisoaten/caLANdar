@@ -17,7 +17,7 @@ import EventTable from "./EventTable";
 
 const Event = () => {
   const eventsState = useState([] as EventData[]);
-  const [events, setEvents] = eventsState;
+  const [events] = eventsState;
 
   return (
     <React.Fragment>
