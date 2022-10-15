@@ -1,2 +1,2 @@
 -- Add down migration script here
-DROP TABLE event;
+DROP TABLE invitation;

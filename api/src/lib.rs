@@ -366,7 +366,7 @@ async fn events_post(
         event_request.title,
         event_request.description,
         event_request.time_begin,
-        event_request.time_end
+        event_request.time_end,
     ).fetch_one(pool.inner()).await
     {
         Ok(event) => event,
@@ -378,6 +378,117 @@ async fn events_post(
     };
 
     Ok(status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct InvitationsPostRequest {
+    email: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct InvitationsResponse {
+    event_id: i32,
+    email: String,
+    handle: Option<String>,
+    invited_at: DateTime<Utc>,
+    responded_at: Option<DateTime<Utc>>,
+    response: Option<bool>,
+    attendance: Option<Vec<u8>>,
+    last_modified: DateTime<Utc>,
+}
+
+#[openapi]
+#[post(
+    "/events/<event_id>/invitations",
+    format = "json",
+    data = "<invitation_request>"
+)]
+async fn invitations_post(
+    event_id: i32,
+    invitation_request: Json<InvitationsPostRequest>,
+    pool: &State<PgPool>,
+    _user: AdminUser,
+) -> Result<status::Created<Json<InvitationsResponse>>, rocket::response::status::BadRequest<String>>
+{
+    // Insert new event and return it
+    let invitation: InvitationsResponse = match sqlx::query_as!(
+        InvitationsResponse,
+        "INSERT INTO invitation (event_id, email)
+        VALUES ($1, $2)
+        RETURNING event_id, email, handle, invited_at, responded_at, response, attendance, last_modified",
+        event_id,
+        invitation_request.email,
+    ).fetch_one(pool.inner()).await
+    {
+        Ok(event) => event,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(
+        status::Created::new("/events/".to_string() + &invitation.event_id.to_string())
+            .body(Json(invitation)),
+    )
+}
+
+#[openapi]
+#[get("/events/<event_id>/invitations", format = "json")]
+async fn invitations_get_all(
+    event_id: i32,
+    pool: &State<PgPool>,
+    _user: AdminUser,
+) -> Result<Json<Vec<InvitationsResponse>>, rocket::response::status::BadRequest<String>> {
+    // Return all events
+    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
+        InvitationsResponse,
+        "SELECT event_id, email, handle, invited_at, responded_at, response, attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1",
+        event_id
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(events) => events,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(invitations))
+}
+
+#[openapi]
+#[delete("/events/<event_id>/invitations/<email>", format = "json")]
+async fn invitations_delete(
+    event_id: i32,
+    email: String,
+    pool: &State<PgPool>,
+    _user: AdminUser,
+) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
+    // Delete the event
+    match sqlx::query!(
+        "DELETE FROM invitation
+        WHERE event_id = $1
+        AND email = $2",
+        event_id,
+        email,
+    )
+    .execute(pool.inner())
+    .await
+    {
+        Ok(_) => Ok(rocket::response::status::NoContent),
+        Err(_) => Err(rocket::response::status::BadRequest(Some(
+            "Error getting database ID".to_string(),
+        ))),
+    }
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -645,7 +756,10 @@ async fn rocket(
                 events_get_all,
                 events_get,
                 events_post,
-                events_delete
+                events_delete,
+                invitations_post,
+                invitations_get_all,
+                invitations_delete,
             ],
         )
         .mount(

@@ -15,9 +15,9 @@ shuttle-shared-db = { version = "0.6.0", features = ["postgres"] }
 shuttle-secrets = "0.6.0"
 sendgrid = { version = "0.18.1", features = ["async"] }
 rocket = { version = "0.5.0-rc.2", features = [ "json" ] }
-schemars = { version = "0.8.10", features = [ "chrono" ] }
+schemars = { version = "0.8.10", features = [ "chrono", "bytes" ] }
 okapi = { version = "0.7.0-rc.1" }
 rocket_okapi = { version = "0.8.0-rc.2", features = ["swagger"] }
 rusty_paseto = { version = "0.4.0", features = ["batteries_included"] }
-sqlx = { version = "0.6.2", features = [ "runtime-tokio-native-tls", "postgres", "offline", "chrono" ] }
+sqlx = { version = "0.6.2", features = [ "runtime-tokio-native-tls", "postgres", "offline", "chrono", "bit-vec" ] }
 tokio = { version = "1.20.1", features = ["full"] }
