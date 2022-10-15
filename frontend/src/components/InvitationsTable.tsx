@@ -20,7 +20,6 @@ import {
 import { InvitationData, defaultInvitationsData } from "../types/invitations";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { Link } from "react-router-dom";
 
 interface InvitationsTableProps {
   event_id: number;

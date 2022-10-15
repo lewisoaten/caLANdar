@@ -19,8 +19,6 @@ const EventManagement = () => {
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
 
-  let isDataLoaded = false;
-
   const navigate = useNavigate();
 
   let { id } = useParams();
