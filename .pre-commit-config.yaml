@@ -52,4 +52,6 @@ repos:
             "clippy::nursery",
             "-D",
             "clippy::unwrap_used",
+            "-A",
+            "clippy::use_self",
           ]

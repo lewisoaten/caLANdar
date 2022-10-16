@@ -10,57 +10,6 @@
     },
     "query": "DELETE FROM invitation\n        WHERE event_id = $1\n        AND email = $2"
   },
-  "12631ab1019c65e62535b8f4f5525f5a1cd1cbe3b05f73b4fba585d443811246": {
-    "describe": {
-      "columns": [
-        {
-          "name": "event_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "email",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "handle",
-          "ordinal": 2,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "invited_at",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "responded_at",
-          "ordinal": 4,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "response",
-          "ordinal": 5,
-          "type_info": "Bool"
-        },
-        {
-          "name": "attendance",
-          "ordinal": 6,
-          "type_info": "Bytea"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 7,
-          "type_info": "Timestamptz"
-        }
-      ],
-      "nullable": [false, false, true, false, true, true, true, false],
-      "parameters": {
-        "Left": ["Int4", "Varchar"]
-      }
-    },
-    "query": "INSERT INTO invitation (event_id, email)\n        VALUES ($1, $2)\n        RETURNING event_id, email, handle, invited_at, responded_at, response, attendance, last_modified"
-  },
   "16980e366e093f877be75c84720fde27c22f46346be0cb6cafd161f222e95b48": {
     "describe": {
       "columns": [
@@ -107,23 +56,7 @@
     },
     "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
   },
-  "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        }
-      ],
-      "nullable": [false],
-      "parameters": {
-        "Left": []
-      }
-    },
-    "query": "SELECT id FROM test"
-  },
-  "1c8ebf4461bb4e1cf843284a62b0df6234ff74d72b27b0419a1bd5fc8449ab42": {
+  "16fe2b1a40413abdb02a74a82b5347db4c33ca376bff58b4296f539a7385c433": {
     "describe": {
       "columns": [
         {
@@ -152,9 +85,158 @@
           "type_info": "Timestamptz"
         },
         {
-          "name": "response",
+          "name": "response: _",
           "ordinal": 5,
-          "type_info": "Bool"
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 6,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 7,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4", "Text"]
+      }
+    },
+    "query": "SELECT event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1 AND email=$2"
+  },
+  "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [false],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT id FROM test"
+  },
+  "1cb5b22789b838b714b506c0f0d853713844c78bb7111e1a431cd229719b3c49": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "DELETE FROM event WHERE id = $1"
+  },
+  "41256ee9c39c5233507ec368fe4d1363d028e821b64a9fa2042b0c9ea7035144": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 5,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 6,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 7,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4", "Varchar"]
+      }
+    },
+    "query": "INSERT INTO invitation (event_id, email)\n        VALUES ($1, $2)\n        RETURNING event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified"
+  },
+  "49aff60c67af154baac3feaa34b757853a8d0492e2222f1e550609ccd4693c0c": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 5,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
         },
         {
           "name": "attendance",
@@ -172,17 +254,7 @@
         "Left": ["Int4"]
       }
     },
-    "query": "SELECT event_id, email, handle, invited_at, responded_at, response, attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
-  },
-  "1cb5b22789b838b714b506c0f0d853713844c78bb7111e1a431cd229719b3c49": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": ["Int4"]
-      }
-    },
-    "query": "DELETE FROM event WHERE id = $1"
+    "query": "SELECT event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
   },
   "606228d019a84631f0c265c427cb4143728f2c67258b55cdfe0c2b2ff40e9ebb": {
     "describe": {
@@ -275,6 +347,28 @@
       }
     },
     "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1"
+  },
+  "8c5cbb09bb16577d3fb79365d3027a4538e4a5645473b468ad879ce2fddd3652": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Varchar",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          },
+          "Int4",
+          "Text"
+        ]
+      }
+    },
+    "query": "UPDATE invitation\n        SET handle = $1, response = $2, responded_at = NOW()\n        WHERE event_id = $3\n        AND email = $4"
   },
   "9c0b3b9a9345ca926bdd6fc5a1b8786c5801b609ec657735eab31d0fd17b98c2": {
     "describe": {
