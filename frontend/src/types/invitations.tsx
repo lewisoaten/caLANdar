@@ -1,12 +1,18 @@
 import moment from "moment";
 
+export enum RSVP {
+  yes = "yes",
+  no = "no",
+  maybe = "maybe",
+}
+
 export type InvitationData = {
   eventId: number;
   email: string;
   handle: string | null;
   invitedAt: moment.Moment;
   respondedAt: moment.Moment | null;
-  response: boolean | null;
+  response: RSVP | null;
   attendance: number[] | null;
   lastModified: moment.Moment;
 };
