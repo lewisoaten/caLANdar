@@ -732,7 +732,7 @@ async fn invitations_patch(
     // Insert new event and return it
     match sqlx::query!(
         r#"UPDATE invitation
-        SET handle = $1, response = $2, responded_at = NOW()
+        SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()
         WHERE event_id = $3
         AND email = $4"#,
         invitation_request.handle,
