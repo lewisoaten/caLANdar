@@ -1,0 +1,17 @@
+{% extends "email_base.html.tera" %}
+
+{% block content %}
+    <p>Dear {{ name }},</p>
+
+    <p>Please confirm your email by visiting the following link in the next 5 minutes: <a href="https://calandar.org/verify_email?token={{ token }}">Validate Email</a></p>
+
+    <p>Alternatively, go to <a href=\"https://calandar.org/verify_email\">https://calandar.org/verify_email</a> and enter the following token:</p>
+
+    <code>{{ token }}</code>
+
+    <p>If you did not request this email, please ignore it.</p>
+
+    <p>Happy hunting,</p>
+
+    <p>Lewis</p>
+{% endblock content %}

@@ -1,15 +1,18 @@
 import React from "react";
 import { useContext, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import Avatar from "@mui/material/Avatar";
-import Button from "@mui/material/Button";
-import CssBaseline from "@mui/material/CssBaseline";
-import TextField from "@mui/material/TextField";
-import Box from "@mui/material/Box";
+import {
+  Avatar,
+  Button,
+  CssBaseline,
+  TextField,
+  Box,
+  Alert,
+  Typography,
+  Container,
+} from "@mui/material";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import Alert from "@mui/material/Alert";
-import Typography from "@mui/material/Typography";
-import Container from "@mui/material/Container";
+import LoadingButton from "@mui/lab/LoadingButton";
 import { UserDispatchContext } from "../UserProvider";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -21,9 +24,13 @@ export default function SignIn() {
 
   const [submitted, setSubmitted] = useState(false);
 
+  const [loading, setLoading] = React.useState(false);
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     // Prevent page reload
     event.preventDefault();
+
+    setLoading(true);
 
     const data = new FormData(event.currentTarget);
 
@@ -83,14 +90,15 @@ export default function SignIn() {
               autoComplete="email"
               autoFocus
             />
-            <Button
+            <LoadingButton
               type="submit"
+              loading={loading}
               fullWidth
               variant="contained"
               sx={{ mt: 3, mb: 2 }}
             >
               Submit Email Verification
-            </Button>
+            </LoadingButton>
           </Box>
         ) : (
           <React.Fragment>

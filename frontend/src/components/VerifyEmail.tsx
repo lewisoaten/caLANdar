@@ -1,17 +1,21 @@
 import React from "react";
-import { useContext, useEffect, useState } from "react";
-import Avatar from "@mui/material/Avatar";
-import Button from "@mui/material/Button";
-import CssBaseline from "@mui/material/CssBaseline";
-import TextField from "@mui/material/TextField";
-import Box from "@mui/material/Box";
+import { useContext, useEffect, useState, useRef } from "react";
+import {
+  Avatar,
+  Box,
+  Container,
+  CssBaseline,
+  TextField,
+  Typography,
+} from "@mui/material";
+import LoadingButton from "@mui/lab/LoadingButton";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import Typography from "@mui/material/Typography";
-import Container from "@mui/material/Container";
 import { UserDispatchContext } from "../UserProvider";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 export default function VerifyEmail() {
+  const submitButton = useRef<HTMLButtonElement>(null);
+
   const { verifyEmail, isSignedIn } = useContext(UserDispatchContext);
 
   const navigate = useNavigate();
@@ -20,9 +24,15 @@ export default function VerifyEmail() {
   const [searchParams] = useSearchParams();
   let [urlToken] = useState(searchParams.get("token"));
 
+  const [loading, setLoading] = React.useState(false);
+
+  searchParams.delete("token");
+
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     // Prevent page reload
     event.preventDefault();
+
+    setLoading(true);
 
     const data = new FormData(event.currentTarget);
 
@@ -33,16 +43,16 @@ export default function VerifyEmail() {
       return;
     }
 
-    verifyEmail(token)
-      // @ts-ignore: Cannot possibly work out why this is complaining about type.
-      .then(() => {
-        navigate(location.state?.from || "/events");
-      });
+    verifyEmail(token);
   };
 
   useEffect(() => {
     if (isSignedIn()) {
       navigate(location.state?.from || "/events");
+    } else if (urlToken) {
+      if (submitButton.current) {
+        submitButton.current.click();
+      }
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,14 +87,16 @@ export default function VerifyEmail() {
             defaultValue={urlToken}
             autoFocus
           />
-          <Button
+          <LoadingButton
             type="submit"
+            ref={submitButton}
+            loading={loading}
             fullWidth
             variant="contained"
             sx={{ mt: 3, mb: 2 }}
           >
             Sign In
-          </Button>
+          </LoadingButton>
         </Box>
       </Box>
     </Container>

@@ -1,5 +1,5 @@
 import React, { ReactNode, createContext, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 interface IUserContext {
   email: string;
@@ -36,6 +36,7 @@ function UserProvider({ children }: Props) {
   const [userDetails, setUserDetails] = useState(getStoredAccount());
 
   const navigate = useNavigate();
+  const location = useLocation();
 
   function signIn(email: string) {
     const user_details = getStoredAccount();
@@ -50,7 +51,10 @@ function UserProvider({ children }: Props) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email: email }),
+        body: JSON.stringify({
+          email: email,
+          redirect: location.state?.from.pathname,
+        }),
       },
     ).then((response) => {
       if (response.status === 200) {
@@ -94,6 +98,7 @@ function UserProvider({ children }: Props) {
         };
         localStorage.setItem("user_context", JSON.stringify(accountDetails));
         setUserDetails(accountDetails);
+        navigate(response.redirect || "/events");
         return accountDetails;
       });
   }
