@@ -26,8 +26,6 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   const token = userDetails?.token;
   const email = userDetails?.email;
 
-  const isAdmin = props.asAdmin ?? false;
-
   const [invitation, setInvitation] = useState(defaultInvitationData);
   const [loading, setLoading] = useState(false);
   const [handleColour, setHandleColour] = useState<
