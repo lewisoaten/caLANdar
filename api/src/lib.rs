@@ -102,10 +102,7 @@ impl<'r> FromRequest<'r> for User {
 
                 match authorise_paseto_header(key, authorization_header, false) {
                     Ok(email) => Outcome::Success(Self { email }),
-                    Err(_) => Outcome::Failure((
-                        rocket::http::Status::Unauthorized,
-                        UserError::TokenError,
-                    )),
+                    Err(_) => Outcome::Forward(()),
                 }
             }
             None => request::Outcome::Failure((
@@ -171,10 +168,7 @@ impl<'r> FromRequest<'r> for AdminUser {
 
                 match authorise_paseto_header(key, authorization_header, true) {
                     Ok(email) => Outcome::Success(Self { email }),
-                    Err(_) => Outcome::Failure((
-                        rocket::http::Status::Unauthorized,
-                        UserError::TokenError,
-                    )),
+                    Err(_) => Outcome::Forward(()),
                 }
             }
             None => request::Outcome::Failure((
@@ -262,10 +256,87 @@ struct EventsGetResponse {
 }
 
 #[openapi]
-#[get("/events", format = "json")]
+#[get("/events?<as_admin>", format = "json")]
 async fn events_get_all(
+    as_admin: bool,
     pool: &State<PgPool>,
-    _user: User,
+    user: AdminUser,
+) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
+    if as_admin {
+        // Return all events
+        match sqlx::query_as!(
+            EventsGetResponse,
+            "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
+        ).fetch_all(pool.inner())
+        .await
+        {
+            Ok(events) => return Ok(Json(events)),
+            Err(_) => {
+                return Err(rocket::response::status::BadRequest(Some(
+                    "Error getting database ID".to_string(),
+                )))
+            }
+        };
+    }
+
+    // Return all events that the user is invited to
+    match sqlx::query_as!(
+        EventsGetResponse,
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end
+    FROM event
+    WHERE id IN (
+        SELECT event_id
+        FROM invitation
+        WHERE email = $1
+    )",
+        user.email
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(events) => Ok(Json(events)),
+        Err(_) => Err(rocket::response::status::BadRequest(Some(
+            "Error getting database ID".to_string(),
+        ))),
+    }
+}
+
+#[openapi]
+#[get("/events", format = "json", rank = 2)]
+async fn events_get_all_user(
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
+    // Return all events
+    let events: Vec<EventsGetResponse> = match sqlx::query_as!(
+        EventsGetResponse,
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end
+        FROM event
+        WHERE id IN (
+            SELECT event_id
+            FROM invitation
+            WHERE email = $1
+        )",
+        user.email
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(events) => events,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(events))
+}
+
+#[openapi]
+#[get("/events", format = "json", rank = 3)]
+async fn events_get_all_default(
+    pool: &State<PgPool>,
 ) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
     // Return all events
     let events: Vec<EventsGetResponse> = match sqlx::query_as!(
@@ -291,7 +362,7 @@ async fn events_get_all(
 async fn events_get(
     id: i32,
     pool: &State<PgPool>,
-    _user: User,
+    _user: AdminUser,
 ) -> Result<Json<EventsGetResponse>, rocket::response::status::BadRequest<String>> {
     // Return requested event
     let event: EventsGetResponse = match sqlx::query_as!(
@@ -299,6 +370,41 @@ async fn events_get(
         "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1",
         id
     ).fetch_one(pool.inner()).await
+    {
+        Ok(event) => event,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(event))
+}
+
+#[openapi]
+#[get("/events/<id>", format = "json", rank = 2)]
+async fn events_get_user(
+    id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<EventsGetResponse>, rocket::response::status::BadRequest<String>> {
+    // Return requested event
+    let event: EventsGetResponse = match sqlx::query_as!(
+        EventsGetResponse,
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end
+        FROM event
+        WHERE id IN (
+            SELECT event_id
+            FROM invitation
+            WHERE email = $1
+            AND event_id = $2
+        )",
+        user.email,
+        id
+    )
+    .fetch_one(pool.inner())
+    .await
     {
         Ok(event) => event,
         Err(_) => {
@@ -754,7 +860,10 @@ async fn rocket(
                 login,
                 verify_email,
                 events_get_all,
+                events_get_all_user,
+                events_get_all_default,
                 events_get,
+                events_get_user,
                 events_post,
                 events_delete,
                 invitations_post,
