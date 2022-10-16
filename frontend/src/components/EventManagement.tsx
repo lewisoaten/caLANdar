@@ -1,10 +1,18 @@
 import * as React from "react";
 import { useEffect, useState, useContext } from "react";
-import { Container, Button, Grid, Paper, Typography } from "@mui/material";
+import {
+  Container,
+  Button,
+  Grid,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
+import InvitationsTable from "./InvitationsTable";
 
 const EventManagement = () => {
   const userDetails = useContext(UserContext);
@@ -16,7 +24,7 @@ const EventManagement = () => {
   let { id } = useParams();
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}`, {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -52,35 +60,55 @@ const EventManagement = () => {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={12} lg={12}>
-          <Paper
-            sx={{
-              p: 2,
-              display: "flex",
-              flexDirection: "column",
-              height: 240,
-            }}
-          >
-            <Typography
-              component="h2"
-              variant="h6"
-              color="primary"
-              gutterBottom
+    <React.Fragment>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={12} lg={12}>
+            <Paper
+              sx={{
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+                height: 240,
+              }}
             >
-              {event.title}
-            </Typography>
-            <Typography variant="body1" gutterBottom>
-              {event.description}
-            </Typography>
-            <Button onClick={onClick} variant="contained" color="error">
-              Delete
-            </Button>
-          </Paper>
+              <Typography
+                component="h2"
+                variant="h6"
+                color="primary"
+                gutterBottom
+              >
+                {event.title}
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {event.description}
+              </Typography>
+              <Stack direction="row" spacing={2}>
+                <Button onClick={onClick} variant="contained" color="error">
+                  Delete
+                </Button>
+              </Stack>
+            </Paper>
+          </Grid>
         </Grid>
-      </Grid>
-    </Container>
+      </Container>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={12} lg={12}>
+            <Paper
+              sx={{
+                p: 2,
+                display: "flex",
+                flexDirection: "column",
+                height: 240,
+              }}
+            >
+              <InvitationsTable event_id={event.id} />
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+    </React.Fragment>
   );
 };
 

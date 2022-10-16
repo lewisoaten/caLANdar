@@ -12,6 +12,7 @@ import {
   DialogTitle,
   Grid,
   Paper,
+  Stack,
   TextField,
 } from "@mui/material";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
@@ -105,10 +106,12 @@ const EventsAdmin = () => {
         {/* Events */}
         <Grid item xs={12}>
           <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
-            <EventTable eventsState={eventsState} />
-            <Button variant="outlined" onClick={handleClickOpen}>
-              Create Event
-            </Button>
+            <EventTable eventsState={eventsState} asAdmin={true} />
+            <Stack direction="row" spacing={2}>
+              <Button variant="outlined" onClick={handleClickOpen}>
+                Create Event
+              </Button>
+            </Stack>
           </Paper>
         </Grid>
       </Grid>

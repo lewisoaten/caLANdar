@@ -1,5 +1,66 @@
 {
   "db": "PostgreSQL",
+  "07e62b080405157fa37c8240129445380aee359b8fcc6b068ab6d152154ab4c9": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": ["Int4", "Text"]
+      }
+    },
+    "query": "DELETE FROM invitation\n        WHERE event_id = $1\n        AND email = $2"
+  },
+  "12631ab1019c65e62535b8f4f5525f5a1cd1cbe3b05f73b4fba585d443811246": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response",
+          "ordinal": 5,
+          "type_info": "Bool"
+        },
+        {
+          "name": "attendance",
+          "ordinal": 6,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 7,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4", "Varchar"]
+      }
+    },
+    "query": "INSERT INTO invitation (event_id, email)\n        VALUES ($1, $2)\n        RETURNING event_id, email, handle, invited_at, responded_at, response, attendance, last_modified"
+  },
   "16980e366e093f877be75c84720fde27c22f46346be0cb6cafd161f222e95b48": {
     "describe": {
       "columns": [
@@ -62,6 +123,57 @@
     },
     "query": "SELECT id FROM test"
   },
+  "1c8ebf4461bb4e1cf843284a62b0df6234ff74d72b27b0419a1bd5fc8449ab42": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response",
+          "ordinal": 5,
+          "type_info": "Bool"
+        },
+        {
+          "name": "attendance",
+          "ordinal": 6,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 7,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "SELECT event_id, email, handle, invited_at, responded_at, response, attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
+  },
   "1cb5b22789b838b714b506c0f0d853713844c78bb7111e1a431cd229719b3c49": {
     "describe": {
       "columns": [],
@@ -71,6 +183,52 @@
       }
     },
     "query": "DELETE FROM event WHERE id = $1"
+  },
+  "606228d019a84631f0c265c427cb4143728f2c67258b55cdfe0c2b2ff40e9ebb": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Text"]
+      }
+    },
+    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end\n        FROM event\n        WHERE id IN (\n            SELECT event_id\n            FROM invitation\n            WHERE email = $1\n        )"
   },
   "845f07db364ad990ef08b77c1fa27f9908d9cfd25fedaa42b9340b3c0b2c8154": {
     "describe": {
@@ -163,5 +321,97 @@
       }
     },
     "query": "INSERT INTO event (title, description, time_begin, time_end) VALUES ($1, $2, $3, $4) RETURNING id, created_at, last_modified, title, description, time_begin, time_end"
+  },
+  "f1b0a2f327f2453b0bf7337143c3cdd6debd3e2573447f816de3b8876d954d32": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Text", "Int4"]
+      }
+    },
+    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end\n        FROM event\n        WHERE id IN (\n            SELECT event_id\n            FROM invitation\n            WHERE email = $1\n            AND event_id = $2\n        )"
+  },
+  "fce198de2cc4e4b7ce0a94c89c6c569d3fadc6a0db5d3e2b87636060bff4a42c": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Text"]
+      }
+    },
+    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end\n    FROM event\n    WHERE id IN (\n        SELECT event_id\n        FROM invitation\n        WHERE email = $1\n    )"
   }
 }

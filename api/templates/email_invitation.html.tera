@@ -1,0 +1,19 @@
+{% extends "email_base.html.tera" %}
+
+{% block content %}
+    <p>Dear {{ name }},</p>
+
+    <p>I'm pleased to invite you to the {{ title }}</p>
+
+    <p>It starts at {{ time_begin }} and runs until {{ time_end }}.</p>
+
+    <p>{{ description }}</p>
+
+    <p>I've created a new website for these events where you can RSVP and see details about the event. In the future, you will also be able to let me know which times you can attend, reserve seats, suggest and vote for games, as well as a live dashboard for during the event itself. It's a constant work in progress, so please let me know if you have any issues or feedback.</p>
+
+    <p>To RSVP, please <a href="https://calandar.org/verify_email?token={{ token }}">click here</a> within the next 24 hours. After this time you will have to log in again at calandar.org using this email address.</p>
+
+    <p>See you there,</p>
+
+    <p>Lewis</p>
+{% endblock content %}

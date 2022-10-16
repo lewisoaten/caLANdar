@@ -17,5 +17,20 @@ React frontend can be launched with:
 
 ### SQLx Database Operations
 
+To modify the database, prepare a migration script with:
+`sqlx migrate add -r <name>`
+
 When a query or database schema is modified, you will need to prepare the `sqlx-data.json` file. This can be performed after launching the application from within the `api/` directory with:
-`DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')/postgres" cargo sqlx prepare --merged -- --all-targets --all-features`
+
+```sh
+export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')/postgres"
+
+cargo sqlx prepare --merged -- --all-targets --all-features
+```
+
+If you have modified the migration scripts during development, you can rollback, and then reapply them with the following commands:
+
+```sh
+cargo sqlx migrate revert
+cargo sqlx migrate run
+```
