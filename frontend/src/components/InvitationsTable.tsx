@@ -108,7 +108,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               "Content-Type": "application/json",
               Authorization: "Bearer " + token,
             },
-            body: JSON.stringify({ email: email }),
+            body: JSON.stringify({ email: email.trim() }),
           },
         ).then((response) => {
           if (response.status === 201) {

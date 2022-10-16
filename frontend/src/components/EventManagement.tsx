@@ -24,7 +24,7 @@ const EventManagement = () => {
   let { id } = useParams();
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}`, {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,

@@ -106,7 +106,7 @@ const EventsAdmin = () => {
         {/* Events */}
         <Grid item xs={12}>
           <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
-            <EventTable eventsState={eventsState} />
+            <EventTable eventsState={eventsState} asAdmin={true} />
             <Stack direction="row" spacing={2}>
               <Button variant="outlined" onClick={handleClickOpen}>
                 Create Event

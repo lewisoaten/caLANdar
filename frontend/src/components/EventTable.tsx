@@ -19,6 +19,7 @@ interface EventTableProps {
     EventData[],
     React.Dispatch<React.SetStateAction<EventData[]>>,
   ];
+  asAdmin?: boolean;
 }
 
 export default function EventTable(props: EventTableProps) {
@@ -28,9 +29,10 @@ export default function EventTable(props: EventTableProps) {
   const ownEventsState = useState([] as EventData[]);
 
   const [events, setEvents] = props.eventsState ?? ownEventsState;
+  const isAdmin = props.asAdmin ?? false;
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events`, {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=${isAdmin}`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
