@@ -7,7 +7,7 @@ use rocket::{
     fairing::{Fairing, Info, Kind},
     get,
     http::Header,
-    options, post,
+    options, patch, post,
     request::{self, FromRequest, Outcome},
     response::status,
     routes,
@@ -494,6 +494,15 @@ struct InvitationsPostRequest {
     email: String,
 }
 
+#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema)]
+#[sqlx(type_name = "invitation_response", rename_all = "lowercase")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+enum InvitationResponse {
+    Yes,
+    No,
+    Maybe,
+}
+
 #[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct InvitationsResponse {
@@ -502,7 +511,7 @@ struct InvitationsResponse {
     handle: Option<String>,
     invited_at: DateTime<Utc>,
     responded_at: Option<DateTime<Utc>>,
-    response: Option<bool>,
+    response: Option<InvitationResponse>,
     attendance: Option<Vec<u8>>,
     last_modified: DateTime<Utc>,
 }
@@ -526,9 +535,9 @@ async fn invitations_post(
     // Insert new event and return it
     let invitation: InvitationsResponse = match sqlx::query_as!(
         InvitationsResponse,
-        "INSERT INTO invitation (event_id, email)
+        r#"INSERT INTO invitation (event_id, email)
         VALUES ($1, $2)
-        RETURNING event_id, email, handle, invited_at, responded_at, response, attendance, last_modified",
+        RETURNING event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified"#,
         event_id,
         invitation_request.email,
     ).fetch_one(pool.inner()).await
@@ -601,6 +610,43 @@ async fn invitations_post(
 }
 
 #[openapi]
+#[get("/events/<event_id>/invitations/<email>", format = "json")]
+async fn invitations_get(
+    event_id: i32,
+    email: String,
+    pool: &State<PgPool>,
+    user: AdminUser,
+) -> Result<Json<InvitationsResponse>, rocket::response::status::BadRequest<String>> {
+    if user.email != email {
+        return Err(rocket::response::status::BadRequest(Some(
+            "You can only respond to invitations for your own email address".to_string(),
+        )));
+    }
+
+    // Return your invitation for this event
+    let invitation: InvitationsResponse = match sqlx::query_as!(
+        InvitationsResponse,
+        r#"SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1 AND email=$2"#,
+        event_id,
+        user.email,
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(invitation) => invitation,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(invitation))
+}
+
+#[openapi]
 #[get("/events/<event_id>/invitations", format = "json")]
 async fn invitations_get_all(
     event_id: i32,
@@ -610,9 +656,9 @@ async fn invitations_get_all(
     // Return all events
     let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
         InvitationsResponse,
-        "SELECT event_id, email, handle, invited_at, responded_at, response, attendance, last_modified
+        r#"SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         FROM invitation
-        WHERE event_id=$1",
+        WHERE event_id=$1"#,
         event_id
     )
     .fetch_all(pool.inner())
@@ -653,6 +699,59 @@ async fn invitations_delete(
             "Error getting database ID".to_string(),
         ))),
     }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+struct InvitationsPatchRequest {
+    handle: String,
+    response: InvitationResponse,
+}
+
+#[openapi]
+#[patch(
+    "/events/<event_id>/invitations/<email>",
+    format = "json",
+    data = "<invitation_request>"
+)]
+async fn invitations_patch(
+    event_id: i32,
+    email: String,
+    invitation_request: Json<InvitationsPatchRequest>,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<rocket::response::status::NoContent, rocket::response::status::Unauthorized<String>> {
+    if user.email != email {
+        return Err(rocket::response::status::Unauthorized(Some(
+            "You can only respond to invitations for your own email address".to_string(),
+        )));
+    }
+
+    // let response: InvitationResponse = InvitationResponse::from(invitation_request.response);
+
+    // Insert new event and return it
+    match sqlx::query!(
+        r#"UPDATE invitation
+        SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()
+        WHERE event_id = $3
+        AND email = $4"#,
+        invitation_request.handle,
+        invitation_request.response as _,
+        event_id,
+        user.email,
+    )
+    .execute(pool.inner())
+    .await
+    {
+        Ok(_) => (),
+        Err(_) => {
+            return Err(rocket::response::status::Unauthorized(Some(
+                "Error updating invitation in the database".to_string(),
+            )))
+        }
+    };
+
+    Ok(rocket::response::status::NoContent)
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -975,8 +1074,10 @@ async fn rocket(
                 events_post,
                 events_delete,
                 invitations_post,
+                invitations_get,
                 invitations_get_all,
                 invitations_delete,
+                invitations_patch,
             ],
         )
         .mount(

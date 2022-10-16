@@ -5,11 +5,13 @@ import { UserContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
+import InvitationResponse from "./InvitationResponse";
 
 const Event = () => {
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
+  const [loaded, setLoaded] = useState(false);
 
   let { id } = useParams();
 
@@ -27,6 +29,7 @@ const Event = () => {
       })
       .then((data) => {
         setEvent(data);
+        setLoaded(true);
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,6 +76,9 @@ const Event = () => {
                 <Typography variant="body1" gutterBottom>
                   {event.description}
                 </Typography>
+              </Grid>
+              <Grid item xs={12}>
+                {loaded && <InvitationResponse event_id={event.id} />}
               </Grid>
             </Grid>
           </Paper>
