@@ -1,15 +1,20 @@
 import * as React from "react";
 import { styled } from "@mui/material/styles";
-import CssBaseline from "@mui/material/CssBaseline";
+import {
+  CssBaseline,
+  Box,
+  Toolbar,
+  Typography,
+  Divider,
+  IconButton,
+  SvgIcon,
+  Stack,
+} from "@mui/material";
 import MuiDrawer from "@mui/material/Drawer";
-import Box from "@mui/material/Box";
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Typography from "@mui/material/Typography";
-import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import { ReactComponent as CalandarIcon } from "../calandar.svg";
 import MenuItems from "./MenuItems";
 
 const drawerWidth: number = 240;
@@ -93,15 +98,18 @@ function DashboardContent(props: AppProps) {
           >
             <MenuIcon />
           </IconButton>
-          <Typography
-            component="h1"
-            variant="h6"
-            color="inherit"
-            noWrap
-            sx={{ flexGrow: 1 }}
-          >
-            caLANdar
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <SvgIcon component={CalandarIcon} inheritViewBox fontSize="large" />
+            <Typography
+              component="h1"
+              variant="h4"
+              color="inherit"
+              noWrap
+              sx={{ flexGrow: 1 }}
+            >
+              caLANdar
+            </Typography>
+          </Stack>
           {/* <IconButton color="inherit">
               <Badge badgeContent={4} color="secondary">
                 <NotificationsIcon />
