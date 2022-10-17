@@ -10,7 +10,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.62"
 chrono = { version = "0.4.22", features = ["serde"] }
-shuttle-service = { version = "0.6.0", features = ["web-rocket"] }
+shuttle-service = { version = "0.7.0", features = ["web-rocket"] }
 shuttle-shared-db = { version = "0.6.0", features = ["postgres"] }
 shuttle-secrets = "0.6.0"
 sendgrid = { version = "0.18.1", features = ["async"] }
