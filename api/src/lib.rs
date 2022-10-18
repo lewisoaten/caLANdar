@@ -1027,17 +1027,20 @@ async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
 ) -> ShuttleRocket {
-    sqlx::migrate!()
-        .run(&pool)
-        .await
-        .expect("Database migrated to latest version.");
+    log::info!("Launching application!");
+    match sqlx::migrate!().run(&pool).await {
+        Ok(_) => log::info!("Migrations ran successfully"),
+        Err(e) => log::error!("Error running migrations: {}", e),
+    };
 
-    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    // Get the discord token set in `Secrets.toml` from the AWS RDS Postgres database
     let paseto_secret_key = if let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") {
         paseto_secret_key
     } else {
         return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
     };
+
+    log::info!("PASETO_SECRET_KEY obtained.");
 
     let paseto_symmetric_key =
         PasetoSymmetricKey::<V4, Local>::from(Key::from(paseto_secret_key.as_bytes()));
@@ -1048,10 +1051,21 @@ async fn rocket(
         return Err(anyhow!("failed to get SENDGRID_API_KEY from secrets store").into());
     };
 
+    log::info!("SENDGRID_API_KEY obtained.");
+
     let email_sender = Sender::new(sendgrid_api_key);
 
-    let tera = Tera::new("templates/**/*.html.tera").expect("Templates parsed correctly.");
+    let tera = match Tera::new("templates/**/*.html.tera") {
+        Ok(tera) => {
+            log::info!("Templates loaded successfully");
+            tera
+        }
+        Err(e) => {
+            return Err(anyhow!("Error loading templates: {}", e).into());
+        }
+    };
 
+    log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]
     let rocket = rocket::build()
         .attach(CORS)
