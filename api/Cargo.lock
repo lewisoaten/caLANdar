@@ -246,7 +246,7 @@ dependencies = [
  "schemars",
  "sendgrid",
  "shuttle-secrets",
- "shuttle-service 0.7.0",
+ "shuttle-service",
  "shuttle-shared-db",
  "sqlx",
  "tokio",
@@ -2606,21 +2606,6 @@ dependencies = [
 
 [[package]]
 name = "shuttle-common"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1be624b67c38c774d3c228d4b56db99545e6a9df8cdcdca274a01466fb11e16"
-dependencies = [
- "chrono",
- "once_cell",
- "rustrict",
- "serde",
- "strum",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "shuttle-common"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c79c43593811f7f5d1d27079e4b1e15cc0308703528ce1410fb517af3f8067a"
@@ -2641,30 +2626,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f03b1934e338ca316851b503d179bb93b30f49ab070250e68fad47aac2b1254"
 dependencies = [
  "async-trait",
- "shuttle-service 0.7.0",
+ "shuttle-service",
  "tokio",
-]
-
-[[package]]
-name = "shuttle-service"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75b301fef98b9aa3759fa6348858b1af2c58af136504990448481050300428aa"
-dependencies = [
- "anyhow",
- "async-trait",
- "cargo_metadata",
- "chrono",
- "crossbeam-channel",
- "futures",
- "pipe",
- "serde_json",
- "shuttle-common 0.6.0",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
 ]
 
 [[package]]
@@ -2683,7 +2646,7 @@ dependencies = [
  "rocket",
  "serde_json",
  "shuttle-codegen",
- "shuttle-common 0.7.0",
+ "shuttle-common",
  "thiserror",
  "tokio",
  "tracing",
@@ -2693,12 +2656,12 @@ dependencies = [
 
 [[package]]
 name = "shuttle-shared-db"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf100d1aed516219b0ef09284e74890c7a06e21a7a246e9ccf34c99b7bd94f57"
+checksum = "eeeb442f9b04837659bac3b7562d3c23b1254d1c3cf4c7d0b24caf317afb73b3"
 dependencies = [
  "async-trait",
- "shuttle-service 0.6.0",
+ "shuttle-service",
  "sqlx",
  "tokio",
 ]
