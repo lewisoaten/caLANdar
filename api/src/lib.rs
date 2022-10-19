@@ -615,8 +615,9 @@ async fn invitations_get(
     event_id: i32,
     email: String,
     pool: &State<PgPool>,
-    user: AdminUser,
+    user: User,
 ) -> Result<Json<InvitationsResponse>, rocket::response::status::BadRequest<String>> {
+    log::info!("Getting invitation details for email: {}", email);
     if user.email != email {
         return Err(rocket::response::status::BadRequest(Some(
             "You can only respond to invitations for your own email address".to_string(),
