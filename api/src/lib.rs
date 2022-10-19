@@ -1022,25 +1022,93 @@ impl Fairing for CORS {
     }
 }
 
+const EMAIL_TEMPLATES: [(&str, &str); 3] = [
+    (
+        "email_base.html.tera",
+        r#"
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+      </head>
+      <body>
+        {% block content %}{% endblock content %}
+      </body>
+    </html>
+    "#,
+    ),
+    (
+        "email_invitation.html.tera",
+        r#"
+    {% extends "email_base.html.tera" %}
+
+    {% block content %}
+        <p>Dear {{ name }},</p>
+
+        <p>I'm pleased to invite you to the {{ title }}</p>
+
+        <p>It starts at {{ time_begin }} and runs until {{ time_end }}.</p>
+
+        <p>{{ description }}</p>
+
+        <p>I've created a new website for these events where you can RSVP and see details about the event. In the future, you will also be able to let me know which times you can attend, reserve seats, suggest and vote for games, as well as a live dashboard for during the event itself. It's a constant work in progress, so please let me know if you have any issues or feedback.</p>
+
+        <p>To RSVP, please <a href="https://calandar.org/verify_email?token={{ token }}">click here</a> within the next 24 hours. After this time you will have to log in again at calandar.org using this email address.</p>
+
+        <p>See you there,</p>
+
+        <p>Lewis</p>
+    {% endblock content %}
+    "#,
+    ),
+    (
+        "email_verification.html.tera",
+        r#"
+    {% extends "email_base.html.tera" %}
+
+    {% block content %}
+        <p>Dear {{ name }},</p>
+
+        <p>Please confirm your email by visiting the following link in the next 5 minutes: <a href="https://calandar.org/verify_email?token={{ token }}">Validate Email</a></p>
+
+        <p>Alternatively, go to <a href=\"https://calandar.org/verify_email\">https://calandar.org/verify_email</a> and enter the following token:</p>
+
+        <code>{{ token }}</code>
+
+        <p>If you did not request this email, please ignore it.</p>
+
+        <p>Happy hunting,</p>
+
+        <p>Lewis</p>
+    {% endblock content %}
+    "#,
+    ),
+];
+
 #[shuttle_service::main]
 async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
 ) -> ShuttleRocket {
-    sqlx::migrate!()
-        .run(&pool)
-        .await
-        .expect("Database migrated to latest version.");
+    log::info!("Launching application!");
+    match sqlx::migrate!().run(&pool).await {
+        Ok(_) => log::info!("Migrations ran successfully"),
+        Err(e) => log::error!("Error running migrations: {}", e),
+    };
 
-    // Get the discord token set in `Secrets.toml` from the shared Postgres database
+    // Get the discord token set in `Secrets.toml` from the AWS RDS Postgres database
     let paseto_secret_key = if let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") {
         paseto_secret_key
     } else {
         return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
     };
 
+    log::info!("PASETO_SECRET_KEY obtained.");
+
     let paseto_symmetric_key =
         PasetoSymmetricKey::<V4, Local>::from(Key::from(paseto_secret_key.as_bytes()));
+
+    log::info!("Paseto key created.");
 
     let sendgrid_api_key = if let Some(sendgrid_api_key) = secret_store.get("SENDGRID_API_KEY") {
         sendgrid_api_key
@@ -1048,10 +1116,19 @@ async fn rocket(
         return Err(anyhow!("failed to get SENDGRID_API_KEY from secrets store").into());
     };
 
+    log::info!("SENDGRID_API_KEY obtained.");
+
     let email_sender = Sender::new(sendgrid_api_key);
 
-    let tera = Tera::new("templates/**/*.html.tera").expect("Templates parsed correctly.");
+    log::info!("Sendgrid sender created.");
 
+    let mut tera = Tera::default();
+    match tera.add_raw_templates(EMAIL_TEMPLATES) {
+        Ok(_) => log::info!("Tera templates added."),
+        Err(e) => log::error!("Error adding Tera templates: {}", e),
+    };
+
+    log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]
     let rocket = rocket::build()
         .attach(CORS)

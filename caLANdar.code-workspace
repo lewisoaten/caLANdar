@@ -14,6 +14,15 @@
 				"driver": "PostgreSQL",
 				"name": "Shuttle Run DB",
 				"connectString": "postgres://postgres:postgres@localhost:24915/postgres"
+			},
+			{
+				"previewLimit": 50,
+				"server": "localhost",
+				"port": 5432,
+				"askForPassword": true,
+				"driver": "PostgreSQL",
+				"name": "Shuttle Deploy DB",
+				"connectString": "postgres://user-calandar-api:BKKqYhRIcMh7@db.shuttle.rs:5432/db-calandar-api"
 			}
 		]
 	}
