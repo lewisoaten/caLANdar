@@ -58,7 +58,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const onClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
     const email = event?.currentTarget.value;
     fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations/${email}`,
+      `${
+        process.env.REACT_APP_API_PROXY
+      }/api/events/${event_id}/invitations/${encodeURIComponent(email)}`,
       {
         method: "DELETE",
         headers: {
