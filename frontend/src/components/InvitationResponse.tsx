@@ -1,6 +1,8 @@
 import * as React from "react";
 import { useEffect, useState, useContext, useRef } from "react";
 import {
+  Alert,
+  Collapse,
   TextField,
   Stack,
   Typography,
@@ -8,6 +10,7 @@ import {
   CircularProgress,
   ToggleButton,
 } from "@mui/material";
+import { useSnackbar } from "notistack";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -26,6 +29,8 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   const token = userDetails?.token;
   const email = userDetails?.email;
 
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
+
   const [invitation, setInvitation] = useState(defaultInvitationData);
   const [loading, setLoading] = useState(false);
   const [handleColour, setHandleColour] = useState<
@@ -37,6 +42,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     | "warning"
     | undefined
   >("primary");
+  const [formInfoVisible, setFormInfoVisible] = useState(false);
 
   var typingTimer = useRef<NodeJS.Timeout>();
   const doneTypingInterval = 1000;
@@ -70,7 +76,6 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     newAlignment: string,
   ) => {
     clearTimeout(typingTimer.current);
-    setLoading(true);
 
     const newInvitation = {
       ...invitation,
@@ -78,6 +83,15 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     };
 
     setInvitation(newInvitation);
+
+    if (!invitation.handle || !newAlignment) {
+      setFormInfoVisible(true);
+      setLoading(false);
+      return;
+    }
+
+    setFormInfoVisible(false);
+    setLoading(true);
 
     typingTimer.current = setTimeout(function () {
       saveInvitationResponse(newInvitation);
@@ -87,15 +101,22 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   const handleHandleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     clearTimeout(typingTimer.current);
 
-    setLoading(true);
-    setHandleColour("warning");
-
     const newInvitation = {
       ...invitation,
       handle: event.target.value,
     };
 
     setInvitation(newInvitation);
+
+    if (!event.target.value || !invitation.response) {
+      setFormInfoVisible(true);
+      setLoading(false);
+      return;
+    }
+
+    setFormInfoVisible(false);
+    setLoading(true);
+    setHandleColour("warning");
 
     if (event.target.value) {
       typingTimer.current = setTimeout(function () {
@@ -124,6 +145,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       if (response.status === 204) {
         setLoading(false);
         setHandleColour("primary");
+        enqueueSnackbar("RSVP saved", { variant: "success" });
       } else {
         alert("Unable to set response");
         throw new Error("Unable to set response");
@@ -136,33 +158,41 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
         RSVP
       </Typography>
-      <Stack spacing={2} direction="row">
-        <TextField
-          label="Handle"
-          variant="outlined"
-          color={handleColour}
-          focused
-          value={invitation.handle}
-          onChange={handleHandleChange}
-        />
-        <ToggleButtonGroup
-          color="primary"
-          value={invitation.response}
-          exclusive
-          onChange={handleRSVPChange}
-          aria-label="Response"
-        >
-          <ToggleButton color="success" value="yes">
-            Yes
-          </ToggleButton>
-          <ToggleButton color="warning" value="maybe">
-            Maybe
-          </ToggleButton>
-          <ToggleButton color="error" value="no">
-            No
-          </ToggleButton>
-        </ToggleButtonGroup>
-        {loading && <CircularProgress />}
+      <Stack spacing={2} direction="column">
+        <Stack spacing={2} direction="row">
+          <TextField
+            label="Handle"
+            variant="outlined"
+            color={handleColour}
+            focused
+            value={invitation.handle}
+            onChange={handleHandleChange}
+          />
+          <ToggleButtonGroup
+            color="primary"
+            value={invitation.response}
+            exclusive
+            onChange={handleRSVPChange}
+            aria-label="Response"
+          >
+            <ToggleButton color="success" value="yes">
+              Yes
+            </ToggleButton>
+            <ToggleButton color="warning" value="maybe">
+              Maybe
+            </ToggleButton>
+            <ToggleButton color="error" value="no">
+              No
+            </ToggleButton>
+          </ToggleButtonGroup>
+          {loading && <CircularProgress />}
+        </Stack>
+        <Collapse in={formInfoVisible}>
+          <Alert severity="info">
+            You must enter both a Handle and select whether you are attending to
+            save your response.
+          </Alert>
+        </Collapse>
       </Stack>
     </React.Fragment>
   );
