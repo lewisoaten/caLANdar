@@ -6,6 +6,7 @@ import { UserProvider } from "./UserProvider";
 import Views from "./Views";
 import Dashboard from "./components/Dashboard";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
+import { SnackbarProvider } from "notistack";
 
 function App() {
   const theme = createTheme({ palette: { mode: "dark" } });
@@ -14,9 +15,17 @@ function App() {
   return (
     <UserProvider>
       <ThemeProvider theme={theme}>
-        <Dashboard>
-          <Views />
-        </Dashboard>
+        <SnackbarProvider
+          maxSnack={3}
+          anchorOrigin={{
+            vertical: "bottom",
+            horizontal: "right",
+          }}
+        >
+          <Dashboard>
+            <Views />
+          </Dashboard>
+        </SnackbarProvider>
       </ThemeProvider>
     </UserProvider>
   );
