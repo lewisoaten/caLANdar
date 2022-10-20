@@ -29,7 +29,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   const token = userDetails?.token;
   const email = userDetails?.email;
 
-  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
+  const { enqueueSnackbar } = useSnackbar();
 
   const [invitation, setInvitation] = useState(defaultInvitationData);
   const [loading, setLoading] = useState(false);
