@@ -162,10 +162,8 @@ export default function EventTable(props: EventTableProps) {
   const openEvent = useCallback(
     (id: GridRowId) => () => {
       navigate(`${id}`);
-
-      // eslint-disable-next-line react-hooks/exhaustive-deps
     },
-    [],
+    [navigate],
   );
 
   const columns = useMemo<GridColumns<typeof events[number]>>(
