@@ -792,7 +792,7 @@ async fn login(
         email_details,
         &mut context,
         redirect,
-        Duration::minutes(5),
+        Duration::minutes(30),
         key,
         sender,
         tera,
@@ -1070,7 +1070,7 @@ const EMAIL_TEMPLATES: [(&str, &str); 3] = [
     {% block content %}
         <p>Dear {{ name }},</p>
 
-        <p>Please confirm your email by visiting the following link in the next 5 minutes: <a href="https://calandar.org/verify_email?token={{ token }}">Validate Email</a></p>
+        <p>Please confirm your email by visiting the following link in the next 30 minutes: <a href="https://calandar.org/verify_email?token={{ token }}">Validate Email</a></p>
 
         <p>Alternatively, go to <a href=\"https://calandar.org/verify_email\">https://calandar.org/verify_email</a> and enter the following token:</p>
 
