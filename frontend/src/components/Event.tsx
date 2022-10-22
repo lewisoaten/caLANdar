@@ -73,7 +73,11 @@ const Event = () => {
                 </Paper>
               </Grid>
               <Grid item xs={12}>
-                <Typography variant="body1" gutterBottom>
+                <Typography
+                  variant="body1"
+                  gutterBottom
+                  sx={{ whiteSpace: "pre-wrap" }}
+                >
                   {event.description}
                 </Typography>
               </Grid>

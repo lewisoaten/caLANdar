@@ -125,7 +125,11 @@ const GridCellExpand = memo(function GridCellExpand(
             elevation={1}
             style={{ minHeight: wrapper.current!.offsetHeight - 3 }}
           >
-            <Typography variant="body2" style={{ padding: 8 }}>
+            <Typography
+              variant="body2"
+              style={{ padding: 8 }}
+              sx={{ whiteSpace: "pre-wrap" }}
+            >
               {value}
             </Typography>
           </Paper>

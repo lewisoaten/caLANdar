@@ -1050,7 +1050,7 @@ const EMAIL_TEMPLATES: [(&str, &str); 3] = [
 
         <p>It starts at {{ time_begin }} and runs until {{ time_end }}.</p>
 
-        <p>{{ description }}</p>
+        <p>{{ description | linebreaksbr }}</p>
 
         <p>I've created a new website for these events where you can RSVP and see details about the event. In the future, you will also be able to let me know which times you can attend, reserve seats, suggest and vote for games, as well as a live dashboard for during the event itself. It's a constant work in progress, so please let me know if you have any issues or feedback.</p>
 
