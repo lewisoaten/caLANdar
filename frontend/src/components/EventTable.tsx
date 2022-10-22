@@ -1,5 +1,15 @@
 import * as React from "react";
-import { useEffect, useState, useContext } from "react";
+import {
+  useEffect,
+  useState,
+  useContext,
+  useCallback,
+  useRef,
+  useMemo,
+  memo,
+  Dispatch,
+  SetStateAction,
+} from "react";
 import { Box, Typography, Paper, Popper } from "@mui/material";
 import {
   DataGrid,
@@ -29,16 +39,16 @@ function isOverflown(element: Element): boolean {
   );
 }
 
-const GridCellExpand = React.memo(function GridCellExpand(
+const GridCellExpand = memo(function GridCellExpand(
   props: GridCellExpandProps,
 ) {
   const { width, value } = props;
-  const wrapper = React.useRef<HTMLDivElement | null>(null);
-  const cellDiv = React.useRef(null);
-  const cellValue = React.useRef(null);
-  const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [showFullCell, setShowFullCell] = React.useState(false);
-  const [showPopper, setShowPopper] = React.useState(false);
+  const wrapper = useRef<HTMLDivElement | null>(null);
+  const cellDiv = useRef(null);
+  const cellValue = useRef(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [showFullCell, setShowFullCell] = useState(false);
+  const [showPopper, setShowPopper] = useState(false);
 
   const handleMouseEnter = () => {
     const isCurrentlyOverflown = isOverflown(cellValue.current!);
@@ -51,7 +61,7 @@ const GridCellExpand = React.memo(function GridCellExpand(
     setShowFullCell(false);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!showFullCell) {
       return undefined;
     }
@@ -134,10 +144,7 @@ function renderCellExpand(params: GridRenderCellParams<string>) {
 }
 
 interface EventTableProps {
-  eventsState?: [
-    EventData[],
-    React.Dispatch<React.SetStateAction<EventData[]>>,
-  ];
+  eventsState?: [EventData[], Dispatch<SetStateAction<EventData[]>>];
   asAdmin?: boolean;
 }
 
@@ -152,14 +159,14 @@ export default function EventTable(props: EventTableProps) {
 
   const navigate = useNavigate();
 
-  const openEvent = React.useCallback(
+  const openEvent = useCallback(
     (id: GridRowId) => () => {
       navigate(`${id}`);
     },
     [],
   );
 
-  const columns = React.useMemo<GridColumns<typeof events[number]>>(
+  const columns = useMemo<GridColumns<typeof events[number]>>(
     () => [
       {
         field: "title",
