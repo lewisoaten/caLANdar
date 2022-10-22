@@ -10,6 +10,7 @@ import {
   Dispatch,
   SetStateAction,
 } from "react";
+import moment from "moment";
 import { Box, Typography, Paper, Popper } from "@mui/material";
 import {
   DataGrid,
@@ -197,13 +198,13 @@ export default function EventTable(props: EventTableProps) {
         flex: 1,
         editable: false,
         valueGetter: (params: GridValueGetterParams) => {
-          if (params.row.timeBegin == null || params.row.timeEnd == null) {
+          const timeBegin = moment(params.row.timeBegin);
+          const timeEnd = moment(params.row.timeEnd);
+          if (timeBegin == null || timeEnd == null) {
             return "";
           }
 
-          return params.row.timeEnd
-            .endOf("day")
-            .diff(params.row.timeBegin.startOf("day"), "days");
+          return timeEnd.endOf("day").diff(timeBegin.startOf("day"), "days");
         },
         valueFormatter: (params: GridValueFormatterParams<number>) => {
           if (params.value == null) {
