@@ -80,7 +80,11 @@ const EventManagement = () => {
               >
                 {event.title}
               </Typography>
-              <Typography variant="body1" gutterBottom>
+              <Typography
+                variant="body1"
+                gutterBottom
+                sx={{ whiteSpace: "pre-wrap" }}
+              >
                 {event.description}
               </Typography>
               <Stack direction="row" spacing={2}>

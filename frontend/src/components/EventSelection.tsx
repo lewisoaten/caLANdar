@@ -48,7 +48,11 @@ const Event = () => {
                     .sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix())[0]
                     ?.timeEnd.calendar()}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ whiteSpace: "pre-wrap" }}
+                >
                   {
                     events.sort(
                       (a, b) => a.timeBegin.unix() - b.timeBegin.unix(),
