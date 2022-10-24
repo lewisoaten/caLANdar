@@ -1,7 +1,8 @@
 extern crate rocket;
 
 use anyhow::anyhow;
-use chrono::{prelude::Utc, DateTime, Duration};
+use chrono::{prelude::Utc, DateTime, Duration, NaiveDateTime};
+use futures::future::join_all;
 use rocket::{
     delete,
     fairing::{Fairing, Info, Kind},
@@ -336,30 +337,6 @@ async fn events_get_all_user(
 }
 
 #[openapi]
-#[get("/events", format = "json", rank = 3)]
-async fn events_get_all_default(
-    pool: &State<PgPool>,
-) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
-    // Return all events
-    let events: Vec<EventsGetResponse> = match sqlx::query_as!(
-        EventsGetResponse,
-        "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
-    )
-    .fetch_all(pool.inner())
-    .await
-    {
-        Ok(events) => events,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
-                "Error getting database ID".to_string(),
-            )))
-        }
-    };
-
-    Ok(Json(events))
-}
-
-#[openapi]
 #[get("/events/<id>", format = "json")]
 async fn events_get(
     id: i32,
@@ -486,6 +463,105 @@ async fn events_post(
     };
 
     Ok(status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)))
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+struct EventGameSuggestionResponse {
+    appid: i64,
+    name: String,
+    last_modified: DateTime<Utc>,
+    requested_at: DateTime<Utc>,
+    suggestion_last_modified: DateTime<Utc>,
+}
+
+#[openapi]
+#[get("/events/<event_id>/games", format = "json")]
+async fn event_games_get_all(
+    event_id: i32,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<Vec<EventGameSuggestionResponse>>, rocket::response::status::BadRequest<String>> {
+    // Return all games
+    let games: Vec<EventGameSuggestionResponse> = match sqlx::query_as!(
+        EventGameSuggestionResponse,
+        r#"SELECT
+            steam_game.appid AS appid,
+            steam_game.name AS name,
+            steam_game.last_modified AS last_modified,
+            event_game.requested_at AS requested_at,
+            event_game.last_modified AS suggestion_last_modified
+        FROM event_game
+        INNER JOIN steam_game ON event_game.game_id = steam_game.appid
+        WHERE event_game.event_id = $1"#,
+        event_id
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(games) => games,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(Json(games))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+struct EventGameSuggestionRequest {
+    appid: i64,
+}
+
+#[openapi]
+#[post("/events/<event_id>/games", format = "json", data = "<game_request>")]
+async fn event_games_post(
+    event_id: i32,
+    game_request: Json<EventGameSuggestionRequest>,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<
+    status::Created<Json<EventGameSuggestionResponse>>,
+    rocket::response::status::BadRequest<String>,
+> {
+    // Insert new game suggestion
+    let event_game_suggestion: EventGameSuggestionResponse = match sqlx::query_as!(
+        EventGameSuggestionResponse,
+        r#"WITH event_game_suggestion_response AS (
+            INSERT INTO event_game (event_id, game_id)
+                VALUES ($1, $2)
+                RETURNING event_id, game_id, requested_at, last_modified
+        ) SELECT
+            steam_game.appid AS appid,
+            steam_game.name AS name,
+            steam_game.last_modified AS last_modified,
+            event_game_suggestion_response.requested_at AS requested_at,
+            event_game_suggestion_response.last_modified AS suggestion_last_modified
+        FROM event_game_suggestion_response
+        INNER JOIN steam_game ON event_game_suggestion_response.game_id = steam_game.appid;"#,
+        event_id,
+        game_request.appid,
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(event_game_suggestion) => event_game_suggestion,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    Ok(status::Created::new(format!(
+        "/events/{}/games/{}",
+        event_id,
+        &game_request.appid.to_string()
+    ))
+    .body(Json(event_game_suggestion)))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -654,7 +730,7 @@ async fn invitations_get_all(
     pool: &State<PgPool>,
     _user: AdminUser,
 ) -> Result<Json<Vec<InvitationsResponse>>, rocket::response::status::BadRequest<String>> {
-    // Return all events
+    // Return all invitations
     let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
         InvitationsResponse,
         r#"SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
@@ -991,6 +1067,200 @@ async fn _send_preauth_email(
     }
 }
 
+#[derive(Serialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct SteamGameUpdate {
+    id: i32,
+    update_time: DateTime<Utc>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGame {
+    appid: i64,
+    name: String,
+    last_modified: i64,
+    price_change_number: Option<i32>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGameResponse {
+    apps: Vec<SteamAPISteamGame>,
+    have_more_results: Option<bool>,
+    last_appid: Option<i64>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGameResponseWrapper {
+    response: SteamAPISteamGameResponse,
+}
+
+#[openapi]
+#[post("/steam-game-update")]
+async fn steam_game_update(
+    pool: &State<PgPool>,
+    steam_api_key: &State<String>,
+    _user: AdminUser,
+) -> Result<Json<()>, rocket::response::status::BadRequest<String>> {
+    let last_update: SteamGameUpdate = match sqlx::query_as!(
+        SteamGameUpdate,
+        "SELECT id, update_time FROM steam_game_update ORDER BY update_time DESC LIMIT 1",
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(last_update) => {
+            log::info!(
+                "Found last update time, checking for updates since {:?}",
+                last_update
+            );
+            last_update
+        }
+        Err(e) => {
+            log::info!("Unable to get last update time: {}", e);
+            // Return earliest unix timestamp
+            SteamGameUpdate {
+                id: 0,
+                update_time: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+            }
+        }
+    };
+
+    // Insert new event and return it
+    let steam_game_update: SteamGameUpdate = match sqlx::query_as!(
+        SteamGameUpdate,
+        "INSERT INTO steam_game_update DEFAULT VALUES RETURNING id, update_time",
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(steam_game_update) => steam_game_update,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    let mut has_more_results = true;
+    let mut last_appid = 0;
+
+    while has_more_results {
+        let request_url = format!("https://api.steampowered.com/IStoreService/GetAppList/v1/?key={key}&if_modified_since={if_modified_since}&last_appid={last_appid}&max_results={max_results}",
+                                key = steam_api_key,
+                                if_modified_since = last_update.update_time.timestamp(),
+                                last_appid = last_appid,
+                                max_results = 10000,
+                            );
+        log::info!("Requesting games from steam API using url: {}", request_url);
+        let response = match reqwest::get(&request_url).await {
+            Ok(response) => response,
+            Err(e) => {
+                return Err(rocket::response::status::BadRequest(Some(format!(
+                    "Error getting steam game list: {}",
+                    e
+                ))))
+            }
+        };
+
+        let steam_games: SteamAPISteamGameResponseWrapper = match response.json().await {
+            Ok(steam_games) => steam_games,
+            Err(e) => {
+                return Err(rocket::response::status::BadRequest(Some(format!(
+                    "Error parsing steam game list: {}",
+                    e
+                ))))
+            }
+        };
+        log::info!(
+            "Parsed steam games response. Last appid: {}, more results: {}, count of results: {}",
+            steam_games.response.last_appid.unwrap_or(0),
+            steam_games.response.have_more_results.unwrap_or(false),
+            steam_games.response.apps.len()
+        );
+
+        has_more_results = steam_games.response.have_more_results.unwrap_or(false);
+        last_appid = steam_games.response.last_appid.unwrap_or(0);
+
+        let mut insert_promises = vec![];
+
+        for steam_game in &steam_games.response.apps {
+            let insert_promise = sqlx::query!(
+                "INSERT INTO steam_game (appid, update_id, name, last_modified)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = $4",
+                steam_game.appid,
+                steam_game_update.id,
+                steam_game.name,
+                DateTime::<Utc>::from_utc(
+                    NaiveDateTime::from_timestamp(steam_game.last_modified, 0),
+                    Utc
+                ),
+            )
+            .execute(pool.inner());
+
+            insert_promises.push(insert_promise);
+        }
+
+        join_all(insert_promises).await;
+        log::info!(
+            "Inserted or updated {} steam games",
+            steam_games.response.apps.len()
+        );
+    }
+
+    Ok(Json(()))
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamGameResponse {
+    appid: i64,
+    name: String,
+    last_modified: DateTime<Utc>,
+    rank: Option<f32>,
+}
+
+#[openapi]
+#[get("/steam-game?<query>&<page>")]
+async fn get_steam_game(
+    query: String,
+    page: Option<i64>,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<Vec<SteamGameResponse>>, rocket::response::status::BadRequest<String>> {
+    const COUNT: i64 = 10;
+
+    let page = page.unwrap_or(0);
+
+    let wrapped_query = format!("'{}'", query);
+
+    // Return games matching search query
+    match sqlx::query_as!(
+        SteamGameResponse,
+        r#"SELECT appid, name, last_modified, ts_rank_cd(to_tsvector('english', name), query, 32 /* rank/(rank+1) */) AS rank
+        FROM steam_game, plainto_tsquery('english', $1) query
+        WHERE query @@ to_tsvector('english', name)
+        ORDER BY rank DESC
+        LIMIT $2
+        OFFSET $3"#,
+        wrapped_query,
+        COUNT,
+        page * COUNT,
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(games) => Ok(Json(games)),
+        Err(e) => Err(rocket::response::status::BadRequest(Some(format!(
+            "Error searching steam games: {}",
+            e
+        )))),
+    }
+}
+
 pub struct CORS;
 
 #[rocket::async_trait]
@@ -1123,6 +1393,14 @@ async fn rocket(
 
     log::info!("Sendgrid sender created.");
 
+    let steam_api_key = if let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") {
+        steam_api_key
+    } else {
+        return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
+    };
+
+    log::info!("SENDGRID_API_KEY obtained.");
+
     let mut tera = Tera::default();
     match tera.add_raw_templates(EMAIL_TEMPLATES) {
         Ok(_) => log::info!("Tera templates added."),
@@ -1136,6 +1414,7 @@ async fn rocket(
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(paseto_symmetric_key)
         .manage::<Sender>(email_sender)
+        .manage::<String>(steam_api_key)
         .manage::<Tera>(tera)
         .mount("/", routes![all_options])
         .mount(
@@ -1146,7 +1425,6 @@ async fn rocket(
                 verify_email,
                 events_get_all,
                 events_get_all_user,
-                events_get_all_default,
                 events_get,
                 events_get_user,
                 events_post,
@@ -1156,6 +1434,10 @@ async fn rocket(
                 invitations_get_all,
                 invitations_delete,
                 invitations_patch,
+                steam_game_update,
+                get_steam_game,
+                event_games_post,
+                event_games_get_all,
             ],
         )
         .mount(

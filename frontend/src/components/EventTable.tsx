@@ -22,7 +22,7 @@ import {
   GridRenderCellParams,
   GridRowId,
 } from "@mui/x-data-grid";
-import LaunchIcon from "@mui/icons-material/Launch";
+import LinkIcon from "@mui/icons-material/Link";
 import { useNavigate } from "react-router-dom";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
@@ -232,7 +232,7 @@ export default function EventTable(props: EventTableProps) {
         flex: 0.1,
         getActions: (params: GridRowParams) => [
           <GridActionsCellItem
-            icon={<LaunchIcon />}
+            icon={<LinkIcon />}
             label="Open"
             onClick={openEvent(params.id)}
           />,
