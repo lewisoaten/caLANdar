@@ -12,8 +12,6 @@ import {
   TextField,
   CircularProgress,
   AutocompleteChangeReason,
-  AutocompleteChangeDetails,
-  AutocompleteHighlightChangeReason,
   IconButton,
 } from "@mui/material";
 import SportsEsportsIcon from "@mui/icons-material/SportsEsports";
@@ -131,7 +129,6 @@ export default function EventGameSuggestions(props: EventTableProps) {
     event: React.SyntheticEvent<Element, Event>,
     value: Game | null,
     reason: AutocompleteChangeReason,
-    details?: AutocompleteChangeDetails<Game> | undefined,
   ) => {
     // Prevent page reload
     event.preventDefault();
