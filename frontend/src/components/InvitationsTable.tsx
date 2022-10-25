@@ -23,6 +23,7 @@ import { dateParser } from "../utils";
 
 interface InvitationsTableProps {
   event_id: number;
+  as_admin: boolean;
 }
 
 export default function InvitationsTable(props: InvitationsTableProps) {
@@ -34,7 +35,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   useEffect(() => {
     if (event_id) {
       fetch(
-        `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations`,
+        `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations?as_admin=${props.as_admin}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -60,7 +61,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     fetch(
       `${
         process.env.REACT_APP_API_PROXY
-      }/api/events/${event_id}/invitations/${encodeURIComponent(email)}`,
+      }/api/events/${event_id}/invitations/${encodeURIComponent(
+        email,
+      )}?as_admin=true`,
       {
         method: "DELETE",
         headers: {
@@ -103,7 +106,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     Promise.all<Promise<InvitationData>[]>(
       emailArr.map((email) => {
         return fetch(
-          `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations`,
+          `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations?as_admin=true`,
           {
             method: "POST",
             headers: {

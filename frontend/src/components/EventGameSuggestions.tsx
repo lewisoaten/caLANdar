@@ -13,8 +13,9 @@ import {
   CircularProgress,
   AutocompleteChangeReason,
   IconButton,
+  Skeleton,
+  Alert,
 } from "@mui/material";
-import SportsEsportsIcon from "@mui/icons-material/SportsEsports";
 import LaunchIcon from "@mui/icons-material/Launch";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
@@ -25,11 +26,12 @@ import {
   defaultGames,
 } from "../types/game_suggestions";
 
-interface EventTableProps {
+interface EventGameSuggestionsProps {
   event_id: number;
+  responded: boolean;
 }
 
-export default function EventGameSuggestions(props: EventTableProps) {
+export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
@@ -67,7 +69,7 @@ export default function EventGameSuggestions(props: EventTableProps) {
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [props.event_id, props.responded]);
 
   function sortAndAddGameSuggestions(
     newGameSuggestions: Array<GameSuggestion>,
@@ -168,50 +170,69 @@ export default function EventGameSuggestions(props: EventTableProps) {
           Game Suggestions
         </Typography>
       </Grid>
+      {props.responded ? (
+        <Grid item xs={12}>
+          <Autocomplete
+            id="game-suggestion"
+            open={open}
+            onOpen={() => {
+              setOpen(true);
+            }}
+            onClose={() => {
+              setOpen(false);
+            }}
+            isOptionEqualToValue={(option, value) => option.name === value.name}
+            getOptionLabel={(option) => option.name}
+            options={options}
+            getOptionDisabled={(option) =>
+              gameSuggestions.find((x) => x.appid === option.appid)
+                ? true
+                : false
+            }
+            handleHomeEndKeys={false}
+            loading={loading}
+            value={null}
+            inputValue={inputValue}
+            openOnFocus={false}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Suggest Game"
+                error={errorMessage ? true : false}
+                helperText={errorMessage}
+                InputProps={{
+                  ...params.InputProps,
+                  endAdornment: (
+                    <React.Fragment>
+                      {loading ? (
+                        <CircularProgress color="inherit" size={20} />
+                      ) : null}
+                      {params.InputProps.endAdornment}
+                    </React.Fragment>
+                  ),
+                }}
+              />
+            )}
+            filterOptions={(x) => x}
+            onInputChange={handleInputChange}
+            onChange={handleInputSelect}
+          />
+        </Grid>
+      ) : (
+        <React.Fragment>
+          <Grid item xs={12}>
+            <Alert severity="info">RSVP to make game suggestions.</Alert>
+          </Grid>
+          <Grid item xs={12}>
+            <Skeleton variant="rectangular" width="100%" animation="wave">
+              <Typography variant="body1" gutterBottom>
+                Autocomplete
+              </Typography>
+            </Skeleton>
+          </Grid>
+        </React.Fragment>
+      )}
       <Grid item xs={12}>
-        <Autocomplete
-          id="game-suggestion"
-          open={open}
-          onOpen={() => {
-            setOpen(true);
-          }}
-          onClose={() => {
-            setOpen(false);
-          }}
-          isOptionEqualToValue={(option, value) => option.name === value.name}
-          getOptionLabel={(option) => option.name}
-          options={options}
-          getOptionDisabled={(option) =>
-            gameSuggestions.find((x) => x.appid === option.appid) ? true : false
-          }
-          handleHomeEndKeys={false}
-          loading={loading}
-          value={null}
-          inputValue={inputValue}
-          openOnFocus={false}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Suggest Game"
-              error={errorMessage ? true : false}
-              helperText={errorMessage}
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <React.Fragment>
-                    {loading ? (
-                      <CircularProgress color="inherit" size={20} />
-                    ) : null}
-                    {params.InputProps.endAdornment}
-                  </React.Fragment>
-                ),
-              }}
-            />
-          )}
-          filterOptions={(x) => x}
-          onInputChange={handleInputChange}
-          onChange={handleInputSelect}
-        />
         <List>
           {gameSuggestions.map((gameSuggestion) => (
             <ListItem
@@ -227,9 +248,10 @@ export default function EventGameSuggestions(props: EventTableProps) {
               dense={true}
             >
               <ListItemAvatar>
-                <Avatar>
-                  <SportsEsportsIcon />
-                </Avatar>
+                <Avatar
+                  alt={gameSuggestion.name || "Game"}
+                  src={`https://steamcdn-a.akamaihd.net/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                />
               </ListItemAvatar>
               <ListItemText
                 primary={gameSuggestion.name}
