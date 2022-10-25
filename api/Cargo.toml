@@ -13,7 +13,7 @@ chrono = { version = "0.4.22", features = ["serde"] }
 futures = "0.3.25"
 shuttle-service = { version = "0.7.1", features = ["web-rocket"] }
 shuttle-shared-db = { version = "0.7.0", features = ["postgres"] }
-shuttle-secrets = "0.7.0"
+shuttle-secrets = "0.7.1"
 log = "0.4.17"
 sendgrid = { version = "0.18.1", features = ["async"] }
 rocket = { version = "0.5.0-rc.2", features = [ "json" ] }
