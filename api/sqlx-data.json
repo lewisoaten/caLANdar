@@ -56,64 +56,6 @@
     },
     "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
   },
-  "16fe2b1a40413abdb02a74a82b5347db4c33ca376bff58b4296f539a7385c433": {
-    "describe": {
-      "columns": [
-        {
-          "name": "event_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "email",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "handle",
-          "ordinal": 2,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "invited_at",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "responded_at",
-          "ordinal": 4,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "response: _",
-          "ordinal": 5,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "no", "maybe"]
-              },
-              "name": "invitation_response"
-            }
-          }
-        },
-        {
-          "name": "attendance",
-          "ordinal": 6,
-          "type_info": "Bytea"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 7,
-          "type_info": "Timestamptz"
-        }
-      ],
-      "nullable": [false, false, true, false, true, true, true, false],
-      "parameters": {
-        "Left": ["Int4", "Text"]
-      }
-    },
-    "query": "SELECT event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1 AND email=$2"
-  },
   "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
     "describe": {
       "columns": [
@@ -160,122 +102,6 @@
       }
     },
     "query": "INSERT INTO steam_game_update DEFAULT VALUES RETURNING id, update_time"
-  },
-  "41256ee9c39c5233507ec368fe4d1363d028e821b64a9fa2042b0c9ea7035144": {
-    "describe": {
-      "columns": [
-        {
-          "name": "event_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "email",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "handle",
-          "ordinal": 2,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "invited_at",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "responded_at",
-          "ordinal": 4,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "response: _",
-          "ordinal": 5,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "no", "maybe"]
-              },
-              "name": "invitation_response"
-            }
-          }
-        },
-        {
-          "name": "attendance",
-          "ordinal": 6,
-          "type_info": "Bytea"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 7,
-          "type_info": "Timestamptz"
-        }
-      ],
-      "nullable": [false, false, true, false, true, true, true, false],
-      "parameters": {
-        "Left": ["Int4", "Varchar"]
-      }
-    },
-    "query": "INSERT INTO invitation (event_id, email)\n        VALUES ($1, $2)\n        RETURNING event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified"
-  },
-  "49aff60c67af154baac3feaa34b757853a8d0492e2222f1e550609ccd4693c0c": {
-    "describe": {
-      "columns": [
-        {
-          "name": "event_id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        },
-        {
-          "name": "email",
-          "ordinal": 1,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "handle",
-          "ordinal": 2,
-          "type_info": "Varchar"
-        },
-        {
-          "name": "invited_at",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "responded_at",
-          "ordinal": 4,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "response: _",
-          "ordinal": 5,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "no", "maybe"]
-              },
-              "name": "invitation_response"
-            }
-          }
-        },
-        {
-          "name": "attendance",
-          "ordinal": 6,
-          "type_info": "Bytea"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 7,
-          "type_info": "Timestamptz"
-        }
-      ],
-      "nullable": [false, false, true, false, true, true, true, false],
-      "parameters": {
-        "Left": ["Int4"]
-      }
-    },
-    "query": "SELECT event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
   },
   "5ad88196d4eb724f1275573eccaa118ede174b00eee2566cd777ee1cb4e01e7b": {
     "describe": {
@@ -394,6 +220,69 @@
       }
     },
     "query": "SELECT\n            steam_game.appid AS appid,\n            steam_game.name AS name,\n            steam_game.last_modified AS last_modified,\n            event_game.requested_at AS requested_at,\n            event_game.last_modified AS suggestion_last_modified\n        FROM event_game\n        INNER JOIN steam_game ON event_game.game_id = steam_game.appid\n        WHERE event_game.event_id = $1"
+  },
+  "6cd5517472dbc53e0bcf8450e0ca65a5627de9d8a2735aa69307a3d344e8406d": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "avatar_url",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "handle",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 6,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 7,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 8,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, null, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
   },
   "845f07db364ad990ef08b77c1fa27f9908d9cfd25fedaa42b9340b3c0b2c8154": {
     "describe": {
@@ -571,6 +460,54 @@
     },
     "query": "UPDATE invitation\n        SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()\n        WHERE event_id = $3\n        AND email = $4"
   },
+  "e3424bf6404e590011f37f6fe37042bb58d0fdf35b00e86b8e3676aa314a1a6d": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "avatar_url",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 3,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 4,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, null, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "SELECT event_id, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, response AS \"response: _\", attendance, last_modified\n                FROM invitation\n                WHERE event_id=$1 AND response IN ('yes', 'maybe')"
+  },
   "f1b0a2f327f2453b0bf7337143c3cdd6debd3e2573447f816de3b8876d954d32": {
     "describe": {
       "columns": [
@@ -617,50 +554,130 @@
     },
     "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end\n        FROM event\n        WHERE id IN (\n            SELECT event_id\n            FROM invitation\n            WHERE email = $1\n            AND event_id = $2\n        )"
   },
-  "fce198de2cc4e4b7ce0a94c89c6c569d3fadc6a0db5d3e2b87636060bff4a42c": {
+  "fae0948b43c51b9ad9932d0b8ab9f295c4712a3fec411cddab48e0a6abe33bf7": {
     "describe": {
       "columns": [
         {
-          "name": "id",
+          "name": "event_id",
           "ordinal": 0,
           "type_info": "Int4"
         },
         {
-          "name": "created_at",
+          "name": "email",
           "ordinal": 1,
-          "type_info": "Timestamptz"
+          "type_info": "Varchar"
         },
         {
-          "name": "last_modified",
+          "name": "avatar_url",
           "ordinal": 2,
-          "type_info": "Timestamptz"
+          "type_info": "Text"
         },
         {
-          "name": "title",
+          "name": "handle",
           "ordinal": 3,
           "type_info": "Varchar"
         },
         {
-          "name": "description",
+          "name": "invited_at",
           "ordinal": 4,
-          "type_info": "Text"
+          "type_info": "Timestamptz"
         },
         {
-          "name": "time_begin",
+          "name": "responded_at",
           "ordinal": 5,
           "type_info": "Timestamptz"
         },
         {
-          "name": "time_end",
+          "name": "response: _",
           "ordinal": 6,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 7,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 8,
           "type_info": "Timestamptz"
         }
       ],
-      "nullable": [false, false, false, false, false, false, false],
+      "nullable": [false, false, null, true, false, true, true, true, false],
       "parameters": {
-        "Left": ["Text"]
+        "Left": ["Int4", "Text"]
       }
     },
-    "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end\n    FROM event\n    WHERE id IN (\n        SELECT event_id\n        FROM invitation\n        WHERE email = $1\n    )"
+    "query": "SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1 AND email=$2"
+  },
+  "ff29c7469463795918bcf875ef5157e1beafa8d78679c18276d56a0719d145e0": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "avatar_url",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "handle",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 6,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 7,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 8,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, null, true, false, true, true, true, false],
+      "parameters": {
+        "Left": ["Int4", "Varchar"]
+      }
+    },
+    "query": "INSERT INTO invitation (event_id, email)\n        VALUES ($1, $2)\n        RETURNING event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified"
   }
 }
