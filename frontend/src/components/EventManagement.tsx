@@ -43,7 +43,7 @@ const EventManagement = () => {
   }, []);
 
   const onClick = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}`, {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
@@ -107,7 +107,7 @@ const EventManagement = () => {
                 height: 240,
               }}
             >
-              <InvitationsTable event_id={event.id} />
+              <InvitationsTable event_id={event.id} as_admin={true} />
             </Paper>
           </Grid>
         </Grid>

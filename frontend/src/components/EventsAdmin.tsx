@@ -66,7 +66,7 @@ const EventsAdmin = () => {
     // Prevent page reload
     event.preventDefault();
 
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events`, {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=true`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

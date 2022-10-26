@@ -1,5 +1,12 @@
 import * as React from "react";
-import { useEffect, useState, useContext, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useContext,
+  useRef,
+  Dispatch,
+  SetStateAction,
+} from "react";
 import {
   Alert,
   Collapse,
@@ -21,6 +28,7 @@ import {
 
 interface InvitationResponseProps {
   event_id: number;
+  setResponded: Dispatch<SetStateAction<boolean>>;
   asAdmin?: boolean;
 }
 
@@ -66,6 +74,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       })
       .then((data) => {
         setInvitation(data);
+        if (data.response && data.handle && data.response !== RSVP.no) {
+          props.setResponded(true);
+        }
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,6 +157,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         setLoading(false);
         setHandleColour("primary");
         enqueueSnackbar("RSVP saved", { variant: "success" });
+        if (newInvitation.response !== RSVP.no) {
+          props.setResponded(true);
+        }
       } else {
         alert("Unable to set response");
         throw new Error("Unable to set response");

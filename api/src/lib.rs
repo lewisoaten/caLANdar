@@ -160,6 +160,12 @@ impl<'r> FromRequest<'r> for AdminUser {
     type Error = UserError;
 
     async fn from_request(request: &'r rocket::Request<'_>) -> request::Outcome<Self, Self::Error> {
+        // API call must specify it wants to access administrative data, otherwise it is Forwarded, and potentially treated as a user request
+        match request.query_value::<bool>("as_admin") {
+            Some(Ok(true)) => {}
+            Some(Ok(false) | Err(_)) | None => return Outcome::Forward(()),
+        };
+
         let authorization_header = request.headers().get_one("Authorization");
 
         match authorization_header {
@@ -259,40 +265,15 @@ struct EventsGetResponse {
 }
 
 #[openapi]
-#[get("/events?<as_admin>", format = "json")]
+#[get("/events", format = "json")]
 async fn events_get_all(
-    as_admin: bool,
     pool: &State<PgPool>,
-    user: AdminUser,
+    _user: AdminUser,
 ) -> Result<Json<Vec<EventsGetResponse>>, rocket::response::status::BadRequest<String>> {
-    if as_admin {
-        // Return all events
-        match sqlx::query_as!(
-            EventsGetResponse,
-            "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
-        ).fetch_all(pool.inner())
-        .await
-        {
-            Ok(events) => return Ok(Json(events)),
-            Err(_) => {
-                return Err(rocket::response::status::BadRequest(Some(
-                    "Error getting database ID".to_string(),
-                )))
-            }
-        };
-    }
-
-    // Return all events that the user is invited to
+    // Return all events
     match sqlx::query_as!(
         EventsGetResponse,
-        "SELECT id, created_at, last_modified, title, description, time_begin, time_end
-    FROM event
-    WHERE id IN (
-        SELECT event_id
-        FROM invitation
-        WHERE email = $1
-    )",
-        user.email
+        "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event"
     )
     .fetch_all(pool.inner())
     .await
@@ -522,15 +503,21 @@ async fn event_games_post(
     event_id: i32,
     game_request: Json<EventGameSuggestionRequest>,
     pool: &State<PgPool>,
-    _user: User,
+    user: User,
 ) -> Result<
     status::Created<Json<EventGameSuggestionResponse>>,
     rocket::response::status::BadRequest<String>,
 > {
-    // Insert new game suggestion
-    let event_game_suggestion: EventGameSuggestionResponse = match sqlx::query_as!(
-        EventGameSuggestionResponse,
-        r#"WITH event_game_suggestion_response AS (
+    match is_attending_event(pool.inner(), event_id, user).await {
+        Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
+        Ok(false) => Err(rocket::response::status::BadRequest(Some(
+            "You can only suggest games for events you have RSVP'd to".to_string(),
+        ))),
+        Ok(true) => {
+            // Insert new game suggestion
+            let event_game_suggestion: EventGameSuggestionResponse = match sqlx::query_as!(
+                EventGameSuggestionResponse,
+                r#"WITH event_game_suggestion_response AS (
             INSERT INTO event_game (event_id, game_id)
                 VALUES ($1, $2)
                 RETURNING event_id, game_id, requested_at, last_modified
@@ -542,26 +529,28 @@ async fn event_games_post(
             event_game_suggestion_response.last_modified AS suggestion_last_modified
         FROM event_game_suggestion_response
         INNER JOIN steam_game ON event_game_suggestion_response.game_id = steam_game.appid;"#,
-        event_id,
-        game_request.appid,
-    )
-    .fetch_one(pool.inner())
-    .await
-    {
-        Ok(event_game_suggestion) => event_game_suggestion,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
-                "Error getting database ID".to_string(),
-            )))
-        }
-    };
+                event_id,
+                game_request.appid,
+            )
+            .fetch_one(pool.inner())
+            .await
+            {
+                Ok(event_game_suggestion) => event_game_suggestion,
+                Err(_) => {
+                    return Err(rocket::response::status::BadRequest(Some(
+                        "Error getting database ID".to_string(),
+                    )))
+                }
+            };
 
-    Ok(status::Created::new(format!(
-        "/events/{}/games/{}",
-        event_id,
-        &game_request.appid.to_string()
-    ))
-    .body(Json(event_game_suggestion)))
+            Ok(status::Created::new(format!(
+                "/events/{}/games/{}",
+                event_id,
+                &game_request.appid.to_string()
+            ))
+            .body(Json(event_game_suggestion)))
+        }
+    }
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -570,7 +559,7 @@ struct InvitationsPostRequest {
     email: String,
 }
 
-#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema)]
+#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[sqlx(type_name = "invitation_response", rename_all = "lowercase")]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 enum InvitationResponse {
@@ -584,6 +573,7 @@ enum InvitationResponse {
 struct InvitationsResponse {
     event_id: i32,
     email: String,
+    avatar_url: Option<String>,
     handle: Option<String>,
     invited_at: DateTime<Utc>,
     responded_at: Option<DateTime<Utc>>,
@@ -613,7 +603,7 @@ async fn invitations_post(
         InvitationsResponse,
         r#"INSERT INTO invitation (event_id, email)
         VALUES ($1, $2)
-        RETURNING event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified"#,
+        RETURNING event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified"#,
         event_id,
         invitation_request.email,
     ).fetch_one(pool.inner()).await
@@ -703,7 +693,7 @@ async fn invitations_get(
     // Return your invitation for this event
     let invitation: InvitationsResponse = match sqlx::query_as!(
         InvitationsResponse,
-        r#"SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         FROM invitation
         WHERE event_id=$1 AND email=$2"#,
         event_id,
@@ -733,7 +723,7 @@ async fn invitations_get_all(
     // Return all invitations
     let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
         InvitationsResponse,
-        r#"SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         FROM invitation
         WHERE event_id=$1"#,
         event_id
@@ -750,6 +740,79 @@ async fn invitations_get_all(
     };
 
     Ok(Json(invitations))
+}
+
+async fn is_attending_event(pool: &PgPool, event_id: i32, user: User) -> Result<bool, String> {
+    // Check that the user has RSVP'd to this event
+    let invitation: InvitationsResponse = match sqlx::query_as!(
+        InvitationsResponse,
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1 AND email=$2"#,
+        event_id,
+        user.email,
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(invitation) => invitation,
+        Err(_) => {
+            return Err("Can't get logged-in users RSVP for the event".to_string())
+        }
+    };
+
+    Ok(matches!(
+        invitation.response,
+        Some(InvitationResponse::Yes | InvitationResponse::Maybe)
+    ))
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+struct InvitationsResponseLite {
+    event_id: i32,
+    avatar_url: Option<String>,
+    handle: Option<String>,
+    response: Option<InvitationResponse>,
+    attendance: Option<Vec<u8>>,
+    last_modified: DateTime<Utc>,
+}
+
+#[openapi]
+#[get("/events/<event_id>/invitations", format = "json", rank = 2)]
+async fn invitations_get_all_user(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
+    match is_attending_event(pool.inner(), event_id, user).await {
+        Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
+        Ok(false) => Err(rocket::response::status::BadRequest(Some(
+            "You can only see invitations for events you have RSVP'd to".to_string(),
+        ))),
+        Ok(true) => {
+            // Return all invitations for this event
+            let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
+                InvitationsResponseLite,
+                r#"SELECT event_id, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, response AS "response: _", attendance, last_modified
+                FROM invitation
+                WHERE event_id=$1 AND response IN ('yes', 'maybe')"#,
+                event_id,
+            )
+            .fetch_all(pool.inner())
+            .await
+            {
+                Ok(invitations) => invitations,
+                Err(_) => {
+                    return Err(rocket::response::status::BadRequest(Some(
+                        "Error getting database ID".to_string(),
+                    )))
+                }
+            };
+
+            Ok(Json(invitations))
+        }
+    }
 }
 
 #[openapi]
@@ -1431,6 +1494,7 @@ async fn rocket(
                 events_delete,
                 invitations_post,
                 invitations_get,
+                invitations_get_all_user,
                 invitations_get_all,
                 invitations_delete,
                 invitations_patch,
