@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useState, useContext, useRef } from "react";
+import { useEffect, useState, useContext, useRef, ChangeEvent } from "react";
 import {
   Autocomplete,
   Typography,
@@ -12,11 +12,13 @@ import {
   TextField,
   CircularProgress,
   AutocompleteChangeReason,
-  IconButton,
   Skeleton,
   Alert,
+  Checkbox,
+  ListItemButton,
 } from "@mui/material";
-import LaunchIcon from "@mui/icons-material/Launch";
+import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
+import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -24,6 +26,7 @@ import {
   defaultGameSuggestions,
   Game,
   defaultGames,
+  GameVote,
 } from "../types/game_suggestions";
 
 interface EventGameSuggestionsProps {
@@ -74,7 +77,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   function sortAndAddGameSuggestions(
     newGameSuggestions: Array<GameSuggestion>,
   ) {
-    newGameSuggestions.sort((a, b) => a.name.localeCompare(b.name));
+    newGameSuggestions.sort((a, b) => b.votes - a.votes);
     setGameSuggestions(newGameSuggestions);
   }
 
@@ -163,6 +166,46 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     }
   };
 
+  const handleVote = (
+    event: ChangeEvent<HTMLInputElement>,
+    checked: boolean,
+  ) => {
+    // Prevent page reload
+    event.preventDefault();
+
+    fetch(
+      `${process.env.REACT_APP_API_PROXY}/api/events/${props.event_id}/games/${event.target.value}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({
+          vote: checked ? GameVote.yes : GameVote.noVote,
+        }),
+      },
+    )
+      .then((response) => {
+        if (response.status === 200) {
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+        } else {
+          alert("Unable to vote");
+          throw new Error("Unable to vote");
+        }
+      })
+      .then((data) => {
+        let gameSuggestionIndex = gameSuggestions.findIndex(
+          (game) => game.appid === parseInt(event.target.value),
+        );
+        let newGameSuggestions = [...gameSuggestions];
+        newGameSuggestions[gameSuggestionIndex] = data;
+        sortAndAddGameSuggestions(newGameSuggestions);
+      });
+  };
+
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
@@ -234,33 +277,45 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       )}
       <Grid item xs={12}>
         <List>
-          {gameSuggestions.map((gameSuggestion) => (
-            <ListItem
-              secondaryAction={
-                <IconButton
+          {gameSuggestions.map((gameSuggestion) => {
+            const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
+            return (
+              <ListItem
+                key={gameSuggestion.appid}
+                secondaryAction={
+                  props.responded && (
+                    <Checkbox
+                      value={gameSuggestion.appid}
+                      edge="end"
+                      icon={<ThumbUpOffAltIcon />}
+                      checkedIcon={<ThumbUpAltIcon />}
+                      onChange={handleVote}
+                      checked={gameSuggestion.self_vote === GameVote.yes}
+                      inputProps={{ "aria-labelledby": labelId }}
+                    />
+                  )
+                }
+                dense={true}
+              >
+                <ListItemButton
                   aria-label="steam link"
                   href={`https://store.steampowered.com/app/${gameSuggestion.appid}/`}
                   target="_blank"
                 >
-                  <LaunchIcon />
-                </IconButton>
-              }
-              dense={true}
-            >
-              <ListItemAvatar>
-                <Avatar
-                  alt={gameSuggestion.name || "Game"}
-                  src={`https://steamcdn-a.akamaihd.net/steam/apps/${gameSuggestion.appid}/header.jpg`}
-                />
-              </ListItemAvatar>
-              <ListItemText
-                primary={gameSuggestion.name}
-                secondary={`Suggested: ${gameSuggestion.requested_at.format(
-                  "ll",
-                )}`}
-              />
-            </ListItem>
-          ))}
+                  <ListItemAvatar>
+                    <Avatar
+                      alt={gameSuggestion.name || "Game"}
+                      src={`https://steamcdn-a.akamaihd.net/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                    />
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={gameSuggestion.name}
+                    secondary={`${gameSuggestion.votes} want to play!`}
+                  />
+                </ListItemButton>
+              </ListItem>
+            );
+          })}
         </List>
       </Grid>
     </Grid>

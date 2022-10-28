@@ -163,7 +163,13 @@ impl<'r> FromRequest<'r> for AdminUser {
         // API call must specify it wants to access administrative data, otherwise it is Forwarded, and potentially treated as a user request
         match request.query_value::<bool>("as_admin") {
             Some(Ok(true)) => {}
-            Some(Ok(false) | Err(_)) | None => return Outcome::Forward(()),
+            Some(Ok(false) | Err(_)) => return Outcome::Forward(()),
+            None => {
+                match request.query_value::<bool>("_as_admin") {
+                    Some(Ok(true)) => {}
+                    Some(Ok(false) | Err(_)) | None => return Outcome::Forward(()),
+                };
+            }
         };
 
         let authorization_header = request.headers().get_one("Authorization");
@@ -454,6 +460,8 @@ struct EventGameSuggestionResponse {
     last_modified: DateTime<Utc>,
     requested_at: DateTime<Utc>,
     suggestion_last_modified: DateTime<Utc>,
+    self_vote: Option<GameVote>,
+    votes: Option<i64>,
 }
 
 #[openapi]
@@ -461,7 +469,7 @@ struct EventGameSuggestionResponse {
 async fn event_games_get_all(
     event_id: i32,
     pool: &State<PgPool>,
-    _user: User,
+    user: User,
 ) -> Result<Json<Vec<EventGameSuggestionResponse>>, rocket::response::status::BadRequest<String>> {
     // Return all games
     let games: Vec<EventGameSuggestionResponse> = match sqlx::query_as!(
@@ -471,11 +479,24 @@ async fn event_games_get_all(
             steam_game.name AS name,
             steam_game.last_modified AS last_modified,
             event_game.requested_at AS requested_at,
-            event_game.last_modified AS suggestion_last_modified
+            event_game.last_modified AS suggestion_last_modified,
+            self_votes.vote AS "self_vote: _",
+            count(all_votes.*) AS votes
         FROM event_game
-        INNER JOIN steam_game ON event_game.game_id = steam_game.appid
-        WHERE event_game.event_id = $1"#,
-        event_id
+        INNER JOIN steam_game
+            ON event_game.game_id = steam_game.appid
+        LEFT JOIN event_game_vote AS self_votes
+            ON event_game.event_id = self_votes.event_id
+            AND event_game.game_id = self_votes.game_id
+            AND self_votes.email = $2
+        LEFT JOIN event_game_vote AS all_votes
+            ON event_game.event_id = all_votes.event_id
+            AND event_game.game_id = all_votes.game_id
+            AND all_votes.vote = 'yes'::vote
+        WHERE event_game.event_id = $1
+        GROUP BY steam_game.appid, steam_game.name, steam_game.last_modified, event_game.requested_at, event_game.last_modified, self_votes.vote"#,
+        event_id,
+        user.email,
     )
     .fetch_all(pool.inner())
     .await
@@ -508,7 +529,7 @@ async fn event_games_post(
     status::Created<Json<EventGameSuggestionResponse>>,
     rocket::response::status::BadRequest<String>,
 > {
-    match is_attending_event(pool.inner(), event_id, user).await {
+    match is_attending_event(pool.inner(), event_id, &user).await {
         Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
         Ok(false) => Err(rocket::response::status::BadRequest(Some(
             "You can only suggest games for events you have RSVP'd to".to_string(),
@@ -518,17 +539,20 @@ async fn event_games_post(
             let event_game_suggestion: EventGameSuggestionResponse = match sqlx::query_as!(
                 EventGameSuggestionResponse,
                 r#"WITH event_game_suggestion_response AS (
-            INSERT INTO event_game (event_id, game_id)
-                VALUES ($1, $2)
-                RETURNING event_id, game_id, requested_at, last_modified
-        ) SELECT
-            steam_game.appid AS appid,
-            steam_game.name AS name,
-            steam_game.last_modified AS last_modified,
-            event_game_suggestion_response.requested_at AS requested_at,
-            event_game_suggestion_response.last_modified AS suggestion_last_modified
-        FROM event_game_suggestion_response
-        INNER JOIN steam_game ON event_game_suggestion_response.game_id = steam_game.appid;"#,
+                    INSERT INTO event_game (event_id, game_id)
+                        VALUES ($1, $2)
+                        RETURNING event_id, game_id, requested_at, last_modified
+                ) SELECT
+                    steam_game.appid AS appid,
+                    steam_game.name AS name,
+                    steam_game.last_modified AS last_modified,
+                    event_game_suggestion_response.requested_at AS requested_at,
+                    event_game_suggestion_response.last_modified AS suggestion_last_modified,
+                    'novote'::vote AS "self_vote: _",
+                    0::BIGINT AS votes
+                FROM event_game_suggestion_response
+                INNER JOIN steam_game
+                    ON event_game_suggestion_response.game_id = steam_game.appid"#,
                 event_id,
                 game_request.appid,
             )
@@ -549,6 +573,91 @@ async fn event_games_post(
                 &game_request.appid.to_string()
             ))
             .body(Json(event_game_suggestion)))
+        }
+    }
+}
+
+#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[sqlx(type_name = "vote", rename_all = "lowercase")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+enum GameVote {
+    Yes,
+    NoVote,
+    No, // Not used for now
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+struct EventGameSuggestionPatch {
+    vote: GameVote,
+}
+
+#[openapi]
+#[patch(
+    "/events/<event_id>/games/<game_id>",
+    format = "json",
+    data = "<game_patch>"
+)]
+async fn event_game_patch(
+    event_id: i32,
+    game_id: i64,
+    game_patch: Json<EventGameSuggestionPatch>,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<EventGameSuggestionResponse>, rocket::response::status::Unauthorized<String>> {
+    match is_attending_event(pool.inner(), event_id, &user).await {
+        Err(e) => Err(rocket::response::status::Unauthorized(Some(e))),
+        Ok(false) => Err(rocket::response::status::Unauthorized(Some(
+            "You can only vote for games for events you have RSVP'd to".to_string(),
+        ))),
+        Ok(true) => {
+            // Insert new event and return it
+            match sqlx::query_as!(
+                EventGameSuggestionResponse,
+                r#"WITH event_game_patch_response AS (
+                    INSERT INTO event_game_vote (event_id, game_id, email, vote)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = $4, last_modified = NOW()
+                        RETURNING event_id, game_id, email, vote, vote_date, last_modified
+                ) SELECT
+                    steam_game.appid AS appid,
+                    steam_game.name AS name,
+                    steam_game.last_modified AS last_modified,
+                    event_game.requested_at AS requested_at,
+                    event_game.last_modified AS suggestion_last_modified,
+                    self_vote.vote AS "self_vote: _",
+                    CASE
+                        WHEN self_vote.vote = 'yes'::vote THEN count(all_votes.*) + 1
+                        ELSE count(all_votes.*) - 1
+                    END AS votes
+                FROM event_game
+                INNER JOIN steam_game
+                    ON event_game.game_id = steam_game.appid
+                LEFT JOIN event_game_patch_response AS self_vote
+                    ON event_game.event_id = self_vote.event_id
+                    AND event_game.game_id = self_vote.game_id
+                LEFT JOIN event_game_vote AS all_votes
+                    ON event_game.event_id = all_votes.event_id
+                    AND event_game.game_id = all_votes.game_id
+                    AND all_votes.vote = 'yes'::vote
+                WHERE event_game.event_id = $1
+                AND event_game.game_id = $2
+                GROUP BY steam_game.appid, steam_game.name, steam_game.last_modified, event_game.requested_at, event_game.last_modified, self_vote.vote"#,
+                event_id,
+                game_id,
+                user.email,
+                game_patch.vote as _,
+            )
+            .fetch_one(pool.inner())
+            .await
+            {
+                Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
+                Err(_) => {
+                    Err(rocket::response::status::Unauthorized(Some(
+                        "Error updating game vote in the database".to_string(),
+                    )))
+                }
+            }
         }
     }
 }
@@ -742,7 +851,7 @@ async fn invitations_get_all(
     Ok(Json(invitations))
 }
 
-async fn is_attending_event(pool: &PgPool, event_id: i32, user: User) -> Result<bool, String> {
+async fn is_attending_event(pool: &PgPool, event_id: i32, user: &User) -> Result<bool, String> {
     // Check that the user has RSVP'd to this event
     let invitation: InvitationsResponse = match sqlx::query_as!(
         InvitationsResponse,
@@ -785,7 +894,7 @@ async fn invitations_get_all_user(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
-    match is_attending_event(pool.inner(), event_id, user).await {
+    match is_attending_event(pool.inner(), event_id, &user).await {
         Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
         Ok(false) => Err(rocket::response::status::BadRequest(Some(
             "You can only see invitations for events you have RSVP'd to".to_string(),
@@ -866,8 +975,6 @@ async fn invitations_patch(
             "You can only respond to invitations for your own email address".to_string(),
         )));
     }
-
-    // let response: InvitationResponse = InvitationResponse::from(invitation_request.response);
 
     // Insert new event and return it
     match sqlx::query!(
@@ -1161,8 +1268,9 @@ struct SteamAPISteamGameResponseWrapper {
 }
 
 #[openapi]
-#[post("/steam-game-update")]
+#[post("/steam-game-update?<_as_admin>")]
 async fn steam_game_update(
+    _as_admin: bool,
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
     _user: AdminUser,
@@ -1502,6 +1610,7 @@ async fn rocket(
                 get_steam_game,
                 event_games_post,
                 event_games_get_all,
+                event_game_patch,
             ],
         )
         .mount(
