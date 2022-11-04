@@ -1,5 +1,6 @@
 status = [
-  "pre-commit.ci - pr"
+  "pre-commit.ci - pr",
+  "netlify/calandar/deploy-preview"
 ]
 # Uncomment this to use a two hour timeout.
 # The default is one hour.
