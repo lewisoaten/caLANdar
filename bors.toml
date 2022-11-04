@@ -1,5 +1,5 @@
 status = [
-  "pre-commit.ci - push"
+  "pre-commit.ci - pr"
 ]
 # Uncomment this to use a two hour timeout.
 # The default is one hour.
