@@ -529,6 +529,16 @@ async fn event_games_post(
     status::Created<Json<EventGameSuggestionResponse>>,
     rocket::response::status::BadRequest<String>,
 > {
+    match is_event_active(pool.inner(), event_id).await {
+        Err(e) => return Err(rocket::response::status::BadRequest(Some(e))),
+        Ok(false) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "You can only suggest games for active events".to_string(),
+            )))
+        }
+        Ok(true) => (),
+    }
+
     match is_attending_event(pool.inner(), event_id, &user).await {
         Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
         Ok(false) => Err(rocket::response::status::BadRequest(Some(
@@ -605,6 +615,16 @@ async fn event_game_patch(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<EventGameSuggestionResponse>, rocket::response::status::Unauthorized<String>> {
+    match is_event_active(pool.inner(), event_id).await {
+        Err(e) => return Err(rocket::response::status::Unauthorized(Some(e))),
+        Ok(false) => {
+            return Err(rocket::response::status::Unauthorized(Some(
+                "You can only vote for games for active events".to_string(),
+            )))
+        }
+        Ok(true) => (),
+    }
+
     match is_attending_event(pool.inner(), event_id, &user).await {
         Err(e) => Err(rocket::response::status::Unauthorized(Some(e))),
         Ok(false) => Err(rocket::response::status::Unauthorized(Some(
@@ -876,6 +896,25 @@ async fn is_attending_event(pool: &PgPool, event_id: i32, user: &User) -> Result
     ))
 }
 
+async fn is_event_active(pool: &PgPool, id: i32) -> Result<bool, String> {
+    // Check that the event has not ended
+    let event_count = match sqlx::query!(
+        r#"SELECT COUNT(*) AS count
+        FROM event
+        WHERE id = $1
+        AND time_end>=NOW()"#,
+        id
+    )
+    .fetch_one(pool)
+    .await
+    {
+        Ok(event_count) => event_count.count,
+        Err(_) => return Err("Can't get event".to_string()),
+    };
+
+    Ok(event_count == Some(1))
+}
+
 #[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct InvitationsResponseLite {
@@ -974,6 +1013,16 @@ async fn invitations_patch(
         return Err(rocket::response::status::Unauthorized(Some(
             "You can only respond to invitations for your own email address".to_string(),
         )));
+    }
+
+    match is_event_active(pool.inner(), event_id).await {
+        Err(e) => return Err(rocket::response::status::Unauthorized(Some(e))),
+        Ok(false) => {
+            return Err(rocket::response::status::Unauthorized(Some(
+                "You can only respond to invitations for active events".to_string(),
+            )))
+        }
+        Ok(true) => (),
     }
 
     // Insert new event and return it

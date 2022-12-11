@@ -330,6 +330,22 @@
     },
     "query": "SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1"
   },
+  "6e43f8204cae1e0461134169b8a9ee69db1d57d5eb97b9f690b71371e5f5a84b": {
+    "describe": {
+      "columns": [
+        {
+          "name": "count",
+          "ordinal": 0,
+          "type_info": "Int8"
+        }
+      ],
+      "nullable": [null],
+      "parameters": {
+        "Left": ["Int4"]
+      }
+    },
+    "query": "SELECT COUNT(*) AS count\n        FROM event\n        WHERE id = $1\n        AND time_end>=NOW()"
+  },
   "750b619063812b5dfc9bbd1dc32896f0817a6248932bdc5e148da2807c2a24d4": {
     "describe": {
       "columns": [
