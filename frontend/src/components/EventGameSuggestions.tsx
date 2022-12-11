@@ -32,6 +32,7 @@ import {
 interface EventGameSuggestionsProps {
   event_id: number;
   responded: boolean;
+  disabled: boolean;
 }
 
 export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
@@ -259,6 +260,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
             filterOptions={(x) => x}
             onInputChange={handleInputChange}
             onChange={handleInputSelect}
+            disabled={props.disabled}
           />
         </Grid>
       ) : (
@@ -292,6 +294,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                       onChange={handleVote}
                       checked={gameSuggestion.self_vote === GameVote.yes}
                       inputProps={{ "aria-labelledby": labelId }}
+                      disabled={props.disabled}
                     />
                   )
                 }
