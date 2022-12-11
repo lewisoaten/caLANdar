@@ -29,6 +29,7 @@ import {
 interface InvitationResponseProps {
   event_id: number;
   setResponded: Dispatch<SetStateAction<boolean>>;
+  disabled: boolean;
   asAdmin?: boolean;
 }
 
@@ -181,6 +182,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
             focused
             value={invitation.handle}
             onChange={handleHandleChange}
+            disabled={props.disabled}
           />
           <ToggleButtonGroup
             color="primary"
@@ -188,6 +190,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
             exclusive
             onChange={handleRSVPChange}
             aria-label="Response"
+            disabled={props.disabled}
           >
             <ToggleButton color="success" value="yes">
               Yes

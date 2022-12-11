@@ -1,4 +1,5 @@
 import * as React from "react";
+import moment from "moment";
 import { useEffect, useState, useContext } from "react";
 import { Container, Paper, Grid, Typography } from "@mui/material";
 import { UserContext } from "../UserProvider";
@@ -88,6 +89,7 @@ const Event = () => {
                   <InvitationResponse
                     event_id={event.id}
                     setResponded={setResponded}
+                    disabled={event.timeEnd.isSameOrBefore(moment())}
                   />
                 )}
               </Grid>
@@ -116,7 +118,11 @@ const Event = () => {
             }}
           >
             {loaded && (
-              <EventGameSuggestions event_id={event.id} responded={responded} />
+              <EventGameSuggestions
+                event_id={event.id}
+                responded={responded}
+                disabled={event.timeEnd.isSameOrBefore(moment())}
+              />
             )}
           </Paper>
         </Grid>
