@@ -42,6 +42,8 @@ repos:
           [
             "--manifest-path",
             "api/Cargo.toml",
+            "--fix",
+            "--allow-staged",
             "--all-features",
             "--",
             "-D",
