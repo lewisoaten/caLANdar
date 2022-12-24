@@ -1,0 +1,149 @@
+use chrono::{prelude::Utc, Duration};
+use rocket::{
+    post,
+    serde::{json, json::Json, Deserialize, Serialize},
+    State,
+};
+use rocket_dyn_templates::tera::{Context, Tera};
+use rocket_okapi::okapi::schemars;
+use rocket_okapi::okapi::schemars::JsonSchema;
+use rocket_okapi::openapi;
+use rusty_paseto::prelude::*;
+use sendgrid::v3::Sender;
+
+use crate::auth::PasetoToken;
+
+use crate::util::{send_preauth_email, PreauthEmailDetails};
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct LoginResponse {}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct LoginRequest {
+    email: String,
+    redirect: Option<String>,
+}
+
+#[openapi(tag = "Auth")]
+#[post("/login", format = "json", data = "<login_request>")]
+pub async fn login(
+    login_request: Json<LoginRequest>,
+    key: &State<PasetoSymmetricKey<V4, Local>>,
+    sender: &State<Sender>,
+    tera: &State<Tera>,
+) -> Result<Json<LoginResponse>, rocket::response::status::BadRequest<String>> {
+    let mut context = Context::new();
+    context.insert("name", &login_request.email);
+
+    let redirect = match login_request.redirect {
+        Some(ref redirect) => redirect,
+        None => "",
+    };
+
+    let email_details = PreauthEmailDetails {
+        email_address: login_request.email.to_string(),
+        email_subject: "Calandar Email Verification".to_string(),
+        email_template: "email_verification.html.tera".to_string(),
+    };
+
+    match send_preauth_email(
+        email_details,
+        &mut context,
+        redirect,
+        Duration::minutes(30),
+        key,
+        sender,
+        tera,
+    )
+    .await
+    {
+        Ok(_) => Ok(Json(LoginResponse {})),
+        Err(_) => Err(rocket::response::status::BadRequest(Some(
+            "Error sending email".to_string(),
+        ))),
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct VerifyEmailRequest {
+    token: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct VerifyEmailResponse {
+    token: String,
+    email: String,
+    redirect: String,
+    is_admin: bool,
+}
+
+#[allow(clippy::needless_pass_by_value)]
+#[openapi(tag = "Auth")]
+#[post("/verify-email", format = "json", data = "<verify_email_request>")]
+pub fn verify_email(
+    verify_email_request: Json<VerifyEmailRequest>,
+    key: &State<PasetoSymmetricKey<V4, Local>>,
+) -> Result<Json<VerifyEmailResponse>, rocket::response::status::BadRequest<String>> {
+    // decode and verify token is a valid email verification token, and has not expired
+
+    let generic_token = match PasetoParser::<V4, Local>::default()
+        .check_claim(IssuerClaim::from("calandar.org"))
+        .check_claim(TokenIdentifierClaim::from("ev"))
+        .parse(&verify_email_request.token, key)
+    {
+        Ok(generic_token) => generic_token,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error parsing token".to_string(),
+            )))
+        }
+    };
+
+    let typed_token: PasetoToken = match json::from_value(generic_token) {
+        Ok(typed_token) => typed_token,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Can't parse PASETO token to types".to_string(),
+            )))
+        }
+    };
+
+    // create a new long-lasting token for the user for subsequent api requests
+    let expiration_claim =
+        match ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339()) {
+            Ok(expiration_claim) => expiration_claim,
+            Err(_) => {
+                return Err(rocket::response::status::BadRequest(Some(
+                    "Can't create time for expiration claim".to_string(),
+                )))
+            }
+        };
+
+    let token = match PasetoBuilder::<V4, Local>::default()
+        .set_claim(expiration_claim)
+        .set_claim(IssuerClaim::from("calandar.org"))
+        .set_claim(TokenIdentifierClaim::from("api"))
+        .set_claim(SubjectClaim::from(typed_token.sub.as_str()))
+        .build(key)
+    {
+        Ok(token) => token,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error building token".to_string(),
+            )))
+        }
+    };
+
+    let is_admin = typed_token.sub == "lewis@oaten.name";
+
+    Ok(Json(VerifyEmailResponse {
+        token,
+        email: typed_token.sub,
+        redirect: typed_token.r.unwrap_or_else(|| "".to_string()),
+        is_admin,
+    }))
+}
