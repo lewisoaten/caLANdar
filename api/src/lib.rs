@@ -1,6 +1,6 @@
 // Crate-wide project settings
 #![forbid(unsafe_code)]
-#![deny(warnings, clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
+#![deny(clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
 #![allow(clippy::use_self)]
 
 extern crate rocket;
@@ -240,6 +240,7 @@ async fn rocket(
                 routes::events::get,
                 routes::events::get_user,
                 routes::events::post,
+                routes::events::put,
                 routes::events::delete,
                 routes::event_invitations::post,
                 routes::event_invitations::get,

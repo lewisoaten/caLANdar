@@ -48,9 +48,10 @@ pub struct InvitationsResponse {
     pub last_modified: DateTime<Utc>,
 }
 
+#[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Event Invitations")]
 #[post(
-    "/events/<event_id>/invitations",
+    "/events/<event_id>/invitations?<_as_admin>",
     format = "json",
     data = "<invitation_request>"
 )]
@@ -61,6 +62,7 @@ pub async fn post(
     key: &State<PasetoSymmetricKey<V4, Local>>,
     sender: &State<Sender>,
     tera: &State<Tera>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<status::Created<Json<InvitationsResponse>>, rocket::response::status::BadRequest<String>>
 {
@@ -180,10 +182,11 @@ pub async fn get(
 }
 
 #[openapi(tag = "Event Invitations")]
-#[get("/events/<event_id>/invitations", format = "json")]
+#[get("/events/<event_id>/invitations?<_as_admin>", format = "json")]
 pub async fn get_all(
     event_id: i32,
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<Vec<InvitationsResponse>>, rocket::response::status::BadRequest<String>> {
     // Return all invitations
@@ -257,11 +260,12 @@ pub async fn get_all_user(
 }
 
 #[openapi(tag = "Event Invitations")]
-#[delete("/events/<event_id>/invitations/<email>", format = "json")]
+#[delete("/events/<event_id>/invitations/<email>?<_as_admin>", format = "json")]
 pub async fn delete(
     event_id: i32,
     email: String,
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
     // Delete the event
@@ -318,7 +322,7 @@ pub async fn patch(
         Ok(true) => (),
     }
 
-    // Insert new event and return it
+    // Update invitation response
     match sqlx::query!(
         r#"UPDATE invitation
         SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()
