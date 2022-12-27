@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
-    delete, get, post,
+    delete, get, post, put,
     response::status,
     serde::{json::Json, Deserialize, Serialize},
     State,
@@ -77,14 +77,14 @@ impl SchemaExample for Event {
 #[derive(Deserialize, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 #[schemars(example = "Self::example")]
-pub struct EventCreate {
+pub struct EventSubmit {
     pub title: String,
     pub description: String,
     pub time_begin: DateTime<Utc>,
     pub time_end: DateTime<Utc>,
 }
 
-impl SchemaExample for EventCreate {
+impl SchemaExample for EventSubmit {
     fn example() -> Self {
         Self {
             title: "Example Event".to_string(),
@@ -100,9 +100,10 @@ custom_errors!(EventsGetError, Unauthorized, InternalServerError);
 /// Get all events as an administrator, even those which the user is not invited to.
 /// Will return an empty list if no events are found.
 #[openapi(tag = "Events")]
-#[get("/events", format = "json")]
+#[get("/events?<_as_admin>", format = "json")]
 pub async fn get_all(
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<Vec<Event>>, EventsGetError> {
     match event::get_all(pool).await {
@@ -135,15 +136,16 @@ custom_errors!(EventGetError, Unauthorized, NotFound, InternalServerError);
 
 /// Return requested event.
 #[openapi(tag = "Events")]
-#[get("/events/<id>", format = "json")]
+#[get("/events/<id>?<_as_admin>", format = "json")]
 pub async fn get(
     id: i32,
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<Event>, EventGetError> {
     match event::get(pool, id).await {
         Ok(event) => Ok(Json(event)),
-        Err(Error::NoDataError(_)) => Err(EventGetError::NotFound(format!(
+        Err(Error::NoData(_)) => Err(EventGetError::NotFound(format!(
             "Event with ID {} not found",
             id
         ))),
@@ -164,12 +166,41 @@ pub async fn get_user(
 ) -> Result<Json<Event>, EventGetError> {
     match event::get_user(pool, id, user.email).await {
         Ok(event) => Ok(Json(event)),
-        Err(Error::NoDataError(_)) => Err(EventGetError::NotFound(format!(
+        Err(Error::NoData(_)) => Err(EventGetError::NotFound(format!(
             "Event with ID {} not found",
             id
         ))),
         Err(e) => Err(EventGetError::InternalServerError(format!(
             "Error getting event, due to: {}",
+            e
+        ))),
+    }
+}
+
+custom_errors!(EventPutError, Unauthorized, BadRequest, InternalServerError);
+
+/// Edit an event
+#[openapi(tag = "Events")]
+#[put("/events/<id>?<_as_admin>", format = "json", data = "<event_submit>")]
+pub async fn put(
+    id: i32,
+    event_submit: Json<EventSubmit>,
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<status::NoContent, EventPutError> {
+    match event::edit(pool, id, event_submit.into_inner()).await {
+        Ok(_) => Ok(status::NoContent),
+        Err(Error::BadInput(e)) => Err(EventPutError::BadRequest(format!(
+            "Invalid request, due to {}",
+            e
+        ))),
+        Err(Error::Controller(e)) => Err(EventPutError::InternalServerError(format!(
+            "Error creating event, due to: {}",
+            e
+        ))),
+        Err(e) => Err(EventPutError::InternalServerError(format!(
+            "Error creating event, due to: {}",
             e
         ))),
     }
@@ -184,15 +215,16 @@ custom_errors!(
 
 /// Delete an event.
 #[openapi(tag = "Events")]
-#[delete("/events/<id>", format = "json")]
+#[delete("/events/<id>?<_as_admin>", format = "json")]
 pub async fn delete(
     id: i32,
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, EventDeleteError> {
     match event::delete(pool, id).await {
         Ok(_) => Ok(rocket::response::status::NoContent),
-        Err(Error::NoDataError(_)) => Err(EventDeleteError::NotFound(format!(
+        Err(Error::NoData(_)) => Err(EventDeleteError::NotFound(format!(
             "Event with ID {} not found",
             id
         ))),
@@ -207,13 +239,14 @@ custom_errors!(EventPostError, Unauthorized, InternalServerError);
 
 /// Create an event
 #[openapi(tag = "Events")]
-#[post("/events", format = "json", data = "<event_request>")]
+#[post("/events?<_as_admin>", format = "json", data = "<event_submit>")]
 pub async fn post(
-    event_request: Json<EventCreate>,
+    event_submit: Json<EventSubmit>,
     pool: &State<PgPool>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<status::Created<Json<Event>>, EventPostError> {
-    match event::create(pool, event_request.into_inner()).await {
+    match event::create(pool, event_submit.into_inner()).await {
         Ok(event) => Ok(
             status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)),
         ),

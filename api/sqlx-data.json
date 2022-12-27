@@ -589,6 +589,52 @@
     },
     "query": "SELECT event_id, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, response AS \"response: _\", attendance, last_modified\n                FROM invitation\n                WHERE event_id=$1 AND response IN ('yes', 'maybe')"
   },
+  "e641e3f6ebd1f9b19a8f00a137fdf5053cdaa2852841415f7f868a4db34cb31c": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "created_at",
+          "ordinal": 1,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "title",
+          "ordinal": 3,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "description",
+          "ordinal": 4,
+          "type_info": "Text"
+        },
+        {
+          "name": "time_begin",
+          "ordinal": 5,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "time_end",
+          "ordinal": 6,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, false, false, false, false, false],
+      "parameters": {
+        "Left": ["Int4", "Varchar", "Text", "Timestamptz", "Timestamptz"]
+      }
+    },
+    "query": "\n        UPDATE event\n        SET title = $2, description = $3, time_begin = $4, time_end = $5, last_modified = NOW()\n        WHERE id = $1\n        RETURNING id, created_at, last_modified, title, description, time_begin, time_end\n        "
+  },
   "e676ae7eb6e0ba4d595119738d7465028ae48ff2563b74a378f8037e0ac5d4d6": {
     "describe": {
       "columns": [

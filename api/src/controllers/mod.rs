@@ -6,14 +6,17 @@ pub mod event;
 #[derive(Debug)]
 pub enum Error {
     // Custom error type
-    ControllerError(String),
-    NoDataError(String),
+    Controller(String),
+    BadInput(String),
+    NoData(String),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::ControllerError(reason) | Error::NoDataError(reason) => reason.fmt(f),
+            Error::Controller(reason) | Error::BadInput(reason) | Error::NoData(reason) => {
+                reason.fmt(f)
+            }
         }
     }
 }

@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use crate::{
     controllers::Error,
     repositories::{event, invitation},
-    routes::events::{Event, EventCreate},
+    routes::events::{Event, EventSubmit},
 };
 
 pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
@@ -13,7 +13,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
             // Convert vector of Event structs to vector of EventsGetResponse structs
             Ok(events.into_iter().map(Event::from).collect())
         }
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
             "Unable to get list of events due to: {}",
             e
         ))),
@@ -35,7 +35,7 @@ pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<Event
                 .collect()
         }
         Err(e) => {
-            return Err(Error::ControllerError(format!(
+            return Err(Error::Controller(format!(
                 "Unable to get user's invitations due to: {}",
                 e
             )))
@@ -52,7 +52,7 @@ pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<Event
             // Convert vector of Event structs to vector of EventsGetResponse structs
             Ok(events.into_iter().map(Event::from).collect())
         }
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
             "Unable to get users's events due to: {}",
             e
         ))),
@@ -70,14 +70,14 @@ pub async fn get(pool: &PgPool, id: i32) -> Result<Event, Error> {
             // Check we have exactly one event
             match events.len() {
                 1 => Ok(Event::from(events[0].clone())),
-                0 => Err(Error::NoDataError("No events found".to_string())),
-                _ => Err(Error::ControllerError(format!(
+                0 => Err(Error::NoData("No events found".to_string())),
+                _ => Err(Error::Controller(format!(
                     "Too many events returned for id {}",
                     id
                 ))),
             }
         }
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
             "Unable to get event due to: {}",
             e
         ))),
@@ -99,7 +99,7 @@ pub async fn get_user(pool: &PgPool, id: i32, user_email: String) -> Result<Even
                 .collect()
         }
         Err(e) => {
-            return Err(Error::ControllerError(format!(
+            return Err(Error::Controller(format!(
                 "Unable to get user's invitations due to: {}",
                 e
             )))
@@ -117,14 +117,14 @@ pub async fn get_user(pool: &PgPool, id: i32, user_email: String) -> Result<Even
             // Check we have exactly one event
             match events.len() {
                 1 => Ok(Event::from(events[0].clone())),
-                0 => Err(Error::NoDataError("No events found".to_string())),
-                _ => Err(Error::ControllerError(format!(
+                0 => Err(Error::NoData("No events found".to_string())),
+                _ => Err(Error::Controller(format!(
                     "Too many events returned for id {}",
                     id
                 ))),
             }
         }
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
             "Unable to get users's events due to: {}",
             e
         ))),
@@ -140,14 +140,14 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
     // Delete event
     match event::delete(pool, event_filter_values).await {
         Ok(_) => Ok(()),
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
             "Unable to delete event due to: {}",
             e
         ))),
     }
 }
 
-pub async fn create(pool: &PgPool, new_event: EventCreate) -> Result<Event, Error> {
+pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Error> {
     // Delete event
     match event::create(
         pool,
@@ -159,7 +159,34 @@ pub async fn create(pool: &PgPool, new_event: EventCreate) -> Result<Event, Erro
     .await
     {
         Ok(event) => Ok(Event::from(event)),
-        Err(e) => Err(Error::ControllerError(format!(
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to create event due to: {}",
+            e
+        ))),
+    }
+}
+
+pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Event, Error> {
+    // Check if time_end is after time_begin
+    if new_event.time_end < new_event.time_begin {
+        return Err(Error::BadInput(
+            "Event end time must be after event start time".to_string(),
+        ));
+    }
+
+    // Delete event
+    match event::edit(
+        pool,
+        id,
+        new_event.title,
+        new_event.description,
+        new_event.time_begin,
+        new_event.time_end,
+    )
+    .await
+    {
+        Ok(event) => Ok(Event::from(event)),
+        Err(e) => Err(Error::Controller(format!(
             "Unable to create event due to: {}",
             e
         ))),

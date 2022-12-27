@@ -1,6 +1,6 @@
 // Crate-wide project settings
 #![forbid(unsafe_code)]
-#![deny(warnings, clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
+#![deny(clippy::pedantic, clippy::nursery, clippy::unwrap_used)]
 #![allow(clippy::use_self)]
 
 extern crate rocket;
@@ -96,7 +96,7 @@ impl Fairing for CORS {
                 ));
                 response.set_header(Header::new(
                     "Access-Control-Allow-Methods",
-                    "POST, GET, PATCH, DELETE, OPTIONS",
+                    "POST, GET, PUT, PATCH, DELETE, OPTIONS",
                 ));
                 response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
                 response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
@@ -240,6 +240,7 @@ async fn rocket(
                 routes::events::get,
                 routes::events::get_user,
                 routes::events::post,
+                routes::events::put,
                 routes::events::delete,
                 routes::event_invitations::post,
                 routes::event_invitations::get,

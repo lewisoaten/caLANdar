@@ -46,9 +46,9 @@ struct SteamAPISteamGameResponseWrapper {
 #[post("/steam-game-update?<_as_admin>")]
 /// Update the list of games from the Steam API
 pub async fn steam_game_update(
-    _as_admin: bool,
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
+    _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<()>, rocket::response::status::BadRequest<String>> {
     let last_update: SteamGameUpdate = match sqlx::query_as!(

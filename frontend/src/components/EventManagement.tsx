@@ -13,17 +13,28 @@ import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
 import InvitationsTable from "./InvitationsTable";
+import EventsAdminDialog from "./EventsAdminDialog";
 
 const EventManagement = () => {
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
+  const [open, setOpen] = useState(false);
+
+  const handleClose = (value?: EventData) => {
+    setOpen(false);
+
+    // If value is set, then refresh event with details
+    if (value) {
+      updateEvent();
+    }
+  };
 
   const navigate = useNavigate();
 
   let { id } = useParams();
 
-  useEffect(() => {
+  const updateEvent = () => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
@@ -38,11 +49,19 @@ const EventManagement = () => {
       .then((data) => {
         setEvent(data);
       });
+  };
+
+  useEffect(() => {
+    updateEvent();
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onClick = () => {
+  const editOnClick = () => {
+    setOpen(true);
+  };
+
+  const deleteOnClick = () => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
       method: "DELETE",
       headers: {
@@ -88,7 +107,14 @@ const EventManagement = () => {
                 {event.description}
               </Typography>
               <Stack direction="row" spacing={2}>
-                <Button onClick={onClick} variant="contained" color="error">
+                <Button onClick={editOnClick} variant="contained">
+                  Edit
+                </Button>
+                <Button
+                  onClick={deleteOnClick}
+                  variant="contained"
+                  color="error"
+                >
                   Delete
                 </Button>
               </Stack>
@@ -112,6 +138,7 @@ const EventManagement = () => {
           </Grid>
         </Grid>
       </Container>
+      <EventsAdminDialog open={open} event={event} onClose={handleClose} />
     </React.Fragment>
   );
 };

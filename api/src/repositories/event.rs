@@ -94,3 +94,30 @@ pub async fn delete(pool: &PgPool, filter: Filter) -> Result<(), sqlx::Error> {
         Err(e) => Err(e),
     }
 }
+
+pub async fn edit(
+    pool: &PgPool,
+    id: i32,
+    title: String,
+    description: String,
+    time_begin: DateTime<Utc>,
+    time_end: DateTime<Utc>,
+) -> Result<Event, sqlx::Error> {
+    // Insert new event and return it
+    sqlx::query_as!(
+        Event,
+        r#"
+        UPDATE event
+        SET title = $2, description = $3, time_begin = $4, time_end = $5, last_modified = NOW()
+        WHERE id = $1
+        RETURNING id, created_at, last_modified, title, description, time_begin, time_end
+        "#,
+        id,
+        title,
+        description,
+        time_begin,
+        time_end,
+    )
+    .fetch_one(pool)
+    .await
+}
