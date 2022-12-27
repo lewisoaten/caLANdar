@@ -1,6 +1,6 @@
 import * as React from "react";
 import moment from "moment";
-import { FormEvent, ChangeEvent, useState, useContext } from "react";
+import { FormEvent, ChangeEvent, useState, useContext, useEffect } from "react";
 import {
   Button,
   Box,
@@ -15,7 +15,11 @@ import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { defaultCreateEvent, EventData } from "../types/events";
+import {
+  defaultCreateEvent,
+  defaultEventData,
+  EventData,
+} from "../types/events";
 
 interface EventsAminDialogProps {
   open: boolean;
@@ -29,16 +33,15 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
-  const [formValues, setFormValues] = useState(defaultCreateEvent);
+  const [formValues, setFormValues] = useState(
+    event ? event : defaultEventData,
+  );
 
-  if (event) {
-    setFormValues({
-      title: event.title,
-      description: event.description,
-      timeBegin: event.timeBegin,
-      timeEnd: event.timeEnd,
-    });
-  }
+  useEffect(() => {
+    setFormValues(event ? event : defaultEventData);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props]);
 
   const cancel = () => {
     onClose();
@@ -70,10 +73,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
     });
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    // Prevent page reload
-    event.preventDefault();
-
+  const postNewEvent = () => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=true`, {
       method: "POST",
       headers: {
@@ -105,6 +105,48 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
       .then((data) => {
         close(data);
       });
+  };
+
+  const putEvent = () => {
+    fetch(
+      `${process.env.REACT_APP_API_PROXY}/api/events/${event?.id}?as_admin=true`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify(formValues),
+      },
+    ).then((response) => {
+      if (response.status === 204) {
+        close(formValues);
+      } else if (response.status === 400) {
+        const error = "Invalid event data.";
+        alert(error);
+        throw new Error(error);
+      } else if (response.status === 401) {
+        const error = "You are not authorized to create an event.";
+        alert(error);
+        throw new Error(error);
+      } else {
+        const error =
+          "Something has gone wrong, please contact the administrator.";
+        alert(error);
+        throw new Error(error);
+      }
+    });
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    // Prevent page reload
+    event.preventDefault();
+
+    if (event) {
+      putEvent();
+    } else {
+      postNewEvent();
+    }
   };
 
   return (
@@ -152,7 +194,6 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               renderInput={(params) => <TextField {...params} />}
               views={["year", "month", "day", "hours"]}
               ampm={false}
-              disablePast
             />
             <DateTimePicker
               label="End Date"
@@ -161,7 +202,6 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               renderInput={(params) => <TextField {...params} />}
               views={["year", "month", "day", "hours"]}
               ampm={false}
-              disablePast
             />
           </LocalizationProvider>
         </DialogContent>
