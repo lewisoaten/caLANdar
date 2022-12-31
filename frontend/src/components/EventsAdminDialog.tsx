@@ -30,15 +30,17 @@ interface EventsAminDialogProps {
 export default function EventsAdminDialog(props: EventsAminDialogProps) {
   const { open, onClose, event } = props;
 
+  const createMode = !event;
+
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
   const [formValues, setFormValues] = useState(
-    event ? event : defaultEventData,
+    createMode ? defaultEventData : event,
   );
 
   useEffect(() => {
-    setFormValues(event ? event : defaultEventData);
+    setFormValues(createMode ? defaultEventData : event);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props]);
@@ -80,7 +82,14 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
       },
-      body: JSON.stringify(formValues),
+      body: JSON.stringify(
+        (({ title, description, timeBegin, timeEnd }) => ({
+          title,
+          description,
+          timeBegin,
+          timeEnd,
+        }))(formValues),
+      ),
     })
       .then((response) => {
         if (response.status === 201) {
@@ -96,8 +105,8 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
           alert(error);
           throw new Error(error);
         } else {
-          const error =
-            "Something has gone wrong, please contact the administrator.";
+          response.text().then((data) => console.log(data));
+          const error = `Something has gone wrong, please contact the administrator. More details: ${response.status}`;
           alert(error);
           throw new Error(error);
         }
@@ -142,10 +151,10 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
     // Prevent page reload
     event.preventDefault();
 
-    if (event) {
-      putEvent();
-    } else {
+    if (createMode) {
       postNewEvent();
+    } else {
+      putEvent();
     }
   };
 
