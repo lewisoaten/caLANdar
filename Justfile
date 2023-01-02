@@ -22,3 +22,23 @@
 
 @bacon:
 	cd api && bacon
+
+@pact-api:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	cargo shuttle run --working-directory api &
+	PID=$!
+	trap "kill ${PID}" EXIT
+
+	echo "Wait for the server to start..."
+	counter=0
+	until [[ $(curl -I -s -o /dev/null -w "%{http_code}" localhost:8000/api/healthz) =~ "204" ]] || [[ $counter -gt 10 ]]; do
+		sleep 1s
+		(( counter=counter+1 ))
+		echo "Counter: ${counter}"
+	done
+
+	pact_verifier_cli --header Authorization="Bearer put_something_here" --port 8000 --dir ./frontend/pacts
+
+@pact-frontend:
+	cd frontend && npm run test:pact

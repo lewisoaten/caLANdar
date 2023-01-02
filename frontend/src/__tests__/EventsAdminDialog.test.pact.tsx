@@ -77,16 +77,8 @@ describe("CaLANDar Create Event API", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      console.log("onClose.mock.calls", onClose.mock.calls);
-
       // @ts-ignore
       global.provider.verify();
-
-      // @ts-ignore
-      expect(global.provider.verify).toThrow();
-
-      // const linkElement = screen.getByText(/learn react/i);
-      // expect(linkElement).toBeInTheDocument();
     });
   });
 });

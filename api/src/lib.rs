@@ -11,7 +11,7 @@ use rocket::{
     get,
     http::Header,
     options, routes,
-    serde::{json::Json, Deserialize, Serialize},
+    serde::{Deserialize, Serialize},
     Request, Response, State,
 };
 use rocket_dyn_templates::tera::Tera;
@@ -36,36 +36,26 @@ mod repositories;
 mod routes;
 mod util;
 
-use crate::auth::User;
-
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct RootResponse {
     value: String,
 }
 
+custom_errors!(HealthzError, NotFound);
+
 #[openapi]
-#[get("/", format = "json")]
-async fn index(
+#[get("/healthz", format = "json")]
+async fn healthz(
     pool: &State<PgPool>,
-    user: User,
-) -> Result<Json<RootResponse>, rocket::response::status::BadRequest<String>> {
-    // Make a simple query to return the given parameter (use a question mark `?` instead of `$1` for MySQL)
-    let test_id: i32 = match sqlx::query!("SELECT id FROM test")
-        .fetch_one(pool.inner())
-        .await
-    {
-        Ok(test_id) => test_id.id,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
-                "Error getting database ID".to_string(),
-            )))
-        }
-    };
-
-    let output = format!("Hello, {}! id: {}", user.email, test_id);
-
-    Ok(Json(RootResponse { value: output }))
+) -> Result<rocket::response::status::NoContent, HealthzError> {
+    // Make a simple query to test connection to the database
+    match sqlx::query!("SELECT 1 AS id").fetch_one(pool.inner()).await {
+        Ok(_) => Ok(rocket::response::status::NoContent),
+        Err(_) => Err(HealthzError::NotFound(
+            "Error getting database ID".to_string(),
+        )),
+    }
 }
 
 #[options("/<_..>")]
@@ -232,7 +222,7 @@ async fn rocket(
         .mount(
             "/api",
             openapi_get_routes![
-                index,
+                healthz,
                 routes::auth::login,
                 routes::auth::verify_email,
                 routes::events::get_all,

@@ -25,7 +25,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "test:pact": "react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
+    "test:pact": "cross-env CI=true react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
