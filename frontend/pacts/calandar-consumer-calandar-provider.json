@@ -1,0 +1,86 @@
+{
+  "consumer": {
+    "name": "calandar-consumer"
+  },
+  "interactions": [
+    {
+      "description": "a POST request to create an event",
+      "providerState": "provider allows event creation",
+      "request": {
+        "body": {
+          "description": "test",
+          "timeBegin": "2015-08-06T16:53:10.123+01:00",
+          "timeEnd": "2015-08-06T16:53:10.123+01:00",
+          "title": "test"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.timeBegin": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          },
+          "$.body.timeEnd": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          }
+        },
+        "method": "POST",
+        "path": "/api/events",
+        "query": "as_admin=true"
+      },
+      "response": {
+        "body": {
+          "createdAt": "2015-08-06T16:53:10.123+01:00",
+          "description": "test",
+          "id": 1,
+          "lastModified": "2015-08-06T16:53:10.123+01:00",
+          "timeBegin": "2015-08-06T16:53:10.123+01:00",
+          "timeEnd": "2015-08-06T16:53:10.123+01:00",
+          "title": "test"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body": {
+            "match": "type"
+          },
+          "$.body.createdAt": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          },
+          "$.body.lastModified": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          },
+          "$.body.timeBegin": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          },
+          "$.body.timeEnd": {
+            "match": "regex",
+            "regex": "^\\d{4}-[01]\\d-[0-3]\\dT[0-2]\\d:[0-5]\\d:[0-5]\\d\\.\\d+([+-][0-2]\\d(:?[0-5]\\d)?|Z)$"
+          }
+        },
+        "status": 201
+      }
+    }
+  ],
+  "metadata": {
+    "pact-js": {
+      "version": "10.4.0"
+    },
+    "pactRust": {
+      "ffi": "0.3.19",
+      "models": "1.0.3"
+    },
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  },
+  "provider": {
+    "name": "calandar-provider"
+  }
+}

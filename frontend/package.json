@@ -7,19 +7,16 @@
     "@emotion/styled": "^11.10.5",
     "@mui/icons-material": "^5.11.0",
     "@mui/lab": "^5.0.0-alpha.114",
-    "@mui/material": "^5.11.2",
+    "@mui/material": "^5.11.3",
     "@mui/x-data-grid": "^5.17.17",
     "@mui/x-date-pickers": "^5.0.12",
-    "@testing-library/jest-dom": "^5.16.5",
-    "@testing-library/react": "^13.4.0",
-    "@testing-library/user-event": "^14.4.3",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.40",
+    "node-fetch": "^3.3.0",
     "notistack": "^2.0.8",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.6.1",
-    "react-scripts": "5.0.1",
     "recharts": "^2.2.0",
     "typescript": "^4.9.4",
     "web-vitals": "^3.1.0"
@@ -28,6 +25,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:pact": "cross-env CI=true react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -49,7 +47,19 @@
     ]
   },
   "devDependencies": {
+    "@pact-foundation/pact": "10.4.0",
+    "@pact-foundation/pact-node": "10.17.7",
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "13.4.0",
+    "@testing-library/user-event": "^14.4.3",
+    "@types/jest": "^29.2.4",
     "@types/react": "^18.0.26",
-    "@types/react-dom": "^18.0.10"
+    "@types/react-dom": "^18.0.10",
+    "cross-env": "^5.2.1",
+    "jest": "^29.3.1",
+    "jest-pact": "^0.10.2",
+    "react-scripts": "5.0.1",
+    "ts-jest": "^29.0.3",
+    "whatwg-fetch": "^3.6.2"
   }
 }

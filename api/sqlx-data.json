@@ -85,22 +85,6 @@
     },
     "query": "\n        DELETE\n        FROM event\n        WHERE (id = ANY($1) OR $2)\n        "
   },
-  "1c6c67f80b7621c1161dcd110fabf87a1562d33f1213e5ff6300eed735f40294": {
-    "describe": {
-      "columns": [
-        {
-          "name": "id",
-          "ordinal": 0,
-          "type_info": "Int4"
-        }
-      ],
-      "nullable": [false],
-      "parameters": {
-        "Left": []
-      }
-    },
-    "query": "SELECT id FROM test"
-  },
   "2740aebba5f7844fff3844918f617ef2cf8d9a4475195f6194568d566b688d0c": {
     "describe": {
       "columns": [
@@ -232,6 +216,22 @@
       }
     },
     "query": "\n        SELECT event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE (event_id = $1 OR $2)\n        AND (email = $3 OR $4)\n        "
+  },
+  "611f76bb5b4ae387967515bd6b0b59857bf03416a03866cc7b9549829994370e": {
+    "describe": {
+      "columns": [
+        {
+          "name": "id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        }
+      ],
+      "nullable": [null],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "SELECT 1 AS id"
   },
   "6cd5517472dbc53e0bcf8450e0ca65a5627de9d8a2735aa69307a3d344e8406d": {
     "describe": {
