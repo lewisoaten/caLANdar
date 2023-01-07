@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
   GameSuggestion,
@@ -36,6 +36,7 @@ interface EventGameSuggestionsProps {
 }
 
 export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
@@ -62,14 +63,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       },
     )
       .then((response) => {
-        return response
-          .text()
-          .then(
-            (data) => JSON.parse(data, dateParser) as Array<GameSuggestion>,
-          );
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then(
+              (data) => JSON.parse(data, dateParser) as Array<GameSuggestion>,
+            );
       })
       .then((data) => {
-        sortAndAddGameSuggestions(data);
+        if (data) sortAndAddGameSuggestions(data);
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -110,9 +113,11 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
           },
         )
           .then((response) => {
-            return response
-              .text()
-              .then((data) => JSON.parse(data, dateParser) as Array<Game>);
+            if (response.status === 401) signOut();
+            else if (response.ok)
+              return response
+                .text()
+                .then((data) => JSON.parse(data, dateParser) as Array<Game>);
           })
           .then((data) => {
             setLoading(false);
@@ -156,13 +161,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         },
       )
         .then((response) => {
-          setInputValue("");
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+          if (response.status === 401) signOut();
+          else if (response.ok) {
+            setInputValue("");
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+          }
         })
         .then((data) => {
-          sortAndAddGameSuggestions([...gameSuggestions, data]);
+          if (data) sortAndAddGameSuggestions([...gameSuggestions, data]);
         });
     }
   };
@@ -188,22 +196,27 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       },
     )
       .then((response) => {
-        if (response.status === 200) {
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
-        } else {
-          alert("Unable to vote");
-          throw new Error("Unable to vote");
+        if (response.status === 401) signOut();
+        else if (response.ok) {
+          if (response.status === 200) {
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+          } else {
+            alert("Unable to vote");
+            throw new Error("Unable to vote");
+          }
         }
       })
       .then((data) => {
-        let gameSuggestionIndex = gameSuggestions.findIndex(
-          (game) => game.appid === parseInt(event.target.value),
-        );
-        let newGameSuggestions = [...gameSuggestions];
-        newGameSuggestions[gameSuggestionIndex] = data;
-        sortAndAddGameSuggestions(newGameSuggestions);
+        if (data) {
+          let gameSuggestionIndex = gameSuggestions.findIndex(
+            (game) => game.appid === parseInt(event.target.value),
+          );
+          let newGameSuggestions = [...gameSuggestions];
+          newGameSuggestions[gameSuggestionIndex] = data;
+          sortAndAddGameSuggestions(newGameSuggestions);
+        }
       });
   };
 

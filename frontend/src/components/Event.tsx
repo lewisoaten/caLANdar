@@ -2,7 +2,7 @@ import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
 import { Container, Paper, Grid, Typography } from "@mui/material";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
@@ -11,6 +11,7 @@ import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
 
 const Event = () => {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
@@ -27,13 +28,17 @@ const Event = () => {
       },
     })
       .then((response) => {
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as EventData);
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as EventData);
       })
       .then((data) => {
-        setEvent(data);
-        setLoaded(true);
+        if (data) {
+          setEvent(data);
+          setLoaded(true);
+        }
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

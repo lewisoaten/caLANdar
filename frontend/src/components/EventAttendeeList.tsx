@@ -11,7 +11,7 @@ import {
   Alert,
   Skeleton,
 } from "@mui/material";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
   InvitationLiteData,
@@ -24,6 +24,7 @@ interface EventAttendeListProps {
 }
 
 export default function EventAttendeeList(props: EventAttendeListProps) {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
@@ -41,15 +42,20 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
       },
     )
       .then((response) => {
-        return response
-          .text()
-          .then(
-            (data) => JSON.parse(data, dateParser) as Array<InvitationLiteData>,
-          );
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then(
+              (data) =>
+                JSON.parse(data, dateParser) as Array<InvitationLiteData>,
+            );
       })
       .then((data) => {
-        setAttendees(data);
-        setLoading(false);
+        if (data) {
+          setAttendees(data);
+          setLoading(false);
+        }
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
