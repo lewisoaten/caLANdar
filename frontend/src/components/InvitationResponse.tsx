@@ -25,9 +25,11 @@ import {
   InvitationData,
   defaultInvitationData,
 } from "../types/invitations";
+import AttendanceSelector from "./AttendanceSelector";
+import { EventData } from "../types/events";
 
 interface InvitationResponseProps {
-  event_id: number;
+  event: EventData;
   setResponded: Dispatch<SetStateAction<boolean>>;
   disabled: boolean;
   asAdmin?: boolean;
@@ -53,13 +55,26 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   >("primary");
   const [formInfoVisible, setFormInfoVisible] = useState(false);
 
+  const [attendanceSelectorVisible, setAttendanceSelectorVisible] =
+    useState(false);
+  const [attendanceColour, setAttendanceColour] = useState<
+    | "primary"
+    | "error"
+    | "secondary"
+    | "info"
+    | "success"
+    | "warning"
+    | "standard"
+    | undefined
+  >("primary");
+
   var typingTimer = useRef<NodeJS.Timeout>();
   const doneTypingInterval = 1000;
 
   useEffect(() => {
     fetch(
       `${process.env.REACT_APP_API_PROXY}/api/events/${
-        props.event_id
+        props.event.id
       }/invitations/${encodeURIComponent(email)}`,
       {
         headers: {
@@ -75,8 +90,11 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       })
       .then((data) => {
         setInvitation(data);
+        setAttendanceColour(data.response === RSVP.yes ? "success" : "warning");
+
         if (data.response && data.handle && data.response !== RSVP.no) {
           props.setResponded(true);
+          setAttendanceSelectorVisible(true);
         }
       });
 
@@ -95,6 +113,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     };
 
     setInvitation(newInvitation);
+    setAttendanceColour(
+      newInvitation.response === RSVP.yes ? "success" : "warning",
+    );
 
     if (!invitation.handle || !newAlignment) {
       setFormInfoVisible(true);
@@ -119,6 +140,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     };
 
     setInvitation(newInvitation);
+    setAttendanceColour(
+      newInvitation.response === RSVP.yes ? "success" : "warning",
+    );
 
     if (!event.target.value || !invitation.response) {
       setFormInfoVisible(true);
@@ -137,10 +161,24 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     }
   };
 
+  const handleAttendanceChange = (newAttendance: number[]) => {
+    const newInvitation = {
+      ...invitation,
+      attendance: newAttendance,
+    };
+
+    setInvitation(newInvitation);
+    setAttendanceColour(
+      newInvitation.response === RSVP.yes ? "success" : "warning",
+    );
+
+    saveInvitationResponse(newInvitation);
+  };
+
   const saveInvitationResponse = (newInvitation: InvitationData) => {
     fetch(
       `${process.env.REACT_APP_API_PROXY}/api/events/${
-        props.event_id
+        props.event.id
       }/invitations/${encodeURIComponent(email)}`,
       {
         method: "PATCH",
@@ -151,6 +189,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         body: JSON.stringify({
           handle: newInvitation.handle,
           response: newInvitation.response,
+          attendance: newInvitation.attendance,
         }),
       },
     ).then((response) => {
@@ -173,7 +212,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
         RSVP
       </Typography>
-      <Stack spacing={2} direction="column">
+      <Stack spacing={2} direction="column" alignItems="flex-start">
         <Stack spacing={2} direction="row">
           <TextField
             label="Handle"
@@ -204,6 +243,20 @@ export default function InvitationResponse(props: InvitationResponseProps) {
           </ToggleButtonGroup>
           {loading && <CircularProgress />}
         </Stack>
+        <Collapse in={attendanceSelectorVisible}>
+          <Typography component="h3" variant="h6" color="primary" gutterBottom>
+            Times Attending
+          </Typography>
+          {attendanceSelectorVisible && (
+            <AttendanceSelector
+              timeBegin={props.event.timeBegin}
+              timeEnd={props.event.timeEnd}
+              value={invitation.attendance}
+              colour={attendanceColour}
+              onChange={handleAttendanceChange}
+            />
+          )}
+        </Collapse>
         <Collapse in={formInfoVisible}>
           <Alert severity="info">
             You must enter both a Handle and select whether you are attending to

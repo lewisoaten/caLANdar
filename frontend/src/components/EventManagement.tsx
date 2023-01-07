@@ -133,7 +133,7 @@ const EventManagement = () => {
                 height: 240,
               }}
             >
-              <InvitationsTable event_id={event.id} as_admin={true} />
+              <InvitationsTable event={event} as_admin={true} />
             </Paper>
           </Grid>
         </Grid>

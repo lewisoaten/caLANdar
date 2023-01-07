@@ -87,7 +87,7 @@ const Event = () => {
               <Grid item xs={12}>
                 {loaded && (
                   <InvitationResponse
-                    event_id={event.id}
+                    event={event}
                     setResponded={setResponded}
                     disabled={event.timeEnd.isSameOrBefore(moment())}
                   />
