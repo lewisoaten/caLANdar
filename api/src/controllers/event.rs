@@ -6,6 +6,21 @@ use crate::{
     routes::events::{Event, EventSubmit},
 };
 
+// Implement From for EventsGetResponse from Event
+impl From<crate::repositories::event::Event> for Event {
+    fn from(event: crate::repositories::event::Event) -> Self {
+        Self {
+            id: event.id,
+            created_at: event.created_at,
+            last_modified: event.last_modified,
+            title: event.title,
+            description: event.description,
+            time_begin: event.time_begin,
+            time_end: event.time_end,
+        }
+    }
+}
+
 pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
     // Return all events
     match event::index(pool).await {

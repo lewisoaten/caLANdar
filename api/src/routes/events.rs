@@ -44,21 +44,6 @@ pub struct Event {
     pub time_end: DateTime<Utc>,
 }
 
-// Implement From for EventsGetResponse from Event
-impl From<crate::repositories::event::Event> for Event {
-    fn from(event: crate::repositories::event::Event) -> Self {
-        Self {
-            id: event.id,
-            created_at: event.created_at,
-            last_modified: event.last_modified,
-            title: event.title,
-            description: event.description,
-            time_begin: event.time_begin,
-            time_end: event.time_end,
-        }
-    }
-}
-
 impl SchemaExample for Event {
     fn example() -> Self {
         Self {

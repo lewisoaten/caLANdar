@@ -16,20 +16,27 @@ import {
   Button,
   Stack,
   Typography,
+  Popover,
 } from "@mui/material";
-import { InvitationData, defaultInvitationsData } from "../types/invitations";
+import {
+  InvitationData,
+  defaultInvitationsData,
+  defaultInvitationData,
+} from "../types/invitations";
 import { UserContext } from "../UserProvider";
 import { dateParser } from "../utils";
+import AttendanceSelector from "./AttendanceSelector";
+import { EventData } from "../types/events";
 
 interface InvitationsTableProps {
-  event_id: number;
+  event: EventData;
   as_admin: boolean;
 }
 
 export default function InvitationsTable(props: InvitationsTableProps) {
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
-  const event_id = props.event_id;
+  const event_id = props.event.id;
   const [invitations, setInvitations] = useState(defaultInvitationsData);
 
   useEffect(() => {
@@ -142,6 +149,31 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     });
   };
 
+  const [popoverAnchorEl, setPopoverAnchorEl] = useState<HTMLElement | null>(
+    null,
+  );
+
+  const [popoverInvitation, setPopoverInvitation] = useState<InvitationData>(
+    defaultInvitationData,
+  );
+
+  const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
+    if (!popoverOpen) {
+      const email = event?.currentTarget.id.replace("attendance-", "");
+      const invitation = invitations.find((x) => x.email === email);
+      if (invitation && invitation.attendance) {
+        setPopoverInvitation(invitation);
+        setPopoverAnchorEl(event.currentTarget);
+      }
+    }
+  };
+
+  const handlePopoverClose = () => {
+    setPopoverAnchorEl(null);
+  };
+
+  const popoverOpen = Boolean(popoverAnchorEl);
+
   return (
     <React.Fragment>
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
@@ -168,7 +200,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               <TableCell>{invitation.invitedAt.calendar()}</TableCell>
               <TableCell>{invitation.response}</TableCell>
               <TableCell>{invitation.respondedAt?.calendar()}</TableCell>
-              <TableCell>{invitation.attendance}</TableCell>
+              <TableCell
+                id={"attendance-" + invitation.email}
+                onMouseEnter={handlePopoverOpen}
+                onClick={handlePopoverOpen}
+                onMouseLeave={handlePopoverClose}
+              >
+                {invitation.attendance}
+              </TableCell>
               <TableCell>{invitation.lastModified.calendar()}</TableCell>
               <TableCell>
                 <Button
@@ -184,6 +223,29 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           ))}
         </TableBody>
       </Table>
+      <Popover
+        sx={{
+          pointerEvents: "none",
+        }}
+        open={popoverOpen}
+        anchorEl={popoverAnchorEl}
+        anchorOrigin={{
+          vertical: "center",
+          horizontal: "left",
+        }}
+        transformOrigin={{
+          vertical: "center",
+          horizontal: "right",
+        }}
+        onClose={handlePopoverClose}
+        disableRestoreFocus
+      >
+        <AttendanceSelector
+          timeBegin={props.event.timeBegin}
+          timeEnd={props.event.timeEnd}
+          value={popoverInvitation.attendance}
+        />
+      </Popover>
       <Stack direction="row" spacing={2}>
         <Button variant="outlined" onClick={handleClickOpen}>
           Send Inviations

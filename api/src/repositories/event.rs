@@ -53,10 +53,9 @@ pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
 }
 
 pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::Error> {
-    let ids = match filter.ids {
-        Some(ids) => (ids, false),
-        None => (vec![], true),
-    };
+    let ids = filter
+        .ids
+        .map_or_else(|| (vec![], true), |ids| (ids, false));
 
     sqlx::query_as!(
         Event,
@@ -73,10 +72,9 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::E
 }
 
 pub async fn delete(pool: &PgPool, filter: Filter) -> Result<(), sqlx::Error> {
-    let ids = match filter.ids {
-        Some(ids) => (ids, false),
-        None => (vec![], true),
-    };
+    let ids = filter
+        .ids
+        .map_or_else(|| (vec![], true), |ids| (ids, false));
 
     match sqlx::query!(
         r#"
