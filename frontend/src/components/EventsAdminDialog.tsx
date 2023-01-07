@@ -13,7 +13,7 @@ import {
 } from "@mui/material";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
   defaultCreateEvent,
@@ -32,6 +32,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
 
   const createMode = !event;
 
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
@@ -101,9 +102,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
           alert(error);
           throw new Error(error);
         } else if (response.status === 401) {
-          const error = "You are not authorized to create an event.";
-          alert(error);
-          throw new Error(error);
+          signOut();
         } else {
           response.text().then((data) => console.log(data));
           const error = `Something has gone wrong, please contact the administrator. More details: ${response.status}`;
@@ -112,7 +111,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         }
       })
       .then((data) => {
-        close(data);
+        if (data) close(data);
       });
   };
 
@@ -135,9 +134,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         alert(error);
         throw new Error(error);
       } else if (response.status === 401) {
-        const error = "You are not authorized to create an event.";
-        alert(error);
-        throw new Error(error);
+        signOut();
       } else {
         const error =
           "Something has gone wrong, please contact the administrator.";

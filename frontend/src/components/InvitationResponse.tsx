@@ -18,7 +18,7 @@ import {
   ToggleButton,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
   RSVP,
@@ -36,6 +36,7 @@ interface InvitationResponseProps {
 }
 
 export default function InvitationResponse(props: InvitationResponseProps) {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const email = userDetails?.email;
@@ -84,17 +85,23 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       },
     )
       .then((response) => {
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as InvitationData);
+        if (response.status === 401) signOut();
+        else
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as InvitationData);
       })
       .then((data) => {
-        setInvitation(data);
-        setAttendanceColour(data.response === RSVP.yes ? "success" : "warning");
+        if (data) {
+          setInvitation(data);
+          setAttendanceColour(
+            data.response === RSVP.yes ? "success" : "warning",
+          );
 
-        if (data.response && data.handle && data.response !== RSVP.no) {
-          props.setResponded(true);
-          setAttendanceSelectorVisible(true);
+          if (data.response && data.handle && data.response !== RSVP.no) {
+            props.setResponded(true);
+            setAttendanceSelectorVisible(true);
+          }
         }
       });
 
@@ -193,7 +200,8 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         }),
       },
     ).then((response) => {
-      if (response.status === 204) {
+      if (response.status === 401) signOut();
+      else if (response.status === 204) {
         setLoading(false);
         setHandleColour("primary");
         enqueueSnackbar("RSVP saved", { variant: "success" });

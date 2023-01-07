@@ -9,13 +9,14 @@ import {
   Typography,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
 import InvitationsTable from "./InvitationsTable";
 import EventsAdminDialog from "./EventsAdminDialog";
 
 const EventManagement = () => {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
@@ -42,12 +43,14 @@ const EventManagement = () => {
       },
     })
       .then((response) => {
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as EventData);
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as EventData);
       })
       .then((data) => {
-        setEvent(data);
+        if (data) setEvent(data);
       });
   };
 
@@ -69,7 +72,8 @@ const EventManagement = () => {
         Authorization: "Bearer " + token,
       },
     }).then((response) => {
-      if (response.status === 204) {
+      if (response.status === 401) signOut();
+      else if (response.status === 204) {
         navigate("..");
       } else {
         alert("Unable to delete event");

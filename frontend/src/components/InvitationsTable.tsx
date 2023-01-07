@@ -23,7 +23,7 @@ import {
   defaultInvitationsData,
   defaultInvitationData,
 } from "../types/invitations";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData } from "../types/events";
@@ -34,6 +34,7 @@ interface InvitationsTableProps {
 }
 
 export default function InvitationsTable(props: InvitationsTableProps) {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const event_id = props.event.id;
@@ -51,12 +52,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         },
       )
         .then((response) => {
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
+          if (response.status === 401) signOut();
+          else
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
         })
         .then((data) => {
-          setInvitations(data);
+          if (data) setInvitations(data);
         });
     }
 
@@ -79,7 +82,8 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         },
       },
     ).then((response) => {
-      if (response.status === 204) {
+      if (response.status === 401) signOut();
+      else if (response.status === 204) {
         var remainingInvitations = invitations.filter(function (invitation) {
           return invitation.email !== email;
         });
@@ -134,7 +138,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
             throw new Error(error);
           } else if (response.status === 401) {
             const error = "You are not authorized to create an event.";
-            alert(error);
+            signOut();
             throw new Error(error);
           } else {
             const error =

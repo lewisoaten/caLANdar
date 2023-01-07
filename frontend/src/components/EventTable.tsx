@@ -24,7 +24,7 @@ import {
 } from "@mui/x-data-grid";
 import LinkIcon from "@mui/icons-material/Link";
 import { useNavigate } from "react-router-dom";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
 
@@ -154,6 +154,7 @@ interface EventTableProps {
 }
 
 export default function EventTable(props: EventTableProps) {
+  const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
@@ -250,12 +251,14 @@ export default function EventTable(props: EventTableProps) {
       },
     })
       .then((response) => {
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as Array<EventData>);
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as Array<EventData>);
       })
       .then((data) => {
-        setEvents(data);
+        if (data) setEvents(data);
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps

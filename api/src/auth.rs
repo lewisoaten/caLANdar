@@ -121,10 +121,13 @@ impl<'r> FromRequest<'r> for User {
                     .state::<PasetoSymmetricKey<V4, Local>>()
                     .expect("PASETO encryption key found in config.");
 
-                authorise_paseto_header(key, authorization_header, false)
-                    .map_or(Outcome::Forward(()), |email| {
-                        Outcome::Success(Self { email })
-                    })
+                authorise_paseto_header(key, authorization_header, false).map_or(
+                    request::Outcome::Failure((
+                        rocket::http::Status::Unauthorized,
+                        UserError::MissingToken,
+                    )),
+                    |email| Outcome::Success(Self { email }),
+                )
             },
         )
     }
