@@ -9,7 +9,7 @@
     "@mui/lab": "^5.0.0-alpha.114",
     "@mui/material": "^5.11.3",
     "@mui/x-data-grid": "^5.17.18",
-    "@mui/x-date-pickers": "^5.0.12",
+    "@mui/x-date-pickers": "^5.0.13",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.40",
     "node-fetch": "^3.3.0",
