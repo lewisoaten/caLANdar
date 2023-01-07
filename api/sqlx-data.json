@@ -365,6 +365,77 @@
     },
     "query": "WITH event_game_suggestion_response AS (\n                    INSERT INTO event_game (event_id, game_id)\n                        VALUES ($1, $2)\n                        RETURNING event_id, game_id, requested_at, last_modified\n                ) SELECT\n                    steam_game.appid AS appid,\n                    steam_game.name AS name,\n                    steam_game.last_modified AS last_modified,\n                    event_game_suggestion_response.requested_at AS requested_at,\n                    event_game_suggestion_response.last_modified AS suggestion_last_modified,\n                    'novote'::vote AS \"self_vote: _\",\n                    0::BIGINT AS votes\n                FROM event_game_suggestion_response\n                INNER JOIN steam_game\n                    ON event_game_suggestion_response.game_id = steam_game.appid"
   },
+  "76d42a6321b6e943584e80016a7459c248dc8ec82aed54402df1b4dcd80409ba": {
+    "describe": {
+      "columns": [
+        {
+          "name": "event_id",
+          "ordinal": 0,
+          "type_info": "Int4"
+        },
+        {
+          "name": "email",
+          "ordinal": 1,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "handle",
+          "ordinal": 2,
+          "type_info": "Varchar"
+        },
+        {
+          "name": "invited_at",
+          "ordinal": 3,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "responded_at",
+          "ordinal": 4,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "response: _",
+          "ordinal": 5,
+          "type_info": {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          }
+        },
+        {
+          "name": "attendance",
+          "ordinal": 6,
+          "type_info": "Bytea"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 7,
+          "type_info": "Timestamptz"
+        }
+      ],
+      "nullable": [false, false, true, false, true, true, true, false],
+      "parameters": {
+        "Left": [
+          "Int4",
+          "Text",
+          "Varchar",
+          {
+            "Custom": {
+              "kind": {
+                "Enum": ["yes", "no", "maybe"]
+              },
+              "name": "invitation_response"
+            }
+          },
+          "Bytea"
+        ]
+      }
+    },
+    "query": "\n        UPDATE invitation\n        SET handle = $3, response = $4, attendance = $5, responded_at = NOW(), last_modified = NOW()\n        WHERE event_id = $1\n        AND email = $2\n        RETURNING event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        "
+  },
   "845f07db364ad990ef08b77c1fa27f9908d9cfd25fedaa42b9340b3c0b2c8154": {
     "describe": {
       "columns": [
@@ -518,28 +589,6 @@
       }
     },
     "query": "INSERT INTO steam_game (appid, update_id, name, last_modified)\n                VALUES ($1, $2, $3, $4)\n                ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = $4"
-  },
-  "cc12d44673db2dca913c6946cc5a2e2287fcfdb53f519e8a5d34793dfc1ed4aa": {
-    "describe": {
-      "columns": [],
-      "nullable": [],
-      "parameters": {
-        "Left": [
-          "Varchar",
-          {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "no", "maybe"]
-              },
-              "name": "invitation_response"
-            }
-          },
-          "Int4",
-          "Text"
-        ]
-      }
-    },
-    "query": "UPDATE invitation\n        SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()\n        WHERE event_id = $3\n        AND email = $4"
   },
   "e3424bf6404e590011f37f6fe37042bb58d0fdf35b00e86b8e3676aa314a1a6d": {
     "describe": {

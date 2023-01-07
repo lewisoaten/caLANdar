@@ -26,15 +26,13 @@ pub struct Filter {
 }
 
 pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Invitation>, sqlx::Error> {
-    let event_id = match filter.event_id {
-        Some(event_id) => (event_id, false),
-        None => (0, true),
-    };
+    let event_id = filter
+        .event_id
+        .map_or((0, true), |event_id| (event_id, false));
 
-    let email = match filter.email {
-        Some(email) => (email, false),
-        None => (String::new(), true),
-    };
+    let email = filter
+        .email
+        .map_or_else(|| (String::new(), true), |email| (email, false));
 
     sqlx::query_as!(
         Invitation,
@@ -50,5 +48,33 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Invitation>, sq
         email.1,
     )
     .fetch_all(pool)
+    .await
+}
+
+pub async fn edit(
+    pool: &PgPool,
+    event_id: i32,
+    email: String,
+    handle: String,
+    response: Response,
+    attendance: Option<Vec<u8>>,
+) -> Result<Invitation, sqlx::Error> {
+    // Insert new event and return it
+    sqlx::query_as!(
+        Invitation,
+        r#"
+        UPDATE invitation
+        SET handle = $3, response = $4, attendance = $5, responded_at = NOW(), last_modified = NOW()
+        WHERE event_id = $1
+        AND email = $2
+        RETURNING event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        "#,
+        event_id,
+        email,
+        handle,
+        response as _,
+        attendance,
+    )
+    .fetch_one(pool)
     .await
 }

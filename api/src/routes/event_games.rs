@@ -93,12 +93,12 @@ pub async fn post(
 > {
     match is_event_active(pool.inner(), event_id).await {
         Err(e) => return Err(rocket::response::status::BadRequest(Some(e))),
-        Ok(false) => {
+        Ok((false, _)) => {
             return Err(rocket::response::status::BadRequest(Some(
                 "You can only suggest games for active events".to_string(),
             )))
         }
-        Ok(true) => (),
+        Ok((true, _)) => (),
     }
 
     match is_attending_event(pool.inner(), event_id, &user).await {
@@ -179,12 +179,12 @@ pub async fn patch(
 ) -> Result<Json<EventGameSuggestionResponse>, rocket::response::status::Unauthorized<String>> {
     match is_event_active(pool.inner(), event_id).await {
         Err(e) => return Err(rocket::response::status::Unauthorized(Some(e))),
-        Ok(false) => {
+        Ok((false, _)) => {
             return Err(rocket::response::status::Unauthorized(Some(
                 "You can only vote for games for active events".to_string(),
             )))
         }
-        Ok(true) => (),
+        Ok((true, _)) => (),
     }
 
     match is_attending_event(pool.inner(), event_id, &user).await {
@@ -194,7 +194,7 @@ pub async fn patch(
         ))),
         Ok(true) => {
             // Insert new event and return it
-            match sqlx::query_as!(
+            let updated_game_suggestion = sqlx::query_as!(
                 EventGameSuggestionResponse,
                 r#"WITH event_game_patch_response AS (
                     INSERT INTO event_game_vote (event_id, game_id, email, vote)
@@ -231,15 +231,16 @@ pub async fn patch(
                 game_patch.vote as _,
             )
             .fetch_one(pool.inner())
-            .await
-            {
-                Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
-                Err(_) => {
+            .await;
+
+            updated_game_suggestion.map_or_else(
+                |_| {
                     Err(rocket::response::status::Unauthorized(Some(
                         "Error updating game vote in the database".to_string(),
                     )))
-                }
-            }
+                },
+                |updated_game_suggestion| Ok(Json(updated_game_suggestion)),
+            )
         }
     }
 }

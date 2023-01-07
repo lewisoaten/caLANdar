@@ -37,10 +37,10 @@ pub async fn login(
     let mut context = Context::new();
     context.insert("name", &login_request.email);
 
-    let redirect = match login_request.redirect {
-        Some(ref redirect) => redirect,
-        None => "",
-    };
+    let redirect = login_request
+        .redirect
+        .as_ref()
+        .map_or("", |redirect| redirect);
 
     let email_details = PreauthEmailDetails {
         email_address: login_request.email.to_string(),
@@ -143,7 +143,7 @@ pub fn verify_email(
     Ok(Json(VerifyEmailResponse {
         token,
         email: typed_token.sub,
-        redirect: typed_token.r.unwrap_or_else(|| "".to_string()),
+        redirect: typed_token.r.unwrap_or_default(),
         is_admin,
     }))
 }

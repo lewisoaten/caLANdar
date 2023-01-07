@@ -1,6 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
-    util::{is_attending_event, is_event_active, send_preauth_email, PreauthEmailDetails},
+    controllers::{event_invitation, Error},
+    util::{is_attending_event, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
 use rocket::{
@@ -18,6 +19,8 @@ use sendgrid::v3::Sender;
 use sqlx::postgres::PgPool;
 
 use crate::routes::events::Event;
+
+use super::SchemaExample;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
@@ -286,12 +289,26 @@ pub async fn delete(
     }
 }
 
-#[derive(Deserialize, JsonSchema)]
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde")]
+#[schemars(example = "Self::example")]
 pub struct InvitationsPatchRequest {
-    handle: String,
-    response: InvitationResponse,
+    pub handle: String,
+    pub response: InvitationResponse,
+    pub attendance: Option<Vec<u8>>,
 }
+
+impl SchemaExample for InvitationsPatchRequest {
+    fn example() -> Self {
+        Self {
+            handle: "FPS Doug".to_string(),
+            response: InvitationResponse::Yes,
+            attendance: Some(vec![0, 1, 1, 0]),
+        }
+    }
+}
+
+custom_errors!(InvitationsPatchError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Event Invitations")]
 #[patch(
@@ -305,44 +322,19 @@ pub async fn patch(
     invitation_request: Json<InvitationsPatchRequest>,
     pool: &State<PgPool>,
     user: User,
-) -> Result<rocket::response::status::NoContent, rocket::response::status::Unauthorized<String>> {
+) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
     if user.email != email {
-        return Err(rocket::response::status::Unauthorized(Some(
+        return Err(InvitationsPatchError::Unauthorized(
             "You can only respond to invitations for your own email address".to_string(),
-        )));
+        ));
     }
 
-    match is_event_active(pool.inner(), event_id).await {
-        Err(e) => return Err(rocket::response::status::Unauthorized(Some(e))),
-        Ok(false) => {
-            return Err(rocket::response::status::Unauthorized(Some(
-                "You can only respond to invitations for active events".to_string(),
-            )))
-        }
-        Ok(true) => (),
+    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner()).await {
+        Ok(()) => Ok(rocket::response::status::NoContent),
+        Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
+        Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
+            "Error getting event, due to: {}",
+            e
+        ))),
     }
-
-    // Update invitation response
-    match sqlx::query!(
-        r#"UPDATE invitation
-        SET handle = $1, response = $2, responded_at = NOW(), last_modified = NOW()
-        WHERE event_id = $3
-        AND email = $4"#,
-        invitation_request.handle,
-        invitation_request.response as _,
-        event_id,
-        user.email,
-    )
-    .execute(pool.inner())
-    .await
-    {
-        Ok(_) => (),
-        Err(_) => {
-            return Err(rocket::response::status::Unauthorized(Some(
-                "Error updating invitation in the database".to_string(),
-            )))
-        }
-    };
-
-    Ok(rocket::response::status::NoContent)
 }

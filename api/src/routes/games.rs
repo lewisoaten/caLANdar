@@ -197,8 +197,6 @@ pub async fn get_steam_game(
 
     let page = page.unwrap_or(0);
 
-    let wrapped_query = format!("'{}'", query);
-
     // Return games matching search query
     match sqlx::query_as!(
         SteamGameResponse,
@@ -208,7 +206,7 @@ pub async fn get_steam_game(
         ORDER BY rank DESC
         LIMIT $2
         OFFSET $3"#,
-        wrapped_query,
+        query,
         COUNT,
         page * COUNT,
     )

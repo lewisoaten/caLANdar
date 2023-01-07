@@ -6,7 +6,11 @@ use sqlx::PgPool;
 
 use crate::{
     auth::User,
-    routes::event_invitations::{InvitationResponse, InvitationsResponse},
+    controllers::event,
+    routes::{
+        event_invitations::{InvitationResponse, InvitationsResponse},
+        events::Event,
+    },
 };
 
 pub async fn send_email(
@@ -16,7 +20,7 @@ pub async fn send_email(
     body: &str,
 ) -> Result<(), String> {
     let personalization = {
-        let mut p = Personalization::new(SendGridEmail::new(&tos[0].to_string()));
+        let mut p = Personalization::new(SendGridEmail::new(tos[0].to_string()));
         for to in tos.iter().skip(1) {
             p = p.add_to(SendGridEmail::new(*to));
         }
@@ -36,7 +40,7 @@ pub async fn send_email(
                 Err("Sendgrid error".to_string())
             }
         }
-        Err(e) => Err(format!("Sendgrid error: {}", e)),
+        Err(e) => Err(format!("Sendgrid error: {e}")),
     }
 }
 
@@ -90,7 +94,7 @@ pub async fn send_preauth_email(
     let body = match tera.render(email.email_template.as_str(), template_context) {
         Ok(body) => body,
         Err(e) => {
-            return Err(format!("Error rendering email with: {}", e));
+            return Err(format!("Error rendering email with: {e}"));
         }
     };
 
@@ -132,21 +136,14 @@ pub async fn is_attending_event(pool: &PgPool, event_id: i32, user: &User) -> Re
     ))
 }
 
-pub async fn is_event_active(pool: &PgPool, id: i32) -> Result<bool, String> {
-    // Check that the event has not ended
-    let event_count = match sqlx::query!(
-        r#"SELECT COUNT(*) AS count
-        FROM event
-        WHERE id = $1
-        AND time_end>=NOW()"#,
-        id
-    )
-    .fetch_one(pool)
-    .await
-    {
-        Ok(event_count) => event_count.count,
+pub async fn is_event_active(pool: &PgPool, id: i32) -> Result<(bool, Event), String> {
+    // Get the event based on id and return a tuple of Event and the boolean whether it is in the future
+    let event = match event::get(pool, id).await {
+        Ok(event) => event,
         Err(_) => return Err("Can't get event".to_string()),
     };
 
-    Ok(event_count == Some(1))
+    let is_active = event.time_end > Utc::now();
+
+    Ok((is_active, event))
 }
