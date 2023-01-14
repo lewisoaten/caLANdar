@@ -163,6 +163,23 @@ async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
 ) -> ShuttleRocket {
+    // Set up logging
+    use sqlx::ConnectOptions;
+    let mut pool_options_copy = pool.connect_options().clone();
+    let new_pool_options = pool_options_copy
+        .log_statements(log::LevelFilter::Debug)
+        .clone();
+
+    let pool = match PgPool::connect_with(new_pool_options).await {
+        Ok(pool) => pool,
+        Err(e) => {
+            log::error!("Error connecting to pool after updating options: {}", e);
+
+            // Return the original pool
+            pool
+        }
+    };
+
     log::info!("Launching application!");
     match sqlx::migrate!().run(&pool).await {
         Ok(_) => log::info!("Migrations ran successfully"),
@@ -239,6 +256,7 @@ async fn rocket(
                 routes::event_invitations::delete,
                 routes::event_invitations::patch,
                 routes::games::steam_game_update,
+                routes::games::steam_game_update_v2,
                 routes::games::get_steam_game,
                 routes::event_games::post,
                 routes::event_games::get_all,
