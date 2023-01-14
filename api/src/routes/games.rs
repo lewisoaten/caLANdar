@@ -41,41 +41,49 @@ struct SteamAPISteamGameResponseWrapper {
     response: SteamAPISteamGameResponse,
 }
 
+// {"applist":{"apps":[{"appid":1941401,"name":""},{"appid":2170321,"name":""},{"appid":1825161,"name":""}]}}
+
 #[allow(clippy::too_many_lines)]
 #[openapi(tag = "Games")]
-#[post("/steam-game-update?<_as_admin>")]
+#[post("/steam-game-update?<full>&<_as_admin>")]
 /// Update the list of games from the Steam API
 pub async fn steam_game_update(
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
+    full: Option<bool>,
     _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<()>, rocket::response::status::BadRequest<String>> {
-    let last_update: SteamGameUpdate = match sqlx::query_as!(
-        SteamGameUpdate,
-        "SELECT id, update_time FROM steam_game_update ORDER BY update_time DESC LIMIT 1",
-    )
-    .fetch_one(pool.inner())
-    .await
-    {
-        Ok(last_update) => {
-            log::info!(
-                "Found last update time, checking for updates since {:?}",
+    let blank_steam_game_update = SteamGameUpdate {
+        id: 0,
+        update_time: DateTime::<Utc>::from_utc(
+            NaiveDateTime::from_timestamp_opt(0, 0).expect("Timestamp 0 is valid."),
+            Utc,
+        ),
+    };
+
+    let last_update: SteamGameUpdate = match full {
+        Some(true) => blank_steam_game_update,
+        _ => match sqlx::query_as!(
+            SteamGameUpdate,
+            "SELECT id, update_time FROM steam_game_update ORDER BY update_time DESC LIMIT 1",
+        )
+        .fetch_one(pool.inner())
+        .await
+        {
+            Ok(last_update) => {
+                log::info!(
+                    "Found last update time, checking for updates since {:?}",
+                    last_update
+                );
                 last_update
-            );
-            last_update
-        }
-        Err(e) => {
-            log::info!("Unable to get last update time: {}", e);
-            // Return earliest unix timestamp
-            SteamGameUpdate {
-                id: 0,
-                update_time: DateTime::<Utc>::from_utc(
-                    NaiveDateTime::from_timestamp_opt(0, 0).expect("Timestamp 0 is valid."),
-                    Utc,
-                ),
             }
-        }
+            Err(e) => {
+                log::info!("Unable to get last update time: {}", e);
+                // Return earliest unix timestamp
+                blank_steam_game_update
+            }
+        },
     };
 
     // Insert new event and return it
@@ -98,11 +106,11 @@ pub async fn steam_game_update(
     let mut last_appid = 0;
 
     while has_more_results {
-        let request_url = format!("https://api.steampowered.com/IStoreService/GetAppList/v1/?key={key}&if_modified_since={if_modified_since}&last_appid={last_appid}&max_results={max_results}",
+        let request_url = format!("https://api.steampowered.com/IStoreService/GetAppList/v1/?key={key}&if_modified_since={if_modified_since}&last_appid={last_appid}&max_results={max_results}&include_games=true&include_dlc=true",
                                 key = steam_api_key,
                                 if_modified_since = last_update.update_time.timestamp(),
                                 last_appid = last_appid,
-                                max_results = 10000,
+                                max_results = 50000,
                             );
         log::info!("Requesting games from steam API using url: {}", request_url);
         let response = match reqwest::get(&request_url).await {
@@ -170,6 +178,106 @@ pub async fn steam_game_update(
             steam_games.response.apps.len()
         );
     }
+
+    Ok(Json(()))
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGameV2 {
+    appid: i64,
+    name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGameApplistV2 {
+    apps: Vec<SteamAPISteamGameV2>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(crate = "rocket::serde")]
+struct SteamAPISteamGameApplistWrapperV2 {
+    applist: SteamAPISteamGameApplistV2,
+}
+
+// {"applist":{"apps":[{"appid":1941401,"name":""},{"appid":2170321,"name":""},{"appid":1825161,"name":""}]}}
+
+#[allow(clippy::too_many_lines)]
+#[openapi(tag = "Games")]
+#[post("/steam-game-update-v2?<_as_admin>")]
+/// Update the list of games from the Steam API v2
+pub async fn steam_game_update_v2(
+    pool: &State<PgPool>,
+    steam_api_key: &State<String>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<Json<()>, rocket::response::status::BadRequest<String>> {
+    // Insert new game update event and return it
+    let steam_game_update: SteamGameUpdate = match sqlx::query_as!(
+        SteamGameUpdate,
+        "INSERT INTO steam_game_update DEFAULT VALUES RETURNING id, update_time",
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(steam_game_update) => steam_game_update,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(Some(
+                "Error getting database ID".to_string(),
+            )))
+        }
+    };
+
+    let request_url = format!(
+        "https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={key}",
+        key = steam_api_key,
+    );
+    log::info!(
+        "Requesting games from steam API v2 using url: {}",
+        request_url
+    );
+    let response = match reqwest::get(&request_url).await {
+        Ok(response) => response,
+        Err(e) => {
+            return Err(rocket::response::status::BadRequest(Some(format!(
+                "Error getting steam game list: {}",
+                e
+            ))))
+        }
+    };
+
+    let steam_games: SteamAPISteamGameApplistWrapperV2 = match response.json().await {
+        Ok(steam_games) => steam_games,
+        Err(e) => {
+            return Err(rocket::response::status::BadRequest(Some(format!(
+                "Error parsing steam game list: {}",
+                e
+            ))))
+        }
+    };
+
+    let mut insert_promises = vec![];
+
+    for steam_game in &steam_games.applist.apps {
+        let insert_promise = sqlx::query!(
+            "INSERT INTO steam_game (appid, update_id, name, last_modified)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = NOW()",
+            steam_game.appid,
+            steam_game_update.id,
+            steam_game.name,
+        )
+        .execute(pool.inner());
+
+        insert_promises.push(insert_promise);
+    }
+
+    join_all(insert_promises).await;
+    log::info!(
+        "Inserted or updated {} steam games",
+        steam_games.applist.apps.len()
+    );
 
     Ok(Json(()))
 }
