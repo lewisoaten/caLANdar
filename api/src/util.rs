@@ -5,7 +5,6 @@ use sendgrid::v3::{Content, Email as SendGridEmail, Message, Personalization, Se
 use sqlx::PgPool;
 
 use crate::{
-    auth::User,
     controllers::event,
     routes::{
         event_invitations::{InvitationResponse, InvitationsResponse},
@@ -111,7 +110,11 @@ pub async fn send_preauth_email(
     }
 }
 
-pub async fn is_attending_event(pool: &PgPool, event_id: i32, user: &User) -> Result<bool, String> {
+pub async fn is_attending_event(
+    pool: &PgPool,
+    event_id: i32,
+    email: String,
+) -> Result<bool, String> {
     // Check that the user has RSVP'd to this event
     let invitation: InvitationsResponse = match sqlx::query_as!(
         InvitationsResponse,
@@ -119,7 +122,7 @@ pub async fn is_attending_event(pool: &PgPool, event_id: i32, user: &User) -> Re
         FROM invitation
         WHERE event_id=$1 AND email=$2"#,
         event_id,
-        user.email,
+        email,
     )
     .fetch_one(pool)
     .await

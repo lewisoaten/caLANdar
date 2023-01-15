@@ -163,7 +163,7 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
 }
 
 pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Error> {
-    // Delete event
+    // Create event
     match event::create(
         pool,
         new_event.title,
@@ -189,7 +189,7 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
         ));
     }
 
-    // Delete event
+    // Edit event
     match event::edit(
         pool,
         id,

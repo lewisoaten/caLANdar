@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 pub mod event;
 pub mod event_invitation;
+pub mod game_suggestion;
 
 // Custom controller error
 #[derive(Debug)]
