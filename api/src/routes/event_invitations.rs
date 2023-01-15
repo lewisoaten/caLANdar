@@ -232,7 +232,7 @@ pub async fn get_all_user(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
-    match is_attending_event(pool.inner(), event_id, &user).await {
+    match is_attending_event(pool.inner(), event_id, user.email).await {
         Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
         Ok(false) => Err(rocket::response::status::BadRequest(Some(
             "You can only see invitations for events you have RSVP'd to".to_string(),
