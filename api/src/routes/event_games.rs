@@ -74,63 +74,6 @@ pub async fn post(
             e
         ))),
     }
-
-    // match is_event_active(pool.inner(), event_id).await {
-    //     Err(e) => return Err(rocket::response::status::BadRequest(Some(e))),
-    //     Ok((false, _)) => {
-    //         return Err(rocket::response::status::BadRequest(Some(
-    //             "You can only suggest games for active events".to_string(),
-    //         )))
-    //     }
-    //     Ok((true, _)) => (),
-    // }
-
-    // match is_attending_event(pool.inner(), event_id, &user).await {
-    //     Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
-    //     Ok(false) => Err(rocket::response::status::BadRequest(Some(
-    //         "You can only suggest games for events you have RSVP'd to".to_string(),
-    //     ))),
-    //     Ok(true) => {
-    //         // Insert new game suggestion
-    //         let event_game_suggestion: EventGameSuggestionResponse = match sqlx::query_as!(
-    //             EventGameSuggestionResponse,
-    //             r#"WITH event_game_suggestion_response AS (
-    //                 INSERT INTO event_game (event_id, game_id)
-    //                     VALUES ($1, $2)
-    //                     RETURNING event_id, game_id, requested_at, last_modified
-    //             ) SELECT
-    //                 steam_game.appid AS appid,
-    //                 steam_game.name AS name,
-    //                 steam_game.last_modified AS last_modified,
-    //                 event_game_suggestion_response.requested_at AS requested_at,
-    //                 event_game_suggestion_response.last_modified AS suggestion_last_modified,
-    //                 'novote'::vote AS "self_vote: _",
-    //                 0::BIGINT AS votes
-    //             FROM event_game_suggestion_response
-    //             INNER JOIN steam_game
-    //                 ON event_game_suggestion_response.game_id = steam_game.appid"#,
-    //             event_id,
-    //             game_request.appid,
-    //         )
-    //         .fetch_one(pool.inner())
-    //         .await
-    //         {
-    //             Ok(event_game_suggestion) => event_game_suggestion,
-    //             Err(_) => {
-    //                 return Err(rocket::response::status::BadRequest(Some(
-    //                     "Error getting database ID".to_string(),
-    //                 )))
-    //             }
-    //         };
-
-    //         Ok(status::Created::new(format!(
-    //             "/events/{}/games/{}",
-    //             event_id,
-    //             &game_request.appid.to_string()
-    //         ))
-    //         .body(Json(event_game_suggestion)))
-    //     }
-    // }
 }
 
 #[derive(sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
