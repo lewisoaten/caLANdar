@@ -1,7 +1,6 @@
 use crate::{
     auth::User,
     controllers::{game_suggestion, Error},
-    util::{is_attending_event, is_event_active},
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
@@ -104,70 +103,19 @@ pub async fn patch(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<EventGameSuggestionResponse>, rocket::response::status::Unauthorized<String>> {
-    match is_event_active(pool.inner(), event_id).await {
-        Err(e) => return Err(rocket::response::status::Unauthorized(Some(e))),
-        Ok((false, _)) => {
-            return Err(rocket::response::status::Unauthorized(Some(
-                "You can only vote for games for active events".to_string(),
-            )))
-        }
-        Ok((true, _)) => (),
-    }
-
-    match is_attending_event(pool.inner(), event_id, user.email.clone()).await {
-        Err(e) => Err(rocket::response::status::Unauthorized(Some(e))),
-        Ok(false) => Err(rocket::response::status::Unauthorized(Some(
-            "You can only vote for games for events you have RSVP'd to".to_string(),
+    #[allow(clippy::option_if_let_else)]
+    match game_suggestion::vote(
+        pool,
+        event_id,
+        game_id,
+        user.email,
+        game_patch.into_inner().vote,
+    )
+    .await
+    {
+        Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
+        Err(_) => Err(rocket::response::status::Unauthorized(Some(
+            "Error updating game vote in the database".to_string(),
         ))),
-        Ok(true) => {
-            // Insert new event and return it
-            let updated_game_suggestion = sqlx::query_as!(
-                EventGameSuggestionResponse,
-                r#"WITH event_game_patch_response AS (
-                    INSERT INTO event_game_vote (event_id, game_id, email, vote)
-                        VALUES ($1, $2, $3, $4)
-                        ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = $4, last_modified = NOW()
-                        RETURNING event_id, game_id, email, vote, vote_date, last_modified
-                ) SELECT
-                    steam_game.appid AS appid,
-                    steam_game.name AS name,
-                    steam_game.last_modified AS last_modified,
-                    event_game.requested_at AS requested_at,
-                    event_game.last_modified AS suggestion_last_modified,
-                    self_vote.vote AS "self_vote: _",
-                    CASE
-                        WHEN self_vote.vote = 'yes'::vote THEN count(all_votes.*) + 1
-                        ELSE count(all_votes.*) - 1
-                    END AS votes
-                FROM event_game
-                INNER JOIN steam_game
-                    ON event_game.game_id = steam_game.appid
-                LEFT JOIN event_game_patch_response AS self_vote
-                    ON event_game.event_id = self_vote.event_id
-                    AND event_game.game_id = self_vote.game_id
-                LEFT JOIN event_game_vote AS all_votes
-                    ON event_game.event_id = all_votes.event_id
-                    AND event_game.game_id = all_votes.game_id
-                    AND all_votes.vote = 'yes'::vote
-                WHERE event_game.event_id = $1
-                AND event_game.game_id = $2
-                GROUP BY steam_game.appid, steam_game.name, steam_game.last_modified, event_game.requested_at, event_game.last_modified, self_vote.vote"#,
-                event_id,
-                game_id,
-                user.email,
-                game_patch.vote as _,
-            )
-            .fetch_one(pool.inner())
-            .await;
-
-            updated_game_suggestion.map_or_else(
-                |_| {
-                    Err(rocket::response::status::Unauthorized(Some(
-                        "Error updating game vote in the database".to_string(),
-                    )))
-                },
-                |updated_game_suggestion| Ok(Json(updated_game_suggestion)),
-            )
-        }
     }
 }

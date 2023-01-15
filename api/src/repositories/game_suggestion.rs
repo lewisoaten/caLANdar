@@ -113,3 +113,52 @@ pub async fn filter(
     .fetch_all(pool)
     .await
 }
+
+pub async fn edit(
+    pool: &PgPool,
+    event_id: i32,
+    game_id: i64,
+    email: String,
+    vote: GameVote,
+) -> Result<GameSuggestion, sqlx::Error> {
+    // Update vote on game suggestion
+    sqlx::query_as!(
+        GameSuggestion,
+        r#"WITH event_game_patch_response AS (
+            INSERT INTO event_game_vote (event_id, game_id, email, vote)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = $4, last_modified = NOW()
+                RETURNING event_id, game_id, email, vote, vote_date, last_modified
+        ) SELECT
+            event_game.event_id AS event_id,
+            event_game.game_id AS game_id,
+            steam_game.name AS game_name,
+            event_game.user_email AS user_email,
+            self_vote.vote AS "self_vote: _",
+            CASE
+                WHEN self_vote.vote = 'yes'::vote THEN count(all_votes.*) + 1
+                ELSE count(all_votes.*) - 1
+            END AS votes,
+            event_game.requested_at AS requested_at,
+            event_game.last_modified AS last_modified
+        FROM event_game
+        INNER JOIN steam_game
+            ON event_game.game_id = steam_game.appid
+        LEFT JOIN event_game_patch_response AS self_vote
+            ON event_game.event_id = self_vote.event_id
+            AND event_game.game_id = self_vote.game_id
+        LEFT JOIN event_game_vote AS all_votes
+            ON event_game.event_id = all_votes.event_id
+            AND event_game.game_id = all_votes.game_id
+            AND all_votes.vote = 'yes'::vote
+        WHERE event_game.event_id = $1
+        AND event_game.game_id = $2
+        GROUP BY event_game.event_id, event_game.game_id, steam_game.name, steam_game.last_modified, event_game.requested_at, event_game.last_modified, self_vote.vote"#,
+        event_id,
+        game_id,
+        email,
+        vote as _,
+    )
+    .fetch_one(pool)
+    .await
+}
