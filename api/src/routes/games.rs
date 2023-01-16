@@ -308,12 +308,14 @@ pub async fn get_steam_game(
     // Return games matching search query
     match sqlx::query_as!(
         SteamGameResponse,
-        r#"SELECT appid, name, last_modified, ts_rank_cd(to_tsvector('english', name), query, 32 /* rank/(rank+1) */) AS rank
+        r#"
+        SELECT appid, name, last_modified, ts_rank_cd(to_tsvector('english', name), query, 32 /* rank/(rank+1) */) AS rank
         FROM steam_game, plainto_tsquery('english', $1) query
         WHERE query @@ to_tsvector('english', name)
-        ORDER BY rank DESC
+        ORDER BY lower(name) LIKE lower($1) DESC, rank DESC
         LIMIT $2
-        OFFSET $3"#,
+        OFFSET $3
+        "#,
         query,
         COUNT,
         page * COUNT,

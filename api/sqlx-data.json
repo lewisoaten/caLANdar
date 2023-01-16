@@ -1,70 +1,5 @@
 {
   "db": "PostgreSQL",
-  "0774754a49afc50e950e75a19a6eb4e86c6682b3ff5af162ebe992c8eafe5dd7": {
-    "describe": {
-      "columns": [
-        {
-          "name": "appid",
-          "ordinal": 0,
-          "type_info": "Int8"
-        },
-        {
-          "name": "name",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 2,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "requested_at",
-          "ordinal": 3,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "suggestion_last_modified",
-          "ordinal": 4,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "self_vote: _",
-          "ordinal": 5,
-          "type_info": {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "novote", "no"]
-              },
-              "name": "vote"
-            }
-          }
-        },
-        {
-          "name": "votes",
-          "ordinal": 6,
-          "type_info": "Int8"
-        }
-      ],
-      "nullable": [false, false, false, false, false, false, null],
-      "parameters": {
-        "Left": [
-          "Int4",
-          "Int8",
-          "Varchar",
-          {
-            "Custom": {
-              "kind": {
-                "Enum": ["yes", "novote", "no"]
-              },
-              "name": "vote"
-            }
-          }
-        ]
-      }
-    },
-    "query": "WITH event_game_patch_response AS (\n                    INSERT INTO event_game_vote (event_id, game_id, email, vote)\n                        VALUES ($1, $2, $3, $4)\n                        ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = $4, last_modified = NOW()\n                        RETURNING event_id, game_id, email, vote, vote_date, last_modified\n                ) SELECT\n                    steam_game.appid AS appid,\n                    steam_game.name AS name,\n                    steam_game.last_modified AS last_modified,\n                    event_game.requested_at AS requested_at,\n                    event_game.last_modified AS suggestion_last_modified,\n                    self_vote.vote AS \"self_vote: _\",\n                    CASE\n                        WHEN self_vote.vote = 'yes'::vote THEN count(all_votes.*) + 1\n                        ELSE count(all_votes.*) - 1\n                    END AS votes\n                FROM event_game\n                INNER JOIN steam_game\n                    ON event_game.game_id = steam_game.appid\n                LEFT JOIN event_game_patch_response AS self_vote\n                    ON event_game.event_id = self_vote.event_id\n                    AND event_game.game_id = self_vote.game_id\n                LEFT JOIN event_game_vote AS all_votes\n                    ON event_game.event_id = all_votes.event_id\n                    AND event_game.game_id = all_votes.game_id\n                    AND all_votes.vote = 'yes'::vote\n                WHERE event_game.event_id = $1\n                AND event_game.game_id = $2\n                GROUP BY steam_game.appid, steam_game.name, steam_game.last_modified, event_game.requested_at, event_game.last_modified, self_vote.vote"
-  },
   "07e62b080405157fa37c8240129445380aee359b8fcc6b068ab6d152154ab4c9": {
     "describe": {
       "columns": [],
@@ -115,6 +50,37 @@
       }
     },
     "query": "INSERT INTO steam_game (appid, update_id, name, last_modified)\n            VALUES ($1, $2, $3, NOW())\n            ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = NOW()"
+  },
+  "3f08555c2c6394ec85aaf1fa10dc5e7e42a2878d8f48bc0a45ed02099e033784": {
+    "describe": {
+      "columns": [
+        {
+          "name": "appid",
+          "ordinal": 0,
+          "type_info": "Int8"
+        },
+        {
+          "name": "name",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "last_modified",
+          "ordinal": 2,
+          "type_info": "Timestamptz"
+        },
+        {
+          "name": "rank",
+          "ordinal": 3,
+          "type_info": "Float4"
+        }
+      ],
+      "nullable": [false, false, false, null],
+      "parameters": {
+        "Left": ["Text", "Int8", "Int8"]
+      }
+    },
+    "query": "\n        SELECT appid, name, last_modified, ts_rank_cd(to_tsvector('english', name), query, 32 /* rank/(rank+1) */) AS rank\n        FROM steam_game, plainto_tsquery('english', $1) query\n        WHERE query @@ to_tsvector('english', name)\n        ORDER BY lower(name) LIKE lower($1) DESC, rank DESC\n        LIMIT $2\n        OFFSET $3\n        "
   },
   "4c186c9a40e8658e779a671b4b2c2750ce2b8abaf2326df3aecb2be347b09e8c": {
     "describe": {
@@ -552,37 +518,6 @@
       }
     },
     "query": "\n        SELECT id, created_at, last_modified, title, description, time_begin, time_end\n        FROM event\n        "
-  },
-  "b85b4a819bfe37870d0f8e95b5223dca65501a88f03edbf06edb42a8eaf4cf7f": {
-    "describe": {
-      "columns": [
-        {
-          "name": "appid",
-          "ordinal": 0,
-          "type_info": "Int8"
-        },
-        {
-          "name": "name",
-          "ordinal": 1,
-          "type_info": "Text"
-        },
-        {
-          "name": "last_modified",
-          "ordinal": 2,
-          "type_info": "Timestamptz"
-        },
-        {
-          "name": "rank",
-          "ordinal": 3,
-          "type_info": "Float4"
-        }
-      ],
-      "nullable": [false, false, false, null],
-      "parameters": {
-        "Left": ["Text", "Int8", "Int8"]
-      }
-    },
-    "query": "SELECT appid, name, last_modified, ts_rank_cd(to_tsvector('english', name), query, 32 /* rank/(rank+1) */) AS rank\n        FROM steam_game, plainto_tsquery('english', $1) query\n        WHERE query @@ to_tsvector('english', name)\n        ORDER BY rank DESC\n        LIMIT $2\n        OFFSET $3"
   },
   "bf2d2ba7266cfdad227651377710d07a0fd8725432c4048857cd2d9c09357c72": {
     "describe": {
