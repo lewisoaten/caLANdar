@@ -250,7 +250,7 @@ dependencies = [
  "schemars",
  "sendgrid",
  "shuttle-secrets",
- "shuttle-service",
+ "shuttle-service 0.8.0",
  "shuttle-shared-db",
  "sqlx",
  "tokio",
@@ -2630,13 +2630,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "shuttle-common"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "419c6ffbe9a898157eadfb436e25e102170c3105b0d8991a660e3272f7e1aa09"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "rustrict",
+ "serde",
+ "strum",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "shuttle-secrets"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91183fd726946a4bf5338cd5ebe92c2f6330414d437b5ea122302bcdb47e8fb4"
 dependencies = [
  "async-trait",
- "shuttle-service",
+ "shuttle-service 0.8.0",
  "tokio",
 ]
 
@@ -2656,7 +2671,30 @@ dependencies = [
  "rocket",
  "serde_json",
  "shuttle-codegen",
- "shuttle-common",
+ "shuttle-common 0.8.0",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "shuttle-service"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea92a1dbdf1be762ef60d923fff1a866d21df56427b94a617a9a0a75f60b7e16"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "cargo_metadata",
+ "chrono",
+ "crossbeam-channel",
+ "futures",
+ "pipe",
+ "serde_json",
+ "shuttle-common 0.9.0",
+ "strfmt",
  "thiserror",
  "tokio",
  "tracing",
@@ -2666,12 +2704,12 @@ dependencies = [
 
 [[package]]
 name = "shuttle-shared-db"
-version = "0.8.0"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3897bcb0937c3b7c04551e6ce219418de1225112e4844fdae2bdf5920fe94db"
+checksum = "9fa2b8547010c12908b17c95392de4df5cce735cf6246931616b6e100d41be9e"
 dependencies = [
  "async-trait",
- "shuttle-service",
+ "shuttle-service 0.9.0",
  "sqlx",
  "tokio",
 ]
@@ -2866,6 +2904,12 @@ checksum = "dbe866e1e51e8260c9eed836a042a5e7f6726bb2b411dffeaa712e19c388f23b"
 dependencies = [
  "loom",
 ]
+
+[[package]]
+name = "strfmt"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26cdabcdab6da7e8c2ac1160e917ec83e78bbe3e10325e17d532718c67a4828f"
 
 [[package]]
 name = "stringprep"
