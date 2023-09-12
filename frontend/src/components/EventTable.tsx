@@ -172,7 +172,7 @@ export default function EventTable(props: EventTableProps) {
     [navigate],
   );
 
-  const columns = useMemo<GridColumns<typeof events[number]>>(
+  const columns = useMemo<GridColumns<(typeof events)[number]>>(
     () => [
       {
         field: "title",
