@@ -3,19 +3,16 @@ name = "calandar-api"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0.69"
 chrono = { version = "0.4.22", features = ["serde"] }
 futures = "0.3.26"
-shuttle-service = { version = "0.10.0", features = ["web-rocket"] }
-shuttle-shared-db = { version = "0.10.0", features = ["postgres"] }
-shuttle-secrets = "0.10.0"
+shuttle-rocket = "0.27.0"
+shuttle-runtime = "0.27.0"
+shuttle-shared-db = { version = "0.27.0", features = ["postgres"] }
+shuttle-secrets = "0.27.0"
 log = "0.4.17"
-sendgrid = { version = "0.18.1", features = ["async"] }
+sendgrid = { version = "0.19.0", features = ["async"] }
 rocket = { version = "0.5.0-rc.2", features = [ "json" ] }
 rocket_dyn_templates = { version = "0.1.0-rc.1", features = [ "tera" ] }
 schemars = { version = "0.8.12", features = [ "chrono", "bytes" ] }
@@ -23,5 +20,5 @@ okapi = { version = "0.7.0-rc.1" }
 reqwest = "0.11.14"
 rocket_okapi = { version = "0.8.0-rc.2", features = ["swagger"] }
 rusty_paseto = { version = "0.4.0", features = ["batteries_included"] }
-sqlx = { version = "0.6.2", features = [ "runtime-tokio-native-tls", "postgres", "offline", "chrono" ] }
+sqlx = { version = "0.7.1", features = [ "runtime-tokio-native-tls", "postgres", "chrono" ] }
 tokio = { version = "1.20.1", features = ["full"] }

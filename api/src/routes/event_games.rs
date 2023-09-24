@@ -40,8 +40,7 @@ pub async fn get_all(
         Ok(game_suggestions) => Ok(Json(game_suggestions)),
         Err(Error::NotPermitted(e)) => Err(EventGameError::Unauthorized(e)),
         Err(e) => Err(EventGameError::InternalServerError(format!(
-            "Error getting event, due to: {}",
-            e
+            "Error getting event, due to: {e}"
         ))),
     }
 }
@@ -69,8 +68,7 @@ pub async fn post(
         ))
         .body(Json(event_game_suggestion))),
         Err(e) => Err(EventGameSuggestionError::InternalServerError(format!(
-            "Error creating event, due to: {}",
-            e
+            "Error creating event, due to: {e}"
         ))),
     }
 }

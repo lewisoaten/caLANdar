@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE event\n        SET title = $2, description = $3, time_begin = $4, time_end = $5, last_modified = NOW()\n        WHERE id = $1\n        RETURNING id, created_at, last_modified, title, description, time_begin, time_end\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "time_begin",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "time_end",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Varchar",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e641e3f6ebd1f9b19a8f00a137fdf5053cdaa2852841415f7f868a4db34cb31c"
+}

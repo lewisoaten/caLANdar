@@ -117,8 +117,7 @@ pub async fn steam_game_update(
             Ok(response) => response,
             Err(e) => {
                 return Err(rocket::response::status::BadRequest(Some(format!(
-                    "Error getting steam game list: {}",
-                    e
+                    "Error getting steam game list: {e}"
                 ))))
             }
         };
@@ -127,8 +126,7 @@ pub async fn steam_game_update(
             Ok(steam_games) => steam_games,
             Err(e) => {
                 return Err(rocket::response::status::BadRequest(Some(format!(
-                    "Error parsing steam game list: {}",
-                    e
+                    "Error parsing steam game list: {e}"
                 ))))
             }
         };
@@ -229,10 +227,8 @@ pub async fn steam_game_update_v2(
         }
     };
 
-    let request_url = format!(
-        "https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={key}",
-        key = steam_api_key,
-    );
+    let request_url =
+        format!("https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={steam_api_key}",);
     log::info!(
         "Requesting games from steam API v2 using url: {}",
         request_url
@@ -241,8 +237,7 @@ pub async fn steam_game_update_v2(
         Ok(response) => response,
         Err(e) => {
             return Err(rocket::response::status::BadRequest(Some(format!(
-                "Error getting steam game list: {}",
-                e
+                "Error getting steam game list: {e}"
             ))))
         }
     };
@@ -251,8 +246,7 @@ pub async fn steam_game_update_v2(
         Ok(steam_games) => steam_games,
         Err(e) => {
             return Err(rocket::response::status::BadRequest(Some(format!(
-                "Error parsing steam game list: {}",
-                e
+                "Error parsing steam game list: {e}"
             ))))
         }
     };
@@ -325,8 +319,7 @@ pub async fn get_steam_game(
     {
         Ok(games) => Ok(Json(games)),
         Err(e) => Err(SteamGameError::BadRequest(format!(
-            "Error searching steam games: {}",
-            e
+            "Error searching steam games: {e}"
         ))),
     }
 }
