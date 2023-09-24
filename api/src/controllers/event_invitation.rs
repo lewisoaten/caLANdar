@@ -49,8 +49,7 @@ pub async fn respond(
     let event = match is_event_active(pool, event_id).await {
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {}",
-                e
+                "Unable to check if event is active, due to: {e}"
             )))
         }
         Ok((false, _)) => {
@@ -68,9 +67,7 @@ pub async fn respond(
 
         if attendance_length != day_quarter_buckets {
             return Err(Error::Controller(format!(
-                "You must indicate attendence for the exact duration of the event. Expected: {}, got: {}",
-                day_quarter_buckets,
-                attendance_length
+                "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
             )));
         }
     };
@@ -88,8 +85,7 @@ pub async fn respond(
     {
         Ok(_event) => Ok(()),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to create event due to: {}",
-            e
+            "Unable to create event due to: {e}"
         ))),
     }
 }

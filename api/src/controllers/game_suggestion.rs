@@ -62,8 +62,7 @@ pub async fn get(
             .map(EventGameSuggestionResponse::from)
             .collect()),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {}",
-            e
+            "Unable to get event due to: {e}"
         ))),
     }
 }
@@ -77,8 +76,7 @@ pub async fn create(
     match is_event_active(pool, event_id).await {
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {}",
-                e
+                "Unable to check if event is active, due to: {e}"
             )))
         }
         Ok((false, _)) => {
@@ -92,8 +90,7 @@ pub async fn create(
     match is_attending_event(pool, event_id, email.clone()).await {
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to check if attending event, due to: {}",
-                e
+                "Unable to check if attending event, due to: {e}"
             )))
         }
         Ok(false) => {
@@ -108,8 +105,7 @@ pub async fn create(
     match game_suggestion::create(pool, event_id, new_event_game_suggestion.appid, email).await {
         Ok(game_suggestions) => Ok(EventGameSuggestionResponse::from(game_suggestions)),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {}",
-            e
+            "Unable to get event due to: {e}"
         ))),
     }
 }
@@ -124,8 +120,7 @@ pub async fn vote(
     match is_event_active(pool, event_id).await {
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {}",
-                e
+                "Unable to check if event is active, due to: {e}"
             )))
         }
         Ok((false, _)) => {
@@ -139,8 +134,7 @@ pub async fn vote(
     match is_attending_event(pool, event_id, email.clone()).await {
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to check if attending event, due to: {}",
-                e
+                "Unable to check if attending event, due to: {e}"
             )))
         }
         Ok(false) => {
@@ -155,8 +149,7 @@ pub async fn vote(
     match game_suggestion::edit(pool, event_id, game_id, email, vote.into()).await {
         Ok(game_suggestions) => Ok(EventGameSuggestionResponse::from(game_suggestions)),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {}",
-            e
+            "Unable to get event due to: {e}"
         ))),
     }
 }

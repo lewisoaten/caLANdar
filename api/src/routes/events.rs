@@ -94,8 +94,7 @@ pub async fn get_all(
     match event::get_all(pool).await {
         Ok(events) => Ok(Json(events)),
         Err(e) => Err(EventsGetError::InternalServerError(format!(
-            "Error getting events, due to: {}",
-            e
+            "Error getting events, due to: {e}"
         ))),
     }
 }
@@ -111,8 +110,7 @@ pub async fn get_all_user(
     match event::get_all_user(pool, user.email).await {
         Ok(events) => Ok(Json(events)),
         Err(e) => Err(EventsGetError::InternalServerError(format!(
-            "Error getting events, due to: {}",
-            e
+            "Error getting events, due to: {e}"
         ))),
     }
 }
@@ -131,12 +129,10 @@ pub async fn get(
     match event::get(pool, id).await {
         Ok(event) => Ok(Json(event)),
         Err(Error::NoData(_)) => Err(EventGetError::NotFound(format!(
-            "Event with ID {} not found",
-            id
+            "Event with ID {id} not found"
         ))),
         Err(e) => Err(EventGetError::InternalServerError(format!(
-            "Error getting event, due to: {}",
-            e
+            "Error getting event, due to: {e}"
         ))),
     }
 }
@@ -152,12 +148,10 @@ pub async fn get_user(
     match event::get_user(pool, id, user.email).await {
         Ok(event) => Ok(Json(event)),
         Err(Error::NoData(_)) => Err(EventGetError::NotFound(format!(
-            "Event with ID {} not found",
-            id
+            "Event with ID {id} not found"
         ))),
         Err(e) => Err(EventGetError::InternalServerError(format!(
-            "Error getting event, due to: {}",
-            e
+            "Error getting event, due to: {e}"
         ))),
     }
 }
@@ -177,16 +171,13 @@ pub async fn put(
     match event::edit(pool, id, event_submit.into_inner()).await {
         Ok(_) => Ok(status::NoContent),
         Err(Error::BadInput(e)) => Err(EventPutError::BadRequest(format!(
-            "Invalid request, due to {}",
-            e
+            "Invalid request, due to {e}"
         ))),
         Err(Error::Controller(e)) => Err(EventPutError::InternalServerError(format!(
-            "Error creating event, due to: {}",
-            e
+            "Error creating event, due to: {e}"
         ))),
         Err(e) => Err(EventPutError::InternalServerError(format!(
-            "Error creating event, due to: {}",
-            e
+            "Error creating event, due to: {e}"
         ))),
     }
 }
@@ -210,12 +201,10 @@ pub async fn delete(
     match event::delete(pool, id).await {
         Ok(_) => Ok(rocket::response::status::NoContent),
         Err(Error::NoData(_)) => Err(EventDeleteError::NotFound(format!(
-            "Event with ID {} not found",
-            id
+            "Event with ID {id} not found"
         ))),
         Err(e) => Err(EventDeleteError::InternalServerError(format!(
-            "Error deleting event, due to: {}",
-            e
+            "Error deleting event, due to: {e}"
         ))),
     }
 }
@@ -236,8 +225,7 @@ pub async fn post(
             status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)),
         ),
         Err(e) => Err(EventPostError::InternalServerError(format!(
-            "Error creating event, due to: {}",
-            e
+            "Error creating event, due to: {e}"
         ))),
     }
 }

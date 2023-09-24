@@ -23,9 +23,9 @@ use rocket_okapi::{
 };
 use rusty_paseto::prelude::*;
 use sendgrid::v3::Sender;
+use shuttle_rocket::ShuttleRocket;
 use shuttle_secrets::SecretStore;
-use shuttle_service::ShuttleRocket;
-use sqlx::postgres::PgPool;
+use sqlx::PgPool;
 
 #[macro_use]
 mod error;
@@ -158,27 +158,27 @@ const EMAIL_TEMPLATES: [(&str, &str); 3] = [
     ),
 ];
 
-#[shuttle_service::main]
+#[shuttle_runtime::main]
 async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,
     #[shuttle_secrets::Secrets] secret_store: SecretStore,
 ) -> ShuttleRocket {
-    // Set up logging
-    use sqlx::ConnectOptions;
-    let mut pool_options_copy = pool.connect_options().clone();
-    let new_pool_options = pool_options_copy
-        .log_statements(log::LevelFilter::Debug)
-        .clone();
+    // // Set up logging
+    // use sqlx::ConnectOptions;
+    // let pool_options_copy = pool.connect_options().clone();
+    // let new_pool_options = pool_options_copy
+    //     .log_statements(log::LevelFilter::Debug)
+    //     .clone();
 
-    let pool = match PgPool::connect_with(new_pool_options).await {
-        Ok(pool) => pool,
-        Err(e) => {
-            log::error!("Error connecting to pool after updating options: {}", e);
+    // let pool = match PgPool::connect_with(new_pool_options).await {
+    //     Ok(pool) => pool,
+    //     Err(e) => {
+    //         log::error!("Error connecting to pool after updating options: {}", e);
 
-            // Return the original pool
-            pool
-        }
-    };
+    //         // Return the original pool
+    //         pool
+    //     }
+    // };
 
     log::info!("Launching application!");
     match sqlx::migrate!().run(&pool).await {
@@ -271,5 +271,5 @@ async fn rocket(
             }),
         );
 
-    Ok(rocket)
+    Ok(rocket.into())
 }

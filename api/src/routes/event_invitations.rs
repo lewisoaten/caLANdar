@@ -333,8 +333,7 @@ pub async fn patch(
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
-            "Error getting event, due to: {}",
-            e
+            "Error getting event, due to: {e}"
         ))),
     }
 }

@@ -29,8 +29,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
             Ok(events.into_iter().map(Event::from).collect())
         }
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get list of events due to: {}",
-            e
+            "Unable to get list of events due to: {e}"
         ))),
     }
 }
@@ -51,8 +50,7 @@ pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<Event
         }
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to get user's invitations due to: {}",
-                e
+                "Unable to get user's invitations due to: {e}"
             )))
         }
     };
@@ -68,8 +66,7 @@ pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<Event
             Ok(events.into_iter().map(Event::from).collect())
         }
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get users's events due to: {}",
-            e
+            "Unable to get users's events due to: {e}"
         ))),
     }
 }
@@ -87,14 +84,12 @@ pub async fn get(pool: &PgPool, id: i32) -> Result<Event, Error> {
                 1 => Ok(Event::from(events[0].clone())),
                 0 => Err(Error::NoData("No events found".to_string())),
                 _ => Err(Error::Controller(format!(
-                    "Too many events returned for id {}",
-                    id
+                    "Too many events returned for id {id}"
                 ))),
             }
         }
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {}",
-            e
+            "Unable to get event due to: {e}"
         ))),
     }
 }
@@ -115,8 +110,7 @@ pub async fn get_user(pool: &PgPool, id: i32, user_email: String) -> Result<Even
         }
         Err(e) => {
             return Err(Error::Controller(format!(
-                "Unable to get user's invitations due to: {}",
-                e
+                "Unable to get user's invitations due to: {e}"
             )))
         }
     };
@@ -134,14 +128,12 @@ pub async fn get_user(pool: &PgPool, id: i32, user_email: String) -> Result<Even
                 1 => Ok(Event::from(events[0].clone())),
                 0 => Err(Error::NoData("No events found".to_string())),
                 _ => Err(Error::Controller(format!(
-                    "Too many events returned for id {}",
-                    id
+                    "Too many events returned for id {id}"
                 ))),
             }
         }
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get users's events due to: {}",
-            e
+            "Unable to get users's events due to: {e}"
         ))),
     }
 }
@@ -156,8 +148,7 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
     match event::delete(pool, event_filter_values).await {
         Ok(_) => Ok(()),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to delete event due to: {}",
-            e
+            "Unable to delete event due to: {e}"
         ))),
     }
 }
@@ -175,8 +166,7 @@ pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Erro
     {
         Ok(event) => Ok(Event::from(event)),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to create event due to: {}",
-            e
+            "Unable to create event due to: {e}"
         ))),
     }
 }
@@ -202,8 +192,7 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
     {
         Ok(event) => Ok(Event::from(event)),
         Err(e) => Err(Error::Controller(format!(
-            "Unable to create event due to: {}",
-            e
+            "Unable to create event due to: {e}"
         ))),
     }
 }
