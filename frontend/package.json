@@ -19,7 +19,7 @@
     "react-router-dom": "^6.8.2",
     "recharts": "^2.4.3",
     "typescript": "^4.9.5",
-    "web-vitals": "^3.1.1"
+    "web-vitals": "^3.4.0"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -47,7 +47,7 @@
     ]
   },
   "devDependencies": {
-    "@pact-foundation/pact": "10.4.1",
+    "@pact-foundation/pact": "12.1.0",
     "@pact-foundation/pact-node": "10.17.7",
     "@testing-library/jest-dom": "^5.16.5",
     "@testing-library/react": "14.0.0",
