@@ -197,7 +197,11 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               label="Start Date"
               value={formValues.timeBegin}
               onChange={handleTimeBeginChange}
-              renderInput={(params) => <TextField {...params} />}
+              slots={{
+                textField: (textFieldProps) => (
+                  <TextField {...textFieldProps} />
+                ),
+              }}
               views={["year", "month", "day", "hours"]}
               ampm={false}
             />
@@ -205,7 +209,11 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               label="End Date"
               value={formValues.timeEnd}
               onChange={handleTimeEndChange}
-              renderInput={(params) => <TextField {...params} />}
+              slots={{
+                textField: (textFieldProps) => (
+                  <TextField {...textFieldProps} />
+                ),
+              }}
               views={["year", "month", "day", "hours"]}
               ampm={false}
             />

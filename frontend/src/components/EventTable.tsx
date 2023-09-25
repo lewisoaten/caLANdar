@@ -5,7 +5,6 @@ import {
   useContext,
   useCallback,
   useRef,
-  useMemo,
   memo,
   Dispatch,
   SetStateAction,
@@ -14,7 +13,7 @@ import moment from "moment";
 import { Box, Typography, Paper, Popper } from "@mui/material";
 import {
   DataGrid,
-  GridColumns,
+  GridColDef,
   GridRowParams,
   GridActionsCellItem,
   GridValueFormatterParams,
@@ -139,7 +138,7 @@ const GridCellExpand = memo(function GridCellExpand(
   );
 });
 
-function renderCellExpand(params: GridRenderCellParams<string>) {
+function renderCellExpand(params: GridRenderCellParams) {
   return (
     <GridCellExpand
       value={params.value || ""}
@@ -172,76 +171,73 @@ export default function EventTable(props: EventTableProps) {
     [navigate],
   );
 
-  const columns = useMemo<GridColumns<(typeof events)[number]>>(
-    () => [
-      {
-        field: "title",
-        headerName: "Title",
-        type: "string",
-        flex: 1,
-        editable: false,
-        renderCell: renderCellExpand,
-      },
-      {
-        field: "timeBegin",
-        headerName: "Start",
-        type: "dateTime",
-        flex: 1,
-        editable: false,
-        valueFormatter: (params: GridValueFormatterParams<moment.Moment>) => {
-          if (params.value == null) {
-            return "";
-          }
+  const columns: GridColDef[] = [
+    {
+      field: "title",
+      headerName: "Title",
+      type: "string",
+      flex: 1,
+      editable: false,
+      renderCell: renderCellExpand,
+    },
+    {
+      field: "timeBegin",
+      headerName: "Start",
+      type: "dateTime",
+      flex: 1,
+      editable: false,
+      valueFormatter: (params: GridValueFormatterParams<moment.Moment>) => {
+        if (params.value == null) {
+          return "";
+        }
 
-          return params.value.calendar();
-        },
+        return params.value.calendar();
       },
-      {
-        field: "duration",
-        headerName: "Duration",
-        type: "dateTime",
-        flex: 1,
-        editable: false,
-        valueGetter: (params: GridValueGetterParams) => {
-          const timeBegin = moment(params.row.timeBegin);
-          const timeEnd = moment(params.row.timeEnd);
-          if (timeBegin == null || timeEnd == null) {
-            return "";
-          }
+    },
+    {
+      field: "duration",
+      headerName: "Duration",
+      type: "dateTime",
+      flex: 1,
+      editable: false,
+      valueGetter: (params: GridValueGetterParams) => {
+        const timeBegin = moment(params.row.timeBegin);
+        const timeEnd = moment(params.row.timeEnd);
+        if (timeBegin == null || timeEnd == null) {
+          return "";
+        }
 
-          return timeEnd.endOf("day").diff(timeBegin.startOf("day"), "days");
-        },
-        valueFormatter: (params: GridValueFormatterParams<number>) => {
-          if (params.value == null) {
-            return "";
-          }
+        return timeEnd.endOf("day").diff(timeBegin.startOf("day"), "days");
+      },
+      valueFormatter: (params: GridValueFormatterParams<number>) => {
+        if (params.value == null) {
+          return "";
+        }
 
-          return `${params.value} days`;
-        },
+        return `${params.value} days`;
       },
-      {
-        field: "description",
-        headerName: "Description",
-        type: "string",
-        flex: 2,
-        editable: false,
-        renderCell: renderCellExpand,
-      },
-      {
-        field: "actions",
-        type: "actions",
-        flex: 0.1,
-        getActions: (params: GridRowParams) => [
-          <GridActionsCellItem
-            icon={<LinkIcon />}
-            label="Open"
-            onClick={openEvent(params.id)}
-          />,
-        ],
-      },
-    ],
-    [openEvent],
-  );
+    },
+    {
+      field: "description",
+      headerName: "Description",
+      type: "string",
+      flex: 2,
+      editable: false,
+      renderCell: renderCellExpand,
+    },
+    {
+      field: "actions",
+      type: "actions",
+      flex: 0.1,
+      getActions: (params: GridRowParams) => [
+        <GridActionsCellItem
+          icon={<LinkIcon />}
+          label="Open"
+          onClick={openEvent(params.id)}
+        />,
+      ],
+    },
+  ];
 
   useEffect(() => {
     fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=${isAdmin}`, {
@@ -273,11 +269,8 @@ export default function EventTable(props: EventTableProps) {
         <DataGrid
           rows={events}
           columns={columns}
-          pageSize={5}
           autoHeight
-          rowsPerPageOptions={[5]}
-          disableSelectionOnClick
-          experimentalFeatures={{ newEditingApi: true }}
+          disableRowSelectionOnClick
           initialState={{
             sorting: {
               sortModel: [{ field: "timeBegin", sort: "desc" }],
