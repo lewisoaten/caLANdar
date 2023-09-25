@@ -1,5 +1,6 @@
 import React from "react";
-import { Route, Routes } from "react-router-dom";
+import { Route } from "react-router-dom";
+import { SentryRoutes } from "./index";
 import SignIn from "./components/SignIn";
 import VerifyEmail from "./components/VerifyEmail";
 import Account from "./components/Account";
@@ -11,7 +12,7 @@ import EventsAdmin from "./components/EventsAdmin";
 
 const Views = () => {
   return (
-    <Routes>
+    <SentryRoutes>
       <Route path="/" element={<SignIn />} />
       <Route path="/verify_email">
         <Route path=":token" element={<VerifyEmail />} />
@@ -26,7 +27,7 @@ const Views = () => {
         </Route>
         <Route path="/account" element={<Account />} />
       </Route>
-    </Routes>
+    </SentryRoutes>
   );
 };
 
