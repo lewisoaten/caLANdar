@@ -1,5 +1,6 @@
 import React, { ReactNode, createContext, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import * as Sentry from "@sentry/react";
 
 interface IUserContext {
   email: string;
@@ -98,6 +99,7 @@ function UserProvider({ children }: Props) {
         };
         localStorage.setItem("user_context", JSON.stringify(accountDetails));
         setUserDetails(accountDetails);
+        Sentry.setUser({ email: accountDetails.email });
         navigate(response.redirect || "/events");
         return accountDetails;
       });
@@ -111,7 +113,7 @@ function UserProvider({ children }: Props) {
 
   function getStoredAccount() {
     const user = localStorage.getItem("user_context");
-    return user
+    const obtainedUser = user
       ? JSON.parse(user)
       : ({
           email: "",
@@ -119,6 +121,12 @@ function UserProvider({ children }: Props) {
           loggedIn: false,
           isAdmin: false,
         } as IUserContext);
+    if (obtainedUser.loggedIn) {
+      Sentry.setUser({ email: obtainedUser.email });
+    } else {
+      Sentry.setUser(null);
+    }
+    return obtainedUser;
   }
 
   function isSignedIn() {
