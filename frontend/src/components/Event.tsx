@@ -76,7 +76,7 @@ const Event = () => {
                     color="primary"
                     gutterBottom
                   >
-                    Gaming starts {event.timeBegin.fromNow()}!
+                    Gaming {event.timeBegin.fromNow()}!
                   </Typography>
                 </Paper>
               </Grid>

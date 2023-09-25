@@ -17,6 +17,7 @@ import EventTable from "./EventTable";
 
 const Event = () => {
   const eventsState = useState([] as EventData[]);
+  const oldEventsState = useState([] as EventData[]);
   const [events] = eventsState;
 
   return (
@@ -80,7 +81,17 @@ const Event = () => {
           {/* Events */}
           <Grid item xs={12}>
             <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
-              <EventTable eventsState={eventsState} />
+              <EventTable eventsState={eventsState} pastEvents={false} />
+            </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          {/* Events */}
+          <Grid item xs={12}>
+            <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
+              <EventTable eventsState={oldEventsState} liveEvents={false} />
             </Paper>
           </Grid>
         </Grid>

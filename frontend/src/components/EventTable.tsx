@@ -149,6 +149,8 @@ function renderCellExpand(params: GridRenderCellParams) {
 
 interface EventTableProps {
   eventsState?: [EventData[], Dispatch<SetStateAction<EventData[]>>];
+  liveEvents?: boolean;
+  pastEvents?: boolean;
   asAdmin?: boolean;
 }
 
@@ -161,6 +163,16 @@ export default function EventTable(props: EventTableProps) {
 
   const [events, setEvents] = props.eventsState ?? ownEventsState;
   const isAdmin = props.asAdmin ?? false;
+
+  const liveEvents = props.liveEvents ?? true;
+  const pastEvents = props.pastEvents ?? true;
+
+  const tableTitle =
+    liveEvents && pastEvents
+      ? "Events"
+      : liveEvents
+      ? "Upcoming Events"
+      : "Past Events";
 
   const navigate = useNavigate();
 
@@ -254,7 +266,27 @@ export default function EventTable(props: EventTableProps) {
             .then((data) => JSON.parse(data, dateParser) as Array<EventData>);
       })
       .then((data) => {
-        if (data) setEvents(data);
+        if (!data) {
+          return [] as EventData[];
+        }
+
+        var newEvents = [] as EventData[];
+
+        if (liveEvents) {
+          newEvents.push(
+            ...data.filter((event) => event.timeEnd.isAfter(moment())),
+          );
+        }
+
+        if (pastEvents) {
+          newEvents.push(
+            ...data.filter((event) => event.timeEnd.isSameOrBefore(moment())),
+          );
+        }
+
+        newEvents.sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix());
+
+        setEvents(newEvents);
       });
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,7 +295,7 @@ export default function EventTable(props: EventTableProps) {
   return (
     <React.Fragment>
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
-        Upcoming Events
+        {tableTitle}
       </Typography>
       <Box sx={{ width: "100%" }}>
         <DataGrid
