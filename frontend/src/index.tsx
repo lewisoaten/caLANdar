@@ -17,6 +17,7 @@ import theme from "./theme";
 Sentry.init({
   dsn: "https://923bbfe5a18542a2abce46873d376d65@o159962.ingest.sentry.io/4504028795371520",
   integrations: [
+    new Sentry.BrowserProfilingIntegration(),
     new Sentry.BrowserTracing({
       // See docs for support of different versions of variation of react router
       // https://docs.sentry.io/platforms/javascript/guides/react/configuration/integrations/react-router/
