@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.69"
 chrono = { version = "0.4.22", features = ["serde"] }
 futures = "0.3.26"
-shuttle-rocket = "0.27.0"
+shuttle-rocket = "0.28.0"
 shuttle-runtime = "0.27.0"
 shuttle-shared-db = { version = "0.27.0", features = ["postgres"] }
 shuttle-secrets = "0.27.0"
