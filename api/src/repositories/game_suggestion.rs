@@ -1,11 +1,6 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
-// pub struct Game {
-//     game_id: i32,
-//     game_name: String,
-// }
-
 #[derive(sqlx::Type)]
 #[sqlx(type_name = "vote", rename_all = "lowercase")]
 pub enum GameVote {

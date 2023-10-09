@@ -42,7 +42,7 @@ update-sqlx:
 	set -euxo pipefail
 	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
 	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/postgres"
-	cd api && cargo sqlx prepare --database-url "${DATABASE_URL}" --merged -- --all-targets --all-features
+	cd api && cargo sqlx prepare --database-url "${DATABASE_URL}" -- --all-targets --all-features
 
 bacon:
 	cd api && bacon
