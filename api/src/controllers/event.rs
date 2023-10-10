@@ -1,4 +1,7 @@
+use futures::executor;
 use sqlx::PgPool;
+
+use base64::{engine::general_purpose, Engine as _};
 
 use crate::{
     controllers::Error,
@@ -15,6 +18,7 @@ impl From<crate::repositories::event::Event> for Event {
             last_modified: event.last_modified,
             title: event.title,
             description: event.description,
+            image: executor::block_on(image_bytes_to_string(event.image)),
             time_begin: event.time_begin,
             time_end: event.time_end,
         }
@@ -154,11 +158,17 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
 }
 
 pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Error> {
+    let image: Option<Vec<u8>> = match image_string_to_bytes(new_event.image).await {
+        Ok(image) => image,
+        Err(e) => return Err(e),
+    };
+
     // Create event
     match event::create(
         pool,
         new_event.title,
         new_event.description,
+        image,
         new_event.time_begin,
         new_event.time_end,
     )
@@ -179,12 +189,18 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
         ));
     }
 
+    let image: Option<Vec<u8>> = match image_string_to_bytes(new_event.image).await {
+        Ok(image) => image,
+        Err(e) => return Err(e),
+    };
+
     // Edit event
     match event::edit(
         pool,
         id,
         new_event.title,
         new_event.description,
+        image,
         new_event.time_begin,
         new_event.time_end,
     )
@@ -195,4 +211,20 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
             "Unable to create event due to: {e}"
         ))),
     }
+}
+
+async fn image_string_to_bytes(image: Option<String>) -> Result<Option<Vec<u8>>, Error> {
+    match image {
+        Some(image) => match general_purpose::STANDARD.decode(image) {
+            Ok(image) => Ok(Some(image)),
+            Err(e) => Err(Error::BadInput(format!(
+                "Unable to decode image due to: {e}"
+            ))),
+        },
+        None => Ok(None),
+    }
+}
+
+async fn image_bytes_to_string(image: Option<Vec<u8>>) -> Option<String> {
+    image.map(|image| general_purpose::STANDARD.encode(image))
 }
