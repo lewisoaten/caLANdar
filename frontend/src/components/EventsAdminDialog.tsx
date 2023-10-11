@@ -10,6 +10,7 @@ import {
   DialogContentText,
   DialogTitle,
   TextField,
+  Grid,
 } from "@mui/material";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
@@ -144,6 +145,49 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
     });
   };
 
+  const getBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      // Make new FileReader
+      let reader = new FileReader();
+
+      // Convert the file to base64 text
+      reader.readAsDataURL(file);
+
+      // on reader load somthing...
+      reader.onload = () => {
+        // remove data url part
+        let base64 = reader.result?.toString().split(",")[1];
+        resolve(base64 as string);
+      };
+    });
+  };
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.currentTarget.files || event.currentTarget.files.length === 0) {
+      setFormValues({
+        ...formValues,
+        image: undefined,
+      });
+      return;
+    }
+
+    // I've kept this example simple by using the first image instead of multiple
+    getBase64(event.currentTarget.files[0])
+      .then((result) => {
+        setFormValues({
+          ...formValues,
+          image: result,
+        });
+      })
+      .catch((err) => {
+        setFormValues({
+          ...formValues,
+          image: undefined,
+        });
+        throw err;
+      });
+  };
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     // Prevent page reload
     event.preventDefault();
@@ -161,63 +205,100 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         <DialogTitle>Create Event</DialogTitle>
         <DialogContent>
           <DialogContentText>Create an event here!</DialogContentText>
-
-          <TextField
-            id="title"
-            name="title"
-            label="Title"
-            type="text"
-            autoFocus
-            required
-            margin="dense"
-            fullWidth
-            variant="outlined"
-            value={formValues.title}
-            onChange={handleInputChange}
-          />
-          <TextField
-            id="description"
-            name="description"
-            label="Description"
-            type="text"
-            autoFocus
-            required
-            margin="dense"
-            fullWidth
-            variant="outlined"
-            multiline
-            value={formValues.description}
-            onChange={handleInputChange}
-          />
-          <LocalizationProvider
-            dateAdapter={AdapterMoment}
-            adapterLocale={moment.locale()}
-          >
-            <DateTimePicker
-              label="Start Date"
-              value={formValues.timeBegin}
-              onChange={handleTimeBeginChange}
-              slots={{
-                textField: (textFieldProps) => (
-                  <TextField {...textFieldProps} />
-                ),
-              }}
-              views={["year", "month", "day", "hours"]}
-              ampm={false}
-            />
-            <DateTimePicker
-              label="End Date"
-              value={formValues.timeEnd}
-              onChange={handleTimeEndChange}
-              slots={{
-                textField: (textFieldProps) => (
-                  <TextField {...textFieldProps} />
-                ),
-              }}
-              views={["year", "month", "day", "hours"]}
-              ampm={false}
-            />
-          </LocalizationProvider>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                id="title"
+                name="title"
+                label="Title"
+                type="text"
+                autoFocus
+                required
+                margin="dense"
+                fullWidth
+                variant="outlined"
+                value={formValues.title}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                id="description"
+                name="description"
+                label="Description"
+                type="text"
+                autoFocus
+                required
+                margin="dense"
+                fullWidth
+                variant="outlined"
+                multiline
+                value={formValues.description}
+                onChange={handleInputChange}
+              />
+            </Grid>
+            <LocalizationProvider
+              dateAdapter={AdapterMoment}
+              adapterLocale={moment.locale()}
+            >
+              <Grid item xs={6}>
+                <DateTimePicker
+                  label="Start Date"
+                  value={formValues.timeBegin}
+                  onChange={handleTimeBeginChange}
+                  slots={{
+                    textField: (textFieldProps) => (
+                      <TextField {...textFieldProps} />
+                    ),
+                  }}
+                  views={["year", "month", "day", "hours"]}
+                  ampm={false}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <DateTimePicker
+                  label="End Date"
+                  value={formValues.timeEnd}
+                  onChange={handleTimeEndChange}
+                  slots={{
+                    textField: (textFieldProps) => (
+                      <TextField {...textFieldProps} />
+                    ),
+                  }}
+                  views={["year", "month", "day", "hours"]}
+                  ampm={false}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  id="image"
+                  name="image"
+                  label="Image"
+                  type="file"
+                  margin="dense"
+                  fullWidth
+                  variant="outlined"
+                  onChange={handleImageChange}
+                />
+              </Grid>
+              <Grid
+                item
+                xs={12}
+                wrap="nowrap"
+                sx={{ overflow: "none", height: 140 }}
+              >
+                <img
+                  style={{ objectFit: "cover", width: "100%", height: "100%" }}
+                  src={
+                    (formValues.image &&
+                      "data:image/png;base64," + formValues.image) ||
+                    "/static/lan_party_image.jpg"
+                  }
+                  alt="LAN Party Theme"
+                />
+              </Grid>
+            </LocalizationProvider>
+          </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={cancel}>Cancel</Button>

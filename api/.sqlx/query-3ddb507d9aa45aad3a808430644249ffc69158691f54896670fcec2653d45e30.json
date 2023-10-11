@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT id, created_at, last_modified, title, description, time_begin, time_end\n        FROM event\n        ",
+  "query": "\n        SELECT\n            id,\n            created_at,\n            last_modified,\n            title,\n            description,\n            image,\n            time_begin,\n            time_end\n        FROM event\n        WHERE (id = ANY($1) OR $2)\n        ",
   "describe": {
     "columns": [
       {
@@ -30,17 +30,25 @@
       },
       {
         "ordinal": 5,
+        "name": "image",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
         "name": "time_begin",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "time_end",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int4Array",
+        "Bool"
+      ]
     },
     "nullable": [
       false,
@@ -48,9 +56,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "b6c1e9fe92bdb06d09d676fdc6431932ee50762d6b53b95e8744f7a7da9cc6d1"
+  "hash": "3ddb507d9aa45aad3a808430644249ffc69158691f54896670fcec2653d45e30"
 }

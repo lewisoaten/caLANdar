@@ -6,6 +6,7 @@ export type EventData = {
   lastModified: moment.Moment;
   title: string;
   description: string;
+  image: string | undefined;
   timeBegin: moment.Moment;
   timeEnd: moment.Moment;
 };
@@ -16,6 +17,7 @@ export const defaultEventData: EventData = {
   lastModified: moment(),
   title: "",
   description: "",
+  image: undefined,
   timeBegin: moment(),
   timeEnd: moment(),
 };

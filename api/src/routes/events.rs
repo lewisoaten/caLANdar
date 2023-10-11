@@ -37,6 +37,9 @@ pub struct Event {
     /// The description of the event.
     pub description: String,
 
+    /// The optional cover image for the event. Base64 and binary encodings are supported.
+    pub image: Option<String>,
+
     /// The time the event begins.
     pub time_begin: DateTime<Utc>,
 
@@ -52,6 +55,7 @@ impl SchemaExample for Event {
             last_modified: Utc::now(),
             title: "Example Event".to_string(),
             description: "This is an example event.".to_string(),
+            image: Some("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAE9JREFUGFcBRAC7/wGjoJj/iK2zACQmHAAYFRkAAdLPyv/h9QsA9/v8AMnCsQABsrW5/wURGgDu9vcAtcGtAAFafW7/XEoxAMXZ4gDs7gUANG0fr2k/YhsAAAAASUVORK5CYII=".to_string()),
             time_begin: Utc::now(),
             time_end: Utc::now(),
         }
@@ -65,6 +69,7 @@ impl SchemaExample for Event {
 pub struct EventSubmit {
     pub title: String,
     pub description: String,
+    pub image: Option<String>,
     pub time_begin: DateTime<Utc>,
     pub time_end: DateTime<Utc>,
 }
@@ -74,6 +79,7 @@ impl SchemaExample for EventSubmit {
         Self {
             title: "Example Event".to_string(),
             description: "This is an example event.".to_string(),
+            image: Some("iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAE9JREFUGFcBRAC7/wGjoJj/iK2zACQmHAAYFRkAAdLPyv/h9QsA9/v8AMnCsQABsrW5/wURGgDu9vcAtcGtAAFafW7/XEoxAMXZ4gDs7gUANG0fr2k/YhsAAAAASUVORK5CYII=".to_string()),
             time_begin: Utc::now(),
             time_end: Utc::now(),
         }

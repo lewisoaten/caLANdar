@@ -1,102 +1,100 @@
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useContext, useState } from "react";
 import {
+  Box,
   Container,
+  FormControl,
+  FormControlLabel,
   Grid,
-  Paper,
-  Card,
-  CardMedia,
-  CardContent,
+  Switch,
   Typography,
-  CardActions,
-  Button,
 } from "@mui/material";
-import { Link } from "react-router-dom";
+import { dateParser } from "../utils";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { EventData } from "../types/events";
-import EventTable from "./EventTable";
+import EventCard from "./EventCard";
+import moment from "moment";
 
 const Event = () => {
-  const eventsState = useState([] as EventData[]);
-  const oldEventsState = useState([] as EventData[]);
-  const [events] = eventsState;
+  const { signOut } = useContext(UserDispatchContext);
+  const userDetails = useContext(UserContext);
+  const token = userDetails?.token;
+
+  const [events, setEvents] = useState([] as EventData[]);
+
+  const [showOldEvents, setShowOldEvents] = React.useState(false);
+
+  const handleShowOldEvents = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setShowOldEvents(event.target.checked);
+  };
+
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/events`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as Array<EventData>);
+      })
+      .then((data) => {
+        if (!data) {
+          return [] as EventData[];
+        }
+
+        data.sort((a, b) => b.timeBegin.unix() - a.timeBegin.unix());
+
+        setEvents(data);
+      });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <React.Fragment>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card>
-              <CardMedia
-                component="img"
-                height="140"
-                image="/static/lan_party_image.jpg"
-                alt="lan party image"
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Grid
+        container
+        spacing={{ xs: 2, md: 3 }}
+        columns={{ sm: 4, md: 8, lg: 12 }}
+      >
+        <Grid item sm={4} md={8} lg={12}>
+          <Box display="flex" justifyContent="flex-end">
+            <FormControl>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showOldEvents}
+                    onChange={handleShowOldEvents}
+                  />
+                }
+                label={
+                  <Typography color="text.secondary">
+                    Show Old Events
+                  </Typography>
+                }
+                labelPlacement="start"
               />
-              <CardContent>
-                <Typography gutterBottom variant="h5" component="div">
-                  {
-                    events.sort(
-                      (a, b) => a.timeBegin.unix() - b.timeBegin.unix(),
-                    )[0]?.title
-                  }
-                </Typography>
-                <Typography variant="subtitle1" gutterBottom>
-                  {events
-                    .sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix())[0]
-                    ?.timeBegin.calendar()}{" "}
-                  to{" "}
-                  {events
-                    .sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix())[0]
-                    ?.timeEnd.calendar()}
-                </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ whiteSpace: "pre-wrap" }}
-                >
-                  {
-                    events.sort(
-                      (a, b) => a.timeBegin.unix() - b.timeBegin.unix(),
-                    )[0]?.description
-                  }
-                </Typography>
-              </CardContent>
-              <CardActions>
-                <Button
-                  size="small"
-                  component={Link}
-                  to={events
-                    .sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix())[0]
-                    ?.id.toString()}
-                >
-                  Open
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
+            </FormControl>
+          </Box>
         </Grid>
-      </Container>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          {/* Events */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
-              <EventTable eventsState={eventsState} pastEvents={false} />
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          {/* Events */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
-              <EventTable eventsState={oldEventsState} liveEvents={false} />
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-    </React.Fragment>
+        {events.map((event) => {
+          if (event.timeEnd.isAfter(moment()) || showOldEvents) {
+            return (
+              <Grid item xs={4}>
+                <EventCard event={event} />
+              </Grid>
+            );
+          } else {
+            return null;
+          }
+        })}
+      </Grid>
+    </Container>
   );
 };
 

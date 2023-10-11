@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1",
+  "query": "\n        INSERT INTO event (\n            title,\n            description,\n            image,\n            time_begin,\n            time_end\n        )\n        VALUES (\n            $1,\n            $2,\n            $3,\n            $4,\n            $5\n        )\n        RETURNING\n            id,\n            created_at,\n            last_modified,\n            title,\n            description,\n            image,\n            time_begin,\n            time_end\n        ",
   "describe": {
     "columns": [
       {
@@ -30,18 +30,27 @@
       },
       {
         "ordinal": 5,
+        "name": "image",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
         "name": "time_begin",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "time_end",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int4"
+        "Varchar",
+        "Text",
+        "Bytea",
+        "Timestamptz",
+        "Timestamptz"
       ]
     },
     "nullable": [
@@ -50,9 +59,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "845f07db364ad990ef08b77c1fa27f9908d9cfd25fedaa42b9340b3c0b2c8154"
+  "hash": "9c8269dfdddebe49ba48b9a3065b8151fa354389f6915c9280d40a5750062d20"
 }

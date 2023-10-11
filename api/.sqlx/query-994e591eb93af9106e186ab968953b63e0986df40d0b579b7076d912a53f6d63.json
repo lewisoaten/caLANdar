@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE event\n        SET title = $2, description = $3, time_begin = $4, time_end = $5, last_modified = NOW()\n        WHERE id = $1\n        RETURNING id, created_at, last_modified, title, description, time_begin, time_end\n        ",
+  "query": "\n        UPDATE event\n        SET\n            title = $2,\n            description = $3,\n            image = $4,\n            time_begin = $5,\n            time_end = $6,\n            last_modified = NOW()\n        WHERE id = $1\n        RETURNING\n            id,\n            created_at,\n            last_modified,\n            title,\n            description,\n            image,\n            time_begin,\n            time_end\n        ",
   "describe": {
     "columns": [
       {
@@ -30,11 +30,16 @@
       },
       {
         "ordinal": 5,
+        "name": "image",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 6,
         "name": "time_begin",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "time_end",
         "type_info": "Timestamptz"
       }
@@ -44,6 +49,7 @@
         "Int4",
         "Varchar",
         "Text",
+        "Bytea",
         "Timestamptz",
         "Timestamptz"
       ]
@@ -54,9 +60,10 @@
       false,
       false,
       false,
+      true,
       false,
       false
     ]
   },
-  "hash": "e641e3f6ebd1f9b19a8f00a137fdf5053cdaa2852841415f7f868a4db34cb31c"
+  "hash": "994e591eb93af9106e186ab968953b63e0986df40d0b579b7076d912a53f6d63"
 }

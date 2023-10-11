@@ -18,7 +18,7 @@ use rusty_paseto::prelude::*;
 use sendgrid::v3::Sender;
 use sqlx::postgres::PgPool;
 
-use crate::routes::events::Event;
+use crate::repositories::event;
 
 use super::SchemaExample;
 
@@ -88,13 +88,23 @@ pub async fn post(
     };
 
     //Get event details
-    let event: Event = match sqlx::query_as!(
-        Event,
-        "SELECT id, created_at, last_modified, title, description, time_begin, time_end FROM event WHERE id = $1",
-        event_id
-    ).fetch_one(pool.inner()).await
+    let event = match event::filter(
+        pool.inner(),
+        event::Filter {
+            ids: Some(vec![event_id]),
+        },
+    )
+    .await
     {
-        Ok(event) => event,
+        Ok(event) => {
+            if event.len() != 1 {
+                return Err(rocket::response::status::BadRequest(Some(
+                    "Too many events returned for ID".to_string(),
+                )));
+            };
+
+            event[0].clone()
+        }
         Err(_) => {
             return Err(rocket::response::status::BadRequest(Some(
                 "Error getting database ID".to_string(),

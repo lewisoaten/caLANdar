@@ -8,6 +8,7 @@ pub struct Event {
     pub last_modified: DateTime<Utc>,
     pub title: String,
     pub description: String,
+    pub image: Option<Vec<u8>>,
     pub time_begin: DateTime<Utc>,
     pub time_end: DateTime<Utc>,
 }
@@ -20,6 +21,7 @@ pub async fn create(
     pool: &PgPool,
     title: String,
     description: String,
+    image: Option<Vec<u8>>,
     time_begin: DateTime<Utc>,
     time_end: DateTime<Utc>,
 ) -> Result<Event, sqlx::Error> {
@@ -27,12 +29,33 @@ pub async fn create(
     sqlx::query_as!(
         Event,
         r#"
-        INSERT INTO event (title, description, time_begin, time_end)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, created_at, last_modified, title, description, time_begin, time_end
+        INSERT INTO event (
+            title,
+            description,
+            image,
+            time_begin,
+            time_end
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5
+        )
+        RETURNING
+            id,
+            created_at,
+            last_modified,
+            title,
+            description,
+            image,
+            time_begin,
+            time_end
         "#,
         title,
         description,
+        image,
         time_begin,
         time_end,
     )
@@ -44,7 +67,15 @@ pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
     sqlx::query_as!(
         Event,
         r#"
-        SELECT id, created_at, last_modified, title, description, time_begin, time_end
+        SELECT
+            id,
+            created_at,
+            last_modified,
+            title,
+            description,
+            image,
+            time_begin,
+            time_end
         FROM event
         "#
     )
@@ -60,7 +91,15 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::E
     sqlx::query_as!(
         Event,
         r#"
-        SELECT id, created_at, last_modified, title, description, time_begin, time_end
+        SELECT
+            id,
+            created_at,
+            last_modified,
+            title,
+            description,
+            image,
+            time_begin,
+            time_end
         FROM event
         WHERE (id = ANY($1) OR $2)
         "#,
@@ -98,6 +137,7 @@ pub async fn edit(
     id: i32,
     title: String,
     description: String,
+    image: Option<Vec<u8>>,
     time_begin: DateTime<Utc>,
     time_end: DateTime<Utc>,
 ) -> Result<Event, sqlx::Error> {
@@ -106,13 +146,28 @@ pub async fn edit(
         Event,
         r#"
         UPDATE event
-        SET title = $2, description = $3, time_begin = $4, time_end = $5, last_modified = NOW()
+        SET
+            title = $2,
+            description = $3,
+            image = $4,
+            time_begin = $5,
+            time_end = $6,
+            last_modified = NOW()
         WHERE id = $1
-        RETURNING id, created_at, last_modified, title, description, time_begin, time_end
+        RETURNING
+            id,
+            created_at,
+            last_modified,
+            title,
+            description,
+            image,
+            time_begin,
+            time_end
         "#,
         id,
         title,
         description,
+        image,
         time_begin,
         time_end,
     )
