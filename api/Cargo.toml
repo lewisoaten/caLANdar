@@ -9,7 +9,7 @@ base64 = "0.21.4"
 chrono = { version = "0.4.22", features = ["serde"] }
 futures = "0.3.26"
 shuttle-rocket = "0.29.0"
-shuttle-runtime = "0.29.0"
+shuttle-runtime = "0.32.0"
 shuttle-shared-db = { version = "0.29.0", features = ["postgres"] }
 shuttle-secrets = "0.29.0"
 log = "0.4.17"
