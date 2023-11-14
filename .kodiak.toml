@@ -6,7 +6,7 @@ version = 1
 # only auto merge "minor" and "patch" version upgrades.
 # do not automerge "major" version upgrades.
 versions = ["minor", "patch"]
-usernames = ["dependabot", "renovate"]
+usernames = ["dependabot", "pre-commit-ci"]
 
 merge.method = "rebase_fast_forward"
 
