@@ -171,8 +171,8 @@ export default function EventTable(props: EventTableProps) {
     liveEvents && pastEvents
       ? "Events"
       : liveEvents
-      ? "Upcoming Events"
-      : "Past Events";
+        ? "Upcoming Events"
+        : "Past Events";
 
   const navigate = useNavigate();
 
