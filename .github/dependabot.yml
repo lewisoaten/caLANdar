@@ -28,32 +28,32 @@ updates:
       interval: "daily"
       time: "21:00"
     open-pull-requests-limit: 10
-    rebase-strategy: "disabled"
+    rebase-strategy: "auto"
   - package-ecosystem: "docker"
     directory: "/frontend/"
     schedule:
       interval: "daily"
       time: "21:00"
     open-pull-requests-limit: 10
-    rebase-strategy: "disabled"
+    rebase-strategy: "auto"
   - package-ecosystem: "cargo"
     directory: "/api/"
     schedule:
       interval: "daily"
       time: "21:00"
     open-pull-requests-limit: 10
-    rebase-strategy: "disabled"
+    rebase-strategy: "auto"
   - package-ecosystem: "docker"
     directory: "/api/"
     schedule:
       interval: "daily"
       time: "21:00"
     open-pull-requests-limit: 10
-    rebase-strategy: "disabled"
+    rebase-strategy: "auto"
   - package-ecosystem: "github-actions"
     directory: "/.github/workflows"
     schedule:
       interval: "daily"
       time: "21:00"
     open-pull-requests-limit: 10
-    rebase-strategy: "disabled"
+    rebase-strategy: "auto"
