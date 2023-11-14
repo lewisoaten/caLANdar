@@ -89,7 +89,9 @@ fn authorise_paseto_header(
                 }
             };
 
-            if must_be_admin && typed_token.sub != "lewis@oaten.name" {
+            let admins = vec!["lewis@oaten.name", "marshallx7a@gmail.com"];
+
+            if must_be_admin && !admins.contains(&typed_token.sub.as_str()) {
                 return Err(UserError::TokenError);
             }
 

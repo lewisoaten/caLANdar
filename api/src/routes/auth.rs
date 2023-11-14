@@ -138,7 +138,9 @@ pub fn verify_email(
         }
     };
 
-    let is_admin = typed_token.sub == "lewis@oaten.name";
+    let admins = vec!["lewis@oaten.name", "marshallx7a@gmail.com"];
+
+    let is_admin = admins.contains(&typed_token.sub.as_str());
 
     Ok(Json(VerifyEmailResponse {
         token,
