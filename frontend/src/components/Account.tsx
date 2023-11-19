@@ -1,14 +1,62 @@
 import React from "react";
-import { Button, Container, Grid, Paper, Typography } from "@mui/material";
+import {
+  Button,
+  Container,
+  Grid,
+  Paper,
+  Typography,
+  TextField,
+} from "@mui/material";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 
+import { defaultProfileData } from "../types/profile";
+
+import { useState, useEffect } from "react";
+
 const Account = () => {
   const { signOut } = useContext(UserDispatchContext);
-  const { email } = useContext(UserContext);
+  const userDetails = useContext(UserContext);
+  const token = userDetails?.token;
+  const [profile, setProfile] = useState(defaultProfileData);
+
+  useEffect(() => {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+    }).then((response) => {
+      if (response.status === 401) signOut();
+      if (response.status === 404) setProfile(defaultProfileData);
+      else if (response.ok)
+        return response.json().then((data) => setProfile(data));
+    });
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onClick = () => {
     signOut();
+  };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = event.target;
+    setProfile({
+      ...profile,
+      [name]: value,
+    });
+  };
+
+  const handleSteamidSave = () => {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({ steamId: profile.steamId }),
+    });
   };
 
   return (
@@ -32,9 +80,36 @@ const Account = () => {
               Account page
             </Typography>
             <Typography variant="subtitle1" gutterBottom>
-              {email}
+              {userDetails.email}
             </Typography>
-            <Button onClick={onClick}>Sign Out</Button>
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <TextField
+                  id="steamId"
+                  name="steamId"
+                  label="Steam ID"
+                  type="number"
+                  required
+                  margin="dense"
+                  value={profile.steamId}
+                  onChange={handleInputChange}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <Button
+                  variant="contained"
+                  color="success"
+                  onClick={handleSteamidSave}
+                >
+                  Save
+                </Button>
+              </Grid>
+              <Grid item xs={6}>
+                <Button variant="outlined" color="error" onClick={onClick}>
+                  Sign Out
+                </Button>
+              </Grid>
+            </Grid>
           </Paper>
         </Grid>
       </Grid>
