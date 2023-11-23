@@ -22,3 +22,15 @@ pub async fn create(pool: &PgPool, user_game: &UserGame) -> Result<UserGame, sql
     .fetch_one(pool)
     .await
 }
+
+pub async fn read(pool: &PgPool, email: String) -> Result<Vec<UserGame>, sqlx::Error> {
+    sqlx::query_as!(
+        UserGame,
+        r#"
+        SELECT email, appid, playtime_forever FROM user_games WHERE email = $1
+        "#,
+        email,
+    )
+    .fetch_all(pool)
+    .await
+}

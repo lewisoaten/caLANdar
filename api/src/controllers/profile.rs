@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use crate::{
     controllers::Error,
     repositories::{profile, steam_api, user_games},
-    routes::profiles::{Profile, ProfileSubmit},
+    routes::profiles::{Profile, ProfileSubmit, UserGame},
 };
 
 // Implement From for Profile from repositories::profile::Profile
@@ -12,6 +12,7 @@ impl From<crate::repositories::profile::Profile> for Profile {
         Self {
             email: profile.email,
             steam_id: profile.steam_id.to_string(),
+            games: None,
         }
     }
 }
@@ -22,15 +23,43 @@ impl From<reqwest::Error> for Error {
     }
 }
 
+impl From<user_games::UserGame> for UserGame {
+    fn from(game: user_games::UserGame) -> Self {
+        Self {
+            appid: game.appid,
+            playtime_forever: game.playtime_forever,
+        }
+    }
+}
+
 pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
     // Return profile from repository for selected email address
-    match profile::read(pool, email.clone()).await {
-        Ok(Some(profile)) => Ok(profile.into()),
-        Ok(None) => Err(Error::NoData(format!("Profile for {email} not found"))),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get profile due to: {e}"
-        ))),
-    }
+    let mut profile: Profile = match profile::read(pool, email.clone()).await {
+        Ok(Some(profile)) => profile.into(),
+        Ok(None) => return Err(Error::NoData(format!("Profile for {email} not found"))),
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get profile due to: {e}"
+            )))
+        }
+    };
+
+    // Return profile with games from user_games repository
+    profile.games = match user_games::read(pool, email.clone()).await {
+        Ok(user_games) => Some(
+            user_games
+                .into_iter()
+                .map(std::convert::Into::into)
+                .collect(),
+        ),
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get user games due to: {e}"
+            )))
+        }
+    };
+
+    Ok(profile)
 }
 
 pub async fn edit(

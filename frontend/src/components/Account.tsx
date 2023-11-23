@@ -6,6 +6,10 @@ import {
   Paper,
   Typography,
   TextField,
+  Card,
+  CardMedia,
+  CardContent,
+  CardActions,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useContext } from "react";
@@ -129,6 +133,30 @@ const Account = () => {
             </Grid>
           </Paper>
         </Grid>
+        {/* Render game cards for each game in profile */}
+        {profile.games.map((game) => (
+          <Grid item xs={12} md={6} lg={4}>
+            <Card key={game.appid} sx={{ maxWidth: 345 }}>
+              <CardMedia
+                sx={{ height: 140 }}
+                image={`https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`}
+                title={game.appid.toString()}
+              />
+              <CardContent>
+                <Typography gutterBottom variant="h5" component="div">
+                  {game.appid.toString()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {game.appid.toString()}
+                </Typography>
+              </CardContent>
+              <CardActions>
+                <Button size="small">Share</Button>
+                <Button size="small">Learn More</Button>
+              </CardActions>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
     </Container>
   );
