@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO user_games (email, appid, playtime_forever)\n        VALUES ($1, $2, $3)\n        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3\n        RETURNING *\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "appid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "playtime_forever",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c8eb9d31be91a2570361941191fbda77d4639f65af438bd099d2703d759937d5"
+}

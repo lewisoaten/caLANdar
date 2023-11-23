@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT * FROM user_games WHERE email = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "appid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "playtime_forever",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7d11c313b1fe73c2ee5398759dee8de3feedb7aa6ac7cc00a3f5be4191c296bb"
+}
