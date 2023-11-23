@@ -260,6 +260,8 @@ async fn rocket(
                 routes::event_games::post,
                 routes::event_games::get_all,
                 routes::event_games::patch,
+                routes::profiles::get,
+                routes::profiles::put,
             ],
         )
         .mount(
