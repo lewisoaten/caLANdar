@@ -14,6 +14,24 @@ use sqlx::postgres::PgPool;
 
 use super::SchemaExample;
 
+/// The profile user games.
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct UserGame {
+    pub appid: i64,
+    pub playtime_forever: i32,
+}
+
+impl SchemaExample for UserGame {
+    fn example() -> Self {
+        Self {
+            appid: 12345,
+            playtime_forever: 300,
+        }
+    }
+}
+
 /// The profile response.
 #[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
@@ -24,6 +42,9 @@ pub struct Profile {
 
     /// The Steam ID of the user.
     pub steam_id: String,
+
+    /// The games the user owns.
+    pub games: Option<Vec<UserGame>>,
 }
 
 impl SchemaExample for Profile {
@@ -31,6 +52,7 @@ impl SchemaExample for Profile {
         Self {
             email: "test@test.invalid".to_string(),
             steam_id: "12345678901234567".to_string(),
+            games: Some(vec![UserGame::example()]),
         }
     }
 }
@@ -95,14 +117,13 @@ custom_errors!(UpdateUserGameError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Games")]
 #[post("/profile/games/update")]
-/// Update the list of games from the Steam API v2
 pub async fn post_games_update(
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
     user: User,
-) -> Result<Json<()>, UpdateUserGameError> {
+) -> Result<Json<Profile>, UpdateUserGameError> {
     match profile::update_user_games(pool, user.email.clone(), steam_api_key.inner()).await {
-        Ok(_) => Ok(Json(())),
+        Ok(updated_profile) => Ok(Json(updated_profile)),
         Err(e) => Err(UpdateUserGameError::InternalServerError(format!(
             "Error updating games, due to: {e}"
         ))),
