@@ -40,3 +40,56 @@ pub async fn get_app_list_v2(
         Err(e) => Err(e),
     }
 }
+
+#[derive(Clone, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct SteamAPIOwnedGame {
+    pub appid: i64,
+    pub playtime_2weeks: Option<i32>,
+    pub playtime_forever: i32,
+    pub playtime_windows_forever: i32,
+    pub playtime_mac_forever: i32,
+    pub playtime_linux_forever: i32,
+    pub playtime_disconnected: i32,
+    pub rtime_last_played: i64,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct SteamAPIOwnedGamesListResponse {
+    pub game_count: i64,
+    pub games: Vec<SteamAPIOwnedGame>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct SteamAPIOwnedGamesList {
+    pub response: SteamAPIOwnedGamesListResponse,
+}
+
+pub async fn get_owned_games(
+    steam_api_key: &String,
+    steam_id: &String,
+) -> Result<SteamAPIOwnedGamesList, reqwest::Error> {
+    let include_played_free_games = true;
+    let include_free_sub = true;
+
+    let request_url = format!(
+        "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={steam_api_key}&steamid={steam_id}&include_played_free_games={include_played_free_games}&include_free_sub={include_free_sub}",
+    );
+
+    log::info!(
+        "Requesting owned games from steam API using url: {}",
+        request_url
+    );
+
+    let response = match reqwest::get(&request_url).await {
+        Ok(response) => response,
+        Err(e) => return Err(e),
+    };
+
+    match response.json().await {
+        Ok(owned_games) => Ok(owned_games),
+        Err(e) => Err(e),
+    }
+}

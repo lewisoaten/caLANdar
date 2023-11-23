@@ -7,6 +7,7 @@ import {
   Typography,
   TextField,
 } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 
@@ -36,8 +37,15 @@ const Account = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const onClick = () => {
-    signOut();
+  const refreshGames = () => {
+    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile/games/update`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({}),
+    });
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,7 +103,7 @@ const Account = () => {
                   onChange={handleInputChange}
                 />
               </Grid>
-              <Grid item xs={6}>
+              <Grid item xs={4}>
                 <Button
                   variant="contained"
                   color="success"
@@ -104,8 +112,17 @@ const Account = () => {
                   Save
                 </Button>
               </Grid>
-              <Grid item xs={6}>
-                <Button variant="outlined" color="error" onClick={onClick}>
+              <Grid item xs={4}>
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={refreshGames}
+                >
+                  Refresh Games
+                </Button>
+              </Grid>
+              <Grid item xs={4}>
+                <Button variant="outlined" color="error" onClick={signOut}>
                   Sign Out
                 </Button>
               </Grid>

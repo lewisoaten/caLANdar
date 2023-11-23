@@ -2,9 +2,8 @@ use crate::{
     auth::User,
     controllers::{profile, Error},
 };
-
 use rocket::{
-    get, put,
+    get, post, put,
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
@@ -88,6 +87,24 @@ pub async fn put(
         ))),
         Err(e) => Err(ProfileUpdateError::InternalServerError(format!(
             "Error updating profile, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(UpdateUserGameError, Unauthorized, InternalServerError);
+
+#[openapi(tag = "Games")]
+#[post("/profile/games/update")]
+/// Update the list of games from the Steam API v2
+pub async fn post_games_update(
+    pool: &State<PgPool>,
+    steam_api_key: &State<String>,
+    user: User,
+) -> Result<Json<()>, UpdateUserGameError> {
+    match profile::update_user_games(pool, user.email.clone(), steam_api_key.inner()).await {
+        Ok(_) => Ok(Json(())),
+        Err(e) => Err(UpdateUserGameError::InternalServerError(format!(
+            "Error updating games, due to: {e}"
         ))),
     }
 }
