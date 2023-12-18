@@ -18,7 +18,7 @@ rocket = { version = "0.5.0-rc.2", features = [ "json" ] }
 rocket_dyn_templates = { version = "0.1.0-rc.1", features = [ "tera" ] }
 schemars = { version = "0.8.16", features = [ "chrono", "bytes" ] }
 okapi = { version = "0.7.0-rc.1" }
-reqwest = "0.11.22"
+reqwest = "0.11.23"
 rocket_okapi = { version = "0.8.0-rc.2", features = ["swagger"] }
 rusty_paseto = { version = "0.6.0", features = ["batteries_included"] }
 sqlx = { version = "0.7.3", features = [ "runtime-tokio-native-tls", "postgres", "chrono" ] }
