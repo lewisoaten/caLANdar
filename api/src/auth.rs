@@ -113,10 +113,7 @@ impl<'r> FromRequest<'r> for User {
         let authorization_header = request.headers().get_one("Authorization");
 
         authorization_header.map_or(
-            request::Outcome::Failure((
-                rocket::http::Status::Unauthorized,
-                UserError::MissingToken,
-            )),
+            request::Outcome::Error((rocket::http::Status::Unauthorized, UserError::MissingToken)),
             |authorization_header| {
                 let key = request
                     .rocket()
@@ -124,7 +121,7 @@ impl<'r> FromRequest<'r> for User {
                     .expect("PASETO encryption key found in config.");
 
                 authorise_paseto_header(key, authorization_header, false).map_or(
-                    request::Outcome::Failure((
+                    request::Outcome::Error((
                         rocket::http::Status::Unauthorized,
                         UserError::MissingToken,
                     )),
@@ -182,11 +179,15 @@ impl<'r> FromRequest<'r> for AdminUser {
         // API call must specify it wants to access administrative data, otherwise it is Forwarded, and potentially treated as a user request
         match request.query_value::<bool>("as_admin") {
             Some(Ok(true)) => {}
-            Some(Ok(false) | Err(_)) => return Outcome::Forward(()),
+            Some(Ok(false) | Err(_)) => {
+                return Outcome::Forward(rocket::http::Status::TemporaryRedirect)
+            }
             None => {
                 match request.query_value::<bool>("_as_admin") {
                     Some(Ok(true)) => {}
-                    Some(Ok(false) | Err(_)) | None => return Outcome::Forward(()),
+                    Some(Ok(false) | Err(_)) | None => {
+                        return Outcome::Forward(rocket::http::Status::TemporaryRedirect)
+                    }
                 };
             }
         };
@@ -194,20 +195,17 @@ impl<'r> FromRequest<'r> for AdminUser {
         let authorization_header = request.headers().get_one("Authorization");
 
         authorization_header.map_or(
-            request::Outcome::Failure((
-                rocket::http::Status::Unauthorized,
-                UserError::MissingToken,
-            )),
+            request::Outcome::Error((rocket::http::Status::Unauthorized, UserError::MissingToken)),
             |authorization_header| {
                 let key = request
                     .rocket()
                     .state::<PasetoSymmetricKey<V4, Local>>()
                     .expect("PASETO encryption key found in config.");
 
-                authorise_paseto_header(key, authorization_header, true)
-                    .map_or(Outcome::Forward(()), |email| {
-                        Outcome::Success(Self { email })
-                    })
+                authorise_paseto_header(key, authorization_header, true).map_or(
+                    Outcome::Forward(rocket::http::Status::TemporaryRedirect),
+                    |email| Outcome::Success(Self { email }),
+                )
             },
         )
     }

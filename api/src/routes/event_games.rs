@@ -112,8 +112,8 @@ pub async fn patch(
     .await
     {
         Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
-        Err(_) => Err(rocket::response::status::Unauthorized(Some(
+        Err(_) => Err(rocket::response::status::Unauthorized(
             "Error updating game vote in the database".to_string(),
-        ))),
+        )),
     }
 }

@@ -60,9 +60,9 @@ pub async fn login(
     .await
     {
         Ok(_) => Ok(Json(LoginResponse {})),
-        Err(_) => Err(rocket::response::status::BadRequest(Some(
+        Err(_) => Err(rocket::response::status::BadRequest(
             "Error sending email".to_string(),
-        ))),
+        )),
     }
 }
 
@@ -97,18 +97,18 @@ pub fn verify_email(
     {
         Ok(generic_token) => generic_token,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error parsing token".to_string(),
-            )))
+            ))
         }
     };
 
     let typed_token: PasetoToken = match json::from_value(generic_token) {
         Ok(typed_token) => typed_token,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Can't parse PASETO token to types".to_string(),
-            )))
+            ))
         }
     };
 
@@ -117,9 +117,9 @@ pub fn verify_email(
         match ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339()) {
             Ok(expiration_claim) => expiration_claim,
             Err(_) => {
-                return Err(rocket::response::status::BadRequest(Some(
+                return Err(rocket::response::status::BadRequest(
                     "Can't create time for expiration claim".to_string(),
-                )))
+                ))
             }
         };
 
@@ -132,9 +132,9 @@ pub fn verify_email(
     {
         Ok(token) => token,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error building token".to_string(),
-            )))
+            ))
         }
     };
 
