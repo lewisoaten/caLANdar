@@ -81,9 +81,9 @@ pub async fn post(
     {
         Ok(event) => event,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error getting database ID".to_string(),
-            )))
+            ))
         }
     };
 
@@ -98,17 +98,17 @@ pub async fn post(
     {
         Ok(event) => {
             if event.len() != 1 {
-                return Err(rocket::response::status::BadRequest(Some(
+                return Err(rocket::response::status::BadRequest(
                     "Too many events returned for ID".to_string(),
-                )));
+                ));
             };
 
             event[0].clone()
         }
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error getting database ID".to_string(),
-            )))
+            ))
         }
     };
 
@@ -144,9 +144,9 @@ pub async fn post(
     {
         Ok(_) => (),
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error sending invitation email".to_string(),
-            )))
+            ))
         }
     }
 
@@ -166,9 +166,9 @@ pub async fn get(
 ) -> Result<Json<InvitationsResponse>, rocket::response::status::BadRequest<String>> {
     log::info!("Getting invitation details for email: {}", email);
     if user.email != email {
-        return Err(rocket::response::status::BadRequest(Some(
+        return Err(rocket::response::status::BadRequest(
             "You can only respond to invitations for your own email address".to_string(),
-        )));
+        ));
     }
 
     // Return your invitation for this event
@@ -185,9 +185,9 @@ pub async fn get(
     {
         Ok(invitation) => invitation,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error getting database ID".to_string(),
-            )))
+            ))
         }
     };
 
@@ -215,9 +215,9 @@ pub async fn get_all(
     {
         Ok(events) => events,
         Err(_) => {
-            return Err(rocket::response::status::BadRequest(Some(
+            return Err(rocket::response::status::BadRequest(
                 "Error getting database ID".to_string(),
-            )))
+            ))
         }
     };
 
@@ -243,10 +243,10 @@ pub async fn get_all_user(
     user: User,
 ) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
     match is_attending_event(pool.inner(), event_id, user.email).await {
-        Err(e) => Err(rocket::response::status::BadRequest(Some(e))),
-        Ok(false) => Err(rocket::response::status::BadRequest(Some(
+        Err(e) => Err(rocket::response::status::BadRequest(e)),
+        Ok(false) => Err(rocket::response::status::BadRequest(
             "You can only see invitations for events you have RSVP'd to".to_string(),
-        ))),
+        )),
         Ok(true) => {
             // Return all invitations for this event
             let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
@@ -261,9 +261,9 @@ pub async fn get_all_user(
             {
                 Ok(invitations) => invitations,
                 Err(_) => {
-                    return Err(rocket::response::status::BadRequest(Some(
+                    return Err(rocket::response::status::BadRequest(
                         "Error getting database ID".to_string(),
-                    )))
+                    ))
                 }
             };
 
@@ -293,9 +293,9 @@ pub async fn delete(
     .await
     {
         Ok(_) => Ok(rocket::response::status::NoContent),
-        Err(_) => Err(rocket::response::status::BadRequest(Some(
+        Err(_) => Err(rocket::response::status::BadRequest(
             "Error getting database ID".to_string(),
-        ))),
+        )),
     }
 }
 
