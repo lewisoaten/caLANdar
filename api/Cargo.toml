@@ -17,7 +17,7 @@ sendgrid = { version = "0.19.0", features = ["async"] }
 rocket = { version = "0.5.0", features = [ "json" ] }
 rocket_dyn_templates = { version = "0.1.0-rc.1", features = [ "tera" ] }
 schemars = { version = "0.8.16", features = [ "chrono", "bytes" ] }
-okapi = { version = "0.7.0-rc.1" }
+okapi = { version = "0.7.0" }
 reqwest = "0.11.23"
 rocket_okapi = { git = "https://github.com/GREsau/okapi", features = ["swagger"] }
 rusty_paseto = { version = "0.6.1", features = ["batteries_included"] }
