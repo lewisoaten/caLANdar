@@ -11,7 +11,7 @@ futures = "0.3.30"
 shuttle-rocket = "0.35.2"
 shuttle-runtime = "0.35.2"
 shuttle-shared-db = { version = "0.35.2", features = ["postgres"] }
-shuttle-secrets = "0.35.2"
+shuttle-secrets = "0.37.0"
 log = "0.4.17"
 sendgrid = { version = "0.19.0", features = ["async"] }
 rocket = { version = "0.5.0", features = [ "json" ] }
