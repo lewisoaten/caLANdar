@@ -57,3 +57,7 @@ updates:
       time: "21:00"
     open-pull-requests-limit: 10
     rebase-strategy: "auto"
+groups:
+  shuttle:
+    patterns:
+    - "shuttle*"
