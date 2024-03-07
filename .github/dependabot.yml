@@ -60,4 +60,4 @@ updates:
 groups:
   shuttle:
     patterns:
-    - "shuttle*"
+      - "shuttle*"
