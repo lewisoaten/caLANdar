@@ -10,7 +10,7 @@ chrono = { version = "0.4.22", features = ["serde"] }
 futures = "0.3.30"
 shuttle-rocket = "0.41.0"
 shuttle-runtime = "0.41.0"
-shuttle-shared-db = { version = "0.41.0", features = ["postgres"] }
+shuttle-shared-db = { version = "0.41.0", features = ["postgres", "sqlx"] }
 shuttle-secrets = "0.41.0"
 log = "0.4.21"
 sendgrid = { version = "0.19.0", features = ["async"] }
