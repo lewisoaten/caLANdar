@@ -43,6 +43,10 @@ updates:
       time: "21:00"
     open-pull-requests-limit: 10
     rebase-strategy: "auto"
+    groups:
+      shuttle:
+        patterns:
+          - "shuttle*"
   - package-ecosystem: "docker"
     directory: "/api/"
     schedule:
@@ -57,7 +61,3 @@ updates:
       time: "21:00"
     open-pull-requests-limit: 10
     rebase-strategy: "auto"
-groups:
-  shuttle:
-    patterns:
-      - "shuttle*"
