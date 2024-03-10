@@ -1,6 +1,6 @@
 {
   description = "CaLANdar LAN organisation app";
-  inputs = { 
+  inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
