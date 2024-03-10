@@ -56,22 +56,30 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> 
             }
         };
 
-    let mut insert_promises = vec![];
+    let chunk_size = 20;
 
-    for steam_game in &steam_games.applist.apps {
-        insert_promises.push(game::create(
-            pool,
-            steam_game.appid,
-            steam_game_update.id,
-            steam_game.name.clone(),
-        ));
+    for chunk in steam_games.applist.apps.chunks(chunk_size) {
+        let mut insert_promises = vec![];
+        for steam_game in chunk {
+            insert_promises.push(game::create(
+                pool,
+                steam_game.appid,
+                steam_game_update.id,
+                steam_game.name.clone(),
+            ));
+        }
+
+        let results = join_all(insert_promises).await;
+
+        for result in results {
+            if let Err(e) = result {
+                log::error!("Failed to insert game: {}", e);
+                break;
+            }
+        }
+
+        log::info!("Inserted {} games successfully.", chunk_size);
     }
-
-    join_all(insert_promises).await;
-    log::info!(
-        "Inserted or updated {} steam games",
-        steam_games.applist.apps.len()
-    );
 
     Ok(())
 }
