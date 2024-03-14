@@ -9,7 +9,7 @@
     "@mui/lab": "5.0.0-alpha.167",
     "@mui/material": "5.15.13",
     "@mui/x-data-grid": "6.19.6",
-    "@mui/x-date-pickers": "6.19.6",
+    "@mui/x-date-pickers": "6.19.7",
     "@sentry/react": "^7.107.0",
     "moment": "2.30.1",
     "moment-timezone": "0.5.45",
