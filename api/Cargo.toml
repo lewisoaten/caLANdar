@@ -8,9 +8,9 @@ anyhow = "1.0.81"
 base64 = "0.22.0"
 chrono = { version = "0.4.37", features = ["serde"] }
 futures = "0.3.30"
-shuttle-rocket = "0.42.0"
-shuttle-runtime = "0.42.0"
-shuttle-shared-db = { version = "0.42.0", features = ["postgres", "sqlx"] }
+shuttle-rocket = "0.43.0"
+shuttle-runtime = "0.43.0"
+shuttle-shared-db = { version = "0.43.0", features = ["postgres", "sqlx"] }
 shuttle-secrets = "0.42.0"
 log = "0.4.21"
 sendgrid = { version = "0.19.0", features = ["async"] }
