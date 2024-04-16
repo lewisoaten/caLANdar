@@ -8,7 +8,7 @@
     "@mui/icons-material": "5.15.15",
     "@mui/lab": "5.0.0-alpha.169",
     "@mui/material": "5.15.15",
-    "@mui/x-data-grid": "6.19.10",
+    "@mui/x-data-grid": "7.2.0",
     "@mui/x-date-pickers": "7.2.0",
     "@sentry/react": "^7.110.1",
     "moment": "2.30.1",
