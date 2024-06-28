@@ -2621,9 +2621,9 @@ checksum = "7ffc183a10b4478d04cbbbfc96d0873219d962dd5accaff2ffbd4ceb7df837f4"
 
 [[package]]
 name = "rusty_paseto"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03abd0624688047cc65eadc5588dd35be44151ce7b6e7e7dea4976f5b3dcd54"
+checksum = "0c28b9f48df2de43da68fb7dcbd60c4f85bca5f6ae4c92cdd9540bcd4a606cb3"
 dependencies = [
  "base64 0.22.1",
  "blake2",
