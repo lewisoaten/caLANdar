@@ -11,6 +11,10 @@ import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import { Link } from "react-router-dom";
 import { UserContext } from "../UserProvider";
+import ListItem from "@mui/material/ListItem";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import AlertTitle from "@mui/material/AlertTitle";
 
 export default function MenuItems() {
   const { loggedIn, isAdmin } = useContext(UserContext);
@@ -31,6 +35,15 @@ export default function MenuItems() {
             </ListItemIcon>
             <ListItemText primary="Account" />
           </ListItemButton>
+          <Divider sx={{ my: 1 }} />
+          <ListItem>
+            <Alert variant="outlined" severity="info">
+              <AlertTitle>New feature!</AlertTitle>
+              See what games you have in common with other gamers.{" "}
+              <Link to="/account">Add your Steam ID</Link> to your profile to
+              find out.
+            </Alert>
+          </ListItem>
         </React.Fragment>
       ) : (
         <React.Fragment>
