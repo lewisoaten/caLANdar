@@ -72,7 +72,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
         <Grid item xs={12}>
           <List>
             {attendees.map((attendee) => (
-              <ListItem dense={true}>
+              <ListItem dense={true} key={attendee.handle}>
                 <ListItemAvatar>
                   <Avatar
                     alt={attendee.handle || "Attendee"}
@@ -96,7 +96,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
             <Alert severity="info">RSVP to load attendees.</Alert>
           </Grid>
           {Array.from(Array(3)).map((e, i) => (
-            <React.Fragment>
+            <React.Fragment key={i}>
               <Grid item xs={2}>
                 <Skeleton variant="circular" animation="wave">
                   <Avatar />

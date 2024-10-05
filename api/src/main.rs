@@ -24,7 +24,7 @@ use rocket_okapi::{
 use rusty_paseto::prelude::*;
 use sendgrid::v3::Sender;
 use shuttle_rocket::ShuttleRocket;
-use shuttle_secrets::SecretStore;
+use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
 
 #[macro_use]
@@ -161,28 +161,11 @@ const EMAIL_TEMPLATES: [(&str, &str); 3] = [
 #[shuttle_runtime::main]
 async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,
-    #[shuttle_secrets::Secrets] secret_store: SecretStore,
+    #[shuttle_runtime::Secrets] secret_store: SecretStore,
 ) -> ShuttleRocket {
-    // // Set up logging
-    // use sqlx::ConnectOptions;
-    // let pool_options_copy = pool.connect_options().clone();
-    // let new_pool_options = pool_options_copy
-    //     .log_statements(log::LevelFilter::Debug)
-    //     .clone();
-
-    // let pool = match PgPool::connect_with(new_pool_options).await {
-    //     Ok(pool) => pool,
-    //     Err(e) => {
-    //         log::error!("Error connecting to pool after updating options: {}", e);
-
-    //         // Return the original pool
-    //         pool
-    //     }
-    // };
-
     log::info!("Launching application!");
     match sqlx::migrate!().run(&pool).await {
-        Ok(_) => log::info!("Migrations ran successfully"),
+        Ok(()) => log::info!("Migrations ran successfully"),
         Err(e) => log::error!("Error running migrations: {}", e),
     };
 
@@ -222,7 +205,7 @@ async fn rocket(
 
     let mut tera = Tera::default();
     match tera.add_raw_templates(EMAIL_TEMPLATES) {
-        Ok(_) => log::info!("Tera templates added."),
+        Ok(()) => log::info!("Tera templates added."),
         Err(e) => log::error!("Error adding Tera templates: {}", e),
     };
 
@@ -262,6 +245,7 @@ async fn rocket(
                 routes::event_games::patch,
                 routes::profiles::get,
                 routes::profiles::put,
+                routes::profiles::post_games_update,
             ],
         )
         .mount(

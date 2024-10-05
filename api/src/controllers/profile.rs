@@ -2,8 +2,8 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::profile,
-    routes::profiles::{Profile, ProfileSubmit},
+    repositories::{profile, steam_api, user_games},
+    routes::profiles::{Profile, ProfileSubmit, UserGame},
 };
 
 // Implement From for Profile from repositories::profile::Profile
@@ -12,19 +12,53 @@ impl From<crate::repositories::profile::Profile> for Profile {
         Self {
             email: profile.email,
             steam_id: profile.steam_id.to_string(),
+            games: vec![],
+        }
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(error: reqwest::Error) -> Self {
+        Error::Controller(format!("Request error: {error}"))
+    }
+}
+
+impl From<user_games::UserGame> for UserGame {
+    fn from(game: user_games::UserGame) -> Self {
+        Self {
+            appid: game.appid,
+            name: game.name.expect("Name not found"),
+            playtime_forever: game.playtime_forever,
         }
     }
 }
 
 pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
     // Return profile from repository for selected email address
-    match profile::read(pool, email.clone()).await {
-        Ok(Some(profile)) => Ok(profile.into()),
-        Ok(None) => Err(Error::NoData(format!("Profile for {email} not found"))),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get profile due to: {e}"
-        ))),
-    }
+    let mut profile: Profile = match profile::read(pool, email.clone()).await {
+        Ok(Some(profile)) => profile.into(),
+        Ok(None) => return Err(Error::NoData(format!("Profile for {email} not found"))),
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get profile due to: {e}"
+            )))
+        }
+    };
+
+    // Return profile with games from user_games repository
+    profile.games = match user_games::read(pool, email.clone()).await {
+        Ok(user_games) => user_games
+            .into_iter()
+            .map(std::convert::Into::into)
+            .collect(),
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get user games due to: {e}"
+            )))
+        }
+    };
+
+    Ok(profile)
 }
 
 pub async fn edit(
@@ -41,6 +75,44 @@ pub async fn edit(
         Ok(profile) => Ok(Profile::from(profile)),
         Err(e) => Err(Error::Controller(format!(
             "Unable to update profile due to: {e}"
+        ))),
+    }
+}
+
+pub async fn update_user_games(
+    pool: &PgPool,
+    email: String,
+    steam_api_key: &String,
+) -> Result<Profile, Error> {
+    let profile = get(pool, email.clone()).await?;
+
+    let user_games = steam_api::get_owned_games(steam_api_key, &profile.steam_id).await?;
+
+    // Create each user game in the user_games.rs repository
+    for game in user_games.response.games {
+        let user_game = user_games::UserGame {
+            email: email.clone(),
+            appid: game.appid,
+            name: None,
+            playtime_forever: game.playtime_forever,
+        };
+
+        match user_games::create(pool, &user_game).await {
+            Ok(_) => (),
+            Err(e) => {
+                return Err(Error::Controller(format!(
+                    "Unable to create user game due to: {e}"
+                )))
+            }
+        }
+    }
+
+    // Return the updated profile
+    match profile::read(pool, email.clone()).await {
+        Ok(Some(profile)) => Ok(profile.into()),
+        Ok(None) => Err(Error::NoData(format!("Profile for {email} not found"))),
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to get profile due to: {e}"
         ))),
     }
 }

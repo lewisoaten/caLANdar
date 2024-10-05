@@ -2,9 +2,8 @@ use crate::{
     auth::User,
     controllers::{profile, Error},
 };
-
 use rocket::{
-    get, put,
+    get, post, put,
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
@@ -14,6 +13,26 @@ use rocket_okapi::openapi;
 use sqlx::postgres::PgPool;
 
 use super::SchemaExample;
+
+/// The profile user games.
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct UserGame {
+    pub appid: i64,
+    pub name: String,
+    pub playtime_forever: i32,
+}
+
+impl SchemaExample for UserGame {
+    fn example() -> Self {
+        Self {
+            appid: 12345,
+            name: "Test Game".to_string(),
+            playtime_forever: 300,
+        }
+    }
+}
 
 /// The profile response.
 #[derive(Serialize, JsonSchema)]
@@ -25,6 +44,9 @@ pub struct Profile {
 
     /// The Steam ID of the user.
     pub steam_id: String,
+
+    /// The games the user owns.
+    pub games: Vec<UserGame>,
 }
 
 impl SchemaExample for Profile {
@@ -32,6 +54,7 @@ impl SchemaExample for Profile {
         Self {
             email: "test@test.invalid".to_string(),
             steam_id: "12345678901234567".to_string(),
+            games: vec![UserGame::example()],
         }
     }
 }
@@ -88,6 +111,23 @@ pub async fn put(
         ))),
         Err(e) => Err(ProfileUpdateError::InternalServerError(format!(
             "Error updating profile, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(UpdateUserGameError, Unauthorized, InternalServerError);
+
+#[openapi(tag = "Profile")]
+#[post("/profile/games/update")]
+pub async fn post_games_update(
+    pool: &State<PgPool>,
+    steam_api_key: &State<String>,
+    user: User,
+) -> Result<Json<Profile>, UpdateUserGameError> {
+    match profile::update_user_games(pool, user.email.clone(), steam_api_key.inner()).await {
+        Ok(updated_profile) => Ok(Json(updated_profile)),
+        Err(e) => Err(UpdateUserGameError::InternalServerError(format!(
+            "Error updating games, due to: {e}"
         ))),
     }
 }

@@ -16,12 +16,3 @@ pub async fn create(pool: &PgPool) -> Result<SteamGameUpdate, sqlx::Error> {
     .fetch_one(pool)
     .await
 }
-
-pub async fn latest(pool: &PgPool) -> Result<SteamGameUpdate, sqlx::Error> {
-    sqlx::query_as!(
-        SteamGameUpdate,
-        "SELECT id, update_time FROM steam_game_update ORDER BY update_time DESC LIMIT 1",
-    )
-    .fetch_one(pool)
-    .await
-}

@@ -105,7 +105,7 @@ pub async fn send_preauth_email(
     )
     .await
     {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(_) => Err("Error sending email".to_string()),
     }
 }
