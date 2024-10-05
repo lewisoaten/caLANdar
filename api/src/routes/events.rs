@@ -205,7 +205,7 @@ pub async fn delete(
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, EventDeleteError> {
     match event::delete(pool, id).await {
-        Ok(_) => Ok(rocket::response::status::NoContent),
+        Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NoData(_)) => Err(EventDeleteError::NotFound(format!(
             "Event with ID {id} not found"
         ))),

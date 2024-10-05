@@ -142,7 +142,7 @@ pub async fn post(
     )
     .await
     {
-        Ok(_) => (),
+        Ok(()) => (),
         Err(_) => {
             return Err(rocket::response::status::BadRequest(
                 "Error sending invitation email".to_string(),

@@ -8,7 +8,7 @@ dev:
 	(trap 'kill 0' SIGINT; just dev-api & just dev-frontend)
 
 dev-api:
-    cargo shuttle run --working-directory api
+    cargo watch --workdir api --quiet --clear --exec 'shuttle run'
 
 dev-frontend:
     cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start
@@ -17,7 +17,7 @@ migrate-info:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/postgres"
+	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
 	cd api && cargo sqlx migrate info --database-url "${DATABASE_URL}"
 
 migrate-add name:
@@ -27,21 +27,21 @@ migrate-run:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/postgres"
+	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
 	cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
 
 migrate-revert:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/postgres"
+	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
 	cd api && cargo sqlx migrate revert --database-url "${DATABASE_URL}"
 
 update-sqlx:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/postgres"
+	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
 	cd api && cargo sqlx prepare --database-url "${DATABASE_URL}" -- --all-targets --all-features
 
 bacon:

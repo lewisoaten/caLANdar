@@ -108,7 +108,7 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
   return (
     <Timeline>
       {dates.map((bucket_array, idx) => (
-        <TimelineItem>
+        <TimelineItem key={idx}>
           <TimelineOppositeContent
             sx={{ m: "auto 0" }}
             align="right"

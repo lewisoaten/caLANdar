@@ -150,7 +150,7 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
 
     // Delete event
     match event::delete(pool, event_filter_values).await {
-        Ok(_) => Ok(()),
+        Ok(()) => Ok(()),
         Err(e) => Err(Error::Controller(format!(
             "Unable to delete event due to: {e}"
         ))),
