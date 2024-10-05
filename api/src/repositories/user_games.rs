@@ -1,4 +1,4 @@
-use sqlx::PgPool;
+use sqlx::{postgres::PgQueryResult, PgPool};
 
 pub struct UserGame {
     pub email: String,
@@ -7,22 +7,18 @@ pub struct UserGame {
     pub playtime_forever: i32,
 }
 
-pub async fn create(pool: &PgPool, user_game: &UserGame) -> Result<UserGame, sqlx::Error> {
-    sqlx::query_as!(
-        UserGame,
+pub async fn create(pool: &PgPool, user_game: &UserGame) -> Result<PgQueryResult, sqlx::Error> {
+    sqlx::query!(
         r#"
-        WITH inserted_user_game AS (
-            INSERT INTO user_game (email, appid, playtime_forever)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3
-            RETURNING *
-        ) SELECT email, appid, name, playtime_forever FROM inserted_user_game JOIN steam_game USING(appid) WHERE email = $1
+        INSERT INTO user_game (email, appid, playtime_forever)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3
         "#,
         user_game.email,
         user_game.appid,
         user_game.playtime_forever,
     )
-    .fetch_one(pool)
+    .execute(pool)
     .await
 }
 
