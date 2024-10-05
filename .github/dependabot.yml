@@ -47,6 +47,7 @@ updates:
       shuttle:
         patterns:
           - "shuttle*"
+          - "sqlx"
   - package-ecosystem: "docker"
     directory: "/api/"
     schedule:
