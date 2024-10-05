@@ -13,7 +13,6 @@ import { Link } from "react-router-dom";
 import { UserContext } from "../UserProvider";
 import ListItem from "@mui/material/ListItem";
 import Alert from "@mui/material/Alert";
-import Button from "@mui/material/Button";
 import AlertTitle from "@mui/material/AlertTitle";
 
 export default function MenuItems() {
