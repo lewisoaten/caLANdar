@@ -51,7 +51,7 @@
     "@pact-foundation/pact": "13.1.3",
     "@pact-foundation/pact-node": "10.18.0",
     "@testing-library/jest-dom": "6.5.0",
-    "@testing-library/react": "14.3.0",
+    "@testing-library/react": "16.0.1",
     "@testing-library/user-event": "14.5.2",
     "@types/jest": "29.5.13",
     "@types/react": "18.3.11",
