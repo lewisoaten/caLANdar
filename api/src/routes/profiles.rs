@@ -20,6 +20,7 @@ use super::SchemaExample;
 #[schemars(example = "Self::example")]
 pub struct UserGame {
     pub appid: i64,
+    pub name: String,
     pub playtime_forever: i32,
 }
 
@@ -27,6 +28,7 @@ impl SchemaExample for UserGame {
     fn example() -> Self {
         Self {
             appid: 12345,
+            name: "Test Game".to_string(),
             playtime_forever: 300,
         }
     }
@@ -44,7 +46,7 @@ pub struct Profile {
     pub steam_id: String,
 
     /// The games the user owns.
-    pub games: Option<Vec<UserGame>>,
+    pub games: Vec<UserGame>,
 }
 
 impl SchemaExample for Profile {
@@ -52,7 +54,7 @@ impl SchemaExample for Profile {
         Self {
             email: "test@test.invalid".to_string(),
             steam_id: "12345678901234567".to_string(),
-            games: Some(vec![UserGame::example()]),
+            games: vec![UserGame::example()],
         }
     }
 }
@@ -115,7 +117,7 @@ pub async fn put(
 
 custom_errors!(UpdateUserGameError, Unauthorized, InternalServerError);
 
-#[openapi(tag = "Games")]
+#[openapi(tag = "Profile")]
 #[post("/profile/games/update")]
 pub async fn post_games_update(
     pool: &State<PgPool>,

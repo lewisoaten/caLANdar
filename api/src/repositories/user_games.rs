@@ -3,6 +3,7 @@ use sqlx::PgPool;
 pub struct UserGame {
     pub email: String,
     pub appid: i64,
+    pub name: Option<String>,
     pub playtime_forever: i32,
 }
 
@@ -10,10 +11,12 @@ pub async fn create(pool: &PgPool, user_game: &UserGame) -> Result<UserGame, sql
     sqlx::query_as!(
         UserGame,
         r#"
-        INSERT INTO user_games (email, appid, playtime_forever)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3
-        RETURNING *
+        WITH inserted_user_game AS (
+            INSERT INTO user_game (email, appid, playtime_forever)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3
+            RETURNING *
+        ) SELECT email, appid, name, playtime_forever FROM inserted_user_game JOIN steam_game USING(appid) WHERE email = $1
         "#,
         user_game.email,
         user_game.appid,
@@ -27,7 +30,7 @@ pub async fn read(pool: &PgPool, email: String) -> Result<Vec<UserGame>, sqlx::E
     sqlx::query_as!(
         UserGame,
         r#"
-        SELECT email, appid, playtime_forever FROM user_games WHERE email = $1
+        SELECT email, appid, name, playtime_forever FROM user_game JOIN steam_game USING(appid) WHERE email = $1
         "#,
         email,
     )

@@ -1,2 +1,2 @@
 -- Add down migration script here
-DROP TABLE user_games;
+DROP TABLE user_game;

@@ -26,7 +26,7 @@ pub async fn steam_game_update_v2(
     _user: AdminUser,
 ) -> Result<Json<()>, UpdateGameError> {
     match game::update(pool, steam_api_key.inner()).await {
-        Ok(_) => Ok(Json(())),
+        Ok(()) => Ok(Json(())),
         Err(e) => Err(UpdateGameError::InternalServerError(format!(
             "Error updating games, due to: {e}"
         ))),

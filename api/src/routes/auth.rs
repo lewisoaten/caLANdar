@@ -59,7 +59,7 @@ pub async fn login(
     )
     .await
     {
-        Ok(_) => Ok(Json(LoginResponse {})),
+        Ok(()) => Ok(Json(LoginResponse {})),
         Err(_) => Err(rocket::response::status::BadRequest(
             "Error sending email".to_string(),
         )),
@@ -138,7 +138,7 @@ pub fn verify_email(
         }
     };
 
-    let admins = vec!["lewis@oaten.name", "marshallx7a@gmail.com"];
+    let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
 
     let is_admin = admins.contains(&typed_token.sub.as_str());
 

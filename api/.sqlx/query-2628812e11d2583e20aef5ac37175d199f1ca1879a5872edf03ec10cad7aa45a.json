@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH inserted_user_game AS (\n            INSERT INTO user_game (email, appid, playtime_forever)\n            VALUES ($1, $2, $3)\n            ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3\n            RETURNING *\n        ) SELECT email, appid, name, playtime_forever FROM inserted_user_game JOIN steam_game USING(appid) WHERE email = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "appid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "playtime_forever",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2628812e11d2583e20aef5ac37175d199f1ca1879a5872edf03ec10cad7aa45a"
+}

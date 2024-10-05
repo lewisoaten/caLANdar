@@ -85,7 +85,7 @@ const Event = () => {
         {events.map((event) => {
           if (event.timeEnd.isAfter(moment()) || showOldEvents) {
             return (
-              <Grid item xs={4}>
+              <Grid item xs={4} key={event.id}>
                 <EventCard event={event} />
               </Grid>
             );

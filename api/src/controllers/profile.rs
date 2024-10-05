@@ -12,7 +12,7 @@ impl From<crate::repositories::profile::Profile> for Profile {
         Self {
             email: profile.email,
             steam_id: profile.steam_id.to_string(),
-            games: None,
+            games: vec![],
         }
     }
 }
@@ -27,6 +27,7 @@ impl From<user_games::UserGame> for UserGame {
     fn from(game: user_games::UserGame) -> Self {
         Self {
             appid: game.appid,
+            name: game.name.expect("Name not found"),
             playtime_forever: game.playtime_forever,
         }
     }
@@ -46,12 +47,10 @@ pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
 
     // Return profile with games from user_games repository
     profile.games = match user_games::read(pool, email.clone()).await {
-        Ok(user_games) => Some(
-            user_games
-                .into_iter()
-                .map(std::convert::Into::into)
-                .collect(),
-        ),
+        Ok(user_games) => user_games
+            .into_iter()
+            .map(std::convert::Into::into)
+            .collect(),
         Err(e) => {
             return Err(Error::Controller(format!(
                 "Unable to get user games due to: {e}"
@@ -94,6 +93,7 @@ pub async fn update_user_games(
         let user_game = user_games::UserGame {
             email: email.clone(),
             appid: game.appid,
+            name: None,
             playtime_forever: game.playtime_forever,
         };
 
