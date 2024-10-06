@@ -246,7 +246,6 @@ async fn rocket(
                 routes::profiles::get,
                 routes::profiles::put,
                 routes::profiles::post_games_update,
-                routes::gamers::get_all,
             ],
         )
         .mount(

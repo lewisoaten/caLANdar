@@ -12,7 +12,6 @@ pub enum Response {
 pub struct Invitation {
     pub event_id: i32,
     pub email: String,
-    pub avatar_url: Option<String>, // For some reason this has to be optional, even though it is explicitly set in the query
     pub handle: Option<String>,
     pub invited_at: DateTime<Utc>,
     pub responded_at: Option<DateTime<Utc>>,
@@ -38,16 +37,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Invitation>, sq
     sqlx::query_as!(
         Invitation,
         r#"
-        SELECT
-            event_id,
-            email,
-            'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url,
-            handle,
-            invited_at,
-            responded_at,
-            response AS "response: _",
-            attendance,
-            last_modified
+        SELECT event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         FROM invitation
         WHERE (event_id = $1 OR $2)
         AND (email = $3 OR $4)
@@ -74,24 +64,10 @@ pub async fn edit(
         Invitation,
         r#"
         UPDATE invitation
-        SET
-            handle = $3,
-            response = $4,
-            attendance = $5,
-            responded_at = NOW(),
-            last_modified = NOW()
+        SET handle = $3, response = $4, attendance = $5, responded_at = NOW(), last_modified = NOW()
         WHERE event_id = $1
         AND email = $2
-        RETURNING
-            event_id,
-            email,
-            'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url,
-            handle,
-            invited_at,
-            responded_at,
-            response AS "response: _",
-            attendance,
-            last_modified
+        RETURNING event_id, email, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         "#,
         event_id,
         email,
