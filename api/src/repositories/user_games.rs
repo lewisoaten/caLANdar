@@ -1,22 +1,29 @@
+use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgQueryResult, PgPool};
 
 pub struct UserGame {
     pub email: String,
     pub appid: i64,
-    pub name: Option<String>,
+    pub name: String,
     pub playtime_forever: i32,
+    pub last_modified: DateTime<Utc>,
 }
 
-pub async fn create(pool: &PgPool, user_game: &UserGame) -> Result<PgQueryResult, sqlx::Error> {
+pub async fn create(
+    pool: &PgPool,
+    email: String,
+    appid: i64,
+    playtime_forever: i32,
+) -> Result<PgQueryResult, sqlx::Error> {
     sqlx::query!(
         r#"
-        INSERT INTO user_game (email, appid, playtime_forever)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3
+        INSERT INTO user_game (email, appid, playtime_forever, last_modified)
+        VALUES ($1, $2, $3, NOW())
+        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3, last_modified = NOW()
         "#,
-        user_game.email,
-        user_game.appid,
-        user_game.playtime_forever,
+        email,
+        appid,
+        playtime_forever,
     )
     .execute(pool)
     .await
@@ -26,7 +33,7 @@ pub async fn read(pool: &PgPool, email: String) -> Result<Vec<UserGame>, sqlx::E
     sqlx::query_as!(
         UserGame,
         r#"
-        SELECT email, appid, name, playtime_forever FROM user_game JOIN steam_game USING(appid) WHERE email = $1
+        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE email = $1
         "#,
         email,
     )

@@ -9,6 +9,7 @@ import Event from "./components/Event";
 import EventManagement from "./components/EventManagement";
 import ProtectedRoutes from "./ProtectedRoutes";
 import EventsAdmin from "./components/EventsAdmin";
+import GamersAdmin from "./components/GamersAdmin";
 
 const Views = () => {
   return (
@@ -25,6 +26,7 @@ const Views = () => {
           <Route path="" element={<EventsAdmin />} />
           <Route path=":id" element={<EventManagement />} />
         </Route>
+        <Route path="/admin/gamers" element={<GamersAdmin />} />
         <Route path="/account" element={<Account />} />
       </Route>
     </SentryRoutes>
