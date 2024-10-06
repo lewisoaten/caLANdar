@@ -17,7 +17,7 @@ use sqlx::postgres::PgPool;
 use super::SchemaExample;
 
 /// The response for the `GET /events` endpoint.
-#[derive(Serialize, JsonSchema)]
+#[derive(Clone, Serialize, JsonSchema, Hash, Eq, PartialEq)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 #[schemars(example = "Self::example")]
 pub struct Event {

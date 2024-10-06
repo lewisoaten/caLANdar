@@ -16,7 +16,7 @@ use sqlx::postgres::PgPool;
 use super::SchemaExample;
 
 /// The profile user games.
-#[derive(Serialize, JsonSchema)]
+#[derive(Clone, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 #[schemars(example = "Self::example")]
 pub struct UserGame {
