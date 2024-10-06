@@ -16,8 +16,6 @@ import {
   GridColDef,
   GridRowParams,
   GridActionsCellItem,
-  GridValueFormatterParams,
-  GridValueGetterParams,
   GridRenderCellParams,
   GridRowId,
 } from "@mui/x-data-grid";
@@ -26,6 +24,7 @@ import { useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
+import { GridApiCommunity } from "@mui/x-data-grid/models/api/gridApiCommunity";
 
 interface GridCellExpandProps {
   value: string;
@@ -198,12 +197,17 @@ export default function EventTable(props: EventTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (params: GridValueFormatterParams<moment.Moment>) => {
-        if (params.value == null) {
+      valueFormatter: (
+        value: moment.Moment,
+        row: any,
+        column: GridColDef<any, moment.Moment, string>,
+        apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        if (value == null) {
           return "";
         }
 
-        return params.value.calendar();
+        return value.calendar();
       },
     },
     {
@@ -212,21 +216,31 @@ export default function EventTable(props: EventTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueGetter: (params: GridValueGetterParams) => {
-        const timeBegin = moment(params.row.timeBegin);
-        const timeEnd = moment(params.row.timeEnd);
+      valueGetter: (
+        value: string,
+        row: any,
+        column: GridColDef<any, string, any>,
+        apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        const timeBegin = moment(row.timeBegin);
+        const timeEnd = moment(row.timeEnd);
         if (timeBegin == null || timeEnd == null) {
           return "";
         }
 
         return timeEnd.endOf("day").diff(timeBegin.startOf("day"), "days");
       },
-      valueFormatter: (params: GridValueFormatterParams<number>) => {
-        if (params.value == null) {
+      valueFormatter: (
+        value: number,
+        row: any,
+        column: GridColDef<any, number, string>,
+        apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        if (value == null) {
           return "";
         }
 
-        return `${params.value} days`;
+        return `${value} days`;
       },
     },
     {
