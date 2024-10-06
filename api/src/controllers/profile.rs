@@ -27,8 +27,9 @@ impl From<user_games::UserGame> for UserGame {
     fn from(game: user_games::UserGame) -> Self {
         Self {
             appid: game.appid,
-            name: game.name.expect("Name not found"),
+            name: game.name,
             playtime_forever: game.playtime_forever,
+            last_modified: game.last_modified,
         }
     }
 }
@@ -90,14 +91,7 @@ pub async fn update_user_games(
 
     // Create each user game in the user_games.rs repository
     for game in user_games.response.games {
-        let user_game = user_games::UserGame {
-            email: email.clone(),
-            appid: game.appid,
-            name: None,
-            playtime_forever: game.playtime_forever,
-        };
-
-        match user_games::create(pool, &user_game).await {
+        match user_games::create(pool, email.clone(), game.appid, game.playtime_forever).await {
             Ok(_) => (),
             Err(e) => {
                 return Err(Error::Controller(format!(
