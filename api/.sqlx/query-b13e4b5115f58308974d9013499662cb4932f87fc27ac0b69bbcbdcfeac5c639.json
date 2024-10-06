@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO user_game (email, appid, playtime_forever)\n        VALUES ($1, $2, $3)\n        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b13e4b5115f58308974d9013499662cb4932f87fc27ac0b69bbcbdcfeac5c639"
+}

@@ -2,7 +2,6 @@ use crate::{
     auth::User,
     controllers::{profile, Error},
 };
-use chrono::{DateTime, Utc};
 use rocket::{
     get, post, put,
     serde::{json::Json, Deserialize, Serialize},
@@ -16,14 +15,13 @@ use sqlx::postgres::PgPool;
 use super::SchemaExample;
 
 /// The profile user games.
-#[derive(Clone, Serialize, JsonSchema)]
+#[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 #[schemars(example = "Self::example")]
 pub struct UserGame {
     pub appid: i64,
     pub name: String,
     pub playtime_forever: i32,
-    pub last_modified: DateTime<Utc>,
 }
 
 impl SchemaExample for UserGame {
@@ -32,7 +30,6 @@ impl SchemaExample for UserGame {
             appid: 12345,
             name: "Test Game".to_string(),
             playtime_forever: 300,
-            last_modified: Utc::now(),
         }
     }
 }

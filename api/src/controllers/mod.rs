@@ -4,7 +4,6 @@ pub mod event;
 pub mod event_invitation;
 pub mod game;
 pub mod game_suggestion;
-pub mod gamer;
 pub mod profile;
 
 // Custom controller error
