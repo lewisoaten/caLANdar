@@ -5,6 +5,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import PeopleIcon from "@mui/icons-material/People";
+import AccountBoxIcon from "@mui/icons-material/AccountBox";
 import LoginIcon from "@mui/icons-material/Login";
 import EventIcon from "@mui/icons-material/Event";
 import Divider from "@mui/material/Divider";
@@ -30,7 +31,7 @@ export default function MenuItems() {
           </ListItemButton>
           <ListItemButton component={Link} to="/account">
             <ListItemIcon>
-              <PeopleIcon />
+              <AccountBoxIcon />
             </ListItemIcon>
             <ListItemText primary="Account" />
           </ListItemButton>
@@ -62,6 +63,12 @@ export default function MenuItems() {
               <EventIcon />
             </ListItemIcon>
             <ListItemText primary="Event Management" />
+          </ListItemButton>
+          <ListItemButton component={Link} to="/admin/gamers">
+            <ListItemIcon>
+              <PeopleIcon />
+            </ListItemIcon>
+            <ListItemText primary="Gamer Management" />
           </ListItemButton>
         </React.Fragment>
       )}

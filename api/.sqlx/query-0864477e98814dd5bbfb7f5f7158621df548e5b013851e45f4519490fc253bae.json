@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE invitation\n        SET handle = $3, response = $4, attendance = $5, responded_at = NOW(), last_modified = NOW()\n        WHERE event_id = $1\n        AND email = $2\n        RETURNING event_id, email, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        ",
+  "query": "\n        UPDATE invitation\n        SET\n            handle = $3,\n            response = $4,\n            attendance = $5,\n            responded_at = NOW(),\n            last_modified = NOW()\n        WHERE event_id = $1\n        AND email = $2\n        RETURNING\n            event_id,\n            email,\n            'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url,\n            handle,\n            invited_at,\n            responded_at,\n            response AS \"response: _\",\n            attendance,\n            last_modified\n        ",
   "describe": {
     "columns": [
       {
@@ -15,21 +15,26 @@
       },
       {
         "ordinal": 2,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
         "name": "handle",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "invited_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "responded_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "response: _",
         "type_info": {
           "Custom": {
@@ -45,12 +50,12 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "attendance",
         "type_info": "Bytea"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "last_modified",
         "type_info": "Timestamptz"
       }
@@ -78,6 +83,7 @@
     "nullable": [
       false,
       false,
+      null,
       true,
       false,
       true,
@@ -86,5 +92,5 @@
       false
     ]
   },
-  "hash": "76d42a6321b6e943584e80016a7459c248dc8ec82aed54402df1b4dcd80409ba"
+  "hash": "0864477e98814dd5bbfb7f5f7158621df548e5b013851e45f4519490fc253bae"
 }

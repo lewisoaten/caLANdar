@@ -2,3 +2,4 @@
 .vscode/
 *.session.sql
 .direnv/
+node_modules
