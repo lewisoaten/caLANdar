@@ -62,5 +62,9 @@
     "react-scripts": "5.0.1",
     "ts-jest": "29.2.5",
     "whatwg-fetch": "3.6.20"
+  },
+  "_comment": "Override required due to old react-scripts version. See: https://github.com/facebook/create-react-app/issues/13080#issuecomment-1487975896",
+  "overrides": {
+    "typescript": "5.6.2"
   }
 }
