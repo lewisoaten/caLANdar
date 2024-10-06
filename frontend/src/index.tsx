@@ -17,23 +17,15 @@ import theme from "./theme";
 Sentry.init({
   dsn: "https://923bbfe5a18542a2abce46873d376d65@o159962.ingest.sentry.io/4504028795371520",
   integrations: [
-    new Sentry.BrowserProfilingIntegration(),
-    new Sentry.BrowserTracing({
-      // See docs for support of different versions of variation of react router
-      // https://docs.sentry.io/platforms/javascript/guides/react/configuration/integrations/react-router/
-      routingInstrumentation: Sentry.reactRouterV6Instrumentation(
-        React.useEffect,
-        useLocation,
-        useNavigationType,
-        createRoutesFromChildren,
-        matchRoutes,
-      ),
+    Sentry.browserProfilingIntegration(),
+    Sentry.reactRouterV6BrowserTracingIntegration({
+      useEffect: React.useEffect,
+      useLocation,
+      useNavigationType,
+      createRoutesFromChildren,
+      matchRoutes,
     }),
-    new Sentry.Replay({
-      // Additional SDK configuration goes in here, for example:
-      maskAllText: false,
-      blockAllMedia: true,
-    }),
+    Sentry.replayIntegration(),
   ],
 
   beforeSend(event) {
