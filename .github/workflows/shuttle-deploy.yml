@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/deploy-action@v0.0.3
+      - uses: shuttle-hq/deploy-action@v2
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
           working-directory: api
