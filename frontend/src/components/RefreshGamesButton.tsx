@@ -6,16 +6,21 @@ import {
 } from "@mui/material";
 import UpdateIcon from "@mui/icons-material/Update";
 import TaskAltIcon from "@mui/icons-material/TaskAlt";
-import React, { useContext, useState } from "react";
+import React, { useContext } from "react";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 
-export default function RefreshGamesButton() {
+interface RefreshGamesButtonProps {
+  loadingState: [boolean, React.Dispatch<React.SetStateAction<boolean>>];
+  doneState: [boolean, React.Dispatch<React.SetStateAction<boolean>>];
+}
+
+export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
-  const [loading, setLoading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [loading, setLoading] = props.loadingState;
+  const [done, setDone] = props.doneState;
 
   function handleClick() {
     setLoading(true);
@@ -48,7 +53,7 @@ export default function RefreshGamesButton() {
     <ListItemButton onClick={handleClick} disabled={loading}>
       <ListItemIcon>
         {!loading && !done && <UpdateIcon />}
-        {loading && !done && (
+        {loading && (
           <React.Fragment>
             <svg width={0} height={0}>
               <defs>

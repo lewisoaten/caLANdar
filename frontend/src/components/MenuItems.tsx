@@ -17,9 +17,19 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
 
-export default function MenuItems() {
-  const { loggedIn, isAdmin } = useContext(UserContext);
+interface MenuItemsProps {
+  updateButtonLoadingState: [
+    boolean,
+    React.Dispatch<React.SetStateAction<boolean>>,
+  ];
+  updateButtonDoneState: [
+    boolean,
+    React.Dispatch<React.SetStateAction<boolean>>,
+  ];
+}
 
+export default function MenuItems(props: MenuItemsProps) {
+  const { loggedIn, isAdmin } = useContext(UserContext);
   return (
     <List component="nav">
       {loggedIn ? (
@@ -71,7 +81,10 @@ export default function MenuItems() {
             </ListItemIcon>
             <ListItemText primary="Gamer Management" />
           </ListItemButton>
-          <RefreshGamesButton />
+          <RefreshGamesButton
+            loadingState={props.updateButtonLoadingState}
+            doneState={props.updateButtonDoneState}
+          />
         </React.Fragment>
       )}
     </List>

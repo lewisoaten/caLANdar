@@ -12,4 +12,5 @@ jobs:
       - uses: shuttle-hq/deploy-action@v2
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
+          project-id: proj_01H1T42300G97DJDRF8PAYQVYF
           working-directory: api
