@@ -9,7 +9,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/deploy-action@v0.0.3
+      - uses: shuttle-hq/deploy-action@a499e4ebcb4b486a0e34d9af9ee2f28e7ee16501 # Was v0.0.3
         with:
           deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
           project-id: proj_01H1T42300G97DJDRF8PAYQVYF
