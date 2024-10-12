@@ -15,6 +15,7 @@ import { UserContext } from "../UserProvider";
 import ListItem from "@mui/material/ListItem";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
+import RefreshGamesButton from "./RefreshGamesButton";
 
 export default function MenuItems() {
   const { loggedIn, isAdmin } = useContext(UserContext);
@@ -70,6 +71,7 @@ export default function MenuItems() {
             </ListItemIcon>
             <ListItemText primary="Gamer Management" />
           </ListItemButton>
+          <RefreshGamesButton />
         </React.Fragment>
       )}
     </List>
