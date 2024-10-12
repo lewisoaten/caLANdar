@@ -13,6 +13,7 @@ import AppBar from "@mui/material/AppBar";
 import MenuIcon from "@mui/icons-material/Menu";
 import { ReactComponent as CalandarIcon } from "../calandar.svg";
 import MenuItems from "./MenuItems";
+import { useState } from "react";
 
 const drawerWidth: number = 240;
 
@@ -21,7 +22,9 @@ export declare interface AppProps {
 }
 
 function ResponsiveDrawer(props: AppProps) {
-  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const menuUpdateButtonLoadingState = useState(false);
+  const menuUpdateButtonDoneState = useState(false);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -91,7 +94,10 @@ function ResponsiveDrawer(props: AppProps) {
             },
           }}
         >
-          <MenuItems />
+          <MenuItems
+            updateButtonLoadingState={menuUpdateButtonLoadingState}
+            updateButtonDoneState={menuUpdateButtonDoneState}
+          />
         </Drawer>
         <Drawer
           variant="permanent"
@@ -104,7 +110,10 @@ function ResponsiveDrawer(props: AppProps) {
           }}
           open
         >
-          <MenuItems />
+          <MenuItems
+            updateButtonLoadingState={menuUpdateButtonLoadingState}
+            updateButtonDoneState={menuUpdateButtonDoneState}
+          />
         </Drawer>
       </Box>
       <Box

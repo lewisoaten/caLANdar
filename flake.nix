@@ -26,6 +26,7 @@
           nativeBuildInputs = with pkgs; [
             rustToolchain
             cargo-watch
+            cargo-shuttle
             sqlx-cli
             pkg-config
             postgresql
