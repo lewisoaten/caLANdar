@@ -47,11 +47,11 @@ pub struct SteamAPIOwnedGame {
     pub appid: i64,
     pub playtime_2weeks: Option<i32>,
     pub playtime_forever: i32,
-    pub playtime_windows_forever: i32,
-    pub playtime_mac_forever: i32,
-    pub playtime_linux_forever: i32,
-    pub playtime_disconnected: i32,
-    pub rtime_last_played: i64,
+    pub playtime_windows_forever: Option<i32>,
+    pub playtime_mac_forever: Option<i32>,
+    pub playtime_linux_forever: Option<i32>,
+    pub playtime_disconnected: Option<i32>,
+    pub rtime_last_played: Option<i64>,
 }
 
 #[derive(Clone, Deserialize)]
