@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE email = $1\n        ",
+  "query": "\n        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE LOWER(email) = LOWER($1)\n        ",
   "describe": {
     "columns": [
       {
@@ -42,5 +42,5 @@
       false
     ]
   },
-  "hash": "bcd291c3c577cc6ac03a88ca090c6702080ce09ffb711f22d944969043fd103b"
+  "hash": "100f8ea802319d85629c733a677ff10a1ec2669d702ba1063bf8473a9e6d679d"
 }

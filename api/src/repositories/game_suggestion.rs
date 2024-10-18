@@ -90,7 +90,7 @@ pub async fn filter(
         LEFT JOIN event_game_vote AS self_votes
             ON event_game.event_id = self_votes.event_id
             AND event_game.game_id = self_votes.game_id
-            AND self_votes.email = $5
+            AND LOWER(self_votes.email) = LOWER($5)
         LEFT JOIN event_game_vote AS all_votes
             ON event_game.event_id = all_votes.event_id
             AND event_game.game_id = all_votes.game_id
