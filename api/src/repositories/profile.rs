@@ -11,7 +11,7 @@ pub async fn read(pool: &PgPool, email: String) -> Result<Option<Profile>, sqlx:
     sqlx::query_as!(
         Profile,
         r#"
-        SELECT * FROM profiles WHERE email = $1
+        SELECT * FROM profiles WHERE LOWER(email) = LOWER($1)
         "#,
         email,
     )

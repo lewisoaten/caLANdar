@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE invitation\n        SET\n            handle = $3,\n            response = $4,\n            attendance = $5,\n            responded_at = NOW(),\n            last_modified = NOW()\n        WHERE event_id = $1\n        AND email = $2\n        RETURNING\n            event_id,\n            email,\n            'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url,\n            handle,\n            invited_at,\n            responded_at,\n            response AS \"response: _\",\n            attendance,\n            last_modified\n        ",
+  "query": "SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id = $1 AND LOWER(email) = LOWER($2)",
   "describe": {
     "columns": [
       {
@@ -63,21 +63,7 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Text",
-        "Varchar",
-        {
-          "Custom": {
-            "name": "invitation_response",
-            "kind": {
-              "Enum": [
-                "yes",
-                "no",
-                "maybe"
-              ]
-            }
-          }
-        },
-        "Bytea"
+        "Text"
       ]
     },
     "nullable": [
@@ -92,5 +78,5 @@
       false
     ]
   },
-  "hash": "0864477e98814dd5bbfb7f5f7158621df548e5b013851e45f4519490fc253bae"
+  "hash": "3d2fa128d815aae000fcdd79c2375acdbe81e1c96c9536c2d276a7292bfa84ab"
 }

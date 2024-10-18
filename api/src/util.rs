@@ -120,7 +120,7 @@ pub async fn is_attending_event(
         InvitationsResponse,
         r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
         FROM invitation
-        WHERE event_id=$1 AND email=$2"#,
+        WHERE event_id = $1 AND LOWER(email) = LOWER($2)"#,
         event_id,
         email,
     )

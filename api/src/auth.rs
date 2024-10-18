@@ -89,9 +89,10 @@ fn authorise_paseto_header(
                 }
             };
 
+            // Also specified at the end of the file
             let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
 
-            if must_be_admin && !admins.contains(&typed_token.sub.as_str()) {
+            if must_be_admin && !admins.contains(&typed_token.sub.to_lowercase().as_str()) {
                 return Err(UserError::TokenError);
             }
 

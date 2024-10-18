@@ -106,6 +106,54 @@ pub struct PlayerSummariesResponse {
     pub players: Vec<PlayerSummary>,
 }
 
+//   {
+//     "response": {
+//       "players": [
+//         {
+//           "steamid": "76561197990048341",
+//           "communityvisibilitystate": 3,
+//           "profilestate": 1,
+//           "personaname": "Caecus",
+//           "profileurl": "https://steamcommunity.com/id/caecus/",
+//           "avatar": "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb.jpg",
+//           "avatarmedium": "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_medium.jpg",
+//           "avatarfull": "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
+//           "avatarhash": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb",
+//           "lastlogoff": 1729005871,
+//           "personastate": 0,
+//           "realname": "Lewis Oaten",
+//           "primaryclanid": "103582791474246703",
+//           "timecreated": 1180017502,
+//           "personastateflags": 0,
+//           "loccountrycode": "GB"
+//         }
+//       ]
+//     }
+//   }
+
+//   {
+//     "response": {
+//       "players": [
+//         {
+//           "steamid": "76561197971093005",
+//           "communityvisibilitystate": 3,
+//           "profilestate": 1,
+//           "personaname": "oatman",
+//           "profileurl": "https://steamcommunity.com/id/thelastanomaly/",
+//           "avatar": "https://avatars.steamstatic.com/71c4d1d08939b9ae3ac8d71380a1c1588d22b51b.jpg",
+//           "avatarmedium": "https://avatars.steamstatic.com/71c4d1d08939b9ae3ac8d71380a1c1588d22b51b_medium.jpg",
+//           "avatarfull": "https://avatars.steamstatic.com/71c4d1d08939b9ae3ac8d71380a1c1588d22b51b_full.jpg",
+//           "avatarhash": "71c4d1d08939b9ae3ac8d71380a1c1588d22b51b",
+//           "lastlogoff": 1728939320,
+//           "personastate": 1,
+//           "primaryclanid": "103582791429521408",
+//           "timecreated": 1101315166,
+//           "personastateflags": 0,
+//           "loccountrycode": "GB"
+//         }
+//       ]
+//     }
+//   }
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct PlayerSummary {

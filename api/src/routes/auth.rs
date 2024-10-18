@@ -138,9 +138,10 @@ pub fn verify_email(
         }
     };
 
+    // Also specified in `fn authorise_paseto_header`
     let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
 
-    let is_admin = admins.contains(&typed_token.sub.as_str());
+    let is_admin = admins.contains(&typed_token.sub.to_lowercase().as_str());
 
     Ok(Json(VerifyEmailResponse {
         token,

@@ -19,7 +19,7 @@ pub async fn create(
         r#"
         INSERT INTO user_game (email, appid, playtime_forever, last_modified)
         VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (email, appid) DO UPDATE SET playtime_forever = $3, last_modified = NOW()
+        ON CONFLICT (LOWER(email), appid) DO UPDATE SET playtime_forever = $3, last_modified = NOW()
         "#,
         email,
         appid,
@@ -33,7 +33,7 @@ pub async fn read(pool: &PgPool, email: String) -> Result<Vec<UserGame>, sqlx::E
     sqlx::query_as!(
         UserGame,
         r#"
-        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE email = $1
+        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE LOWER(email) = LOWER($1)
         "#,
         email,
     )

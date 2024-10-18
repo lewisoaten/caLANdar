@@ -50,7 +50,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Invitation>, sq
             last_modified
         FROM invitation
         WHERE (event_id = $1 OR $2)
-        AND (email = $3 OR $4)
+        AND (LOWER(email) = LOWER($3) OR $4)
         "#,
         event_id.0,
         event_id.1,
@@ -81,7 +81,7 @@ pub async fn edit(
             responded_at = NOW(),
             last_modified = NOW()
         WHERE event_id = $1
-        AND email = $2
+        AND LOWER(email) = LOWER($2)
         RETURNING
             event_id,
             email,

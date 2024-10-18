@@ -164,7 +164,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
     if (!popoverOpen) {
       const email = event?.currentTarget.id.replace("attendance-", "");
-      const invitation = invitations.find((x) => x.email === email);
+      const invitation = invitations.find(
+        (x) => x.email.toLowerCase() === email.toLowerCase(),
+      );
       if (invitation && invitation.attendance) {
         setPopoverInvitation(invitation);
         setPopoverAnchorEl(event.currentTarget);

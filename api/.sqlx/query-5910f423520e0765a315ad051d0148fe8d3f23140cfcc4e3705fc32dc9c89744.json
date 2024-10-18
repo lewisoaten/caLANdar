@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS \"response: _\", attendance, last_modified\n        FROM invitation\n        WHERE event_id=$1 AND email=$2",
+  "query": "\n        SELECT\n            event_id,\n            email,\n            'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url,\n            handle,\n            invited_at,\n            responded_at,\n            response AS \"response: _\",\n            attendance,\n            last_modified\n        FROM invitation\n        WHERE (event_id = $1 OR $2)\n        AND (LOWER(email) = LOWER($3) OR $4)\n        ",
   "describe": {
     "columns": [
       {
@@ -63,7 +63,9 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Text"
+        "Bool",
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
@@ -78,5 +80,5 @@
       false
     ]
   },
-  "hash": "fae0948b43c51b9ad9932d0b8ab9f295c4712a3fec411cddab48e0a6abe33bf7"
+  "hash": "5910f423520e0765a315ad051d0148fe8d3f23140cfcc4e3705fc32dc9c89744"
 }

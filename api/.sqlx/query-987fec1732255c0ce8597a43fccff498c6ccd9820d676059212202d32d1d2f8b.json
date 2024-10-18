@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            event_game.event_id AS event_id,\n            event_game.game_id AS game_id,\n            steam_game.name AS game_name,\n            event_game.user_email AS user_email,\n            self_votes.vote AS \"self_vote: _\",\n            count(all_votes.*) AS votes,\n            event_game.requested_at AS requested_at,\n            event_game.last_modified AS last_modified\n        FROM event_game\n        INNER JOIN steam_game\n            ON event_game.game_id = steam_game.appid\n        LEFT JOIN event_game_vote AS self_votes\n            ON event_game.event_id = self_votes.event_id\n            AND event_game.game_id = self_votes.game_id\n            AND self_votes.email = $5\n        LEFT JOIN event_game_vote AS all_votes\n            ON event_game.event_id = all_votes.event_id\n            AND event_game.game_id = all_votes.game_id\n            AND all_votes.vote = 'yes'::vote\n        WHERE (event_game.event_id = $1 OR $2)\n        AND (event_game.game_id = $3 OR $4)\n        GROUP BY event_game.event_id, event_game.game_id, steam_game.name, self_votes.vote, event_game.requested_at, event_game.last_modified\n        ",
+  "query": "\n        SELECT\n            event_game.event_id AS event_id,\n            event_game.game_id AS game_id,\n            steam_game.name AS game_name,\n            event_game.user_email AS user_email,\n            self_votes.vote AS \"self_vote: _\",\n            count(all_votes.*) AS votes,\n            event_game.requested_at AS requested_at,\n            event_game.last_modified AS last_modified\n        FROM event_game\n        INNER JOIN steam_game\n            ON event_game.game_id = steam_game.appid\n        LEFT JOIN event_game_vote AS self_votes\n            ON event_game.event_id = self_votes.event_id\n            AND event_game.game_id = self_votes.game_id\n            AND LOWER(self_votes.email) = LOWER($5)\n        LEFT JOIN event_game_vote AS all_votes\n            ON event_game.event_id = all_votes.event_id\n            AND event_game.game_id = all_votes.game_id\n            AND all_votes.vote = 'yes'::vote\n        WHERE (event_game.event_id = $1 OR $2)\n        AND (event_game.game_id = $3 OR $4)\n        GROUP BY event_game.event_id, event_game.game_id, steam_game.name, self_votes.vote, event_game.requested_at, event_game.last_modified\n        ",
   "describe": {
     "columns": [
       {
@@ -75,5 +75,5 @@
       false
     ]
   },
-  "hash": "91f959da4afee4d93e08fb9f3459a91802ea69f08e5373f523cf56eff8df9641"
+  "hash": "987fec1732255c0ce8597a43fccff498c6ccd9820d676059212202d32d1d2f8b"
 }
