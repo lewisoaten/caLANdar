@@ -18,7 +18,7 @@ export default function EventCard(props: EventCardProps) {
   const { event } = props;
 
   // use default image if none is provided
-  var image = "/static/lan_party_image.jpg";
+  let image = "/static/lan_party_image.jpg";
   if (event.image) {
     image = "data:image/jpeg;base64," + event.image;
   }

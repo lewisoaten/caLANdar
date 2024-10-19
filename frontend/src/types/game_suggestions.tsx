@@ -6,6 +6,16 @@ export enum GameVote {
   no = "no", // Not used for now
 }
 
+export type Gamer = {
+  avatarUrl: string | null;
+  handle: string | null;
+};
+
+export const defaultGamer: Gamer = {
+  avatarUrl: null,
+  handle: null,
+};
+
 export type GameSuggestion = {
   appid: number;
   name: string;
@@ -14,6 +24,9 @@ export type GameSuggestion = {
   suggestion_last_modified: moment.Moment;
   self_vote: GameVote;
   votes: number;
+  gamer_owned: Gamer[];
+  gamer_unowned: Gamer[];
+  gamer_unknown: Gamer[];
 };
 
 export const defaultGameSuggestions: GameSuggestion[] = [];
@@ -26,6 +39,9 @@ export const defaultGameSuggestion: GameSuggestion = {
   suggestion_last_modified: moment(),
   self_vote: GameVote.noVote,
   votes: 0,
+  gamer_owned: [],
+  gamer_unowned: [],
+  gamer_unknown: [],
 };
 
 export type Game = {

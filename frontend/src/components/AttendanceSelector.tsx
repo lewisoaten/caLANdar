@@ -37,7 +37,7 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
       .startOf("day")
       .diff(moment(props.timeBegin).startOf("day"), "days") + 1;
 
-  var firstButtonForAttendance: number | undefined;
+  let firstButtonForAttendance: number | undefined;
 
   //Create array of dates between timeBegin and timeEnd
   const dates = Array.from(Array(numberOfDays)).map((_, day_number) => {
@@ -60,13 +60,13 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
 
   const calculatedAttendance = dates.flat().filter((e) => e === 1);
 
-  const attendance: number[] = calculatedAttendance.map((e, i) => {
+  const attendance: number[] = calculatedAttendance.map((_, i) => {
     return props.value && props.value.length > i ? props.value[i] : 1;
   });
 
   const selectedButtonsFromAttendance = (attendance: number[]) => {
     // Convert array of 1s and 0s to array of indices of 1s
-    var selectedButtons: number[] = [];
+    const selectedButtons: number[] = [];
 
     dates.flat().forEach((e, i) => {
       if (
@@ -96,7 +96,7 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
   );
 
   const handleButtonChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newSelectedButtons: number[],
   ) => {
     if (props.onChange) {

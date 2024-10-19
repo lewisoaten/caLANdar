@@ -42,15 +42,12 @@ export default function InvitationsTable(props: InvitationsTableProps) {
 
   useEffect(() => {
     if (event_id) {
-      fetch(
-        `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations?as_admin=${props.as_admin}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
-          },
+      fetch(`/api/events/${event_id}/invitations?as_admin=${props.as_admin}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
         },
-      )
+      })
         .then((response) => {
           if (response.status === 401) signOut();
           else
@@ -62,8 +59,6 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           if (data) setInvitations(data);
         });
     }
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event_id]);
 
   const onClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
@@ -84,7 +79,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     ).then((response) => {
       if (response.status === 401) signOut();
       else if (response.status === 204) {
-        var remainingInvitations = invitations.filter(function (invitation) {
+        const remainingInvitations = invitations.filter(function (invitation) {
           return invitation.email !== email;
         });
         setInvitations(remainingInvitations);
@@ -112,21 +107,18 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     const data = new FormData(event.currentTarget);
     const emails = data.get("emails") as string;
 
-    var emailArr = emails.split(",");
+    const emailArr = emails.split(",");
 
     Promise.all<Promise<InvitationData>[]>(
       emailArr.map((email) => {
-        return fetch(
-          `${process.env.REACT_APP_API_PROXY}/api/events/${event_id}/invitations?as_admin=true`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bearer " + token,
-            },
-            body: JSON.stringify({ email: email.trim() }),
+        return fetch(`/api/events/${event_id}/invitations?as_admin=true`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
           },
-        ).then((response) => {
+          body: JSON.stringify({ email: email.trim() }),
+        }).then((response) => {
           if (response.status === 201) {
             setOpen(false);
             return response

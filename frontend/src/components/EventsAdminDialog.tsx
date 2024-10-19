@@ -43,8 +43,6 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
 
   useEffect(() => {
     setFormValues(createMode ? defaultEventData : event);
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props]);
 
   const cancel = () => {
@@ -78,7 +76,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   };
 
   const postNewEvent = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=true`, {
+    fetch(`/api/events?as_admin=true`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -117,17 +115,14 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   };
 
   const putEvent = () => {
-    fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${event?.id}?as_admin=true`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify(formValues),
+    fetch(`/api/events/${event?.id}?as_admin=true`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
-    ).then((response) => {
+      body: JSON.stringify(formValues),
+    }).then((response) => {
       if (response.status === 204) {
         close(formValues);
       } else if (response.status === 400) {
@@ -148,7 +143,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   const getBase64 = (file: File): Promise<string> => {
     return new Promise((resolve) => {
       // Make new FileReader
-      let reader = new FileReader();
+      const reader = new FileReader();
 
       // Convert the file to base64 text
       reader.readAsDataURL(file);
@@ -156,7 +151,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
       // on reader load somthing...
       reader.onload = () => {
         // remove data url part
-        let base64 = reader.result?.toString().split(",")[1];
+        const base64 = reader.result?.toString().split(",")[1];
         resolve(base64 as string);
       };
     });

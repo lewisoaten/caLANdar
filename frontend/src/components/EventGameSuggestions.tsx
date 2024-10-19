@@ -49,19 +49,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [inputValue, setInputValue] = useState("");
   const [options, setOptions] = useState(defaultGames);
 
-  var typingTimer = useRef<NodeJS.Timeout>();
+  const typingTimer = useRef<NodeJS.Timeout>();
   const doneTypingInterval = 1000;
 
   useEffect(() => {
-    fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${props.event_id}/games`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
+    fetch(`/api/events/${props.event_id}/games`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
-    )
+    })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok)
@@ -74,8 +71,6 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       .then((data) => {
         if (data) sortAndAddGameSuggestions(data);
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.event_id, props.responded]);
 
   function sortAndAddGameSuggestions(
@@ -103,15 +98,12 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       setOpen(true);
 
       typingTimer.current = setTimeout(function () {
-        fetch(
-          `${process.env.REACT_APP_API_PROXY}/api/steam-game?query=${value}`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: "Bearer " + token,
-            },
+        fetch(`/api/steam-game?query=${value}`, {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
           },
-        )
+        })
           .then((response) => {
             if (response.status === 401) signOut();
             else if (response.ok)
@@ -146,20 +138,17 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     setOpen(false);
 
     if (reason === "selectOption" && value) {
-      fetch(
-        `${process.env.REACT_APP_API_PROXY}/api/events/${props.event_id}/games`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({
-            appid: value.appid,
-            name: value.name,
-          }),
+      fetch(`/api/events/${props.event_id}/games`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + token,
         },
-      )
+        body: JSON.stringify({
+          appid: value.appid,
+          name: value.name,
+        }),
+      })
         .then((response) => {
           if (response.status === 401) signOut();
           else if (response.ok) {
@@ -182,19 +171,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     // Prevent page reload
     event.preventDefault();
 
-    fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${props.event_id}/games/${event.target.value}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({
-          vote: checked ? GameVote.yes : GameVote.noVote,
-        }),
+    fetch(`/api/events/${props.event_id}/games/${event.target.value}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
-    )
+      body: JSON.stringify({
+        vote: checked ? GameVote.yes : GameVote.noVote,
+      }),
+    })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) {
@@ -210,10 +196,10 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       })
       .then((data) => {
         if (data) {
-          let gameSuggestionIndex = gameSuggestions.findIndex(
+          const gameSuggestionIndex = gameSuggestions.findIndex(
             (game) => game.appid === parseInt(event.target.value),
           );
-          let newGameSuggestions = [...gameSuggestions];
+          const newGameSuggestions = [...gameSuggestions];
           newGameSuggestions[gameSuggestionIndex] = data;
           sortAndAddGameSuggestions(newGameSuggestions);
         }

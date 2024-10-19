@@ -29,7 +29,7 @@ const Event = () => {
   };
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events`, {
+    fetch(`/api/events`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -51,8 +51,6 @@ const Event = () => {
 
         setEvents(data);
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

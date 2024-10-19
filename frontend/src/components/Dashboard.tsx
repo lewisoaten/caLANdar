@@ -5,13 +5,12 @@ import {
   Toolbar,
   Typography,
   IconButton,
-  SvgIcon,
   Stack,
 } from "@mui/material";
 import Drawer from "@mui/material/Drawer";
 import AppBar from "@mui/material/AppBar";
 import MenuIcon from "@mui/icons-material/Menu";
-import { ReactComponent as CalandarIcon } from "../calandar.svg";
+import CalandarIcon from "../calandar.svg";
 import MenuItems from "./MenuItems";
 import { useState } from "react";
 
@@ -55,7 +54,9 @@ function ResponsiveDrawer(props: AppProps) {
             <MenuIcon />
           </IconButton>
           <Stack direction="row" spacing={1} alignItems="center">
-            <SvgIcon component={CalandarIcon} inheritViewBox fontSize="large" />
+            <Typography variant="h4">
+              <CalandarIcon />
+            </Typography>
             <Typography
               component="h1"
               variant="h4"

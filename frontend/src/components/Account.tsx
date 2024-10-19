@@ -33,7 +33,7 @@ const Account = () => {
   const [profile, setProfile] = useState(defaultProfileData);
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile`, {
+    fetch(`/api/profile`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -50,12 +50,10 @@ const Account = () => {
           setProfile(data);
         });
     });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refreshGames = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile/games/update`, {
+    fetch(`/api/profile/games/update`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -74,7 +72,7 @@ const Account = () => {
   };
 
   const handleSteamidSave = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/profile`, {
+    fetch(`/api/profile`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -85,7 +83,7 @@ const Account = () => {
   };
 
   const formatDuration = (duration: moment.Duration) => {
-    let parts = [];
+    const parts = [];
 
     // return nothing when the duration is falsy or not correctly parsed (P0D)
     if (!duration || duration.toISOString() === "P0D") return;

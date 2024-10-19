@@ -69,14 +69,12 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     | undefined
   >("primary");
 
-  var typingTimer = useRef<NodeJS.Timeout>();
+  const typingTimer = useRef<NodeJS.Timeout>();
   const doneTypingInterval = 1000;
 
   useEffect(() => {
     fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${
-        props.event.id
-      }/invitations/${encodeURIComponent(email)}`,
+      `/api/events/${props.event.id}/invitations/${encodeURIComponent(email)}`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -104,12 +102,10 @@ export default function InvitationResponse(props: InvitationResponseProps) {
           }
         }
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRSVPChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newAlignment: string,
   ) => {
     clearTimeout(typingTimer.current);
@@ -184,9 +180,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
 
   const saveInvitationResponse = (newInvitation: InvitationData) => {
     fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${
-        props.event.id
-      }/invitations/${encodeURIComponent(email)}`,
+      `/api/events/${props.event.id}/invitations/${encodeURIComponent(email)}`,
       {
         method: "PATCH",
         headers: {

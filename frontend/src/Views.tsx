@@ -1,6 +1,6 @@
 import React from "react";
 import { Route } from "react-router-dom";
-import { SentryRoutes } from "./index";
+import { SentryRoutes } from "./main";
 import SignIn from "./components/SignIn";
 import VerifyEmail from "./components/VerifyEmail";
 import Account from "./components/Account";
