@@ -9,6 +9,11 @@ pub struct UserGame {
     pub last_modified: DateTime<Utc>,
 }
 
+pub struct Filter {
+    pub appid: Option<i64>,
+    pub email: Option<String>,
+}
+
 pub async fn create(
     pool: &PgPool,
     email: String,
@@ -29,13 +34,31 @@ pub async fn create(
     .await
 }
 
-pub async fn read(pool: &PgPool, email: String) -> Result<Vec<UserGame>, sqlx::Error> {
+pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<UserGame>, sqlx::Error> {
+    let appid = filter.appid.map_or((0, true), |appid| (appid, false));
+
+    let email = filter
+        .email
+        .map_or((String::new(), true), |email| (email, false));
+
     sqlx::query_as!(
         UserGame,
         r#"
-        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE LOWER(email) = LOWER($1)
+        SELECT
+            email,
+            appid,
+            name,
+            playtime_forever,
+            user_game.last_modified
+        FROM user_game
+        JOIN steam_game USING(appid)
+        WHERE (appid = $1 OR $2)
+        AND (LOWER(email) = LOWER($3) OR $4)
         "#,
-        email,
+        appid.0,
+        appid.1,
+        email.0,
+        email.1,
     )
     .fetch_all(pool)
     .await
