@@ -42,7 +42,7 @@ export default function SignIn() {
     }
 
     signIn(email)
-      // @ts-ignore: Cannot possibly work out why this is complaining about type.
+      // @ts-expect-error: Cannot possibly work out why this is complaining about type.
       .then(() => {
         setSubmitted(true);
       });
@@ -52,8 +52,6 @@ export default function SignIn() {
     if (isSignedIn()) {
       navigate(location.state?.from || "/events");
     }
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

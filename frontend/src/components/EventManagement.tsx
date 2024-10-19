@@ -33,10 +33,10 @@ const EventManagement = () => {
 
   const navigate = useNavigate();
 
-  let { id } = useParams();
+  const { id } = useParams();
 
   const updateEvent = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
+    fetch(`/api/events/${id}?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -56,8 +56,6 @@ const EventManagement = () => {
 
   useEffect(() => {
     updateEvent();
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const editOnClick = () => {
@@ -65,7 +63,7 @@ const EventManagement = () => {
   };
 
   const deleteOnClick = () => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}?as_admin=true`, {
+    fetch(`/api/events/${id}?as_admin=true`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",

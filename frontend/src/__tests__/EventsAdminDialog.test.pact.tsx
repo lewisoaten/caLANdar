@@ -1,9 +1,6 @@
 import React from "react";
-import {
-  render,
-  screen,
-  waitForElementToBeRemoved,
-} from "@testing-library/react";
+import "@testing-library/jest-dom";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as Pact from "@pact-foundation/pact";
 
@@ -12,15 +9,12 @@ import EventsAdminDialog from "../components/EventsAdminDialog";
 describe("CaLANDar Create Event API", () => {
   describe("create event", () => {
     beforeEach((done) => {
-      const contentTypeJsonMatcher = Pact.Matchers.term({
+      const _contentTypeJsonMatcher = Pact.Matchers.term({
         matcher: "application\\/json; *charset=utf-8",
         generate: "application/json; charset=utf-8",
       });
 
-      // @ts-ignore
-      process.env.REACT_APP_API_PROXY = `http://localhost:${global.port}`;
-
-      // @ts-ignore
+      // @ts-expect-error: No signature for global provider
       global.provider
         .addInteraction({
           state: "provider allows event creation",
@@ -77,7 +71,7 @@ describe("CaLANDar Create Event API", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // @ts-ignore
+      // @ts-expect-error: No signature for global provider
       global.provider.verify();
     });
   });

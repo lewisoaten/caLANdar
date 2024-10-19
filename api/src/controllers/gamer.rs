@@ -114,7 +114,11 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
             let mut gamer_list: Vec<GamerBuild> = gamers.values().cloned().collect();
             // Annotate gamer list wih games owned
             for gamer in &mut gamer_list {
-                match user_games::read(pool, gamer.email.clone()).await {
+                let filter = user_games::Filter {
+                    email: Some(gamer.email.clone()),
+                    appid: None,
+                };
+                match user_games::filter(pool, filter).await {
                     Ok(user_games) => {
                         gamer.games_owned_count = user_games.len() as u16;
                         gamer.games_owned_last_modified = user_games

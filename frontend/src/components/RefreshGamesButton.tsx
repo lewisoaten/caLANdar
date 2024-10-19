@@ -25,16 +25,13 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   function handleClick() {
     setLoading(true);
     setDone(false);
-    fetch(
-      `${process.env.REACT_APP_API_PROXY}/api//steam-game-update-v2?as_admin=true`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
+    fetch(`/api//steam-game-update-v2?as_admin=true`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
-    ).then((response) => {
+    }).then((response) => {
       if (response.status === 200) {
         setLoading(false);
         setDone(true);

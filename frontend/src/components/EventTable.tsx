@@ -199,9 +199,11 @@ export default function EventTable(props: EventTableProps) {
       editable: false,
       valueFormatter: (
         value: moment.Moment,
-        row: any,
-        column: GridColDef<any, moment.Moment, string>,
-        apiRef: React.MutableRefObject<GridApiCommunity>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
       ) => {
         if (value == null) {
           return "";
@@ -217,10 +219,12 @@ export default function EventTable(props: EventTableProps) {
       flex: 1,
       editable: false,
       valueGetter: (
-        value: string,
+        _value: string,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         row: any,
-        column: GridColDef<any, string, any>,
-        apiRef: React.MutableRefObject<GridApiCommunity>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, string, any>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
       ) => {
         const timeBegin = moment(row.timeBegin);
         const timeEnd = moment(row.timeEnd);
@@ -232,9 +236,11 @@ export default function EventTable(props: EventTableProps) {
       },
       valueFormatter: (
         value: number,
-        row: any,
-        column: GridColDef<any, number, string>,
-        apiRef: React.MutableRefObject<GridApiCommunity>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, number, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
       ) => {
         if (value == null) {
           return "";
@@ -257,6 +263,7 @@ export default function EventTable(props: EventTableProps) {
       flex: 0.1,
       getActions: (params: GridRowParams) => [
         <GridActionsCellItem
+          key={params.id}
           icon={<LinkIcon />}
           label="Open"
           onClick={openEvent(params.id)}
@@ -266,7 +273,7 @@ export default function EventTable(props: EventTableProps) {
   ];
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events?as_admin=${isAdmin}`, {
+    fetch(`/api/events?as_admin=${isAdmin}`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -284,7 +291,7 @@ export default function EventTable(props: EventTableProps) {
           return [] as EventData[];
         }
 
-        var newEvents = [] as EventData[];
+        const newEvents = [] as EventData[];
 
         if (liveEvents) {
           newEvents.push(
@@ -302,8 +309,6 @@ export default function EventTable(props: EventTableProps) {
 
         setEvents(newEvents);
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

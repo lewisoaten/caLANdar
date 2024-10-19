@@ -181,6 +181,7 @@ const GamersAdmin = () => {
       flex: 1,
       editable: false,
       valueGetter: (_value, row) => row,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       renderCell: (params: GridRenderCellParams<any, GamerData>) => (
         <Tooltip title={params.value?.email || "Attendee"}>
           <Chip
@@ -255,9 +256,11 @@ const GamersAdmin = () => {
       editable: false,
       valueFormatter: (
         value: moment.Moment,
-        row: any,
-        column: GridColDef<any, moment.Moment, string>,
-        apiRef: React.MutableRefObject<GridApiCommunity>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
       ) => {
         if (value == null) {
           return "";
@@ -281,9 +284,11 @@ const GamersAdmin = () => {
       editable: false,
       valueFormatter: (
         value: moment.Moment,
-        row: any,
-        column: GridColDef<any, moment.Moment, string>,
-        apiRef: React.MutableRefObject<GridApiCommunity>,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
       ) => {
         if (value == null) {
           return "";
@@ -292,70 +297,10 @@ const GamersAdmin = () => {
         return value.calendar();
       },
     },
-    // {
-    //   field: "timeBegin",
-    //   headerName: "Start",
-    //   type: "dateTime",
-    //   flex: 1,
-    //   editable: false,
-    //   valueFormatter: (
-    //     value: moment.Moment,
-    //     row: any,
-    //     column: GridColDef<any, moment.Moment, string>,
-    //     apiRef: React.MutableRefObject<GridApiCommunity>,
-    //   ) => {
-    //     if (value == null) {
-    //       return "";
-    //     }
-
-    //     return value.calendar();
-    //   },
-    // },
-    // {
-    //   field: "duration",
-    //   headerName: "Duration",
-    //   type: "dateTime",
-    //   flex: 1,
-    //   editable: false,
-    //   valueGetter: (
-    //     value: string,
-    //     row: any,
-    //     column: GridColDef<any, string, any>,
-    //     apiRef: React.MutableRefObject<GridApiCommunity>,
-    //   ) => {
-    //     const timeBegin = moment(row.timeBegin);
-    //     const timeEnd = moment(row.timeEnd);
-    //     if (timeBegin == null || timeEnd == null) {
-    //       return "";
-    //     }
-
-    //     return timeEnd.endOf("day").diff(timeBegin.startOf("day"), "days");
-    //   },
-    //   valueFormatter: (
-    //     value: number,
-    //     row: any,
-    //     column: GridColDef<any, number, string>,
-    //     apiRef: React.MutableRefObject<GridApiCommunity>,
-    //   ) => {
-    //     if (value == null) {
-    //       return "";
-    //     }
-
-    //     return `${value} days`;
-    //   },
-    // },
-    // {
-    //   field: "description",
-    //   headerName: "Description",
-    //   type: "string",
-    //   flex: 2,
-    //   editable: false,
-    //   renderCell: renderCellExpand,
-    // },
   ];
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/gamers?as_admin=true`, {
+    fetch(`/api/gamers?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -375,8 +320,6 @@ const GamersAdmin = () => {
 
         setGamers(data);
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

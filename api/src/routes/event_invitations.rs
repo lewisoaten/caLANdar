@@ -227,12 +227,12 @@ pub async fn get_all(
 #[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct InvitationsResponseLite {
-    event_id: i32,
-    avatar_url: Option<String>,
-    handle: Option<String>,
-    response: Option<InvitationResponse>,
-    attendance: Option<Vec<u8>>,
-    last_modified: DateTime<Utc>,
+    pub event_id: i32,
+    pub avatar_url: Option<String>,
+    pub handle: Option<String>,
+    pub response: Option<InvitationResponse>,
+    pub attendance: Option<Vec<u8>>,
+    pub last_modified: DateTime<Utc>,
 }
 
 #[openapi(tag = "Event Invitations")]

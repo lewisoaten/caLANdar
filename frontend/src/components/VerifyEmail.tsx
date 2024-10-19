@@ -22,7 +22,7 @@ export default function VerifyEmail() {
   const location = useLocation();
 
   const [searchParams] = useSearchParams();
-  let [urlToken] = useState(searchParams.get("token"));
+  const [urlToken] = useState(searchParams.get("token"));
 
   const [loading, setLoading] = React.useState(false);
 
@@ -54,8 +54,6 @@ export default function VerifyEmail() {
         submitButton.current.click();
       }
     }
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

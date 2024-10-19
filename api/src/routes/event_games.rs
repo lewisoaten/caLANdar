@@ -15,7 +15,14 @@ use rocket_okapi::openapi;
 use sqlx::postgres::PgPool;
 
 #[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde")]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct Gamer {
+    pub avatar_url: Option<String>,
+    pub handle: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct EventGameSuggestionResponse {
     pub appid: i64,
     pub name: String,
@@ -24,6 +31,9 @@ pub struct EventGameSuggestionResponse {
     pub suggestion_last_modified: DateTime<Utc>,
     pub self_vote: Option<GameVote>,
     pub votes: Option<i64>,
+    pub gamer_owned: Vec<Gamer>,
+    pub gamer_unowned: Vec<Gamer>,
+    pub gamer_unknown: Vec<Gamer>,
 }
 
 custom_errors!(EventGameError, Unauthorized, InternalServerError);

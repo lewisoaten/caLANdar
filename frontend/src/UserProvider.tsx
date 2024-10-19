@@ -1,4 +1,5 @@
-import React, { ReactNode, createContext, useState } from "react";
+import React from "react";
+import { ReactNode, createContext, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 
@@ -20,8 +21,8 @@ const UserContext = createContext({
 } as IUserContext);
 
 const UserDispatchContext = createContext({
-  signIn: (email: string) => Promise<Response>,
-  verifyEmail: (token: string) => Promise<Response>,
+  signIn: (_email: string) => Promise<Response>,
+  verifyEmail: (_token: string) => Promise<Response>,
   signOut: () => {},
   isSignedIn: () => false as boolean,
 });
@@ -45,19 +46,16 @@ function UserProvider({ children }: Props) {
       return user_details;
     }
 
-    const signin_promise = fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/login`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: email,
-          redirect: location.state?.from.pathname,
-        }),
+    const signin_promise = fetch(`/api/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    ).then((response) => {
+      body: JSON.stringify({
+        email: email,
+        redirect: location.state?.from.pathname,
+      }),
+    }).then((response) => {
       if (response.status === 200) {
         return response.json();
       } else {
@@ -75,7 +73,7 @@ function UserProvider({ children }: Props) {
       return user_details;
     }
 
-    return fetch(`${process.env.REACT_APP_API_PROXY}/api/verify-email`, {
+    return fetch(`/api/verify-email`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

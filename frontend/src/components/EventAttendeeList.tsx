@@ -32,15 +32,12 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(
-      `${process.env.REACT_APP_API_PROXY}/api/events/${props.event_id}/invitations`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: "Bearer " + token,
-        },
+    fetch(`/api/events/${props.event_id}/invitations`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + token,
       },
-    )
+    })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok)
@@ -57,8 +54,6 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
           setLoading(false);
         }
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.event_id, props.responded]);
 
   return (
@@ -95,7 +90,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
           <Grid item xs={12}>
             <Alert severity="info">RSVP to load attendees.</Alert>
           </Grid>
-          {Array.from(Array(3)).map((e, i) => (
+          {Array.from(Array(3)).map((_, i) => (
             <React.Fragment key={i}>
               <Grid item xs={2}>
                 <Skeleton variant="circular" animation="wave">

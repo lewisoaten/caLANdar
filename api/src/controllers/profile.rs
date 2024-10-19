@@ -47,7 +47,12 @@ pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
     };
 
     // Return profile with games from user_games repository
-    profile.games = match user_games::read(pool, email.clone()).await {
+    let filter = user_games::Filter {
+        email: Some(email.clone()),
+        appid: None,
+    };
+
+    profile.games = match user_games::filter(pool, filter).await {
         Ok(user_games) => user_games
             .into_iter()
             .map(std::convert::Into::into)

@@ -30,8 +30,8 @@ export type CreateEvent = {
 };
 
 const roundUpHour = () => {
-  var m = moment();
-  var roundUp =
+  const m = moment();
+  const roundUp =
     m.minute() || m.second() || m.millisecond()
       ? m.add(1, "hour").startOf("hour")
       : m.startOf("hour");

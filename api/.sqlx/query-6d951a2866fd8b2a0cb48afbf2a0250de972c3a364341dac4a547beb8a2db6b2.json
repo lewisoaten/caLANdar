@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT email, appid, name, playtime_forever, user_game.last_modified FROM user_game JOIN steam_game USING(appid) WHERE LOWER(email) = LOWER($1)\n        ",
+  "query": "\n        SELECT\n            email,\n            appid,\n            name,\n            playtime_forever,\n            user_game.last_modified\n        FROM user_game\n        JOIN steam_game USING(appid)\n        WHERE (appid = $1 OR $2)\n        AND (LOWER(email) = LOWER($3) OR $4)\n        ",
   "describe": {
     "columns": [
       {
@@ -31,7 +31,10 @@
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Int8",
+        "Bool",
+        "Text",
+        "Bool"
       ]
     },
     "nullable": [
@@ -42,5 +45,5 @@
       false
     ]
   },
-  "hash": "100f8ea802319d85629c733a677ff10a1ec2669d702ba1063bf8473a9e6d679d"
+  "hash": "6d951a2866fd8b2a0cb48afbf2a0250de972c3a364341dac4a547beb8a2db6b2"
 }

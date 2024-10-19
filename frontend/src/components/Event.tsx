@@ -18,10 +18,10 @@ const Event = () => {
   const [loaded, setLoaded] = useState(false);
   const [responded, setResponded] = useState(false);
 
-  let { id } = useParams();
+  const { id } = useParams();
 
   useEffect(() => {
-    fetch(`${process.env.REACT_APP_API_PROXY}/api/events/${id}`, {
+    fetch(`/api/events/${id}`, {
       headers: {
         "Content-Type": "application/json",
         Authorization: "Bearer " + token,
@@ -40,8 +40,6 @@ const Event = () => {
           setLoaded(true);
         }
       });
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

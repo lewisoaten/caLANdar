@@ -2,8 +2,11 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::game_suggestion,
-    routes::event_games::{EventGameSuggestionRequest, EventGameSuggestionResponse, GameVote},
+    repositories::{game_suggestion, user_games},
+    routes::{
+        event_games::{EventGameSuggestionRequest, EventGameSuggestionResponse, GameVote, Gamer},
+        event_invitations::{InvitationResponse, InvitationsResponse},
+    },
     util::{is_attending_event, is_event_active},
 };
 
@@ -40,6 +43,9 @@ impl From<game_suggestion::GameSuggestion> for EventGameSuggestionResponse {
             suggestion_last_modified: game_suggestion.last_modified,
             self_vote: game_suggestion.self_vote.map(Into::into),
             votes: game_suggestion.votes,
+            gamer_owned: Vec::new(),
+            gamer_unowned: Vec::new(),
+            gamer_unknown: Vec::new(),
         }
     }
 }
@@ -49,7 +55,25 @@ pub async fn get(
     event_id: i32,
     email: String,
 ) -> Result<Vec<EventGameSuggestionResponse>, Error> {
-    // Build new EventFilter
+    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
+        InvitationsResponse,
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1"#,
+        event_id
+    )
+    .fetch_all(pool)
+    .await
+    {
+        Ok(invitations) => invitations,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get event invitations due to: {e}"
+            )))
+        }
+    };
+
+    // Build new game_suggestion Filter
     let game_suggestion_filter_values = game_suggestion::Filter {
         event_id: Some(event_id),
         game_id: None,
@@ -57,12 +81,69 @@ pub async fn get(
 
     // Return all game suggestions for event
     match game_suggestion::filter(pool, game_suggestion_filter_values, email).await {
-        Ok(game_suggestions) => Ok(game_suggestions
-            .into_iter()
-            .map(EventGameSuggestionResponse::from)
-            .collect()),
+        Ok(game_suggestions) => {
+            // Based on the invitations with a response of 'yes' or 'maybe', add whether or not each gamer owns the game in game_suggestions
+            let mut game_suggestions_with_gamers = Vec::new();
+
+            for game_suggestion in game_suggestions {
+                let mut gamer_owned = Vec::new();
+                let mut gamer_unowned = Vec::new();
+                let gamer_unknown = Vec::new();
+
+                for invitation in &invitations {
+                    if invitation.response != Some(InvitationResponse::Yes)
+                        && invitation.response != Some(InvitationResponse::Maybe)
+                    {
+                        continue;
+                    }
+
+                    let user_games = match user_games::filter(
+                        pool,
+                        user_games::Filter {
+                            appid: Some(game_suggestion.game_id),
+                            email: Some(invitation.email.clone()),
+                        },
+                    )
+                    .await
+                    {
+                        Ok(user_games) => user_games,
+                        Err(e) => {
+                            return Err(Error::Controller(format!(
+                                "Unable to get user games due to: {e}"
+                            )))
+                        }
+                    };
+
+                    if user_games.is_empty() {
+                        gamer_unowned.push(Gamer {
+                            avatar_url: invitation.avatar_url.clone(),
+                            handle: invitation.handle.clone(),
+                        });
+                    } else {
+                        gamer_owned.push(Gamer {
+                            avatar_url: invitation.avatar_url.clone(),
+                            handle: invitation.handle.clone(),
+                        });
+                    }
+                }
+
+                game_suggestions_with_gamers.push(EventGameSuggestionResponse {
+                    appid: game_suggestion.game_id,
+                    name: game_suggestion.game_name,
+                    last_modified: game_suggestion.last_modified,
+                    requested_at: game_suggestion.requested_at,
+                    suggestion_last_modified: game_suggestion.last_modified,
+                    self_vote: game_suggestion.self_vote.map(Into::into),
+                    votes: game_suggestion.votes,
+                    gamer_owned,
+                    gamer_unowned,
+                    gamer_unknown,
+                });
+            }
+            Ok(game_suggestions_with_gamers)
+        }
         Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {e}"
+            "Unable to get game suggestions due to: {e}"
         ))),
     }
 }
