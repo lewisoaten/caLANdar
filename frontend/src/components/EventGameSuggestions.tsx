@@ -63,6 +63,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     fetch(`/api/events/${props.event_id}/games`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     })
@@ -108,6 +109,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         fetch(`/api/steam-game?query=${value}`, {
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
             Authorization: "Bearer " + token,
           },
         })
@@ -149,6 +151,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: "Bearer " + token,
         },
         body: JSON.stringify({
@@ -182,6 +185,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify({

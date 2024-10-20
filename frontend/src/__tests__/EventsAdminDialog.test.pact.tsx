@@ -24,6 +24,7 @@ describe("CaLANDar Create Event API", () => {
             path: "/api/events",
             headers: {
               "Content-Type": "application/json",
+              Accept: "application/json",
             },
             query: {
               as_admin: "true",
@@ -39,6 +40,7 @@ describe("CaLANDar Create Event API", () => {
             status: 201,
             headers: {
               "Content-Type": "application/json",
+              Accept: "application/json",
             },
             body: Pact.Matchers.somethingLike({
               id: 1,

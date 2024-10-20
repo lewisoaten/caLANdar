@@ -36,6 +36,7 @@ const Account = () => {
     fetch(`/api/profile`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     }).then((response) => {
@@ -57,6 +58,7 @@ const Account = () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify({}),
@@ -76,6 +78,7 @@ const Account = () => {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify({ steamId: profile.steamId }),

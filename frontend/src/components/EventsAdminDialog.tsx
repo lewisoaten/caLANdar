@@ -80,6 +80,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify(
@@ -119,6 +120,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify(formValues),

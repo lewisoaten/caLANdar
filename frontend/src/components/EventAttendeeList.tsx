@@ -35,6 +35,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
     fetch(`/api/events/${props.event_id}/invitations`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     })

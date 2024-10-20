@@ -32,6 +32,7 @@ const Event = () => {
     fetch(`/api/events`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     })
