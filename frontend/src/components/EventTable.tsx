@@ -276,6 +276,7 @@ export default function EventTable(props: EventTableProps) {
     fetch(`/api/events?as_admin=${isAdmin}`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     })

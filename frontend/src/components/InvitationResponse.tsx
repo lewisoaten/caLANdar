@@ -78,6 +78,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       {
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: "Bearer " + token,
         },
       },
@@ -185,6 +186,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: "Bearer " + token,
         },
         body: JSON.stringify({

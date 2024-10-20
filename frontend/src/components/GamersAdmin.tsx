@@ -303,6 +303,7 @@ const GamersAdmin = () => {
     fetch(`/api/gamers?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
         Authorization: "Bearer " + token,
       },
     })

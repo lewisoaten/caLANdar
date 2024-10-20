@@ -45,6 +45,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       fetch(`/api/events/${event_id}/invitations?as_admin=${props.as_admin}`, {
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: "Bearer " + token,
         },
       })
@@ -69,6 +70,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
           Authorization: "Bearer " + token,
         },
       },
@@ -111,6 +113,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
             Authorization: "Bearer " + token,
           },
           body: JSON.stringify({ email: email.trim() }),
