@@ -26,7 +26,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8000",
+      "/api": {
+        target: process.env.REACT_APP_API_PROXY,
+        changeOrigin: true,
+      },
     },
   },
   test: {
