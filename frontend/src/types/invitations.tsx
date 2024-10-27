@@ -35,7 +35,7 @@ export const defaultInvitationData: InvitationData = {
   eventId: 0,
   email: "",
   avatarUrl: null,
-  handle: null,
+  handle: "",
   invitedAt: moment(),
   respondedAt: null,
   response: null,

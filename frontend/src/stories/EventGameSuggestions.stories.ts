@@ -38,7 +38,7 @@ const games: GameSuggestion[] = [
     ...defaultGameSuggestion,
     appid: 1,
     name: "Game 1",
-    self_vote: GameVote.yes,
+    selfVote: GameVote.yes,
     gamerOwned: [
       {
         ...defaultGamer,
@@ -79,7 +79,7 @@ const games: GameSuggestion[] = [
     ...defaultGameSuggestion,
     appid: 2,
     name: "Game 2",
-    self_vote: GameVote.no,
+    selfVote: GameVote.no,
     votes: 2,
     gamerOwned: [
       {

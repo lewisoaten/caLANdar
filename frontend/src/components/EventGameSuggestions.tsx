@@ -442,6 +442,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                               return (
                                 <Avatar
                                   alt={gamer.handle || "Attendee"}
+                                  key={gameSuggestion.appid
+                                    .toString()
+                                    .concat(gamer.handle || "")}
                                   src={
                                     gamer.avatarUrl ||
                                     "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
@@ -462,7 +465,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         icon={<ThumbUpOffAltIcon />}
                         checkedIcon={<ThumbUpAltIcon />}
                         onChange={handleVote}
-                        checked={gameSuggestion.self_vote === GameVote.yes}
+                        checked={gameSuggestion.selfVote === GameVote.yes}
                         inputProps={{ "aria-labelledby": labelId }}
                         disabled={props.disabled}
                       />
