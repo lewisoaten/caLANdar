@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useContext } from "react";
+import { useLocation } from "react-router-dom";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
@@ -16,6 +17,8 @@ import ListItem from "@mui/material/ListItem";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
+import { Collapse } from "@mui/material";
+import { Event } from "@mui/icons-material";
 
 interface MenuItemsProps {
   updateButtonLoadingState: [
@@ -30,6 +33,11 @@ interface MenuItemsProps {
 
 export default function MenuItems(props: MenuItemsProps) {
   const { loggedIn, isAdmin } = useContext(UserContext);
+
+  const location = useLocation();
+  const eventUrl = location.pathname.match(/^\/events\/[0-9]+/g)?.[0];
+  const gamesUrl = eventUrl + "/games";
+
   return (
     <List component="nav">
       {loggedIn ? (
@@ -40,6 +48,24 @@ export default function MenuItems(props: MenuItemsProps) {
             </ListItemIcon>
             <ListItemText primary="Events" />
           </ListItemButton>
+          {eventUrl && (
+            <Collapse in={true}>
+              <List>
+                <ListItemButton sx={{ pl: 4 }} component={Link} to={eventUrl}>
+                  <ListItemIcon>
+                    <Event />
+                  </ListItemIcon>
+                  <ListItemText primary="Event" />
+                </ListItemButton>
+                {/* <ListItemButton sx={{ pl: 4 }} component={Link} to={gamesUrl}>
+                  <ListItemIcon>
+                    <SportsEsports />
+                  </ListItemIcon>
+                  <ListItemText primary="Games" />
+                </ListItemButton> */}
+              </List>
+            </Collapse>
+          )}
           <ListItemButton component={Link} to="/account">
             <ListItemIcon>
               <AccountBoxIcon />
