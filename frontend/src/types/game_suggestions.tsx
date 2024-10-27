@@ -19,10 +19,10 @@ export const defaultGamer: Gamer = {
 export type GameSuggestion = {
   appid: number;
   name: string;
-  last_modified: moment.Moment;
-  requested_at: moment.Moment;
-  suggestion_last_modified: moment.Moment;
-  self_vote: GameVote;
+  lastModified: moment.Moment;
+  requestedAt: moment.Moment;
+  suggestionLastModified: moment.Moment;
+  selfVote: GameVote;
   votes: number;
   gamerOwned: Gamer[];
   gamerUnowned: Gamer[];
@@ -34,10 +34,10 @@ export const defaultGameSuggestions: GameSuggestion[] = [];
 export const defaultGameSuggestion: GameSuggestion = {
   appid: 0,
   name: "",
-  last_modified: moment(),
-  requested_at: moment(),
-  suggestion_last_modified: moment(),
-  self_vote: GameVote.noVote,
+  lastModified: moment(),
+  requestedAt: moment(),
+  suggestionLastModified: moment(),
+  selfVote: GameVote.noVote,
   votes: 0,
   gamerOwned: [],
   gamerUnowned: [],
