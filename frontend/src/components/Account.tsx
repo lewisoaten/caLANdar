@@ -200,47 +200,58 @@ const Account = () => {
           </Paper>
         </Grid>
         {/* Render game cards for each game in profile */}
-        {profile.games.map((game) => (
-          <Grid item xs={12} md={6} lg={4} key={game.appid}>
-            <Card key={game.appid} sx={{ maxWidth: 345 }}>
-              <CardMedia
-                sx={{ height: 140 }}
-                image={`https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`}
-                title={game.name}
-              />
-              <CardContent>
-                <Typography gutterBottom variant="h5" component="div">
-                  {game.name}
-                </Typography>
-
-                {game.playtimeForever !== 0 ? (
-                  <React.Fragment>
-                    <Tooltip
-                      title={formatDuration(
-                        moment.duration(game.playtimeForever, "minutes"),
-                      )}
-                    >
-                      <Chip
-                        color="success"
-                        size="small"
-                        icon={<AccessTimeIcon />}
-                        label={moment
-                          .duration(game.playtimeForever, "minutes")
-                          .humanize()}
+        <Grid item xs={12} md={12} lg={12}>
+          <Paper>
+            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+              <Grid container spacing={3}>
+                {profile.games.map((game) => (
+                  <Grid item xs={12} md={6} lg={4} key={game.appid}>
+                    <Card key={game.appid} sx={{ maxWidth: 345 }} elevation={4}>
+                      <CardMedia
+                        sx={{ height: 140 }}
+                        image={`https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`}
+                        title={game.name}
                       />
-                    </Tooltip>
-                  </React.Fragment>
-                ) : (
-                  <React.Fragment></React.Fragment>
-                )}
-              </CardContent>
-              {/* <CardActions>
+                      <CardContent>
+                        <Typography gutterBottom variant="h5" component="div">
+                          {game.name}
+                        </Typography>
+
+                        {game.playtimeForever !== 0 ? (
+                          <React.Fragment>
+                            <Tooltip
+                              title={formatDuration(
+                                moment.duration(
+                                  game.playtimeForever,
+                                  "minutes",
+                                ),
+                              )}
+                            >
+                              <Chip
+                                color="success"
+                                size="small"
+                                icon={<AccessTimeIcon />}
+                                label={moment
+                                  .duration(game.playtimeForever, "minutes")
+                                  .humanize()}
+                              />
+                            </Tooltip>
+                          </React.Fragment>
+                        ) : (
+                          <React.Fragment></React.Fragment>
+                        )}
+                      </CardContent>
+                      {/* <CardActions>
                 <Button size="small">Share</Button>
                 <Button size="small">Learn More</Button>
               </CardActions> */}
-            </Card>
-          </Grid>
-        ))}
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            </Container>
+          </Paper>
+        </Grid>
       </Grid>
     </Container>
   );

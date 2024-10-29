@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
-#[derive(sqlx::Type)]
+#[derive(sqlx::Type, PartialEq, Eq)]
 #[sqlx(type_name = "invitation_response", rename_all = "lowercase")]
 pub enum Response {
     Yes,

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(appid) OVER () as count\n        FROM user_game\n        INNER JOIN steam_game USING(appid)\n        WHERE (appid = $1 OR $2)\n        AND (LOWER(email) = ANY($3) OR $4)\n        GROUP BY\n            appid,\n            name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bool",
+        "TextArray",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4eeb5ce7c01ab136799539a6cd47a36c9e661470d70f19ad4d3c0ad9c68cad99"
+}

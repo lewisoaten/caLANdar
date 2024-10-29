@@ -82,9 +82,17 @@ custom_errors!(ProfileGetError, NotFound, InternalServerError);
 
 /// Return the user's profile.
 #[openapi(tag = "Profile")]
-#[get("/profile", format = "json")]
-pub async fn get(pool: &State<PgPool>, user: User) -> Result<Json<Profile>, ProfileGetError> {
-    match profile::get(pool, user.email.clone()).await {
+#[get("/profile?<page>", format = "json")]
+pub async fn get(
+    pool: &State<PgPool>,
+    user: User,
+    page: Option<i64>,
+) -> Result<Json<Profile>, ProfileGetError> {
+    const COUNT: i64 = 10;
+
+    let page = page.unwrap_or(0);
+
+    match profile::get(pool, user.email.clone(), COUNT, page).await {
         Ok(profile) => Ok(Json(profile)),
         Err(Error::NoData(_)) => Err(ProfileGetError::NotFound(format!(
             "Profile for {}",

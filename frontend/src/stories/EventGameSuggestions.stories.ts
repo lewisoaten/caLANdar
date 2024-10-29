@@ -148,7 +148,7 @@ export const Default: Story = {
         http.get(`/api/steam-game`, () => {
           return HttpResponse.json(gameSearchResult);
         }),
-        http.get(`/api/events/1/games`, () => {
+        http.get(`/api/events/1/suggested_games`, () => {
           return HttpResponse.json(games);
         }),
       ],

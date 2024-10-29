@@ -115,16 +115,18 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
             // Annotate gamer list wih games owned
             for gamer in &mut gamer_list {
                 let filter = user_games::Filter {
-                    email: Some(gamer.email.clone()),
+                    emails: Some(vec![gamer.email.clone()]),
                     appid: None,
+                    count: 9999,
+                    page: 0,
                 };
                 match user_games::filter(pool, filter).await {
                     Ok(user_games) => {
                         gamer.games_owned_count = user_games.len() as u16;
                         gamer.games_owned_last_modified = user_games
                             .iter()
-                            .max_by_key(|user_game| user_game.last_modified)
-                            .map(|user_game| user_game.last_modified);
+                            .max_by_key(|user_game| user_game.last_modified.unwrap_or_default())
+                            .map(|user_game| user_game.last_modified.unwrap_or_default());
                     }
                     Err(e) => {
                         log::error!("Unable to get games owned by gamer: {}", e);

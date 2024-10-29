@@ -28,13 +28,17 @@ impl From<user_games::UserGame> for UserGame {
         Self {
             appid: game.appid,
             name: game.name,
-            playtime_forever: game.playtime_forever,
-            last_modified: game.last_modified,
+            playtime_forever: game
+                .playtime_forever
+                .unwrap_or_default()
+                .try_into()
+                .unwrap_or_default(),
+            last_modified: game.last_modified.unwrap_or_default(),
         }
     }
 }
 
-pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
+pub async fn get(pool: &PgPool, email: String, count: i64, page: i64) -> Result<Profile, Error> {
     // Return profile from repository for selected email address
     let mut profile: Profile = match profile::read(pool, email.clone()).await {
         Ok(Some(profile)) => profile.into(),
@@ -48,8 +52,10 @@ pub async fn get(pool: &PgPool, email: String) -> Result<Profile, Error> {
 
     // Return profile with games from user_games repository
     let filter = user_games::Filter {
-        email: Some(email.clone()),
+        emails: Some(vec![email.clone()]),
         appid: None,
+        count,
+        page,
     };
 
     profile.games = match user_games::filter(pool, filter).await {
@@ -90,7 +96,7 @@ pub async fn update_user_games(
     email: String,
     steam_api_key: &String,
 ) -> Result<Profile, Error> {
-    let profile = get(pool, email.clone()).await?;
+    let profile = get(pool, email.clone(), 1, 1).await?;
 
     let user_games = steam_api::get_owned_games(steam_api_key, &profile.steam_id).await?;
 
