@@ -59,3 +59,36 @@ export const defaultGame: Game = {
   last_modified: moment(),
   rank: 0.0,
 };
+
+export type EventGame = {
+  appid: number;
+  name: string;
+  gamerOwned: Gamer[];
+  playtimeForever: number;
+  lastModified: moment.Moment;
+};
+
+export const defaultEventGame: EventGame = {
+  appid: 0,
+  name: "",
+  gamerOwned: [],
+  playtimeForever: 0,
+  lastModified: moment(),
+};
+
+export type EventGamesMap = Map<number, EventGame[]>;
+
+export const defaultEventGamesMap: EventGamesMap = new Map<
+  number,
+  EventGame[]
+>();
+
+export type EventGames = {
+  eventGames: EventGamesMap;
+  totalCount: number;
+};
+
+export const defaultEventGames: EventGames = {
+  eventGames: defaultEventGamesMap,
+  totalCount: 0,
+};

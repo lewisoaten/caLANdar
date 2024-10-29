@@ -16,16 +16,12 @@ import {
   Alert,
   Checkbox,
   ListItemButton,
-  AvatarGroup,
   Stack,
   useTheme,
   useMediaQuery,
-  Tooltip,
 } from "@mui/material";
-import { red } from "@mui/material/colors";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
-import SentimentVeryDissatisfiedIcon from "@mui/icons-material/SentimentVeryDissatisfied";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -35,6 +31,7 @@ import {
   defaultGames,
   GameVote,
 } from "../types/game_suggestions";
+import GameOwners from "./GameOwners";
 
 interface EventGameSuggestionsProps {
   event_id: number;
@@ -60,7 +57,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const doneTypingInterval = 1000;
 
   useEffect(() => {
-    fetch(`/api/events/${props.event_id}/games`, {
+    fetch(`/api/events/${props.event_id}/suggested_games`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -147,7 +144,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     setOpen(false);
 
     if (reason === "selectOption" && value) {
-      fetch(`/api/events/${props.event_id}/games`, {
+      fetch(`/api/events/${props.event_id}/suggested_games`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -181,17 +178,20 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     // Prevent page reload
     event.preventDefault();
 
-    fetch(`/api/events/${props.event_id}/games/${event.target.value}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
+    fetch(
+      `/api/events/${props.event_id}/suggested_games/${event.target.value}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({
+          vote: checked ? GameVote.yes : GameVote.noVote,
+        }),
       },
-      body: JSON.stringify({
-        vote: checked ? GameVote.yes : GameVote.noVote,
-      }),
-    })
+    )
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) {
@@ -215,17 +215,6 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
           sortAndAddGameSuggestions(newGameSuggestions);
         }
       });
-  };
-
-  const theme = useTheme();
-  const theme_lg = useMediaQuery(theme.breakpoints.up("lg"));
-  const theme_sm = useMediaQuery(theme.breakpoints.up("sm"));
-  const theme_xs = useMediaQuery(theme.breakpoints.up("xs"));
-
-  const avatars = () => {
-    if (theme_lg) return 7;
-    if (theme_sm) return 5;
-    if (theme_xs) return 1;
   };
 
   return (
@@ -315,150 +304,11 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         alignItems: "center",
                       }}
                     >
-                      <Tooltip
-                        disableInteractive
-                        title={
-                          <React.Fragment>
-                            <Grid container spacing={2}>
-                              {gameSuggestion.gamerOwned.length > 0 && (
-                                <React.Fragment>
-                                  <Grid item xs={12}>
-                                    <Typography component="h1">
-                                      Owners
-                                    </Typography>
-                                  </Grid>
-                                  <Grid item xs={12}>
-                                    <List>
-                                      {gameSuggestion.gamerOwned.map(
-                                        (gamer) => (
-                                          <ListItem
-                                            dense={true}
-                                            key={gamer.handle}
-                                          >
-                                            <ListItemAvatar>
-                                              <Avatar
-                                                alt={gamer.handle || "Attendee"}
-                                                src={
-                                                  gamer.avatarUrl ||
-                                                  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                                }
-                                              />
-                                            </ListItemAvatar>
-                                            <ListItemText
-                                              primary={gamer.handle}
-                                            />
-                                          </ListItem>
-                                        ),
-                                      )}
-                                    </List>
-                                  </Grid>
-                                </React.Fragment>
-                              )}
-                              {gameSuggestion.gamerUnowned.length > 0 && (
-                                <React.Fragment>
-                                  <Grid item xs={12}>
-                                    <Typography component="h1">
-                                      Unowned
-                                    </Typography>
-                                  </Grid>
-                                  <Grid item xs={12}>
-                                    <List>
-                                      {gameSuggestion.gamerUnowned.map(
-                                        (gamer) => (
-                                          <ListItem
-                                            dense={true}
-                                            key={gamer.handle}
-                                          >
-                                            <ListItemAvatar>
-                                              <Avatar
-                                                alt={gamer.handle || "Attendee"}
-                                                src={
-                                                  gamer.avatarUrl ||
-                                                  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                                }
-                                              />
-                                            </ListItemAvatar>
-                                            <ListItemText
-                                              primary={gamer.handle}
-                                            />
-                                          </ListItem>
-                                        ),
-                                      )}
-                                    </List>
-                                  </Grid>
-                                </React.Fragment>
-                              )}
-                              {gameSuggestion.gamerUnknown.length > 0 && (
-                                <React.Fragment>
-                                  <Grid item xs={12}>
-                                    <Typography component="h1">
-                                      Unknown
-                                    </Typography>
-                                  </Grid>
-                                  <Grid item xs={12}>
-                                    <List>
-                                      {gameSuggestion.gamerUnknown.map(
-                                        (gamer) => (
-                                          <ListItem
-                                            dense={true}
-                                            key={gamer.handle}
-                                          >
-                                            <ListItemAvatar>
-                                              <Avatar
-                                                alt={gamer.handle || "Attendee"}
-                                                src={
-                                                  gamer.avatarUrl ||
-                                                  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                                }
-                                              />
-                                            </ListItemAvatar>
-                                            <ListItemText
-                                              primary={gamer.handle}
-                                            />
-                                          </ListItem>
-                                        ),
-                                      )}
-                                    </List>
-                                  </Grid>
-                                </React.Fragment>
-                              )}
-                            </Grid>
-                          </React.Fragment>
-                        }
-                      >
-                        <AvatarGroup
-                          spacing="small"
-                          max={avatars()}
-                          sx={{
-                            "& .MuiAvatar-root": {
-                              width: 32,
-                              height: 32,
-                              fontSize: 15,
-                            },
-                          }}
-                        >
-                          {(gameSuggestion.gamerOwned.length &&
-                            gameSuggestion.gamerOwned.map((gamer) => {
-                              return (
-                                <Avatar
-                                  alt={gamer.handle || "Attendee"}
-                                  key={gameSuggestion.appid
-                                    .toString()
-                                    .concat(gamer.handle || "")}
-                                  src={
-                                    gamer.avatarUrl ||
-                                    "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                  }
-                                  sx={{ bgcolor: "#222" }}
-                                />
-                              );
-                            })) || (
-                            <Avatar alt="No-One" sx={{ bgcolor: red[500] }}>
-                              <SentimentVeryDissatisfiedIcon />
-                            </Avatar>
-                          )}
-                        </AvatarGroup>
-                      </Tooltip>
+                      <GameOwners
+                        gamerOwned={gameSuggestion.gamerOwned}
+                        gamerUnowned={gameSuggestion.gamerUnowned}
+                        gamerUnknown={gameSuggestion.gamerUnknown}
+                      />
                       <Checkbox
                         value={gameSuggestion.appid}
                         edge="end"

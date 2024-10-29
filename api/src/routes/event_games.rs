@@ -14,11 +14,51 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use sqlx::postgres::PgPool;
 
-#[derive(Serialize, JsonSchema)]
+#[derive(Serialize, JsonSchema, Clone)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct Gamer {
     pub avatar_url: Option<String>,
     pub handle: Option<String>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct EventGameResponse {
+    pub appid: i64,
+    pub name: String,
+    pub gamer_owned: Vec<Gamer>,
+    pub playtime_forever: i32,
+    pub last_modified: DateTime<Utc>,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct EventGames {
+    pub event_games: Vec<EventGameResponse>,
+    pub total_count: i64,
+}
+
+custom_errors!(EventGameError, Unauthorized, InternalServerError);
+
+#[openapi(tag = "Event Games")]
+#[get("/events/<event_id>/games?<page>&<count>", format = "json")]
+pub async fn get_all(
+    event_id: i32,
+    pool: &State<PgPool>,
+    page: Option<i64>,
+    count: Option<i64>,
+) -> Result<Json<EventGames>, EventGameError> {
+    let page = page.unwrap_or(0);
+    let count = count.unwrap_or(10);
+
+    // Return all games
+    match game_suggestion::get_all_event_games(pool, event_id, count, page).await {
+        Ok(game_suggestions) => Ok(Json(game_suggestions)),
+        Err(Error::NotPermitted(e)) => Err(EventGameError::Unauthorized(e)),
+        Err(e) => Err(EventGameError::InternalServerError(format!(
+            "Error getting event, due to: {e}"
+        ))),
+    }
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -36,20 +76,20 @@ pub struct EventGameSuggestionResponse {
     pub gamer_unknown: Vec<Gamer>,
 }
 
-custom_errors!(EventGameError, Unauthorized, InternalServerError);
+custom_errors!(EventGameSuggestedError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Event Games")]
-#[get("/events/<event_id>/games", format = "json")]
-pub async fn get_all(
+#[get("/events/<event_id>/suggested_games", format = "json")]
+pub async fn get_all_suggested(
     event_id: i32,
     pool: &State<PgPool>,
     user: User,
-) -> Result<Json<Vec<EventGameSuggestionResponse>>, EventGameError> {
+) -> Result<Json<Vec<EventGameSuggestionResponse>>, EventGameSuggestedError> {
     // Return all games
     match game_suggestion::get(pool, event_id, user.email).await {
         Ok(game_suggestions) => Ok(Json(game_suggestions)),
-        Err(Error::NotPermitted(e)) => Err(EventGameError::Unauthorized(e)),
-        Err(e) => Err(EventGameError::InternalServerError(format!(
+        Err(Error::NotPermitted(e)) => Err(EventGameSuggestedError::Unauthorized(e)),
+        Err(e) => Err(EventGameSuggestedError::InternalServerError(format!(
             "Error getting event, due to: {e}"
         ))),
     }
@@ -64,7 +104,11 @@ pub struct EventGameSuggestionRequest {
 }
 
 #[openapi(tag = "Event Games")]
-#[post("/events/<event_id>/games", format = "json", data = "<game_request>")]
+#[post(
+    "/events/<event_id>/suggested_games",
+    format = "json",
+    data = "<game_request>"
+)]
 pub async fn post(
     event_id: i32,
     game_request: Json<EventGameSuggestionRequest>,
@@ -100,7 +144,7 @@ pub struct EventGameSuggestionPatch {
 
 #[openapi(tag = "Event Games")]
 #[patch(
-    "/events/<event_id>/games/<game_id>",
+    "/events/<event_id>/suggested_games/<game_id>",
     format = "json",
     data = "<game_patch>"
 )]

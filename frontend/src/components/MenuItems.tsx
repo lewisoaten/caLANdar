@@ -18,7 +18,7 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
 import { Collapse } from "@mui/material";
-import { Event } from "@mui/icons-material";
+import { Event, SportsEsports } from "@mui/icons-material";
 
 interface MenuItemsProps {
   updateButtonLoadingState: [
@@ -57,12 +57,12 @@ export default function MenuItems(props: MenuItemsProps) {
                   </ListItemIcon>
                   <ListItemText primary="Event" />
                 </ListItemButton>
-                {/* <ListItemButton sx={{ pl: 4 }} component={Link} to={gamesUrl}>
+                <ListItemButton sx={{ pl: 4 }} component={Link} to={gamesUrl}>
                   <ListItemIcon>
                     <SportsEsports />
                   </ListItemIcon>
                   <ListItemText primary="Games" />
-                </ListItemButton> */}
+                </ListItemButton>
               </List>
             </Collapse>
           )}

@@ -1,14 +1,16 @@
+use std::collections::HashMap;
+
 use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
     repositories::{
         game_suggestion::{self, GameSuggestion},
-        user_games,
+        invitation, user_games,
     },
-    routes::{
-        event_games::{EventGameSuggestionRequest, EventGameSuggestionResponse, GameVote, Gamer},
-        event_invitations::{InvitationResponse, InvitationsResponse},
+    routes::event_games::{
+        EventGameResponse, EventGameSuggestionRequest, EventGameSuggestionResponse, EventGames,
+        GameVote, Gamer,
     },
     util::{is_attending_event, is_event_active},
 };
@@ -53,19 +55,175 @@ impl From<game_suggestion::GameSuggestion> for EventGameSuggestionResponse {
     }
 }
 
+impl From<String> for Gamer {
+    fn from(gamer: String) -> Self {
+        Self {
+            avatar_url: Some(String::new()),
+            handle: Some(gamer),
+        }
+    }
+}
+
+impl Default for Gamer {
+    fn default() -> Self {
+        Self {
+            avatar_url: None,
+            handle: None,
+        }
+    }
+}
+
+// Implement From for EventGameResponse from Game
+impl From<crate::repositories::user_games::UserGame> for EventGameResponse {
+    fn from(game: crate::repositories::user_games::UserGame) -> Self {
+        Self {
+            appid: game.appid,
+            name: game.name,
+            gamer_owned: game
+                .emails
+                .unwrap_or_default()
+                .into_iter()
+                .map(std::convert::Into::into)
+                .collect(),
+            playtime_forever: game
+                .playtime_forever
+                .unwrap_or_default()
+                .try_into()
+                .unwrap_or_default(),
+            last_modified: game.last_modified.unwrap_or_default(),
+        }
+    }
+}
+
+pub async fn get_all_event_games(
+    pool: &PgPool,
+    event_id: i32,
+    count: i64,
+    page: i64,
+) -> Result<EventGames, Error> {
+    let invitations = match invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
+    )
+    .await
+    {
+        Ok(invitations) => invitations,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get event invitations due to: {e}"
+            )))
+        }
+    };
+
+    // Filter out invitations with a response of 'yes' or 'maybe'
+    let invitations: Vec<invitation::Invitation> = invitations
+        .into_iter()
+        .filter(|i| {
+            i.response == Some(invitation::Response::Yes)
+                || i.response == Some(invitation::Response::Maybe)
+        })
+        .collect();
+
+    // Create list of emails from all event inviations
+    let emails: Vec<String> = invitations.iter().map(|i| i.email.clone()).collect();
+
+    // Create map of emails to their respective handles and avatar_urls
+    let mut email_map: HashMap<String, Gamer> = HashMap::new();
+    for invitation in invitations {
+        email_map.insert(
+            invitation.email.clone().to_lowercase(),
+            Gamer {
+                avatar_url: invitation.avatar_url,
+                handle: invitation.handle,
+            },
+            // (, ),
+        );
+    }
+
+    // Build user_games Filter
+    let user_games_filter_values = user_games::Filter {
+        appid: None,
+        emails: Some(emails.clone()),
+        count,
+        page,
+    };
+
+    let event_games = match user_games::filter(pool, user_games_filter_values).await {
+        Ok(games) => {
+            let mut event_games = Vec::new();
+            //For each Gamer in each event_games, add the Gamer's handle and avatar_url from invitations
+            for game in games {
+                let gamer_emails = game.emails.unwrap_or_default();
+
+                let gamer_owned: Vec<Gamer> = gamer_emails
+                    .iter()
+                    .map(|email| {
+                        email_map.get(&email.to_lowercase()).unwrap_or(&Gamer {
+                            avatar_url: None,
+                            handle: None,
+                        })
+                    })
+                    .cloned()
+                    .collect();
+
+                event_games.push(EventGameResponse {
+                    appid: game.appid,
+                    name: game.name,
+                    gamer_owned,
+                    playtime_forever: game
+                        .playtime_forever
+                        .unwrap_or_default()
+                        .try_into()
+                        .unwrap_or_default(),
+                    last_modified: game.last_modified.unwrap_or_default(),
+                });
+            }
+            event_games
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get games count for event due to: {e}"
+            )))
+        }
+    };
+
+    let user_games_filter_values = user_games::Filter {
+        appid: None,
+        emails: Some(emails),
+        count,
+        page,
+    };
+
+    let event_games_count = match user_games::count(pool, user_games_filter_values).await {
+        Ok(count) => count,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get games count for event due to: {e}"
+            )))
+        }
+    };
+
+    Ok(EventGames {
+        event_games,
+        total_count: event_games_count.unwrap_or(0) / count,
+    })
+}
+
 pub async fn get(
     pool: &PgPool,
     event_id: i32,
     email: String,
 ) -> Result<Vec<EventGameSuggestionResponse>, Error> {
-    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
-        InvitationsResponse,
-        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
-        FROM invitation
-        WHERE event_id=$1"#,
-        event_id
+    let invitations = match invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
     )
-    .fetch_all(pool)
     .await
     {
         Ok(invitations) => invitations,
@@ -134,14 +292,13 @@ pub async fn create(
         Ok(true) => (),
     };
 
-    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
-        InvitationsResponse,
-        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
-        FROM invitation
-        WHERE event_id=$1"#,
-        event_id
+    let invitations = match invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
     )
-    .fetch_all(pool)
     .await
     {
         Ok(invitations) => invitations,
@@ -196,14 +353,13 @@ pub async fn vote(
         Ok(true) => (),
     };
 
-    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
-        InvitationsResponse,
-        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
-        FROM invitation
-        WHERE event_id=$1"#,
-        event_id
+    let invitations = match invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
     )
-    .fetch_all(pool)
     .await
     {
         Ok(invitations) => invitations,
@@ -226,15 +382,15 @@ pub async fn vote(
 async fn add_owners_to_game(
     pool: &PgPool,
     game_suggestion: GameSuggestion,
-    invitations: &Vec<InvitationsResponse>,
+    invitations: &Vec<invitation::Invitation>,
 ) -> Result<EventGameSuggestionResponse, Error> {
     let mut gamer_owned = Vec::new();
     let mut gamer_unowned = Vec::new();
     let gamer_unknown = Vec::new();
 
     for invitation in invitations {
-        if invitation.response != Some(InvitationResponse::Yes)
-            && invitation.response != Some(InvitationResponse::Maybe)
+        if invitation.response != Some(invitation::Response::Yes)
+            && invitation.response != Some(invitation::Response::Maybe)
         {
             continue;
         }
@@ -243,7 +399,9 @@ async fn add_owners_to_game(
             pool,
             user_games::Filter {
                 appid: Some(game_suggestion.game_id),
-                email: Some(invitation.email.clone()),
+                emails: Some(vec![invitation.email.clone()]),
+                count: 1,
+                page: 0,
             },
         )
         .await
