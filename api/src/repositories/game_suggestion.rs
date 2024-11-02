@@ -40,13 +40,18 @@ pub async fn create(
             INSERT INTO event_game (event_id, game_id, user_email, last_modified)
                 VALUES ($1, $2, $3, NOW())
                 RETURNING event_id, game_id, user_email, requested_at, last_modified
+        ), event_game_patch_response AS (
+            INSERT INTO event_game_vote (event_id, game_id, email, vote)
+                SELECT event_id, game_id, user_email, 'yes'::vote AS vote FROM event_game_suggestion_response
+                ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = 'yes'::vote, last_modified = NOW()
+                RETURNING event_id, game_id, email, vote, vote_date, last_modified
         ) SELECT
             event_game_suggestion_response.event_id AS event_id,
             event_game_suggestion_response.game_id AS game_id,
             steam_game.name AS game_name,
             event_game_suggestion_response.user_email AS user_email,
-            'novote'::vote AS "self_vote: _",
-            0::BIGINT AS votes,
+            'yes'::vote AS "self_vote: _",
+            1 AS "votes: i64",
             event_game_suggestion_response.requested_at AS requested_at,
             event_game_suggestion_response.last_modified AS last_modified
         FROM event_game_suggestion_response
