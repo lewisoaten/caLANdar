@@ -1,5 +1,4 @@
 use chrono::{DateTime, Duration, Utc};
-use log::warn;
 use sqlx::PgPool;
 
 use crate::{
@@ -31,13 +30,7 @@ fn _get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) 
         .and_local_timezone(Utc)
         .unwrap();
 
-    warn!("Starting calculation of day quarter buckets");
-    warn!("time_begin: {}", time_begin);
-    warn!("time_end: {}", time_end);
-
     while current_day < time_end {
-        warn!("\nProcessing day starting at: {}", current_day);
-
         // Iterate over each 6-hour bucket, starting from 6 AM
         for &hour in &[6, 12, 18, 0] {
             let bucket_start = if hour == 0 {
@@ -47,64 +40,18 @@ fn _get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) 
             };
             let bucket_end = bucket_start + Duration::hours(6);
 
-            warn!("Bucket from {} to {}: ", bucket_start, bucket_end);
-
             // Check if this bucket is within the specified time range
             if bucket_start <= time_end && bucket_end > time_begin {
                 buckets.push(1u8);
-                warn!("  -> Within range, adding 1");
-            } else {
-                warn!("  -> Out of range, skipping bucket");
             }
         }
 
         // Move to the next day's 6 AM
         current_day += Duration::days(1);
-        warn!("Moving to next day at 6 AM: {}", current_day);
     }
-
-    warn!("Finished calculation. Buckets: {:?}", buckets);
 
     buckets
 }
-
-// fn _get_day_quarter_buckets(
-//     time_begin: chrono::DateTime<Utc>,
-//     time_end: chrono::DateTime<Utc>,
-// ) -> Vec<u8> {
-//     const SECONDS_PER_QUARTER: i64 = 60 * 60 * 24 / 4;
-
-//     log::info!(
-//         "Calculating day quarter buckets for event from {time_begin} to {time_end}",
-//         time_begin = time_begin,
-//         time_end = time_end
-//     );
-
-//     let positive_duration_in_seconds = time_end
-//         .signed_duration_since(time_begin)
-//         .num_seconds()
-//         .abs();
-
-//     log::info!(
-//         "Event duration is {positive_duration_in_seconds} seconds",
-//         positive_duration_in_seconds = positive_duration_in_seconds
-//     );
-
-//     let quarter_days = match u8::try_from(
-//         positive_duration_in_seconds / SECONDS_PER_QUARTER,
-//     ) {
-//         Ok(quarter_days) => quarter_days,
-//         Err(_) => return vec![],
-//     };
-
-//     log::info!(
-//         "Event duration is {quarter_days} quarter days",
-//         quarter_days = quarter_days
-//     );
-
-//     // Return vector of 0s with the same number of elements as quarter_days
-//     vec![0_u8; quarter_days as usize]
-// }
 
 pub async fn respond(
     pool: &PgPool,
