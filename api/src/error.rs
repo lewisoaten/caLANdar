@@ -92,6 +92,7 @@ macro_rules! generate_error {
         /// Sets the status code of the response to 404 Not Found.
         impl<'r, 'o: 'r> Responder<'r, 'o> for $responder {
             fn respond_to(self, req: &'r Request<'_>) -> response::Result<'o> {
+                log::error!("Error, {}: {}", $title, self.0);
                 (
                     Status::$responder,
                     Json(ErrorResponse::new(
