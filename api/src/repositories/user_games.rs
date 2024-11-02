@@ -86,14 +86,20 @@ pub async fn count(pool: &PgPool, filter: Filter) -> Result<Option<i64>, sqlx::E
 
     sqlx::query_scalar!(
         r#"
-        SELECT COUNT(appid) OVER () as count
-        FROM user_game
-        INNER JOIN steam_game USING(appid)
-        WHERE (appid = $1 OR $2)
-        AND (LOWER(email) = ANY($3) OR $4)
-        GROUP BY
-            appid,
-            name
+        SELECT COALESCE (
+            (
+                SELECT COUNT(appid) OVER () as count
+                FROM user_game
+                INNER JOIN steam_game USING(appid)
+                WHERE (appid = $1 OR $2)
+                AND (LOWER(email) = ANY($3) OR $4)
+                GROUP BY
+                    appid,
+                    name
+                LIMIT 1
+            ),
+            0
+        );
         "#,
         appid.0,
         appid.1,
