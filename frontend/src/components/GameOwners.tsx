@@ -17,6 +17,7 @@ import SentimentVeryDissatisfiedIcon from "@mui/icons-material/SentimentVeryDiss
 import { Gamer } from "../types/game_suggestions";
 
 interface GameOwnersProps {
+  hideIfEmpty?: boolean;
   gamerOwned: Gamer[];
   gamerUnowned?: Gamer[];
   gamerUnknown?: Gamer[];
@@ -28,13 +29,15 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
   const theme_sm = useMediaQuery(theme.breakpoints.up("sm"));
   const theme_xs = useMediaQuery(theme.breakpoints.up("xs"));
 
+  const hidden = (props.hideIfEmpty || false) && props.gamerOwned.length === 0;
+
   const avatars = () => {
     if (theme_lg) return 7;
     if (theme_sm) return 5;
     if (theme_xs) return 1;
   };
 
-  return (
+  return hidden ? null : (
     <Tooltip
       disableInteractive
       title={

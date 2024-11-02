@@ -50,6 +50,9 @@ pub struct Profile {
 
     /// The games the user owns.
     pub games: Vec<UserGame>,
+
+    /// The number of games that the user owns
+    pub game_count: i64,
 }
 
 impl SchemaExample for Profile {
@@ -58,6 +61,7 @@ impl SchemaExample for Profile {
             email: "test@test.invalid".to_string(),
             steam_id: "12345678901234567".to_string(),
             games: vec![UserGame::example()],
+            game_count: 123,
         }
     }
 }
@@ -82,17 +86,17 @@ custom_errors!(ProfileGetError, NotFound, InternalServerError);
 
 /// Return the user's profile.
 #[openapi(tag = "Profile")]
-#[get("/profile?<page>", format = "json")]
+#[get("/profile?<page>&<count>", format = "json")]
 pub async fn get(
     pool: &State<PgPool>,
     user: User,
     page: Option<i64>,
+    count: Option<i64>,
 ) -> Result<Json<Profile>, ProfileGetError> {
-    const COUNT: i64 = 10;
-
     let page = page.unwrap_or(0);
+    let count = count.unwrap_or(10);
 
-    match profile::get(pool, user.email.clone(), COUNT, page).await {
+    match profile::get(pool, user.email.clone(), count, page).await {
         Ok(profile) => Ok(Json(profile)),
         Err(Error::NoData(_)) => Err(ProfileGetError::NotFound(format!(
             "Profile for {}",

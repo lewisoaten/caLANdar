@@ -151,7 +151,7 @@ pub async fn get_all_event_games(
         page,
     };
 
-    let event_games = match user_games::filter(pool, user_games_filter_values).await {
+    let event_games = match user_games::filter(pool, user_games_filter_values.clone()).await {
         Ok(games) => {
             let mut event_games = Vec::new();
             //For each Gamer in each event_games, add the Gamer's handle and avatar_url from invitations
@@ -190,13 +190,6 @@ pub async fn get_all_event_games(
         }
     };
 
-    let user_games_filter_values = user_games::Filter {
-        appid: None,
-        emails: Some(emails),
-        count,
-        page,
-    };
-
     let event_games_count = match user_games::count(pool, user_games_filter_values).await {
         Ok(count) => count,
         Err(e) => {
@@ -208,7 +201,7 @@ pub async fn get_all_event_games(
 
     Ok(EventGames {
         event_games,
-        total_count: event_games_count.unwrap_or(0) / count,
+        total_count: (event_games_count.unwrap_or(0) + count - 1) / count,
     })
 }
 

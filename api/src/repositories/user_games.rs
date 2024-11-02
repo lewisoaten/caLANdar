@@ -9,6 +9,7 @@ pub struct UserGame {
     pub last_modified: Option<DateTime<Utc>>,
 }
 
+#[derive(Clone)]
 pub struct Filter {
     pub appid: Option<i64>,
     pub emails: Option<Vec<String>>,
