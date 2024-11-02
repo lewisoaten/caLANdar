@@ -46,9 +46,13 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
         .startOf("day")
         .add(day_number, "days");
       const bucket = moment(day).add(6 * (bucket_number + 1), "hours");
-      if (props.timeBegin <= bucket && props.timeEnd >= bucket) {
-        if (firstButtonForAttendance === undefined)
+      if (
+        props.timeBegin < moment(bucket).add(6, "hours") &&
+        props.timeEnd >= bucket
+      ) {
+        if (firstButtonForAttendance === undefined) {
           firstButtonForAttendance = day_number * 4 + bucket_number;
+        }
         return 1;
       }
 
