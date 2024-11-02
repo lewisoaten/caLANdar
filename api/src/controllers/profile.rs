@@ -13,6 +13,7 @@ impl From<crate::repositories::profile::Profile> for Profile {
             email: profile.email,
             steam_id: profile.steam_id.to_string(),
             games: vec![],
+            game_count: 0,
         }
     }
 }
@@ -58,7 +59,7 @@ pub async fn get(pool: &PgPool, email: String, count: i64, page: i64) -> Result<
         page,
     };
 
-    profile.games = match user_games::filter(pool, filter).await {
+    profile.games = match user_games::filter(pool, filter.clone()).await {
         Ok(user_games) => user_games
             .into_iter()
             .map(std::convert::Into::into)
@@ -66,6 +67,16 @@ pub async fn get(pool: &PgPool, email: String, count: i64, page: i64) -> Result<
         Err(e) => {
             return Err(Error::Controller(format!(
                 "Unable to get user games due to: {e}"
+            )))
+        }
+    };
+
+    profile.game_count = match user_games::count(pool, filter).await {
+        Ok(Some(game_count)) => (game_count + count - 1) / count,
+        Ok(None) => 0,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get user game count due to: {e}"
             )))
         }
     };

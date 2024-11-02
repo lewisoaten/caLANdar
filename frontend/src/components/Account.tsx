@@ -22,36 +22,19 @@ import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 
 import { defaultProfileData } from "../types/profile";
+import { EventGame } from "../types/game_suggestions";
 
 import { useState, useEffect } from "react";
 import moment from "moment";
+import GamesList from "./GamesList";
 
 const Account = () => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const [profile, setProfile] = useState(defaultProfileData);
-
-  useEffect(() => {
-    fetch(`/api/profile`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    }).then((response) => {
-      if (response.status === 401) signOut();
-      if (response.status === 404) setProfile(defaultProfileData);
-      else if (response.ok)
-        return response.json().then((data) => {
-          data.games = data.games.sort(
-            (a: { playtimeForever: number }, b: { playtimeForever: number }) =>
-              b.playtimeForever - a.playtimeForever,
-          );
-          setProfile(data);
-        });
-    });
-  }, []);
+  const [games, setGames] = useState(new Map<number, EventGame[]>());
+  const [gamesCount, setGamesCount] = useState(0);
 
   const refreshGames = () => {
     fetch(`/api/profile/games/update`, {
@@ -85,43 +68,51 @@ const Account = () => {
     });
   };
 
-  const formatDuration = (duration: moment.Duration) => {
-    const parts = [];
+  const loadNewPage = (page: number) => {
+    fetch(`/api/profile?page=${page}&count=12`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    }).then((response) => {
+      if (response.status === 401) signOut();
+      if (response.status === 404) setProfile(defaultProfileData);
+      else if (response.ok)
+        return response.json().then((data) => {
+          setProfile(data);
+          // Sort Games
+          let games = data.games.sort(
+            (a: { playtimeForever: number }, b: { playtimeForever: number }) =>
+              b.playtimeForever - a.playtimeForever,
+          );
 
-    // return nothing when the duration is falsy or not correctly parsed (P0D)
-    if (!duration || duration.toISOString() === "P0D") return;
+          // Map UserGame to EventGame
+          games = games.map(
+            (game: {
+              appid: number;
+              name: string;
+              playtimeForever: number;
+            }) => {
+              return {
+                appid: game.appid,
+                name: game.name,
+                gamerOwned: [],
+                playtimeForever: game.playtimeForever,
+                lastModified: moment(),
+              } as EventGame;
+            },
+          );
 
-    if (duration.years() >= 1) {
-      const years = Math.floor(duration.years());
-      parts.push(years + " " + (years > 1 ? "years" : "year"));
-    }
+          const gamesMap = new Map<number, EventGame[]>();
 
-    if (duration.months() >= 1) {
-      const months = Math.floor(duration.months());
-      parts.push(months + " " + (months > 1 ? "months" : "month"));
-    }
+          gamesMap.set(1, games);
 
-    if (duration.days() >= 1) {
-      const days = Math.floor(duration.days());
-      parts.push(days + " " + (days > 1 ? "days" : "day"));
-    }
+          setGames(gamesMap);
 
-    if (duration.hours() >= 1) {
-      const hours = Math.floor(duration.hours());
-      parts.push(hours + " " + (hours > 1 ? "hours" : "hour"));
-    }
-
-    if (duration.minutes() >= 1) {
-      const minutes = Math.floor(duration.minutes());
-      parts.push(minutes + " " + (minutes > 1 ? "minutes" : "minute"));
-    }
-
-    if (duration.seconds() >= 1) {
-      const seconds = Math.floor(duration.seconds());
-      parts.push(seconds + " " + (seconds > 1 ? "seconds" : "second"));
-    }
-
-    return parts.join(", ");
+          setGamesCount(data.gameCount);
+        });
+    });
   };
 
   return (
@@ -199,59 +190,11 @@ const Account = () => {
             </Grid>
           </Paper>
         </Grid>
-        {/* Render game cards for each game in profile */}
-        <Grid item xs={12} md={12} lg={12}>
-          <Paper>
-            <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-              <Grid container spacing={3}>
-                {profile.games.map((game) => (
-                  <Grid item xs={12} md={6} lg={4} key={game.appid}>
-                    <Card key={game.appid} sx={{ maxWidth: 345 }} elevation={4}>
-                      <CardMedia
-                        sx={{ height: 140 }}
-                        image={`https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`}
-                        title={game.name}
-                      />
-                      <CardContent>
-                        <Typography gutterBottom variant="h5" component="div">
-                          {game.name}
-                        </Typography>
-
-                        {game.playtimeForever !== 0 ? (
-                          <React.Fragment>
-                            <Tooltip
-                              title={formatDuration(
-                                moment.duration(
-                                  game.playtimeForever,
-                                  "minutes",
-                                ),
-                              )}
-                            >
-                              <Chip
-                                color="success"
-                                size="small"
-                                icon={<AccessTimeIcon />}
-                                label={moment
-                                  .duration(game.playtimeForever, "minutes")
-                                  .humanize()}
-                              />
-                            </Tooltip>
-                          </React.Fragment>
-                        ) : (
-                          <React.Fragment></React.Fragment>
-                        )}
-                      </CardContent>
-                      {/* <CardActions>
-                <Button size="small">Share</Button>
-                <Button size="small">Learn More</Button>
-              </CardActions> */}
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-            </Container>
-          </Paper>
-        </Grid>
+        <GamesList
+          loadNewPage={loadNewPage}
+          games={games}
+          gamesCount={gamesCount}
+        />
       </Grid>
     </Container>
   );
