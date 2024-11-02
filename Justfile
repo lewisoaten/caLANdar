@@ -13,6 +13,9 @@ dev-api:
 dev-frontend:
     cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start
 
+dev-storybook:
+	cd frontend && npm run storybook
+
 migrate-info:
 	#!/usr/bin/env bash
 	set -euxo pipefail
