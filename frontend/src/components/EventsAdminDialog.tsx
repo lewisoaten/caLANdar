@@ -1,5 +1,5 @@
 import * as React from "react";
-import moment from "moment";
+import moment from "moment/min/moment-with-locales";
 import { FormEvent, ChangeEvent, useState, useContext, useEffect } from "react";
 import {
   Button,
@@ -12,8 +12,12 @@ import {
   TextField,
   Grid,
 } from "@mui/material";
-import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
+import {
+  LocalizationProvider,
+  DateTimePicker,
+  DateField,
+} from "@mui/x-date-pickers";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -62,6 +66,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   };
 
   const handleTimeBeginChange = (value: moment.Moment | null) => {
+    value?.startOf("hour");
     setFormValues({
       ...formValues,
       timeBegin: value ?? defaultCreateEvent.timeBegin,
@@ -69,6 +74,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
   };
 
   const handleTimeEndChange = (value: moment.Moment | null) => {
+    value?.startOf("hour");
     setFormValues({
       ...formValues,
       timeEnd: value ?? defaultCreateEvent.timeEnd,
@@ -196,10 +202,16 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
     }
   };
 
+  const locale =
+    navigator.languages && navigator.languages.length
+      ? navigator.languages[0]
+      : navigator.language;
+  moment.locale(locale);
+
   return (
     <Dialog open={open} onClose={cancel}>
       <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-        <DialogTitle>Create Event</DialogTitle>
+        <DialogTitle>Create/Edit Event</DialogTitle>
         <DialogContent>
           <DialogContentText>Create an event here!</DialogContentText>
           <Grid container spacing={2}>
