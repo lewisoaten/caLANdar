@@ -51,7 +51,7 @@
     "@pact-foundation/pact": "13.1.4",
     "@pact-foundation/pact-node": "10.18.0",
     "@storybook/addon-essentials": "^8.4.1",
-    "@storybook/addon-interactions": "^8.4.1",
+    "@storybook/addon-interactions": "^8.4.2",
     "@storybook/addon-links": "^8.4.1",
     "@storybook/addon-onboarding": "^8.4.1",
     "@storybook/blocks": "^8.4.0",
