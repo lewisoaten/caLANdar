@@ -10,7 +10,7 @@
     "@mui/material": "5.16.7",
     "@mui/x-data-grid": "7.22.3",
     "@mui/x-date-pickers": "7.22.3",
-    "@sentry/react": "^8.39.0",
+    "@sentry/react": "^8.40.0",
     "globals": "^15.12.0",
     "moment": "2.30.1",
     "moment-timezone": "0.5.46",
