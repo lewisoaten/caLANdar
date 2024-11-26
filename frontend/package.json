@@ -7,7 +7,7 @@
     "@emotion/styled": "11.13.5",
     "@mui/icons-material": "5.16.7",
     "@mui/lab": "5.0.0-alpha.173",
-    "@mui/material": "5.16.7",
+    "@mui/material": "6.1.8",
     "@mui/x-data-grid": "7.22.3",
     "@mui/x-date-pickers": "7.22.3",
     "@sentry/react": "^8.40.0",
