@@ -1,4 +1,4 @@
-FROM rust:1.82.0
+FROM rust:1.83.0
 
 WORKDIR /usr/src/app/calandar
 
