@@ -46,7 +46,7 @@
     ]
   },
   "devDependencies": {
-    "@chromatic-com/storybook": "^3.2.3",
+    "@chromatic-com/storybook": "^3.2.4",
     "@eslint/compat": "^1.2.5",
     "@pact-foundation/pact": "13.2.0",
     "@pact-foundation/pact-node": "10.18.0",
