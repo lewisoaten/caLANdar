@@ -50,7 +50,7 @@
     "@eslint/compat": "^1.2.5",
     "@pact-foundation/pact": "13.2.0",
     "@pact-foundation/pact-node": "10.18.0",
-    "@storybook/addon-essentials": "^8.5.0",
+    "@storybook/addon-essentials": "^8.5.1",
     "@storybook/addon-interactions": "^8.5.0",
     "@storybook/addon-links": "^8.5.0",
     "@storybook/addon-onboarding": "^8.5.0",
