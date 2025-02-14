@@ -1,27 +1,11 @@
-import React, { ChangeEvent } from "react";
-import {
-  Container,
-  Grid,
-  Paper,
-  Typography,
-  Card,
-  CardMedia,
-  CardContent,
-  Chip,
-  Tooltip,
-  Pagination,
-  Stack,
-} from "@mui/material";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import * as React from "react";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 
 import { defaultEventGamesMap, EventGame } from "../types/game_suggestions";
 
-import { useState, useEffect } from "react";
-import moment from "moment";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import GameOwners from "./GameOwners";
 import GamesList from "./GamesList";
 
 const EventGames = () => {
@@ -46,7 +30,7 @@ const EventGames = () => {
       if (response.status === 404) setEventGames(defaultEventGamesMap);
       else if (response.ok)
         return response.json().then((data) => {
-          let eventGames = new Map<number, EventGame[]>();
+          const eventGames = new Map<number, EventGame[]>();
 
           // Iterate over items in data, putting them into the correct eventGames key based on the number of gamers who own the game
           for (let i = 0; i < data.eventGames.length; i++) {

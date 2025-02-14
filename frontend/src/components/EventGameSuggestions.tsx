@@ -17,8 +17,6 @@ import {
   Checkbox,
   ListItemButton,
   Stack,
-  useTheme,
-  useMediaQuery,
 } from "@mui/material";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";

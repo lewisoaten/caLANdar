@@ -5,26 +5,20 @@ import {
   Grid,
   Paper,
   Typography,
-  Card,
-  CardMedia,
-  CardContent,
   FormControl,
   InputLabel,
   Input,
   FormHelperText,
   Link,
-  Chip,
-  Tooltip,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 
 import { defaultProfileData } from "../types/profile";
 import { EventGame } from "../types/game_suggestions";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import moment from "moment";
 import GamesList from "./GamesList";
 

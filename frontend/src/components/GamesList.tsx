@@ -18,7 +18,6 @@ import { EventGame } from "../types/game_suggestions";
 
 import { useState, useEffect } from "react";
 import moment from "moment";
-import { useLocation } from "react-router-dom";
 import GameOwners from "./GameOwners";
 
 // Create GamesList Props
@@ -32,13 +31,11 @@ interface GamesListProps {
 const GamesList = (props: GamesListProps) => {
   const [page, setPage] = useState(1);
 
-  const location = useLocation();
-
   useEffect(() => {
     props.loadNewPage(0);
   }, []);
 
-  const handleChangePage = (event: ChangeEvent<unknown>, newPage: number) => {
+  const handleChangePage = (_event: ChangeEvent<unknown>, newPage: number) => {
     setPage(newPage);
     props.loadNewPage(newPage - 1);
   };
