@@ -51,7 +51,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [inputValue, setInputValue] = useState("");
   const [options, setOptions] = useState(defaultGames);
 
-  const typingTimer = useRef<NodeJS.Timeout>();
+  const typingTimer = useRef<NodeJS.Timeout>(new NodeJS.Timeout());
   const doneTypingInterval = 1000;
 
   useEffect(() => {
