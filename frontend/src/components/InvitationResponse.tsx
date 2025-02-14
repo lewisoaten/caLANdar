@@ -69,7 +69,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     | undefined
   >("primary");
 
-  const typingTimer = useRef<NodeJS.Timeout>();
+  const typingTimer = useRef<NodeJS.Timeout>(new NodeJS.Timeout());
   const doneTypingInterval = 1000;
 
   useEffect(() => {
