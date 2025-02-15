@@ -9,8 +9,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: shuttle-hq/deploy-action@a499e4ebcb4b486a0e34d9af9ee2f28e7ee16501 # Was v0.0.3
+      - uses: shuttle-hq/deploy-action@e1c2ff9b0d68adb0b2cfb35e29edfb335b854e41 # v2 latest commit
         with:
-          deploy-key: ${{ secrets.SHUTTLE_DEPLOY_KEY }}
-          project-id: proj_01H1T42300G97DJDRF8PAYQVYF
+          shuttle-api-key: ${{ secrets.SHUTTLE_API_KEY }}
+          project-id: proj_01JKZY7KYNJ0KZZDKGDW9W1KAF
           working-directory: api
+          secrets: |
+            PASETO_SECRET_KEY = '${{ secrets.PASETO_SECRET_KEY }}'
+            SENDGRID_API_KEY = '${{ secrets.SENDGRID_API_KEY }}'
+            STEAM_API_KEY = '${{ secrets.STEAM_API_KEY }}'
