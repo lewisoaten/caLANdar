@@ -138,7 +138,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
   };
 
   const handleHandleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    clearTimeout(typingTimer.current);
+    if (typingTimer.current !== null) {
+      clearTimeout(typingTimer.current);
+    }
 
     const newInvitation = {
       ...invitation,
