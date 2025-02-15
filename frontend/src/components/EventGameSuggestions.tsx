@@ -51,7 +51,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [inputValue, setInputValue] = useState("");
   const [options, setOptions] = useState(defaultGames);
 
-  const typingTimer = useRef<NodeJS.Timeout>(new NodeJS.Timeout());
+  const typingTimer = useRef<null | NodeJS.Timeout>(null);
   const doneTypingInterval = 1000;
 
   useEffect(() => {
@@ -91,7 +91,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     // Prevent page reload
     event.preventDefault();
 
-    clearTimeout(typingTimer.current);
+    if (typingTimer.current !== null) {
+      clearTimeout(typingTimer.current);
+    }
 
     setInputValue(value);
     setErrorMessage("");
