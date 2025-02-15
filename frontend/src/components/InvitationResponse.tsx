@@ -69,7 +69,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     | undefined
   >("primary");
 
-  const typingTimer = useRef<NodeJS.Timeout>(new NodeJS.Timeout());
+  const typingTimer = useRef<null | NodeJS.Timeout>(null);
   const doneTypingInterval = 1000;
 
   useEffect(() => {
@@ -109,7 +109,9 @@ export default function InvitationResponse(props: InvitationResponseProps) {
     _event: React.MouseEvent<HTMLElement>,
     newAlignment: string,
   ) => {
-    clearTimeout(typingTimer.current);
+    if (typingTimer.current !== null) {
+      clearTimeout(typingTimer.current);
+    }
 
     const newInvitation = {
       ...invitation,
