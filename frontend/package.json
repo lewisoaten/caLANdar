@@ -9,7 +9,7 @@
     "@mui/lab": "^6.0.0-beta.27",
     "@mui/material": "^6.4.4",
     "@mui/x-data-grid": "7.28.1",
-    "@mui/x-date-pickers": "7.28.0",
+    "@mui/x-date-pickers": "7.28.2",
     "@sentry/react": "^9.10.0",
     "globals": "^15.15.0",
     "moment": "2.30.1",
