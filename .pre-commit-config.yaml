@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: prettier
   - repo: https://github.com/pre-commit/mirrors-eslint
-    rev: v9.20.1
+    rev: v9.27.0
     hooks:
       - id: eslint
         entry: /usr/bin/env sh -c 'cd frontend && eslint'
