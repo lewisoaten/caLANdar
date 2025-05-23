@@ -27,6 +27,12 @@ jobs:
             api/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
+      - name: Check formatting
+        run: cargo fmt --check
+        working-directory: ./api
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+        working-directory: ./api
       - name: Build
         run: cargo build --verbose
         working-directory: ./api

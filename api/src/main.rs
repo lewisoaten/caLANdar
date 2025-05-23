@@ -28,17 +28,17 @@ use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
 
 #[macro_use]
-mod error;
+mod error; // error_chain macros are often fine without pub
 
-mod auth;
-mod controllers;
-mod repositories;
-mod routes;
-mod util;
+pub mod auth;
+pub mod controllers;
+pub mod repositories;
+pub mod routes;
+pub mod util;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
-struct RootResponse {
+pub struct RootResponse { // Made public just in case, though not directly used by current test
     value: String,
 }
 
@@ -46,7 +46,7 @@ custom_errors!(HealthzError, NotFound);
 
 #[openapi]
 #[get("/healthz", format = "json")]
-async fn healthz(
+pub async fn healthz( // Made public
     pool: &State<PgPool>,
 ) -> Result<rocket::response::status::NoContent, HealthzError> {
     // Make a simple query to test connection to the database
@@ -59,7 +59,7 @@ async fn healthz(
 }
 
 #[options("/<_..>")]
-const fn all_options() -> rocket::response::status::NoContent {
+pub const fn all_options() -> rocket::response::status::NoContent { // Made public
     rocket::response::status::NoContent
 }
 

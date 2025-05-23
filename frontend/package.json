@@ -30,6 +30,7 @@
     "test": "vitest",
     "test:coverage": "vitest run --coverage --watch=false",
     "test:pact": "cross-env CI=true react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
+    "test:e2e": "playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -50,6 +51,7 @@
     "@eslint/compat": "^1.2.8",
     "@pact-foundation/pact": "14.0.0",
     "@pact-foundation/pact-node": "10.18.0",
+    "@playwright/test": "^1.52.0",
     "@storybook/addon-essentials": "^8.6.12",
     "@storybook/addon-interactions": "^8.6.12",
     "@storybook/addon-links": "^8.5.6",
