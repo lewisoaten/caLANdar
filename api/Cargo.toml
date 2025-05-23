@@ -8,9 +8,9 @@ anyhow = "1.0.89"
 base64 = "0.22.1"
 chrono = { version = "0.4.38", features = ["serde"] }
 futures = "0.3.30"
-shuttle-rocket = "0.52.0"
-shuttle-runtime = "0.52.0"
-shuttle-shared-db = { version = "0.52.0", features = ["postgres", "sqlx"] }
+shuttle-rocket = "0.55.0"
+shuttle-runtime = "0.55.0"
+shuttle-shared-db = { version = "0.55.0", features = ["postgres", "sqlx"] }
 log = "0.4.22"
 sendgrid = { version = "0.19.0", features = ["async"] }
 rocket = { version = "0.5.0", features = [ "json" ] }
@@ -20,5 +20,5 @@ okapi = { version = "0.7.0-rc.1" }
 reqwest = { version = "0.12.8", features = [ "json" ] }
 rocket_okapi = { git = "https://github.com/GREsau/okapi", features = ["swagger"] }
 rusty_paseto = { version = "0.7.1", features = ["batteries_included"] }
-sqlx = { version = "0.8.2", features = [ "runtime-tokio-native-tls", "postgres", "chrono" ] }
+sqlx = { version = "0.8.6", features = [ "runtime-tokio-native-tls", "postgres", "chrono" ] }
 tokio = { version = "1.40.0", features = ["full"] }
