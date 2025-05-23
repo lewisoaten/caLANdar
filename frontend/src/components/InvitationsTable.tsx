@@ -62,7 +62,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     }
   }, [event_id]);
 
-  const onResendClick = (event) => {
+  const onResendInvite = (event) => {
     const email = event?.currentTarget.value;
     fetch(
       `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
@@ -220,7 +220,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
                 <Stack direction="row" spacing={1}>
                   {!invitation.response && (
                     <Button
-                      onClick={(e) => onResendClick(e)}
+                      onClick={(e) => onResendInvite(e)}
                       value={invitation.email}
                       variant="contained"
                       color="primary"
