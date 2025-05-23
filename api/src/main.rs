@@ -237,6 +237,7 @@ async fn rocket(
                 routes::event_invitations::get_all_user,
                 routes::event_invitations::get_all,
                 routes::event_invitations::delete,
+                routes::event_invitations::resend,
                 routes::event_invitations::patch,
                 routes::games::steam_game_update_v2,
                 routes::games::get_steam_game,
