@@ -29,6 +29,15 @@ updates:
       time: "21:00"
     open-pull-requests-limit: 10
     rebase-strategy: "auto"
+    groups:
+      storybook:
+        patterns:
+          - "storybook"
+          - "@storybook/*"
+          - "@etchteam/storybook*"
+      mui:
+        patterns:
+          - "@mui/*"
   - package-ecosystem: "docker"
     directory: "/frontend/"
     schedule:
