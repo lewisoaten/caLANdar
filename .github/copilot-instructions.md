@@ -11,6 +11,7 @@ This document provides guidelines and instructions for GitHub Copilot to help wi
 ## Development Environment
 
 The project uses Nix flakes for development environment setup. All dependencies are defined in `flake.nix` including:
+
 - Rust toolchain and cargo tools
 - Node.js
 - PostgreSQL
@@ -67,6 +68,7 @@ pre-commit run
 ```
 
 This will execute various checks including:
+
 - Code formatting (Rust, JavaScript)
 - Linting (ESLint, Clippy)
 - File format validation
@@ -77,6 +79,7 @@ Running these checks before committing ensures your code meets the project's qua
 ## Authentication
 
 The application uses PASETO tokens for authentication:
+
 - Regular users authenticate with a token
 - Admin users require additional `as_admin=true` query parameter
 - The API key for development is "put_something_here"
