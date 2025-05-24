@@ -4,4 +4,4 @@
 profile = "default"
 
 # List of options: https://releases.rs/
-channel = "1.81.0"
+channel = "1.87.0"
