@@ -10,8 +10,8 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
+  Grid,
 } from "@mui/material";
-import Grid from "@mui/material/Grid";
 import { red } from "@mui/material/colors";
 import SentimentVeryDissatisfiedIcon from "@mui/icons-material/SentimentVeryDissatisfied";
 import { Gamer } from "../types/game_suggestions";
@@ -45,10 +45,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
           <Grid container spacing={2}>
             {props.gamerOwned.length > 0 && (
               <React.Fragment>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <Typography component="h1">Owners</Typography>
                 </Grid>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <List>
                     {props.gamerOwned.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>
@@ -70,10 +70,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
             )}
             {props.gamerUnowned && props.gamerUnowned.length > 0 && (
               <React.Fragment>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <Typography component="h1">Unowned</Typography>
                 </Grid>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <List>
                     {props.gamerUnowned.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>
@@ -95,10 +95,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
             )}
             {props.gamerUnknown && props.gamerUnknown.length > 0 && (
               <React.Fragment>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <Typography component="h1">Unknown</Typography>
                 </Grid>
-                <Grid xs={12}>
+                <Grid sx={{ gridColumn: 'span 12' }}>
                   <List>
                     {props.gamerUnknown.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>

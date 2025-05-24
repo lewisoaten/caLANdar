@@ -10,8 +10,8 @@ import {
   DialogContentText,
   DialogTitle,
   TextField,
+  Grid,
 } from "@mui/material";
-import Grid from "@mui/material/Grid";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -211,7 +211,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         <DialogContent>
           <DialogContentText>Create an event here!</DialogContentText>
           <Grid container spacing={2}>
-            <Grid xs={12}>
+            <Grid sx={{ gridColumn: 'span 12' }}>
               <TextField
                 id="title"
                 name="title"
@@ -226,7 +226,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                 onChange={handleInputChange}
               />
             </Grid>
-            <Grid xs={12}>
+            <Grid sx={{ gridColumn: 'span 12' }}>
               <TextField
                 id="description"
                 name="description"
@@ -246,7 +246,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               dateAdapter={AdapterMoment}
               adapterLocale={moment.locale()}
             >
-              <Grid xs={6}>
+              <Grid sx={{ gridColumn: 'span 6' }}>
                 <DateTimePicker
                   label="Start Date"
                   value={formValues.timeBegin}
@@ -260,7 +260,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   ampm={false}
                 />
               </Grid>
-              <Grid xs={6}>
+              <Grid sx={{ gridColumn: 'span 6' }}>
                 <DateTimePicker
                   label="End Date"
                   value={formValues.timeEnd}
@@ -274,7 +274,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   ampm={false}
                 />
               </Grid>
-              <Grid xs={12}>
+              <Grid sx={{ gridColumn: 'span 12' }}>
                 <TextField
                   id="image"
                   name="image"
@@ -288,9 +288,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               </Grid>
               <Grid
                 item
-                xs={12}
-                wrap="nowrap"
-                sx={{ overflow: "none", height: 140 }}
+                sx={{ gridColumn: 'span 12', overflow: "none", height: 140 }}
               >
                 <img
                   style={{ objectFit: "cover", width: "100%", height: "100%" }}
