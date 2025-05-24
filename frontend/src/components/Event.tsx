@@ -1,8 +1,7 @@
 import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
-import { Container, Paper, Typography } from "@mui/material";
-import Grid from "@mui/material/Grid";
+import { Container, Paper, Typography, Grid } from "@mui/material";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
@@ -47,7 +46,7 @@ const Event = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid xs={12} md={12} lg={12}>
+        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 12', lg: 'span 12' } }}>
           <Paper
             sx={{
               p: 2,
@@ -56,7 +55,7 @@ const Event = () => {
             }}
           >
             <Grid container spacing={2}>
-              <Grid xs={6}>
+              <Grid sx={{ gridColumn: 'span 6' }}>
                 <Typography
                   component="h2"
                   variant="h4"
@@ -66,7 +65,7 @@ const Event = () => {
                   {event.title}
                 </Typography>
               </Grid>
-              <Grid xs={6}>
+              <Grid sx={{ gridColumn: 'span 6' }}>
                 <Paper variant="outlined">
                   <Typography
                     component="h3"
@@ -80,7 +79,7 @@ const Event = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid xs={12}>
+              <Grid sx={{ gridColumn: 'span 12' }}>
                 <Typography
                   variant="body1"
                   gutterBottom
@@ -89,7 +88,7 @@ const Event = () => {
                   {event.description}
                 </Typography>
               </Grid>
-              <Grid xs={12}>
+              <Grid sx={{ gridColumn: 'span 12' }}>
                 {loaded && (
                   <InvitationResponse
                     event={event}
@@ -101,7 +100,7 @@ const Event = () => {
             </Grid>
           </Paper>
         </Grid>
-        <Grid xs={12} md={6} lg={6}>
+        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 6', lg: 'span 6' } }}>
           <Paper
             sx={{
               p: 2,
@@ -114,7 +113,7 @@ const Event = () => {
             )}
           </Paper>
         </Grid>
-        <Grid xs={12} md={6} lg={6}>
+        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 6', lg: 'span 6' } }}>
           <Paper
             sx={{
               p: 2,
