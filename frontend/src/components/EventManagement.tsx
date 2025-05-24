@@ -7,7 +7,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import { useParams, useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
@@ -86,7 +86,7 @@ const EventManagement = () => {
     <React.Fragment>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={12} lg={12}>
+          <Grid xs={12} md={12} lg={12}>
             <Paper
               sx={{
                 p: 2,
@@ -128,7 +128,7 @@ const EventManagement = () => {
       </Container>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={12} lg={12}>
+          <Grid xs={12} md={12} lg={12}>
             <Paper
               sx={{
                 p: 2,

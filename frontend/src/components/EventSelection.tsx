@@ -8,7 +8,7 @@ import {
   Switch,
   Typography,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import { dateParser } from "../utils";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { EventData } from "../types/events";
@@ -61,7 +61,7 @@ const Event = () => {
         spacing={{ xs: 2, md: 3 }}
         columns={{ sm: 4, md: 8, lg: 12 }}
       >
-        <Grid item sm={4} md={8} lg={12}>
+        <Grid sm={4} md={8} lg={12}>
           <Box display="flex" justifyContent="flex-end">
             <FormControl>
               <FormControlLabel
@@ -84,7 +84,7 @@ const Event = () => {
         {events.map((event) => {
           if (event.timeEnd.isAfter(moment()) || showOldEvents) {
             return (
-              <Grid item xs={4} key={event.id}>
+              <Grid xs={4} key={event.id}>
                 <EventCard event={event} />
               </Grid>
             );

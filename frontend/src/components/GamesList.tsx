@@ -11,7 +11,7 @@ import {
   Pagination,
   Stack,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 import { EventGame } from "../types/game_suggestions";
@@ -82,10 +82,10 @@ const GamesList = (props: GamesListProps) => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={12} lg={12}>
+        <Grid xs={12} md={12} lg={12}>
           <Paper>
             <Container maxWidth="lg" sx={{ mt: 4, mb: 4, p: 3 }}>
-              <Grid item xs={12} md={12} lg={12}>
+              <Grid xs={12} md={12} lg={12}>
                 <Pagination
                   count={props.gamesCount}
                   page={page}
@@ -99,13 +99,13 @@ const GamesList = (props: GamesListProps) => {
               <Grid container spacing={3}>
                 {[...props.games.keys()].map((key) => (
                   <React.Fragment key={key}>
-                    <Grid item xs={12} md={12} lg={12}>
+                    <Grid xs={12} md={12} lg={12}>
                       <Typography variant="h4">
                         Owned by {key} Gamers
                       </Typography>
                     </Grid>
                     {props.games.get(key)?.map((game) => (
-                      <Grid item xs={12} md={6} lg={4} key={game.appid}>
+                      <Grid xs={12} md={6} lg={4} key={game.appid}>
                         <Card sx={{ maxWidth: 345 }} elevation={4}>
                           <CardMedia
                             sx={{ height: 140 }}
@@ -170,7 +170,7 @@ const GamesList = (props: GamesListProps) => {
               </Grid>
             </Container>
             <Container maxWidth="lg" sx={{ mt: 4, mb: 4, p: 3 }}>
-              <Grid item xs={12} md={12} lg={12}>
+              <Grid xs={12} md={12} lg={12}>
                 <Pagination
                   count={props.gamesCount}
                   page={page}

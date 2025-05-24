@@ -10,7 +10,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import { GamerData } from "../types/gamer";
 import { DataGrid } from "@mui/x-data-grid/DataGrid";
 import {
@@ -327,7 +327,7 @@ const GamersAdmin = () => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
         {/* Gamers */}
-        <Grid item xs={12}>
+        <Grid xs={12}>
           <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
             <Typography
               component="h2"
