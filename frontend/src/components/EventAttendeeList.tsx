@@ -10,7 +10,7 @@ import {
   Alert,
   Skeleton,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -59,13 +59,13 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
 
   return (
     <Grid container spacing={2}>
-      <Grid item xs={12}>
+      <Grid xs={12}>
         <Typography component="h3" variant="h6" color="primary" gutterBottom>
           Attendees
         </Typography>
       </Grid>
       {props.responded && !loading ? (
-        <Grid item xs={12}>
+        <Grid xs={12}>
           <List>
             {attendees.map((attendee) => (
               <ListItem dense={true} key={attendee.handle}>
@@ -88,17 +88,17 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
         </Grid>
       ) : (
         <React.Fragment>
-          <Grid item xs={12}>
+          <Grid xs={12}>
             <Alert severity="info">RSVP to load attendees.</Alert>
           </Grid>
           {Array.from(Array(3)).map((_, i) => (
             <React.Fragment key={i}>
-              <Grid item xs={2}>
+              <Grid xs={2}>
                 <Skeleton variant="circular" animation="wave">
                   <Avatar />
                 </Skeleton>
               </Grid>
-              <Grid item xs={10}>
+              <Grid xs={10}>
                 <Skeleton variant="rectangular" width="100%" animation="wave">
                   <Typography variant="body1" gutterBottom>
                     Person Name

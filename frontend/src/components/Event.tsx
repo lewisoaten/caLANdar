@@ -2,7 +2,7 @@ import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
 import { Container, Paper, Typography } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
@@ -47,7 +47,7 @@ const Event = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={12} lg={12}>
+        <Grid xs={12} md={12} lg={12}>
           <Paper
             sx={{
               p: 2,
@@ -56,7 +56,7 @@ const Event = () => {
             }}
           >
             <Grid container spacing={2}>
-              <Grid item xs={6}>
+              <Grid xs={6}>
                 <Typography
                   component="h2"
                   variant="h4"
@@ -66,7 +66,7 @@ const Event = () => {
                   {event.title}
                 </Typography>
               </Grid>
-              <Grid item xs={6}>
+              <Grid xs={6}>
                 <Paper variant="outlined">
                   <Typography
                     component="h3"
@@ -80,7 +80,7 @@ const Event = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 <Typography
                   variant="body1"
                   gutterBottom
@@ -89,7 +89,7 @@ const Event = () => {
                   {event.description}
                 </Typography>
               </Grid>
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 {loaded && (
                   <InvitationResponse
                     event={event}
@@ -101,7 +101,7 @@ const Event = () => {
             </Grid>
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6} lg={6}>
+        <Grid xs={12} md={6} lg={6}>
           <Paper
             sx={{
               p: 2,
@@ -114,7 +114,7 @@ const Event = () => {
             )}
           </Paper>
         </Grid>
-        <Grid item xs={12} md={6} lg={6}>
+        <Grid xs={12} md={6} lg={6}>
           <Paper
             sx={{
               p: 2,

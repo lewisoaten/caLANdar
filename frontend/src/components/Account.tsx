@@ -10,7 +10,7 @@ import {
   FormHelperText,
   Link,
 } from "@mui/material";
-import Grid from "@mui/material/GridLegacy";
+import Grid from "@mui/material/Grid";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";
@@ -112,7 +112,7 @@ const Account = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid item xs={12} md={12} lg={12}>
+        <Grid xs={12} md={12} lg={12}>
           <Paper
             sx={{
               p: 2,
@@ -133,7 +133,7 @@ const Account = () => {
               {userDetails.email}
             </Typography>
             <Grid container spacing={2}>
-              <Grid item xs={12}>
+              <Grid xs={12}>
                 <FormControl variant="standard">
                   <InputLabel htmlFor="steamId">Steam ID</InputLabel>
                   <Input
@@ -158,7 +158,7 @@ const Account = () => {
                   </FormHelperText>
                 </FormControl>
               </Grid>
-              <Grid item xs={4}>
+              <Grid xs={4}>
                 <Button
                   variant="contained"
                   color="success"
@@ -167,7 +167,7 @@ const Account = () => {
                   Save
                 </Button>
               </Grid>
-              <Grid item xs={4}>
+              <Grid xs={4}>
                 <Button
                   variant="outlined"
                   startIcon={<RefreshIcon />}
@@ -176,7 +176,7 @@ const Account = () => {
                   Refresh Games
                 </Button>
               </Grid>
-              <Grid item xs={4}>
+              <Grid xs={4}>
                 <Button variant="outlined" color="error" onClick={signOut}>
                   Sign Out
                 </Button>
