@@ -287,7 +287,6 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                 />
               </Grid>
               <Grid
-                item
                 size={12}
                 sx={{ overflow: "none", height: 140 }}
               >
