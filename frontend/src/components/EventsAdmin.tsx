@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useState } from "react";
-import { Button, Container, Paper, Stack } from "@mui/material";
-import Grid from "@mui/material/Grid";
+import { Button, Container, Paper, Stack, Grid } from "@mui/material";
 import { EventData } from "../types/events";
 import EventTable from "./EventTable";
 import EventsAdminDialog from "./EventsAdminDialog";
@@ -29,7 +28,7 @@ const EventsAdmin = () => {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
         {/* Events */}
-        <Grid xs={12}>
+        <Grid sx={{ gridColumn: 'span 12' }}>
           <Paper sx={{ p: 2, display: "flex", flexDirection: "column" }}>
             <EventTable eventsState={eventsState} asAdmin={true} />
             <Stack direction="row" spacing={2}>
