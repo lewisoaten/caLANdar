@@ -10,8 +10,8 @@ import {
   DialogContentText,
   DialogTitle,
   TextField,
-  Grid,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
 import { LocalizationProvider, DateTimePicker } from "@mui/x-date-pickers";
 import { UserContext, UserDispatchContext } from "../UserProvider";

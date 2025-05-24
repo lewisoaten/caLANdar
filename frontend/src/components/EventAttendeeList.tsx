@@ -2,7 +2,6 @@ import * as React from "react";
 import { useEffect, useState, useContext } from "react";
 import {
   Typography,
-  Grid,
   List,
   ListItem,
   ListItemAvatar,
@@ -11,6 +10,7 @@ import {
   Alert,
   Skeleton,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {

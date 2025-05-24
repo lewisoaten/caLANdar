@@ -1,7 +1,6 @@
 import React, { ChangeEvent } from "react";
 import {
   Container,
-  Grid,
   Paper,
   Typography,
   Card,
@@ -12,6 +11,7 @@ import {
   Pagination,
   Stack,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 import { EventGame } from "../types/game_suggestions";

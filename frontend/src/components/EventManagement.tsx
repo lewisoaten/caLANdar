@@ -3,11 +3,11 @@ import { useEffect, useState, useContext } from "react";
 import {
   Container,
   Button,
-  Grid,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { useParams, useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";

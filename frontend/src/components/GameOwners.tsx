@@ -1,7 +1,6 @@
 import * as React from "react";
 import {
   Typography,
-  Grid,
   List,
   ListItem,
   ListItemAvatar,
@@ -12,6 +11,7 @@ import {
   useMediaQuery,
   Tooltip,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { red } from "@mui/material/colors";
 import SentimentVeryDissatisfiedIcon from "@mui/icons-material/SentimentVeryDissatisfied";
 import { Gamer } from "../types/game_suggestions";

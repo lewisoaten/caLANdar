@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
-import { Button, Container, Grid, Paper, Stack } from "@mui/material";
+import { Button, Container, Paper, Stack } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { EventData } from "../types/events";
 import EventTable from "./EventTable";
 import EventsAdminDialog from "./EventsAdminDialog";

@@ -5,10 +5,10 @@ import {
   Container,
   FormControl,
   FormControlLabel,
-  Grid,
   Switch,
   Typography,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { dateParser } from "../utils";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { EventData } from "../types/events";

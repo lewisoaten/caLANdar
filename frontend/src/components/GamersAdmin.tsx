@@ -5,12 +5,12 @@ import {
   Box,
   Chip,
   Container,
-  Grid,
   Paper,
   Popper,
   Tooltip,
   Typography,
 } from "@mui/material";
+import Grid from "@mui/material/Unstable_Grid2";
 import { GamerData } from "../types/gamer";
 import { DataGrid } from "@mui/x-data-grid/DataGrid";
 import {
