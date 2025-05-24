@@ -57,6 +57,23 @@ Use the following commands to manage the application:
 - `just pact-api`: Runs the API and verifies the contract against the Pact files
 - `just pact-frontend`: Runs the frontend Pact tests
 
+### Pre-commit Checks
+
+The project uses pre-commit hooks to ensure code quality. Always run the pre-commit checks before committing changes:
+
+```bash
+# Run all pre-commit checks
+pre-commit run
+```
+
+This will execute various checks including:
+- Code formatting (Rust, JavaScript)
+- Linting (ESLint, Clippy)
+- File format validation
+- Other quality checks
+
+Running these checks before committing ensures your code meets the project's quality standards and prevents CI failures.
+
 ## Authentication
 
 The application uses PASETO tokens for authentication:
