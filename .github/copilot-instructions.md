@@ -16,6 +16,24 @@ The project uses Nix flakes for development environment setup. All dependencies 
 - PostgreSQL
 - Just command runner
 
+### Activating the Development Environment
+
+Before running any commands, you must activate the Nix development shell:
+
+```bash
+# Activate the Nix develop shell
+nix develop --impure
+
+# All commands must be run inside this environment
+```
+
+All commands listed in this document must be executed within the activated Nix shell. The shell provides access to all required dependencies and tools. You can verify the environment is activated correctly by running:
+
+```bash
+# Check available commands in justfile
+just --list
+```
+
 ## Common Development Commands
 
 Use the following commands to manage the application:
