@@ -1,0 +1,65 @@
+name: Copilot Setup
+
+on:
+  copilot-api:
+
+jobs:
+  set-up-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Nix
+        uses: cachix/install-nix-action@v24
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Install flake packages
+        run: |
+          nix develop --impure -c echo "Nix environment set up successfully"
+
+      - name: Setup Node.js environment for frontend
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Setup Rust environment
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          components: rustfmt, clippy
+
+      - name: Install cargo tools 
+        run: |
+          cargo install cargo-watch
+          cargo install cargo-shuttle
+          cargo install sqlx-cli
+          cargo install bacon
+
+      - name: Install just command runner
+        run: |
+          cargo install just
+
+      - name: Install PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql postgresql-contrib
+          sudo service postgresql start
+
+      - name: Setup PostgreSQL for development
+        run: |
+          sudo -u postgres psql -c "CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER;"
+          sudo -u postgres psql -c "CREATE DATABASE \"calandar-api\" WITH OWNER postgres;"
+
+      - name: Test environment setup
+        run: |
+          just --list
