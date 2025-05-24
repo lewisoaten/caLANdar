@@ -2,7 +2,7 @@ import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
 import { Container, Paper, Typography } from "@mui/material";
-import Grid from "@mui/material/Unstable_Grid2";
+import Grid from "@mui/material/GridLegacy";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";

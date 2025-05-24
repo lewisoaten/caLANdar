@@ -10,7 +10,7 @@ import {
   FormHelperText,
   Link,
 } from "@mui/material";
-import Grid from "@mui/material/Unstable_Grid2";
+import Grid from "@mui/material/GridLegacy";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useContext } from "react";
 import { UserDispatchContext, UserContext } from "../UserProvider";

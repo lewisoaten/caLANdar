@@ -11,7 +11,7 @@ import {
   Pagination,
   Stack,
 } from "@mui/material";
-import Grid from "@mui/material/Unstable_Grid2";
+import Grid from "@mui/material/GridLegacy";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 import { EventGame } from "../types/game_suggestions";

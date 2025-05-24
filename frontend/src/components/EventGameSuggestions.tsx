@@ -17,7 +17,7 @@ import {
   ListItemButton,
   Stack,
 } from "@mui/material";
-import Grid from "@mui/material/Unstable_Grid2";
+import Grid from "@mui/material/GridLegacy";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
 import { UserContext, UserDispatchContext } from "../UserProvider";
