@@ -46,7 +46,7 @@ const Event = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 12', lg: 'span 12' } }}>
+        <Grid size={{ xs: 12, md: 12, lg: 12 }}>
           <Paper
             sx={{
               p: 2,
@@ -55,7 +55,7 @@ const Event = () => {
             }}
           >
             <Grid container spacing={2}>
-              <Grid sx={{ gridColumn: 'span 6' }}>
+              <Grid size={6}>
                 <Typography
                   component="h2"
                   variant="h4"
@@ -65,7 +65,7 @@ const Event = () => {
                   {event.title}
                 </Typography>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 6' }}>
+              <Grid size={6}>
                 <Paper variant="outlined">
                   <Typography
                     component="h3"
@@ -79,7 +79,7 @@ const Event = () => {
                   </Typography>
                 </Paper>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 12' }}>
+              <Grid size={12}>
                 <Typography
                   variant="body1"
                   gutterBottom
@@ -88,7 +88,7 @@ const Event = () => {
                   {event.description}
                 </Typography>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 12' }}>
+              <Grid size={12}>
                 {loaded && (
                   <InvitationResponse
                     event={event}
@@ -100,7 +100,7 @@ const Event = () => {
             </Grid>
           </Paper>
         </Grid>
-        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 6', lg: 'span 6' } }}>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <Paper
             sx={{
               p: 2,
@@ -113,7 +113,7 @@ const Event = () => {
             )}
           </Paper>
         </Grid>
-        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 6', lg: 'span 6' } }}>
+        <Grid size={{ xs: 12, md: 6, lg: 6 }}>
           <Paper
             sx={{
               p: 2,

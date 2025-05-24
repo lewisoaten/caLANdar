@@ -112,7 +112,7 @@ const Account = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
-        <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 12', lg: 'span 12' } }}>
+        <Grid size={{ xs: 12, md: 12, lg: 12 }}>
           <Paper
             sx={{
               p: 2,
@@ -133,7 +133,7 @@ const Account = () => {
               {userDetails.email}
             </Typography>
             <Grid container spacing={2}>
-              <Grid sx={{ gridColumn: 'span 12' }}>
+              <Grid size={12}>
                 <FormControl variant="standard">
                   <InputLabel htmlFor="steamId">Steam ID</InputLabel>
                   <Input
@@ -158,7 +158,7 @@ const Account = () => {
                   </FormHelperText>
                 </FormControl>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 4' }}>
+              <Grid size={4}>
                 <Button
                   variant="contained"
                   color="success"
@@ -167,7 +167,7 @@ const Account = () => {
                   Save
                 </Button>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 4' }}>
+              <Grid size={4}>
                 <Button
                   variant="outlined"
                   startIcon={<RefreshIcon />}
@@ -176,7 +176,7 @@ const Account = () => {
                   Refresh Games
                 </Button>
               </Grid>
-              <Grid sx={{ gridColumn: 'span 4' }}>
+              <Grid size={4}>
                 <Button variant="outlined" color="error" onClick={signOut}>
                   Sign Out
                 </Button>

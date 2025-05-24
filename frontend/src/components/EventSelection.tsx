@@ -61,7 +61,7 @@ const Event = () => {
         spacing={{ xs: 2, md: 3 }}
         columns={{ sm: 4, md: 8, lg: 12 }}
       >
-        <Grid sx={{ gridColumn: { sm: 'span 4', md: 'span 8', lg: 'span 12' } }}>
+        <Grid size={{ sm: 4, md: 8, lg: 12 }}>
           <Box display="flex" justifyContent="flex-end">
             <FormControl>
               <FormControlLabel
@@ -84,7 +84,7 @@ const Event = () => {
         {events.map((event) => {
           if (event.timeEnd.isAfter(moment()) || showOldEvents) {
             return (
-              <Grid sx={{ gridColumn: 'span 4' }} key={event.id}>
+              <Grid size={4} key={event.id}>
                 <EventCard event={event} />
               </Grid>
             );

@@ -86,7 +86,7 @@ const EventManagement = () => {
     <React.Fragment>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 12', lg: 'span 12' } }}>
+          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
             <Paper
               sx={{
                 p: 2,
@@ -128,7 +128,7 @@ const EventManagement = () => {
       </Container>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          <Grid sx={{ gridColumn: { xs: 'span 12', md: 'span 12', lg: 'span 12' } }}>
+          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
             <Paper
               sx={{
                 p: 2,

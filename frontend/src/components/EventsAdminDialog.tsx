@@ -211,7 +211,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
         <DialogContent>
           <DialogContentText>Create an event here!</DialogContentText>
           <Grid container spacing={2}>
-            <Grid sx={{ gridColumn: 'span 12' }}>
+            <Grid size={12}>
               <TextField
                 id="title"
                 name="title"
@@ -226,7 +226,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                 onChange={handleInputChange}
               />
             </Grid>
-            <Grid sx={{ gridColumn: 'span 12' }}>
+            <Grid size={12}>
               <TextField
                 id="description"
                 name="description"
@@ -246,7 +246,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               dateAdapter={AdapterMoment}
               adapterLocale={moment.locale()}
             >
-              <Grid sx={{ gridColumn: 'span 6' }}>
+              <Grid size={6}>
                 <DateTimePicker
                   label="Start Date"
                   value={formValues.timeBegin}
@@ -260,7 +260,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   ampm={false}
                 />
               </Grid>
-              <Grid sx={{ gridColumn: 'span 6' }}>
+              <Grid size={6}>
                 <DateTimePicker
                   label="End Date"
                   value={formValues.timeEnd}
@@ -274,7 +274,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   ampm={false}
                 />
               </Grid>
-              <Grid sx={{ gridColumn: 'span 12' }}>
+              <Grid size={12}>
                 <TextField
                   id="image"
                   name="image"
@@ -288,7 +288,8 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               </Grid>
               <Grid
                 item
-                sx={{ gridColumn: 'span 12', overflow: "none", height: 140 }}
+                size={12}
+                sx={{ overflow: "none", height: 140 }}
               >
                 <img
                   style={{ objectFit: "cover", width: "100%", height: "100%" }}

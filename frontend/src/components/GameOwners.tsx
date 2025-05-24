@@ -45,10 +45,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
           <Grid container spacing={2}>
             {props.gamerOwned.length > 0 && (
               <React.Fragment>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <Typography component="h1">Owners</Typography>
                 </Grid>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <List>
                     {props.gamerOwned.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>
@@ -70,10 +70,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
             )}
             {props.gamerUnowned && props.gamerUnowned.length > 0 && (
               <React.Fragment>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <Typography component="h1">Unowned</Typography>
                 </Grid>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <List>
                     {props.gamerUnowned.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>
@@ -95,10 +95,10 @@ export default function EventGameSuggestions(props: GameOwnersProps) {
             )}
             {props.gamerUnknown && props.gamerUnknown.length > 0 && (
               <React.Fragment>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <Typography component="h1">Unknown</Typography>
                 </Grid>
-                <Grid sx={{ gridColumn: 'span 12' }}>
+                <Grid size={12}>
                   <List>
                     {props.gamerUnknown.map((gamer) => (
                       <ListItem dense={true} key={gamer.handle}>

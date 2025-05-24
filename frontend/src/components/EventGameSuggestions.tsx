@@ -219,13 +219,13 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
 
   return (
     <Grid container spacing={2}>
-      <Grid sx={{ gridColumn: 'span 12' }}>
+      <Grid size={12}>
         <Typography component="h3" variant="h6" color="primary" gutterBottom>
           Game Suggestions
         </Typography>
       </Grid>
       {props.responded ? (
-        <Grid sx={{ gridColumn: 'span 12' }}>
+        <Grid size={12}>
           <Autocomplete
             id="game-suggestion"
             open={open}
@@ -275,10 +275,10 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         </Grid>
       ) : (
         <React.Fragment>
-          <Grid sx={{ gridColumn: 'span 12' }}>
+          <Grid size={12}>
             <Alert severity="info">RSVP to make game suggestions.</Alert>
           </Grid>
-          <Grid sx={{ gridColumn: 'span 12' }}>
+          <Grid size={12}>
             <Skeleton variant="rectangular" width="100%" animation="wave">
               <Typography variant="body1" gutterBottom>
                 Autocomplete
@@ -287,7 +287,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
           </Grid>
         </React.Fragment>
       )}
-      <Grid sx={{ gridColumn: 'span 12' }}>
+      <Grid size={12}>
         <List>
           {gameSuggestions.map((gameSuggestion) => {
             const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
