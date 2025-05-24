@@ -43,6 +43,12 @@
         {
           devShells.default = mkShell {
             inherit buildInputs nativeBuildInputs;
+            # Set CARGO_HOME to a project-local directory.
+            # This tells cargo to use this path for its home, instead of ~/.cargo.
+            # This effectively isolates it from your global ~/.cargo directory,
+            # preventing it from picking up binaries like an old cargo-shuttle from there.
+            # Cargo will create this directory if it doesn't exist and needs to write.
+            CARGO_HOME = "${builtins.toString ./.}/.nix_shell_cargo_home";
           };
         }
       );
