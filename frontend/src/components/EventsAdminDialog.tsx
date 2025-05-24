@@ -286,10 +286,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   onChange={handleImageChange}
                 />
               </Grid>
-              <Grid
-                size={12}
-                sx={{ overflow: "none", height: 140 }}
-              >
+              <Grid size={12} sx={{ overflow: "none", height: 140 }}>
                 <img
                   style={{ objectFit: "cover", width: "100%", height: "100%" }}
                   src={

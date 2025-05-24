@@ -10,6 +10,9 @@ export default [
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
   },
   {
+    ignores: ["build/*"],
+  },
+  {
     languageOptions: {
       globals: globals.browser,
     },
