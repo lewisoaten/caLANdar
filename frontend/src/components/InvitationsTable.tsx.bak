@@ -62,8 +62,15 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     }
   }, [event_id]);
 
-  const onClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+  const onResendInvite = (event) => {
     const email = event?.currentTarget.value;
+    fetch(
+      `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
     fetch(
       `/api/events/${event_id}/invitations/${encodeURIComponent(email)}?as_admin=true`,
       {
@@ -207,14 +214,28 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               </TableCell>
               <TableCell>{invitation.lastModified.calendar()}</TableCell>
               <TableCell>
-                <Button
-                  onClick={(e) => onClick(e)}
-                  value={invitation.email}
-                  variant="contained"
-                  color="error"
-                >
-                  Remove
-                </Button>
+                <Stack direction="row" spacing={1}>
+                  {!invitation.response && (
+                    <Button
+                      onClick={(e) => onResendInvite(e)}
+                      value={invitation.email}
+                      variant="contained"
+                      color="primary"
+                      size="small"
+                    >
+                      Resend Invite
+                    </Button>
+                  )}
+                  <Button
+                    onClick={(e) => onClick(e)}
+                    value={invitation.email}
+                    variant="contained"
+                    color="error"
+                    size="small"
+                  >
+                    Remove
+                  </Button>
+                </Stack>
               </TableCell>
             </TableRow>
           ))}
