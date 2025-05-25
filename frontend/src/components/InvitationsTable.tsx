@@ -71,6 +71,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
+
+  const onClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
+    const email = event?.currentTarget.value;
     fetch(
       `/api/events/${event_id}/invitations/${encodeURIComponent(email)}?as_admin=true`,
       {
