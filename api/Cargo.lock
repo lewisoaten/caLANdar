@@ -238,7 +238,7 @@ dependencies = [
  "futures",
  "log",
  "okapi 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "rocket",
  "rocket_dyn_templates",
  "rocket_okapi",
@@ -2609,9 +2609,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.12.19"
+version = "0.12.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2f8e5513d63f2e5b386eb5106dc67eaf3f84e95258e210489136b8b92ad6119"
+checksum = "eabf4c97d9130e2bf606614eb937e86edac8292eaa6f422f995d7e8de1eb1813"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2625,12 +2625,10 @@ dependencies = [
  "hyper-rustls",
  "hyper-tls 0.6.0",
  "hyper-util",
- "ipnet",
  "js-sys",
  "log",
  "mime",
  "native-tls",
- "once_cell",
  "percent-encoding",
  "pin-project-lite",
  "quinn",
@@ -2662,7 +2660,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "http 1.2.0",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "serde",
  "thiserror 1.0.64",
  "tower-service",
@@ -3162,7 +3160,7 @@ dependencies = [
  "headers",
  "http 1.2.0",
  "percent-encoding",
- "reqwest 0.12.19",
+ "reqwest 0.12.20",
  "reqwest-middleware",
  "serde",
  "serde_json",
