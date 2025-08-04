@@ -11,23 +11,27 @@ echo "Setting up CaLANdar development environment..."
 mkdir -p ~/.cargo
 mkdir -p ~/.cache/nix
 
-# Create a shell wrapper that automatically enters the Nix environment
-cat > ~/.nix-shell-wrapper << 'EOF'
+# Create a simple script to activate the Nix environment
+cat > ~/.activate-nix-env << 'EOF'
 #!/bin/bash
-# Check if we're already in a nix shell
+# Activate CaLANdar development environment if not already active
 if [ -z "$IN_NIX_SHELL" ]; then
   echo "Activating CaLANdar development environment..."
-  exec nix develop --impure --command bash --rcfile <(echo "source ~/.bashrc; echo 'CaLANdar development environment activated! Run just --list to see available commands.'")
-else
-  # Already in nix shell, just run bash normally
-  exec bash "$@"
+  exec nix develop --impure
 fi
 EOF
 
-chmod +x ~/.nix-shell-wrapper
+chmod +x ~/.activate-nix-env
 
-# Set the wrapper as the default shell for new terminals
-echo 'export SHELL=~/.nix-shell-wrapper' >> ~/.bashrc
-echo 'exec ~/.nix-shell-wrapper' >> ~/.bashrc
+# Add activation to bashrc, but only for interactive shells and avoid recursion
+cat >> ~/.bashrc << 'EOF'
+
+# Auto-activate CaLANdar Nix environment for interactive shells
+if [[ $- == *i* ]] && [ -z "$IN_NIX_SHELL" ] && [ -z "$NIX_ENV_ACTIVATED" ]; then
+  export NIX_ENV_ACTIVATED=1
+  echo "Activating CaLANdar development environment..."
+  exec nix develop --impure
+fi
+EOF
 
 echo "Development environment setup complete!"

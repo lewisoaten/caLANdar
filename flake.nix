@@ -54,8 +54,13 @@
               export CARGO_HOME="$ROOT_PATH/.cargo"
               export RUSTUP_HOME="$ROOT_PATH/.rustup"
 
-              rustup install stable
-              rustup default stable
+              # Initialize rustup only if it's available and not already set up
+              if command -v rustup >/dev/null 2>&1; then
+                rustup install stable 2>/dev/null || true
+                rustup default stable 2>/dev/null || true
+              fi
+              
+              echo "CaLANdar development environment activated! Run 'just --list' to see available commands."
             '';
           };
         }
