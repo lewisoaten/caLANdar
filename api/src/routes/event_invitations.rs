@@ -15,7 +15,7 @@ use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
-use sendgrid::v3::Sender;
+use resend_rs::Resend;
 use sqlx::postgres::PgPool;
 
 use crate::repositories::event;
@@ -63,7 +63,7 @@ pub async fn post(
     invitation_request: Json<InvitationsPostRequest>,
     pool: &State<PgPool>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
-    sender: &State<Sender>,
+    sender: &State<Resend>,
     tera: &State<Tera>,
     _as_admin: Option<bool>,
     _user: AdminUser,

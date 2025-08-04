@@ -9,7 +9,7 @@ use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
-use sendgrid::v3::Sender;
+use resend_rs::Resend;
 
 use crate::auth::PasetoToken;
 
@@ -31,7 +31,7 @@ pub struct LoginRequest {
 pub async fn login(
     login_request: Json<LoginRequest>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
-    sender: &State<Sender>,
+    sender: &State<Resend>,
     tera: &State<Tera>,
 ) -> Result<Json<LoginResponse>, rocket::response::status::BadRequest<String>> {
     let mut context = Context::new();

@@ -1,7 +1,7 @@
 use chrono::{prelude::Utc, Duration};
 use rocket_dyn_templates::tera::{Context, Tera};
 use rusty_paseto::prelude::*;
-use sendgrid::v3::{Content, Email as SendGridEmail, Message, Personalization, Sender};
+use resend_rs::{Resend, types::CreateEmailBaseOptions};
 use sqlx::PgPool;
 
 use crate::{
@@ -13,33 +13,19 @@ use crate::{
 };
 
 pub async fn send_email(
-    sender: &Sender,
+    sender: &Resend,
     tos: Vec<&str>,
     subject: &str,
     body: &str,
 ) -> Result<(), String> {
-    let personalization = {
-        let mut p = Personalization::new(SendGridEmail::new(tos[0].to_string()));
-        for to in tos.iter().skip(1) {
-            p = p.add_to(SendGridEmail::new(*to));
-        }
-        p
-    };
-
-    let m = Message::new(SendGridEmail::new("lewis+calandar@oaten.name"))
-        .set_subject(subject)
-        .add_content(Content::new().set_content_type("text/html").set_value(body))
-        .add_personalization(personalization);
-
-    match sender.send(&m).await {
-        Ok(sendgrid_result) => {
-            if sendgrid_result.status().is_success() {
-                Ok(())
-            } else {
-                Err("Sendgrid error".to_string())
-            }
-        }
-        Err(e) => Err(format!("Sendgrid error: {e}")),
+    let from = "lewis+calandar@oaten.name";
+    
+    let email = CreateEmailBaseOptions::new(from, tos, subject)
+        .with_html(body);
+    
+    match sender.emails.send(email).await {
+        Ok(_response) => Ok(()),
+        Err(e) => Err(format!("Resend error: {e}")),
     }
 }
 
@@ -55,7 +41,7 @@ pub async fn send_preauth_email(
     redirect: &str,
     token_timeout: Duration,
     key: &PasetoSymmetricKey<V4, Local>,
-    sender: &Sender,
+    sender: &Resend,
     tera: &Tera,
 ) -> Result<(), String> {
     let expiration_claim =

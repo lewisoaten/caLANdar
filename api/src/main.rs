@@ -22,7 +22,7 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
-use sendgrid::v3::Sender;
+use resend_rs::Resend;
 use shuttle_rocket::ShuttleRocket;
 use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
@@ -183,17 +183,17 @@ async fn rocket(
 
     log::info!("Paseto key created.");
 
-    let sendgrid_api_key = if let Some(sendgrid_api_key) = secret_store.get("SENDGRID_API_KEY") {
-        sendgrid_api_key
+    let resend_api_key = if let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") {
+        resend_api_key
     } else {
-        return Err(anyhow!("failed to get SENDGRID_API_KEY from secrets store").into());
+        return Err(anyhow!("failed to get RESEND_API_KEY from secrets store").into());
     };
 
-    log::info!("SENDGRID_API_KEY obtained.");
+    log::info!("RESEND_API_KEY obtained.");
 
-    let email_sender = Sender::new(sendgrid_api_key);
+    let email_sender = Resend::new(&resend_api_key);
 
-    log::info!("Sendgrid sender created.");
+    log::info!("Resend sender created.");
 
     let steam_api_key = if let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") {
         steam_api_key
@@ -201,7 +201,7 @@ async fn rocket(
         return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
     };
 
-    log::info!("SENDGRID_API_KEY obtained.");
+    log::info!("STEAM_API_KEY obtained.");
 
     let mut tera = Tera::default();
     match tera.add_raw_templates(EMAIL_TEMPLATES) {
@@ -215,7 +215,7 @@ async fn rocket(
         .attach(CORS)
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(paseto_symmetric_key)
-        .manage::<Sender>(email_sender)
+        .manage::<Resend>(email_sender)
         .manage::<String>(steam_api_key)
         .manage::<Tera>(tera)
         .mount("/", routes![all_options])
