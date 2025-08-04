@@ -52,14 +52,7 @@
               # preventing it from picking up binaries like an old cargo-shuttle from there.
               # Cargo will create this directory if it doesn't exist and needs to write.
               export CARGO_HOME="$ROOT_PATH/.cargo"
-              export RUSTUP_HOME="$ROOT_PATH/.rustup"
 
-              # Initialize rustup only if it's available and not already set up
-              if command -v rustup >/dev/null 2>&1; then
-                rustup install stable 2>/dev/null || true
-                rustup default stable 2>/dev/null || true
-              fi
-              
               echo "CaLANdar development environment activated! Run 'just --list' to see available commands."
             '';
           };
