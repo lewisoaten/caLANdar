@@ -7,14 +7,15 @@ This directory contains the development container configuration for CaLANdar.
 - **Base Image**: Ubuntu 22.04
 - **Nix**: Installed with flakes support for reproducible development environment
 - **VS Code Extensions**: Rust, TypeScript, and development tools
-- **Port Forwarding**: 
+- **Port Forwarding**:
   - 3000: Frontend (React)
-  - 8000: API (Rust/Rocket) 
+  - 8000: API (Rust/Rocket)
   - 6006: Storybook
 
 ## Features
 
 The dev container uses these features:
+
 - Git
 - GitHub CLI
 - Nix package manager with flakes support
@@ -24,7 +25,7 @@ The dev container uses these features:
 ### GitHub Codespaces
 
 1. Go to the repository on GitHub
-2. Click the green "Code" button  
+2. Click the green "Code" button
 3. Select "Codespaces" tab
 4. Click "Create codespace on main" (or your branch)
 5. Wait for the environment to set up (this may take a few minutes on first creation)
@@ -53,7 +54,7 @@ just dev
 # Run only the API
 just dev-api
 
-# Run only the frontend  
+# Run only the frontend
 just dev-frontend
 
 # Run tests
