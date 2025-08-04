@@ -127,8 +127,21 @@ pub async fn get_all_user(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<Vec<Event>>, EventsGetError> {
-    match event::get_all_user(pool, user.email).await {
-        Ok(events) => Ok(Json(events)),
+    match EventService::get_all_user_events(pool.inner(), user.email).await {
+        Ok(events) => {
+            // Convert DTOs to API response types
+            let response_events: Vec<Event> = events.into_iter().map(|dto| Event {
+                id: dto.id,
+                created_at: dto.created_at,
+                last_modified: dto.last_modified,
+                title: dto.title,
+                description: dto.description,
+                image: dto.image,
+                time_begin: dto.time_begin,
+                time_end: dto.time_end,
+            }).collect();
+            Ok(Json(response_events))
+        }
         Err(e) => Err(EventsGetError::InternalServerError(format!(
             "Error getting events, due to: {e}"
         ))),
