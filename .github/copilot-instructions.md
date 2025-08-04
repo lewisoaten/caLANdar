@@ -76,6 +76,8 @@ This will execute various checks including:
 
 Running these checks before committing ensures your code meets the project's quality standards and prevents CI failures.
 
+Some checks will automatically fix issues, while others will require manual intervention. Always add fixes or address all issues before committing.
+
 ## Authentication
 
 The application uses PASETO tokens for authentication:
