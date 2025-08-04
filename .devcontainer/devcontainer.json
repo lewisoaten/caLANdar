@@ -4,6 +4,13 @@
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": true,
+      "azureDnsAutoDetection": true,
+      "installDockerBuildx": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
     "ghcr.io/devcontainers/features/nix:1": {
       "version": "latest",
       "multiUser": false,
@@ -48,7 +55,7 @@
       }
     }
   },
-  "postCreateCommand": "bash -c 'mkdir -p ~/.cargo && source ~/.bashrc && nix develop --impure -c echo \"Development environment ready! Run just --list to see available commands.\"'",
+  "postCreateCommand": "bash .devcontainer/init-dev-env.sh",
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "mounts": [
