@@ -32,8 +32,10 @@ mod error;
 
 mod auth;
 mod controllers;
+mod dto;
 mod repositories;
 mod routes;
+mod services;
 mod util;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
