@@ -86,6 +86,7 @@ The dev container automatically sets up the same development environment as defi
 - Docker support for Shuttle
 
 **Key Features:**
+
 - **Automatic Activation**: The Nix development shell is automatically activated in every terminal
 - **Docker-in-Docker**: Full Docker support allows Shuttle to run containers properly
 - **Tool Availability**: All development tools are immediately available in your PATH
@@ -103,6 +104,7 @@ If you encounter issues:
 ### Manual Nix Shell (if needed)
 
 In rare cases where automatic activation fails, you can manually enter the Nix shell:
+
 ```bash
 nix develop --impure
 ```
