@@ -1,0 +1,58 @@
+{
+  "name": "CaLANdar Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/nix:1": {
+      "version": "latest",
+      "multiUser": false,
+      "extraNixConfig": "experimental-features = nix-command flakes"
+    }
+  },
+  "forwardPorts": [3000, 8000, 6006],
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend (React)",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "API (Rust/Rocket)",
+      "onAutoForward": "notify"
+    },
+    "6006": {
+      "label": "Storybook",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "ms-vscode.vscode-typescript-next",
+        "ms-vscode.vscode-json",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+        "vadimcn.vscode-lldb",
+        "github.copilot",
+        "github.copilot-chat",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-eslint"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.buildScripts.enable": true,
+        "rust-analyzer.procMacro.enable": true,
+        "rust-analyzer.diagnostics.enable": true,
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "postCreateCommand": "bash -c 'source ~/.bashrc && nix develop --impure -c echo \"Development environment ready! Run just --list to see available commands.\"'",
+  "postStartCommand": "bash -c 'source ~/.bashrc && cd frontend && nix develop --impure -c npm install'",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=${localWorkspaceFolder}/.nix_shell_cargo_home,target=${containerWorkspaceFolder}/.nix_shell_cargo_home,type=bind,consistency=cached"
+  ]
+}
