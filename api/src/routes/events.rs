@@ -1,6 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event, Error},
+    services::event::EventService,
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
@@ -97,8 +98,21 @@ pub async fn get_all(
     _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<Vec<Event>>, EventsGetError> {
-    match event::get_all(pool).await {
-        Ok(events) => Ok(Json(events)),
+    match EventService::get_all_events(pool.inner()).await {
+        Ok(events) => {
+            // Convert DTOs to API response types
+            let response_events: Vec<Event> = events.into_iter().map(|dto| Event {
+                id: dto.id,
+                created_at: dto.created_at,
+                last_modified: dto.last_modified,
+                title: dto.title,
+                description: dto.description,
+                image: dto.image,
+                time_begin: dto.time_begin,
+                time_end: dto.time_end,
+            }).collect();
+            Ok(Json(response_events))
+        }
         Err(e) => Err(EventsGetError::InternalServerError(format!(
             "Error getting events, due to: {e}"
         ))),
