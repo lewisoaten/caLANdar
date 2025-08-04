@@ -24,9 +24,11 @@ The dev container uses these features:
 ### GitHub Codespaces
 
 1. Go to the repository on GitHub
-2. Click the green "Code" button
+2. Click the green "Code" button  
 3. Select "Codespaces" tab
 4. Click "Create codespace on main" (or your branch)
+5. Wait for the environment to set up (this may take a few minutes on first creation)
+6. Once ready, open a terminal and run `just --list` to see available commands
 
 ### VS Code with Dev Containers Extension
 
@@ -34,6 +36,8 @@ The dev container uses these features:
 2. Open the repository folder
 3. When prompted, click "Reopen in Container"
 4. Or use Command Palette: "Dev Containers: Reopen in Container"
+5. Wait for the container to build and start
+6. Open a terminal and run `just --list` to see available commands
 
 ### Commands Available
 

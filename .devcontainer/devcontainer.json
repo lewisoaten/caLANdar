@@ -48,11 +48,11 @@
       }
     }
   },
-  "postCreateCommand": "bash -c 'source ~/.bashrc && nix develop --impure -c echo \"Development environment ready! Run just --list to see available commands.\"'",
-  "postStartCommand": "bash -c 'source ~/.bashrc && cd frontend && nix develop --impure -c npm install'",
+  "postCreateCommand": "bash -c 'mkdir -p ~/.cargo && source ~/.bashrc && nix develop --impure -c echo \"Development environment ready! Run just --list to see available commands.\"'",
   "remoteUser": "vscode",
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   "mounts": [
-    "source=${localWorkspaceFolder}/.nix_shell_cargo_home,target=${containerWorkspaceFolder}/.nix_shell_cargo_home,type=bind,consistency=cached"
+    "source=calandar-cargo-cache,target=/home/vscode/.cargo,type=volume",
+    "source=calandar-nix-cache,target=/home/vscode/.cache/nix,type=volume"
   ]
 }
