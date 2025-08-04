@@ -3,4 +3,5 @@
 *.session.sql
 .direnv/
 node_modules
-.nix_shell_cargo_home
+.cargo
+.rustup

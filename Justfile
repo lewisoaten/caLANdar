@@ -11,10 +11,10 @@ dev-api:
     cargo watch --workdir api --quiet --clear --exec 'shuttle run'
 
 dev-frontend:
-    cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start
+    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8000 npm start
 
 dev-storybook:
-	cd frontend && npm run storybook
+	cd frontend && npm install && npm run storybook
 
 migrate-info:
 	#!/usr/bin/env bash
@@ -68,4 +68,4 @@ pact-api:
 	pact_verifier_cli --header Authorization="Bearer put_something_here" --port 8000 --dir ./frontend/pacts
 
 pact-frontend:
-	cd frontend && npm run test:pact
+	cd frontend && npm install && npm run test:pact
