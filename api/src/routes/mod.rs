@@ -7,6 +7,6 @@ pub mod games;
 pub mod profiles;
 
 /// Trait for adds examples to API documentation
-trait SchemaExample {
+pub trait SchemaExample {
     fn example() -> Self;
 }
