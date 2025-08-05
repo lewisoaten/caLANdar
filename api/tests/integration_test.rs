@@ -36,7 +36,6 @@
 //! - Database operations use the real database via shuttle
 //! - Authentication uses real PASETO tokens
 
-use chrono::{Duration, Utc};
 use mockito::{Server, ServerGuard};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
@@ -55,8 +54,6 @@ struct TestContext {
     email_mock_server: ServerGuard,
     /// Authentication tokens for different users
     tokens: HashMap<String, String>,
-    /// Created event ID for testing
-    event_id: Option<i32>,
 }
 
 impl TestContext {
@@ -71,7 +68,6 @@ impl TestContext {
             steam_mock_server,
             email_mock_server,
             tokens: HashMap::new(),
-            event_id: None,
         }
     }
 
