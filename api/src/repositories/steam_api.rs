@@ -25,10 +25,7 @@ pub async fn get_app_list_v2(
     let request_url =
         format!("https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={steam_api_key}",);
 
-    log::info!(
-        "Requesting games from steam API v2 using url: {}",
-        request_url
-    );
+    log::info!("Requesting games from steam API v2 using url: {request_url}");
 
     let response = match reqwest::get(&request_url).await {
         Ok(response) => response,
@@ -43,6 +40,7 @@ pub async fn get_app_list_v2(
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct SteamAPIOwnedGame {
     pub appid: i64,
     pub playtime_2weeks: Option<i32>,
@@ -56,6 +54,7 @@ pub struct SteamAPIOwnedGame {
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct SteamAPIOwnedGamesListResponse {
     pub game_count: i64,
     pub games: Vec<SteamAPIOwnedGame>,
@@ -63,6 +62,7 @@ pub struct SteamAPIOwnedGamesListResponse {
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct SteamAPIOwnedGamesList {
     pub response: SteamAPIOwnedGamesListResponse,
 }
@@ -78,10 +78,7 @@ pub async fn get_owned_games(
         "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={steam_api_key}&steamid={steam_id}&include_played_free_games={include_played_free_games}&include_free_sub={include_free_sub}",
     );
 
-    log::info!(
-        "Requesting owned games from steam API using url: {}",
-        request_url
-    );
+    log::info!("Requesting owned games from steam API using url: {request_url}");
 
     let response = match reqwest::get(&request_url).await {
         Ok(response) => response,
@@ -96,12 +93,14 @@ pub async fn get_owned_games(
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct PlayerSummaries {
     pub response: PlayerSummariesResponse,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct PlayerSummariesResponse {
     pub players: Vec<PlayerSummary>,
 }
@@ -156,6 +155,7 @@ pub struct PlayerSummariesResponse {
 //   }
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
+#[allow(dead_code)]
 pub struct PlayerSummary {
     pub steamid: String,
     pub personaname: String,
@@ -175,6 +175,7 @@ pub struct PlayerSummary {
     pub gameid: Option<String>,
 }
 
+#[allow(dead_code)]
 pub async fn get_current_game(
     steam_api_key: &String,
     steam_id: &String,
@@ -183,10 +184,7 @@ pub async fn get_current_game(
         "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={steam_id}",
     );
 
-    log::info!(
-        "Requesting current game from steam API using url: {}",
-        request_url
-    );
+    log::info!("Requesting current game from steam API using url: {request_url}");
 
     let response = reqwest::get(&request_url).await?;
 

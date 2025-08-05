@@ -60,7 +60,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                 let event: Event = match event::filter(pool, event_filter_values).await {
                     Ok(event) => event[0].clone().into(),
                     Err(e) => {
-                        log::error!("Unable to get event for invitation: {}", e);
+                        log::error!("Unable to get event for invitation: {e}");
                         continue;
                     }
                 };
@@ -81,7 +81,9 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                         games_owned_last_modified: Option::None,
                     };
                     gamers.insert(key.clone(), gamer);
-                    gamers.get_mut(&key).unwrap()
+                    gamers
+                        .get_mut(&key)
+                        .expect("Gamer should exist after insert")
                 };
 
                 match invitation.handle {
@@ -122,15 +124,15 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                 };
                 match user_games::filter(pool, filter).await {
                     Ok(user_games) => {
-                        gamer.games_owned_count = user_games.len() as u16;
+                        gamer.games_owned_count =
+                            u16::try_from(user_games.len()).unwrap_or(u16::MAX);
                         gamer.games_owned_last_modified = user_games
                             .iter()
                             .max_by_key(|user_game| user_game.last_modified.unwrap_or_default())
                             .map(|user_game| user_game.last_modified.unwrap_or_default());
                     }
                     Err(e) => {
-                        log::error!("Unable to get games owned by gamer: {}", e);
-                        continue;
+                        log::error!("Unable to get games owned by gamer: {e}");
                     }
                 }
             }

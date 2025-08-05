@@ -25,14 +25,14 @@ pub async fn update(
     steam_id: Option<i64>,
     last_refreshed: Option<DateTime<Utc>>,
 ) -> Result<Profile, sqlx::Error> {
-    let mut old_profile = match read(pool, email.clone()).await? {
-        Some(old_profile) => old_profile,
-        None => Profile {
+    let mut old_profile = (read(pool, email.clone()).await?).map_or_else(
+        || Profile {
             email: email.clone(),
             steam_id: 0,
             last_refreshed: None,
         },
-    };
+        |old_profile| old_profile,
+    );
 
     if let Some(new_steam_id) = steam_id {
         old_profile.steam_id = new_steam_id;

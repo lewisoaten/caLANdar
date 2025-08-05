@@ -19,7 +19,7 @@ impl From<InvitationResponse> for Response {
     }
 }
 
-fn _get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
+fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
     let mut buckets = Vec::new();
 
     // Start from 6 AM of time_begin's date
@@ -75,7 +75,7 @@ pub async fn respond(
 
     // Check if attendence has the same number of elements as day quarter buckets for the events duration
     if let Some(ref attendance) = invitation_response.attendance {
-        let day_quarter_buckets = _get_day_quarter_buckets(event.time_begin, event.time_end).len();
+        let day_quarter_buckets = get_day_quarter_buckets(event.time_begin, event.time_end).len();
         let attendance_length = attendance.len();
 
         if attendance_length != day_quarter_buckets {
@@ -83,7 +83,7 @@ pub async fn respond(
                 "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
             )));
         }
-    };
+    }
 
     // Respond to invitation
     match invitation::edit(
