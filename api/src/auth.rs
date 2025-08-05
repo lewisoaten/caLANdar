@@ -29,41 +29,6 @@ pub struct PasetoToken {
     pub sub: String,
 }
 
-#[cfg(test)]
-mod tests {
-    use chrono::{Duration, Utc};
-    use rusty_paseto::prelude::*;
-
-    #[test]
-    fn test_authorise_paseto_header() {
-        let email = "test@test.invalid";
-        let paseto_symmetric_key = PasetoSymmetricKey::<V4, Local>::from(Key::from([0; 32]));
-        let expiration_claim =
-            ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339())
-                .expect("Valid date 7 days in the future.");
-
-        let token = PasetoBuilder::<V4, Local>::default()
-            .set_claim(expiration_claim)
-            .set_claim(IssuerClaim::from("calandar.org"))
-            .set_claim(TokenIdentifierClaim::from("api"))
-            .set_claim(SubjectClaim::from(email))
-            .build(&paseto_symmetric_key)
-            .expect("Valid token built.");
-
-        let token = format!("Bearer {token}");
-
-        let result = super::authorise_paseto_header(&paseto_symmetric_key, &token, false);
-        assert_eq!(result.expect("Email provided for test."), email);
-
-        let result = super::authorise_paseto_header(&paseto_symmetric_key, &token, true);
-        match result.expect_err("Error because we are not an admin.") {
-            super::UserError::TokenError => (),
-            super::UserError::MissingToken => panic!("Expected TokenError"),
-        };
-    }
-}
-
-/// Validate Bearer header string is a valid `CaLANdar` API token and in-date.
 fn authorise_paseto_header(
     key: &PasetoSymmetricKey<V4, Local>,
     authorization_header: &str,
@@ -71,15 +36,12 @@ fn authorise_paseto_header(
 ) -> Result<String, UserError> {
     match authorization_header.strip_prefix("Bearer ") {
         Some(token) => {
-            let generic_token = match PasetoParser::<V4, Local>::default()
+            let Ok(generic_token) = PasetoParser::<V4, Local>::default()
                 .check_claim(IssuerClaim::from("calandar.org"))
                 .check_claim(TokenIdentifierClaim::from("api"))
                 .parse(token, key)
-            {
-                Ok(generic_token) => generic_token,
-                Err(_) => {
-                    return Err(UserError::TokenError);
-                }
+            else {
+                return Err(UserError::TokenError);
             };
 
             let typed_token: PasetoToken = match json::from_value(generic_token) {
@@ -133,7 +95,7 @@ impl<'r> FromRequest<'r> for User {
     }
 }
 
-impl<'a> OpenApiFromRequest<'a> for User {
+impl OpenApiFromRequest<'_> for User {
     fn from_request_input(
         _gen: &mut OpenApiGenerator,
         _name: String,
@@ -191,7 +153,7 @@ impl<'r> FromRequest<'r> for AdminUser {
                     }
                 };
             }
-        };
+        }
 
         let authorization_header = request.headers().get_one("Authorization");
 
@@ -212,7 +174,7 @@ impl<'r> FromRequest<'r> for AdminUser {
     }
 }
 
-impl<'a> OpenApiFromRequest<'a> for AdminUser {
+impl OpenApiFromRequest<'_> for AdminUser {
     fn from_request_input(
         _gen: &mut OpenApiGenerator,
         _name: String,
@@ -243,5 +205,39 @@ impl<'a> OpenApiFromRequest<'a> for AdminUser {
             security_scheme,
             security_req,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+    use rusty_paseto::prelude::*;
+
+    #[test]
+    fn test_authorise_paseto_header() {
+        let email = "test@test.invalid";
+        let paseto_symmetric_key = PasetoSymmetricKey::<V4, Local>::from(Key::from([0; 32]));
+        let expiration_claim =
+            ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339())
+                .expect("Valid date 7 days in the future.");
+
+        let token = PasetoBuilder::<V4, Local>::default()
+            .set_claim(expiration_claim)
+            .set_claim(IssuerClaim::from("calandar.org"))
+            .set_claim(TokenIdentifierClaim::from("api"))
+            .set_claim(SubjectClaim::from(email))
+            .build(&paseto_symmetric_key)
+            .expect("Valid token built.");
+
+        let token = format!("Bearer {token}");
+
+        let result = super::authorise_paseto_header(&paseto_symmetric_key, &token, false);
+        assert_eq!(result.expect("Email provided for test."), email);
+
+        let result = super::authorise_paseto_header(&paseto_symmetric_key, &token, true);
+        match result.expect_err("Error because we are not an admin.") {
+            super::UserError::TokenError => (),
+            super::UserError::MissingToken => panic!("Expected TokenError"),
+        }
     }
 }

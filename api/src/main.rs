@@ -6,6 +6,7 @@
 extern crate rocket;
 
 use anyhow::anyhow;
+use resend_rs::Resend;
 use rocket::{
     fairing::{Fairing, Info, Kind},
     get,
@@ -22,7 +23,6 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
-use resend_rs::Resend;
 use shuttle_rocket::ShuttleRocket;
 use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
@@ -90,8 +90,8 @@ impl Fairing for CORS {
                 ));
                 response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
                 response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
-            };
-        };
+            }
+        }
     }
 }
 
@@ -166,13 +166,11 @@ async fn rocket(
     log::info!("Launching application!");
     match sqlx::migrate!().run(&pool).await {
         Ok(()) => log::info!("Migrations ran successfully"),
-        Err(e) => log::error!("Error running migrations: {}", e),
-    };
+        Err(e) => log::error!("Error running migrations: {e}"),
+    }
 
     // Get the discord token set in `Secrets.toml` from the AWS RDS Postgres database
-    let paseto_secret_key = if let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") {
-        paseto_secret_key
-    } else {
+    let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") else {
         return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
     };
 
@@ -183,9 +181,7 @@ async fn rocket(
 
     log::info!("Paseto key created.");
 
-    let resend_api_key = if let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") {
-        resend_api_key
-    } else {
+    let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") else {
         return Err(anyhow!("failed to get RESEND_API_KEY from secrets store").into());
     };
 
@@ -195,9 +191,7 @@ async fn rocket(
 
     log::info!("Resend sender created.");
 
-    let steam_api_key = if let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") {
-        steam_api_key
-    } else {
+    let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") else {
         return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
     };
 
@@ -206,8 +200,8 @@ async fn rocket(
     let mut tera = Tera::default();
     match tera.add_raw_templates(EMAIL_TEMPLATES) {
         Ok(()) => log::info!("Tera templates added."),
-        Err(e) => log::error!("Error adding Tera templates: {}", e),
-    };
+        Err(e) => log::error!("Error adding Tera templates: {e}"),
+    }
 
     log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]

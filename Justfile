@@ -50,6 +50,9 @@ update-sqlx:
 bacon:
 	cd api && bacon
 
+clippy:
+	pre-commit run clippy
+
 pact-api:
 	#!/usr/bin/env bash
 	set -euxo pipefail

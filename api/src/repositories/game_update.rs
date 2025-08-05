@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct SteamGameUpdate {
     pub id: i32,
     pub update_time: DateTime<Utc>,
