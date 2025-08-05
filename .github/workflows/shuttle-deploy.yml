@@ -16,5 +16,5 @@ jobs:
           working-directory: api
           secrets: |
             PASETO_SECRET_KEY = '${{ secrets.PASETO_SECRET_KEY }}'
-            SENDGRID_API_KEY = '${{ secrets.SENDGRID_API_KEY }}'
+            RESEND_API_KEY = '${{ secrets.RESEND_API_KEY }}'
             STEAM_API_KEY = '${{ secrets.STEAM_API_KEY }}'
