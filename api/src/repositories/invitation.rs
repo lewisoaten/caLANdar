@@ -14,10 +14,13 @@ pub struct Invitation {
     pub email: String,
     pub avatar_url: Option<String>, // For some reason this has to be optional, even though it is explicitly set in the query
     pub handle: Option<String>,
+    #[allow(dead_code)]
     pub invited_at: DateTime<Utc>,
     pub responded_at: Option<DateTime<Utc>>,
     pub response: Option<Response>,
+    #[allow(dead_code)]
     pub attendance: Option<Vec<u8>>,
+    #[allow(dead_code)]
     pub last_modified: DateTime<Utc>,
 }
 

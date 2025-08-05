@@ -37,13 +37,10 @@ pub async fn get(
 }
 
 pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> {
-    let steam_game_update = match game_update::create(pool).await {
-        Ok(steam_game_update) => steam_game_update,
-        Err(_) => {
-            return Err(Error::Controller(
-                "Unable to create game update log".to_string(),
-            ))
-        }
+    let Ok(steam_game_update) = game_update::create(pool).await else {
+        return Err(Error::Controller(
+            "Unable to create game update log".to_string(),
+        ));
     };
 
     let steam_games: steam_api::SteamAPISteamGameApplistWrapperV2 =
@@ -73,12 +70,12 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> 
 
         for result in results {
             if let Err(e) = result {
-                log::error!("Failed to insert game: {}", e);
+                log::error!("Failed to insert game: {e}");
                 break;
             }
         }
 
-        log::info!("Inserted {} games successfully.", chunk_size);
+        log::info!("Inserted {chunk_size} games successfully.");
     }
 
     Ok(())

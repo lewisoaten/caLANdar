@@ -9,9 +9,9 @@ pub enum GameVote {
     No, // Not used for now
 }
 
+#[allow(dead_code)]
 pub struct GameSuggestion {
     pub event_id: i32,
-    // game: Game,  // TODO: Figure out how to do this
     pub game_id: i64,
     pub game_name: String,
     pub user_email: String,

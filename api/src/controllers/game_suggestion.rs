@@ -64,15 +64,6 @@ impl From<String> for Gamer {
     }
 }
 
-impl Default for Gamer {
-    fn default() -> Self {
-        Self {
-            avatar_url: None,
-            handle: None,
-        }
-    }
-}
-
 // Implement From for EventGameResponse from Game
 impl From<crate::repositories::user_games::UserGame> for EventGameResponse {
     fn from(game: crate::repositories::user_games::UserGame) -> Self {
@@ -269,7 +260,7 @@ pub async fn create(
             ))
         }
         Ok((true, _event)) => (),
-    };
+    }
 
     match is_attending_event(pool, event_id, email.clone()).await {
         Err(e) => {
@@ -283,7 +274,7 @@ pub async fn create(
             ))
         }
         Ok(true) => (),
-    };
+    }
 
     let invitations = match invitation::filter(
         pool,
@@ -330,7 +321,7 @@ pub async fn vote(
             ))
         }
         Ok((true, _event)) => (),
-    };
+    }
 
     match is_attending_event(pool, event_id, email.clone()).await {
         Err(e) => {
@@ -344,7 +335,7 @@ pub async fn vote(
             ))
         }
         Ok(true) => (),
-    };
+    }
 
     let invitations = match invitation::filter(
         pool,

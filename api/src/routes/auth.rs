@@ -1,4 +1,5 @@
 use chrono::{prelude::Utc, Duration};
+use resend_rs::Resend;
 use rocket::{
     post,
     serde::{json, json::Json, Deserialize, Serialize},
@@ -9,7 +10,6 @@ use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
-use sendgrid::v3::Sender;
 
 use crate::auth::PasetoToken;
 
@@ -31,7 +31,7 @@ pub struct LoginRequest {
 pub async fn login(
     login_request: Json<LoginRequest>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
-    sender: &State<Sender>,
+    sender: &State<Resend>,
     tera: &State<Tera>,
 ) -> Result<Json<LoginResponse>, rocket::response::status::BadRequest<String>> {
     let mut context = Context::new();
@@ -43,9 +43,9 @@ pub async fn login(
         .map_or("", |redirect| redirect);
 
     let email_details = PreauthEmailDetails {
-        email_address: login_request.email.to_string(),
-        email_subject: "Calandar Email Verification".to_string(),
-        email_template: "email_verification.html.tera".to_string(),
+        address: login_request.email.to_string(),
+        subject: "Calandar Email Verification".to_string(),
+        template: "email_verification.html.tera".to_string(),
     };
 
     match send_preauth_email(
@@ -60,9 +60,9 @@ pub async fn login(
     .await
     {
         Ok(()) => Ok(Json(LoginResponse {})),
-        Err(_) => Err(rocket::response::status::BadRequest(
-            "Error sending email".to_string(),
-        )),
+        Err(e) => Err(rocket::response::status::BadRequest(format!(
+            "Error sending login email due to: {e}"
+        ))),
     }
 }
 
@@ -90,17 +90,14 @@ pub fn verify_email(
 ) -> Result<Json<VerifyEmailResponse>, rocket::response::status::BadRequest<String>> {
     // decode and verify token is a valid email verification token, and has not expired
 
-    let generic_token = match PasetoParser::<V4, Local>::default()
+    let Ok(generic_token) = PasetoParser::<V4, Local>::default()
         .check_claim(IssuerClaim::from("calandar.org"))
         .check_claim(TokenIdentifierClaim::from("ev"))
         .parse(&verify_email_request.token, key)
-    {
-        Ok(generic_token) => generic_token,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(
-                "Error parsing token".to_string(),
-            ))
-        }
+    else {
+        return Err(rocket::response::status::BadRequest(
+            "Error parsing token".to_string(),
+        ));
     };
 
     let typed_token: PasetoToken = match json::from_value(generic_token) {
@@ -113,29 +110,24 @@ pub fn verify_email(
     };
 
     // create a new long-lasting token for the user for subsequent api requests
-    let expiration_claim =
-        match ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339()) {
-            Ok(expiration_claim) => expiration_claim,
-            Err(_) => {
-                return Err(rocket::response::status::BadRequest(
-                    "Can't create time for expiration claim".to_string(),
-                ))
-            }
-        };
+    let Ok(expiration_claim) =
+        ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339())
+    else {
+        return Err(rocket::response::status::BadRequest(
+            "Can't create time for expiration claim".to_string(),
+        ));
+    };
 
-    let token = match PasetoBuilder::<V4, Local>::default()
+    let Ok(token) = PasetoBuilder::<V4, Local>::default()
         .set_claim(expiration_claim)
         .set_claim(IssuerClaim::from("calandar.org"))
         .set_claim(TokenIdentifierClaim::from("api"))
         .set_claim(SubjectClaim::from(typed_token.sub.as_str()))
         .build(key)
-    {
-        Ok(token) => token,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(
-                "Error building token".to_string(),
-            ))
-        }
+    else {
+        return Err(rocket::response::status::BadRequest(
+            "Error building token".to_string(),
+        ));
     };
 
     // Also specified in `fn authorise_paseto_header`

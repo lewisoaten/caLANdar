@@ -89,9 +89,8 @@ pub async fn edit(
     email: String,
     new_profile: ProfileSubmit,
 ) -> Result<Profile, Error> {
-    let new_steam_id = match new_profile.steam_id.parse::<i64>() {
-        Ok(id) => id,
-        Err(_) => return Err(Error::BadInput("Unable to parse steam ID".to_string())),
+    let Ok(new_steam_id) = new_profile.steam_id.parse::<i64>() else {
+        return Err(Error::BadInput("Unable to parse steam ID".to_string()));
     };
 
     match profile::update(pool, email.clone(), Some(new_steam_id), None).await {

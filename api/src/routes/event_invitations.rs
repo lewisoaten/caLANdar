@@ -4,6 +4,7 @@ use crate::{
     util::{is_attending_event, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
+use resend_rs::Resend;
 use rocket::{
     delete, get, patch, post,
     response::status,
@@ -15,7 +16,6 @@ use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
-use sendgrid::v3::Sender;
 use sqlx::postgres::PgPool;
 
 use crate::repositories::event;
@@ -63,7 +63,7 @@ pub async fn post(
     invitation_request: Json<InvitationsPostRequest>,
     pool: &State<PgPool>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
-    sender: &State<Sender>,
+    sender: &State<Resend>,
     tera: &State<Tera>,
     _as_admin: Option<bool>,
     _user: AdminUser,
@@ -101,7 +101,7 @@ pub async fn post(
                 return Err(rocket::response::status::BadRequest(
                     "Too many events returned for ID".to_string(),
                 ));
-            };
+            }
 
             event[0].clone()
         }
@@ -126,9 +126,9 @@ pub async fn post(
     context.insert("description", &event.description);
 
     let email_details = PreauthEmailDetails {
-        email_address: invitation_request.email.to_string(),
-        email_subject: format!("{} - caLANdar Invitation", event.title),
-        email_template: "email_invitation.html.tera".to_string(),
+        address: invitation_request.email.to_string(),
+        subject: format!("{} - caLANdar Invitation", event.title),
+        template: "email_invitation.html.tera".to_string(),
     };
 
     match send_preauth_email(
@@ -164,7 +164,7 @@ pub async fn get(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<InvitationsResponse>, rocket::response::status::BadRequest<String>> {
-    log::info!("Getting invitation details for email: {}", email);
+    log::info!("Getting invitation details for email: {email}");
     if user.email != email {
         return Err(rocket::response::status::BadRequest(
             "You can only respond to invitations for your own email address".to_string(),
