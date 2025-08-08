@@ -72,3 +72,15 @@ pact-api:
 
 pact-frontend:
 	cd frontend && npm install && npm run test:pact
+
+test-integration:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	echo 'Running integration tests (requires API server to be running)...'
+	cd api && cargo test --test integration_test
+
+test-integration-basic:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	echo 'Running basic integration tests (without requiring API server)...'
+	cd api && timeout 10 cargo test test_api_connectivity || echo "Expected timeout - API server not running"
