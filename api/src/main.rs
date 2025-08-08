@@ -32,9 +32,12 @@ mod error;
 
 mod auth;
 mod controllers;
+mod dto;
 mod repositories;
 mod routes;
+mod services;
 mod util;
+mod web;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
