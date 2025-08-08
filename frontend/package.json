@@ -31,7 +31,8 @@
     "test:coverage": "vitest run --coverage --watch=false",
     "test:pact": "cross-env CI=true react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "test-storybook": "./scripts/test-storybook.sh"
   },
   "browserslist": {
     "production": [
