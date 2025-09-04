@@ -11,7 +11,7 @@ futures = "0.3.30"
 shuttle-rocket = "0.56.0"
 shuttle-runtime = "0.56.0"
 shuttle-shared-db = { version = "0.56.0", features = ["postgres", "sqlx"] }
-log = "0.4.27"
+log = "0.4.28"
 resend-rs = "0.17"
 rocket = { version = "0.5.0", features = [ "json" ] }
 rocket_dyn_templates = { version = "0.2.0", features = [ "tera" ] }
