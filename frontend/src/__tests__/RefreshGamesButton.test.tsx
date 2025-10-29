@@ -1,0 +1,167 @@
+import { describe, test, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "../test/test-utils";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
+import RefreshGamesButton from "../components/RefreshGamesButton";
+import { useState } from "react";
+
+// Create MSW server for API mocking
+const server = setupServer();
+
+beforeEach(() => {
+  server.listen({ onUnhandledRequest: "error" });
+});
+
+afterEach(() => {
+  server.resetHandlers();
+  server.close();
+});
+
+describe("RefreshGamesButton", () => {
+  test("renders with default state", () => {
+    const TestWrapper = () => {
+      const loadingState = useState(false);
+      const doneState = useState(false);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    expect(screen.getByText("Update Games")).toBeInTheDocument();
+  });
+
+  test("shows loading state when clicked", async () => {
+    server.use(
+      http.post("/api/steam-game-update-v2", () => {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(HttpResponse.json({}, { status: 200 }));
+          }, 100);
+        });
+      })
+    );
+
+    const TestWrapper = () => {
+      const loadingState = useState(false);
+      const doneState = useState(false);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    
+    const button = screen.getByRole("button", { name: /update games/i });
+    await userEvent.click(button);
+
+    // Button should be disabled during loading
+    expect(button).toBeDisabled();
+  });
+
+  test("shows done state after successful update", async () => {
+    server.use(
+      http.post("/api/steam-game-update-v2", () => {
+        return HttpResponse.json({}, { status: 200 });
+      })
+    );
+
+    const TestWrapper = () => {
+      const loadingState = useState(false);
+      const doneState = useState(false);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    
+    const button = screen.getByRole("button", { name: /update games/i });
+    await userEvent.click(button);
+
+    // Wait for the done state
+    await waitFor(() => {
+      expect(button).not.toBeDisabled();
+    });
+  });
+
+  test("handles error response", async () => {
+    // Mock alert
+    const alertSpy = vi.spyOn(window, "alert").mockImplementation(() => {});
+
+    server.use(
+      http.post("/api/steam-game-update-v2", () => {
+        return HttpResponse.json({ error: "Server error" }, { status: 500 });
+      })
+    );
+
+    const TestWrapper = () => {
+      const loadingState = useState(false);
+      const doneState = useState(false);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    
+    const button = screen.getByRole("button", { name: /update games/i });
+    await userEvent.click(button);
+
+    // Wait for error alert
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalled();
+    });
+
+    alertSpy.mockRestore();
+  });
+
+  test("renders with loading state initially", () => {
+    const TestWrapper = () => {
+      const loadingState = useState(true);
+      const doneState = useState(false);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    
+    const button = screen.getByRole("button", { name: /update games/i });
+    expect(button).toBeDisabled();
+  });
+
+  test("renders with done state initially", () => {
+    const TestWrapper = () => {
+      const loadingState = useState(false);
+      const doneState = useState(true);
+      return (
+        <RefreshGamesButton
+          loadingState={loadingState}
+          doneState={doneState}
+        />
+      );
+    };
+
+    render(<TestWrapper />);
+    
+    const button = screen.getByRole("button", { name: /update games/i });
+    expect(button).not.toBeDisabled();
+  });
+});

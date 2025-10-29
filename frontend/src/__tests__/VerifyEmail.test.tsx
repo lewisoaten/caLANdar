@@ -1,0 +1,70 @@
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import VerifyEmail from "../components/VerifyEmail";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
+import { UserProvider } from "../UserProvider";
+
+const theme = createTheme({ palette: { mode: "dark" } });
+
+// Custom render without the BrowserRouter from test-utils
+const renderWithRouter = (ui: React.ReactElement, initialEntries: string[] = ["/"]) => {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>
+      <ThemeProvider theme={theme}>
+        <UserProvider>{ui}</UserProvider>
+      </ThemeProvider>
+    </MemoryRouter>
+  );
+};
+
+describe("VerifyEmail", () => {
+  test("renders verify email form", () => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/verify_email" element={<VerifyEmail />} />
+      </Routes>,
+      ["/verify_email"]
+    );
+    
+    expect(screen.getByLabelText(/token/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+  });
+
+  test("renders with token from URL", () => {
+    const token = "test-token-123";
+    renderWithRouter(
+      <Routes>
+        <Route path="/verify_email" element={<VerifyEmail />} />
+      </Routes>,
+      [`/verify_email?token=${token}`]
+    );
+    
+    const input = screen.getByLabelText(/token/i) as HTMLInputElement;
+    expect(input.value).toBe(token);
+  });
+
+  test("renders title", () => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/verify_email" element={<VerifyEmail />} />
+      </Routes>,
+      ["/verify_email"]
+    );
+    
+    expect(screen.getByText("Verify Email Token")).toBeInTheDocument();
+  });
+
+  test("has required token field", () => {
+    renderWithRouter(
+      <Routes>
+        <Route path="/verify_email" element={<VerifyEmail />} />
+      </Routes>,
+      ["/verify_email"]
+    );
+    
+    const input = screen.getByLabelText(/token/i);
+    expect(input).toBeRequired();
+  });
+});
