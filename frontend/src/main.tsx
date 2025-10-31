@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import {
-  Routes,
   BrowserRouter,
   useLocation,
   useNavigationType,
@@ -61,8 +60,6 @@ Sentry.init({
 
 const rootElement = document.getElementById("root");
 const root = createRoot(rootElement!);
-
-export const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
 root.render(
   <React.StrictMode>
