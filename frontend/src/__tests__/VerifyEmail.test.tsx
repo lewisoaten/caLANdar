@@ -1,6 +1,5 @@
-import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import VerifyEmail from "../components/VerifyEmail";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
