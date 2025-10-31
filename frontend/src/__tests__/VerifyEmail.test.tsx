@@ -1,4 +1,12 @@
-import { describe, test, expect, beforeAll, afterEach, afterAll } from "vitest";
+import {
+  describe,
+  test,
+  expect,
+  beforeAll,
+  afterEach,
+  afterAll,
+  vi,
+} from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { http, HttpResponse } from "msw";
@@ -39,6 +47,7 @@ describe("VerifyEmail", () => {
     renderWithRouter(
       <Routes>
         <Route path="/verify_email" element={<VerifyEmail />} />
+        <Route path="/events" element={<div>Events Page</div>} />
       </Routes>,
       ["/verify_email"],
     );
@@ -54,6 +63,7 @@ describe("VerifyEmail", () => {
     renderWithRouter(
       <Routes>
         <Route path="/verify_email" element={<VerifyEmail />} />
+        <Route path="/events" element={<div>Events Page</div>} />
       </Routes>,
       [`/verify_email?token=${token}`],
     );
@@ -66,6 +76,7 @@ describe("VerifyEmail", () => {
     renderWithRouter(
       <Routes>
         <Route path="/verify_email" element={<VerifyEmail />} />
+        <Route path="/events" element={<div>Events Page</div>} />
       </Routes>,
       ["/verify_email"],
     );
@@ -77,6 +88,7 @@ describe("VerifyEmail", () => {
     renderWithRouter(
       <Routes>
         <Route path="/verify_email" element={<VerifyEmail />} />
+        <Route path="/events" element={<div>Events Page</div>} />
       </Routes>,
       ["/verify_email"],
     );

@@ -58,7 +58,7 @@ describe("RefreshGamesButton", () => {
     };
 
     render(<TestWrapper />);
-    
+
     const button = screen.getByRole("button", { name: /update games/i });
     await userEvent.click(button);
 
@@ -85,7 +85,7 @@ describe("RefreshGamesButton", () => {
     };
 
     render(<TestWrapper />);
-    
+
     const button = screen.getByRole("button", { name: /update games/i });
     await userEvent.click(button);
 
@@ -117,7 +117,7 @@ describe("RefreshGamesButton", () => {
     };
 
     render(<TestWrapper />);
-    
+
     const button = screen.getByRole("button", { name: /update games/i });
     await userEvent.click(button);
 
@@ -142,7 +142,7 @@ describe("RefreshGamesButton", () => {
     };
 
     render(<TestWrapper />);
-    
+
     const button = screen.getByRole("button", { name: /update games/i });
     expect(button).toBeDisabled();
   });
@@ -160,7 +160,7 @@ describe("RefreshGamesButton", () => {
     };
 
     render(<TestWrapper />);
-    
+
     const button = screen.getByRole("button", { name: /update games/i });
     expect(button).not.toBeDisabled();
   });
