@@ -1,6 +1,6 @@
 import React from "react";
-import { Route } from "react-router-dom";
-import { SentryRoutes } from "./main";
+import { Route, Routes } from "react-router-dom";
+import * as Sentry from "@sentry/react";
 import SignIn from "./components/SignIn";
 import VerifyEmail from "./components/VerifyEmail";
 import Account from "./components/Account";
@@ -11,6 +11,8 @@ import ProtectedRoutes from "./ProtectedRoutes";
 import EventsAdmin from "./components/EventsAdmin";
 import GamersAdmin from "./components/GamersAdmin";
 import EventGames from "./components/EventGames";
+
+export const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
 const Views = () => {
   return (
