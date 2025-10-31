@@ -1,11 +1,24 @@
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { http, HttpResponse } from "msw";
+import { setupServer } from "msw/node";
 import VerifyEmail from "../components/VerifyEmail";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { UserProvider } from "../UserProvider";
 
 const theme = createTheme({ palette: { mode: "dark" } });
+
+// Set up MSW server
+const server = setupServer(
+  http.post("/api/verify-email", () => {
+    return HttpResponse.json({ token: "mocked-token" }, { status: 200 });
+  })
+);
+
+beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 // Custom render without the BrowserRouter from test-utils
 const renderWithRouter = (ui: React.ReactElement, initialEntries: string[] = ["/"]) => {
