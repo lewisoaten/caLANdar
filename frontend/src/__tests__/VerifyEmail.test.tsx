@@ -3,6 +3,7 @@ import {
   test,
   expect,
   beforeAll,
+  beforeEach,
   afterEach,
   afterAll,
   vi,
@@ -25,6 +26,10 @@ const server = setupServer(
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
+beforeEach(() => {
+  // Clear localStorage before each test to ensure clean state
+  localStorage.clear();
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
