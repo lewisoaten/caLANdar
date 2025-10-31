@@ -1,0 +1,39 @@
+# Copilot agent environment setup steps
+# See: https://docs.github.com/en/enterprise-cloud@latest/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment#preinstalling-tools-or-dependencies-in-copilots-environment
+steps:
+  - name: Install APT prerequisites
+    run: |
+      set -e
+      apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        ca-certificates curl git build-essential
+
+  - name: Install Rust toolchain (rustup + stable)
+    run: |
+      set -e
+      if ! command -v rustup >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        export PATH="$HOME/.cargo/bin:$PATH"
+      fi
+      source "$HOME/.cargo/env" || true
+      rustup toolchain install stable || true
+
+  - name: Install Node.js (LTS)
+    run: |
+      set -e
+      if ! command -v node >/dev/null 2>&1; then
+        curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+        apt-get install -y nodejs
+      fi
+
+  - name: Install just (task runner) if needed
+    run: |
+      set -e
+      if ! command -v just >/dev/null 2>&1; then
+        curl -sSfL https://github.com/casey/just/releases/latest/download/just-$(uname -s)-x86_64 -o /usr/local/bin/just
+        chmod +x /usr/local/bin/just
+      fi
+
+  - name: Placeholder: install Copilot Agent (replace with official installer)
+    run: |
+      echo "TODO: Replace this step with the official Copilot Agent install command per docs. Do not bake secrets into images."
