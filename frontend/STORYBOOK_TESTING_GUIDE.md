@@ -5,6 +5,7 @@ This guide provides instructions for creating Storybook stories and component te
 ## Overview
 
 All React components in `frontend/src/components/` should have:
+
 1. A Storybook story file (`.stories.tsx`)
 2. A test file (`.test.tsx`)
 
@@ -165,10 +166,10 @@ describe("ComponentName", () => {
   test("handles user interaction", async () => {
     const handleClick = vi.fn();
     render(<ComponentName onClick={handleClick} />);
-    
+
     const button = screen.getByRole("button");
     await userEvent.click(button);
-    
+
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
@@ -180,7 +181,7 @@ describe("ComponentName", () => {
     );
 
     render(<ComponentName />);
-    
+
     await waitFor(() => {
       expect(screen.getByText("test data")).toBeInTheDocument();
     });
@@ -188,7 +189,7 @@ describe("ComponentName", () => {
 
   test("handles API errors", async () => {
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    
+
     server.use(
       http.get("/api/endpoint", () => {
         return HttpResponse.json({ error: "Failed" }, { status: 500 });
@@ -196,7 +197,7 @@ describe("ComponentName", () => {
     );
 
     render(<ComponentName />);
-    
+
     await waitFor(() => {
       expect(screen.getByText(/error/i)).toBeInTheDocument();
     });
@@ -237,7 +238,7 @@ beforeEach(() => {
   server.use(
     http.get("/api/endpoint", () => {
       return HttpResponse.json({ data: "value" });
-    })
+    }),
   );
 });
 ```
@@ -268,10 +269,10 @@ test("displays error message", () => {
 test("submits form with correct data", async () => {
   const handleSubmit = vi.fn();
   render(<ComponentName onSubmit={handleSubmit} />);
-  
+
   await userEvent.type(screen.getByLabelText("Email"), "test@example.com");
   await userEvent.click(screen.getByRole("button", { name: /submit/i }));
-  
+
   await waitFor(() => {
     expect(handleSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ email: "test@example.com" })
@@ -331,10 +332,12 @@ For each component, ensure:
 ## Components Status
 
 ### Completed
+
 - AttendanceSelector (story + tests needed)
 - EventGameSuggestions (story + tests needed)
 
 ### To Do
+
 1. Dashboard
 2. MenuItems
 3. EventsAdmin
@@ -369,19 +372,23 @@ For each component, ensure:
 ## Troubleshooting
 
 ### Tests fail with "Cannot find module"
+
 - Ensure all imports use correct relative paths
 - Check that `test-utils.tsx` is imported instead of `@testing-library/react` for render
 
 ### MSW handlers not working
+
 - Ensure `server.listen()` is called in `beforeEach`
 - Check URL matches exactly (including query params)
 - Use `onUnhandledRequest: "bypass"` to allow non-mocked requests
 
 ### Component requires context
+
 - Use the custom `render` from `test-utils.tsx`
 - Or wrap component in necessary providers in test
 
 ### Storybook build fails
+
 - Run `npm run build-storybook` to see detailed errors
 - Check that all imports are valid
 - Ensure MSW handlers are properly configured

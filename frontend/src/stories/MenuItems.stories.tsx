@@ -6,7 +6,7 @@ import { useState } from "react";
 const MenuItemsWrapper = () => {
   const updateButtonLoadingState = useState(false);
   const updateButtonDoneState = useState(false);
-  
+
   return (
     <MenuItems
       updateButtonLoadingState={updateButtonLoadingState}

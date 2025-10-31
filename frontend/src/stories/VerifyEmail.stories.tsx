@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 // Wrapper to provide routing context
 const VerifyEmailWrapper = (args: { token?: string }) => {
   const searchParams = args.token ? `?token=${args.token}` : "";
-  
+
   return (
     <MemoryRouter initialEntries={[`/verify_email${searchParams}`]}>
       <Routes>

@@ -21,44 +21,44 @@ All infrastructure is in place and working:
 
 ### Priority Components (from issue)
 
-| Component | Story | Tests | Notes |
-|-----------|-------|-------|-------|
-| Dashboard | ❌ | ❌ | Complex, requires UserContext |
-| MenuItems | ❌ | ❌ | Requires UserContext and routing |
-| EventsAdmin | ❌ | ❌ | Requires API mocking |
-| InvitationsTable | ❌ | ❌ | Complex table with API calls |
-| VerifyEmail | ✅ | ✅ | **COMPLETE** - 4 passing tests |
-| RefreshGamesButton | ✅ | ⚠️ | Story complete, test has MSW issues |
-| EventTable | ❌ | ❌ | DataGrid component |
-| EventsAdminDialog | ❌ | ❌ | Has pact test, needs unit test |
-| AttendanceSelector | ✅ | ❌ | Story exists, needs tests |
+| Component          | Story | Tests | Notes                               |
+| ------------------ | ----- | ----- | ----------------------------------- |
+| Dashboard          | ❌    | ❌    | Complex, requires UserContext       |
+| MenuItems          | ❌    | ❌    | Requires UserContext and routing    |
+| EventsAdmin        | ❌    | ❌    | Requires API mocking                |
+| InvitationsTable   | ❌    | ❌    | Complex table with API calls        |
+| VerifyEmail        | ✅    | ✅    | **COMPLETE** - 4 passing tests      |
+| RefreshGamesButton | ✅    | ⚠️    | Story complete, test has MSW issues |
+| EventTable         | ❌    | ❌    | DataGrid component                  |
+| EventsAdminDialog  | ❌    | ❌    | Has pact test, needs unit test      |
+| AttendanceSelector | ✅    | ❌    | Story exists, needs tests           |
 
 ### All Components (22 total)
 
-| # | Component | Story | Tests | Complexity |
-|---|-----------|-------|-------|------------|
-| 1 | Account | ❌ | ❌ | Medium - API calls |
-| 2 | AttendanceSelector | ✅ | ❌ | Medium - state management |
-| 3 | Dashboard | ❌ | ❌ | High - layout wrapper |
-| 4 | Event | ❌ | ❌ | High - complex page |
-| 5 | EventAttendeeList | ❌ | ❌ | Medium - API + table |
-| 6 | EventCard | ❌ | ❌ | Low - presentational |
-| 7 | EventGameSuggestions | ✅ | ❌ | High - complex state |
-| 8 | EventGames | ❌ | ❌ | High - complex page |
-| 9 | EventManagement | ❌ | ❌ | High - admin page |
-| 10 | EventSelection | ❌ | ❌ | Medium - list page |
-| 11 | EventTable | ❌ | ❌ | Medium - DataGrid |
-| 12 | EventsAdmin | ❌ | ❌ | Medium - admin page |
-| 13 | EventsAdminDialog | ❌ | ❌ | Medium - form dialog |
-| 14 | GameOwners | ❌ | ❌ | Medium - API + display |
-| 15 | GamersAdmin | ❌ | ❌ | High - admin page |
-| 16 | GamesList | ❌ | ❌ | Medium - list with API |
-| 17 | InvitationResponse | ❌ | ❌ | Medium - form |
-| 18 | InvitationsTable | ❌ | ❌ | High - complex table |
-| 19 | MenuItems | ❌ | ❌ | Medium - navigation |
-| 20 | RefreshGamesButton | ✅ | ⚠️ | Low - button with API |
-| 21 | SignIn | ❌ | ❌ | Medium - form |
-| 22 | VerifyEmail | ✅ | ✅ | Low - simple form |
+| #   | Component            | Story | Tests | Complexity                |
+| --- | -------------------- | ----- | ----- | ------------------------- |
+| 1   | Account              | ❌    | ❌    | Medium - API calls        |
+| 2   | AttendanceSelector   | ✅    | ❌    | Medium - state management |
+| 3   | Dashboard            | ❌    | ❌    | High - layout wrapper     |
+| 4   | Event                | ❌    | ❌    | High - complex page       |
+| 5   | EventAttendeeList    | ❌    | ❌    | Medium - API + table      |
+| 6   | EventCard            | ❌    | ❌    | Low - presentational      |
+| 7   | EventGameSuggestions | ✅    | ❌    | High - complex state      |
+| 8   | EventGames           | ❌    | ❌    | High - complex page       |
+| 9   | EventManagement      | ❌    | ❌    | High - admin page         |
+| 10  | EventSelection       | ❌    | ❌    | Medium - list page        |
+| 11  | EventTable           | ❌    | ❌    | Medium - DataGrid         |
+| 12  | EventsAdmin          | ❌    | ❌    | Medium - admin page       |
+| 13  | EventsAdminDialog    | ❌    | ❌    | Medium - form dialog      |
+| 14  | GameOwners           | ❌    | ❌    | Medium - API + display    |
+| 15  | GamersAdmin          | ❌    | ❌    | High - admin page         |
+| 16  | GamesList            | ❌    | ❌    | Medium - list with API    |
+| 17  | InvitationResponse   | ❌    | ❌    | Medium - form             |
+| 18  | InvitationsTable     | ❌    | ❌    | High - complex table      |
+| 19  | MenuItems            | ❌    | ❌    | Medium - navigation       |
+| 20  | RefreshGamesButton   | ✅    | ⚠️    | Low - button with API     |
+| 21  | SignIn               | ❌    | ❌    | Medium - form             |
+| 22  | VerifyEmail          | ✅    | ✅    | Low - simple form         |
 
 **Progress: 4/22 stories (18%), 1/22 tests (5%)**
 
@@ -181,6 +181,7 @@ Make sure your changes pass locally before pushing.
 ## Questions?
 
 Refer to `STORYBOOK_TESTING_GUIDE.md` for:
+
 - Template code for stories
 - Template code for tests
 - MSW mocking examples

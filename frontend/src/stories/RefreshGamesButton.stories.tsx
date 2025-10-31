@@ -8,9 +8,9 @@ import { useState } from "react";
 const RefreshGamesButtonWrapper = (args: any) => {
   const loadingState = useState(false);
   const doneState = useState(false);
-  
+
   return (
-    <RefreshGamesButton 
+    <RefreshGamesButton
       loadingState={loadingState}
       doneState={doneState}
       {...args}
@@ -47,10 +47,7 @@ export const Loading: Story = {
     const loadingState = useState(true);
     const doneState = useState(false);
     return (
-      <RefreshGamesButton
-        loadingState={loadingState}
-        doneState={doneState}
-      />
+      <RefreshGamesButton loadingState={loadingState} doneState={doneState} />
     );
   },
   parameters: {
@@ -74,10 +71,7 @@ export const Done: Story = {
     const loadingState = useState(false);
     const doneState = useState(true);
     return (
-      <RefreshGamesButton
-        loadingState={loadingState}
-        doneState={doneState}
-      />
+      <RefreshGamesButton loadingState={loadingState} doneState={doneState} />
     );
   },
   parameters: {
