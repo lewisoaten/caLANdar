@@ -27,6 +27,7 @@
     "start": "vite dev --port 3000",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
     "test": "vitest",
     "test:coverage": "vitest run --coverage --watch=false",
     "test:pact": "cross-env CI=true react-scripts test --runInBand --setupFiles ./pact/setup.ts --setupFilesAfterEnv ./pact/jest-wrapper.ts --testMatch \"**/*.test.pact.tsx\"",
