@@ -322,9 +322,34 @@ custom_errors!(InvitationsPatchError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Event Invitations")]
 #[patch(
+    "/events/<event_id>/invitations/<email>?<_as_admin>",
+    format = "json",
+    data = "<invitation_request>",
+    rank = 1
+)]
+pub async fn patch_admin(
+    event_id: i32,
+    email: String,
+    invitation_request: Json<InvitationsPatchRequest>,
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
+    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner()).await {
+        Ok(()) => Ok(rocket::response::status::NoContent),
+        Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
+        Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
+            "Error getting event, due to: {e}"
+        ))),
+    }
+}
+
+#[openapi(tag = "Event Invitations")]
+#[patch(
     "/events/<event_id>/invitations/<email>",
     format = "json",
-    data = "<invitation_request>"
+    data = "<invitation_request>",
+    rank = 2
 )]
 pub async fn patch(
     event_id: i32,
