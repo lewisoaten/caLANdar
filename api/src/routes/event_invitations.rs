@@ -401,7 +401,12 @@ impl SchemaExample for SendCustomEmailRequest {
     }
 }
 
-custom_errors!(SendCustomEmailError, Unauthorized, BadRequest, InternalServerError);
+custom_errors!(
+    SendCustomEmailError,
+    Unauthorized,
+    BadRequest,
+    InternalServerError
+);
 
 #[openapi(tag = "Event Invitations")]
 #[post(
@@ -466,9 +471,7 @@ pub async fn send_custom_email(
         .iter()
         .filter(|invitation| match &email_request.filter {
             EmailRecipientFilter::All => true,
-            EmailRecipientFilter::RsvpYes => {
-                invitation.response == Some(InvitationResponse::Yes)
-            }
+            EmailRecipientFilter::RsvpYes => invitation.response == Some(InvitationResponse::Yes),
             EmailRecipientFilter::RsvpYesMaybe => matches!(
                 invitation.response,
                 Some(InvitationResponse::Yes | InvitationResponse::Maybe)

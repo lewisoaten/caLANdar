@@ -14,6 +14,7 @@ import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
 import InvitationsTable from "./InvitationsTable";
 import EventsAdminDialog from "./EventsAdminDialog";
+import SendEmailDialog from "./SendEmailDialog";
 
 const EventManagement = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -21,6 +22,7 @@ const EventManagement = () => {
   const token = userDetails?.token;
   const [event, setEvent] = useState(defaultEventData);
   const [open, setOpen] = useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const handleClose = (value?: EventData) => {
     setOpen(false);
@@ -82,6 +84,14 @@ const EventManagement = () => {
     });
   };
 
+  const handleEmailDialogOpen = () => {
+    setEmailDialogOpen(true);
+  };
+
+  const handleEmailDialogClose = () => {
+    setEmailDialogOpen(false);
+  };
+
   return (
     <React.Fragment>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -115,6 +125,13 @@ const EventManagement = () => {
                   Edit
                 </Button>
                 <Button
+                  onClick={handleEmailDialogOpen}
+                  variant="contained"
+                  color="secondary"
+                >
+                  Send Email
+                </Button>
+                <Button
                   onClick={deleteOnClick}
                   variant="contained"
                   color="error"
@@ -143,6 +160,11 @@ const EventManagement = () => {
         </Grid>
       </Container>
       <EventsAdminDialog open={open} event={event} onClose={handleClose} />
+      <SendEmailDialog
+        open={emailDialogOpen}
+        onClose={handleEmailDialogClose}
+        event={event}
+      />
     </React.Fragment>
   );
 };
