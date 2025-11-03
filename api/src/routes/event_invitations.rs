@@ -1,7 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event_invitation, Error},
-    util::{is_attending_event, send_preauth_email, PreauthEmailDetails},
+    util::{is_attending_event, send_email, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
 use resend_rs::Resend;
@@ -369,6 +369,161 @@ pub async fn patch(
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
             "Error responding to invitation, due to: {e}"
+        ))),
+    }
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub enum EmailRecipientFilter {
+    All,
+    RsvpYes,
+    RsvpYesMaybe,
+    NotResponded,
+}
+
+#[derive(Deserialize, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct SendCustomEmailRequest {
+    pub filter: EmailRecipientFilter,
+    pub subject: String,
+    pub message: String,
+}
+
+impl SchemaExample for SendCustomEmailRequest {
+    fn example() -> Self {
+        Self {
+            filter: EmailRecipientFilter::RsvpYes,
+            subject: "Event Update".to_string(),
+            message: "Just a reminder about the upcoming event!".to_string(),
+        }
+    }
+}
+
+custom_errors!(SendCustomEmailError, Unauthorized, BadRequest, InternalServerError);
+
+#[openapi(tag = "Event Invitations")]
+#[post(
+    "/events/<event_id>/email?<_as_admin>",
+    format = "json",
+    data = "<email_request>"
+)]
+pub async fn send_custom_email(
+    event_id: i32,
+    email_request: Json<SendCustomEmailRequest>,
+    pool: &State<PgPool>,
+    sender: &State<Resend>,
+    tera: &State<Tera>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<rocket::response::status::NoContent, SendCustomEmailError> {
+    // Get the event details
+    let event = match event::filter(
+        pool.inner(),
+        event::Filter {
+            ids: Some(vec![event_id]),
+        },
+    )
+    .await
+    {
+        Ok(events) => {
+            if events.len() != 1 {
+                return Err(SendCustomEmailError::BadRequest(
+                    "Event not found".to_string(),
+                ));
+            }
+            events[0].clone()
+        }
+        Err(_) => {
+            return Err(SendCustomEmailError::InternalServerError(
+                "Error getting event".to_string(),
+            ))
+        }
+    };
+
+    // Get all invitations for this event
+    let invitations: Vec<InvitationsResponse> = match sqlx::query_as!(
+        InvitationsResponse,
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1"#,
+        event_id
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(invitations) => invitations,
+        Err(_) => {
+            return Err(SendCustomEmailError::InternalServerError(
+                "Error getting invitations".to_string(),
+            ))
+        }
+    };
+
+    // Filter invitations based on the requested filter
+    let filtered_invitations: Vec<&InvitationsResponse> = invitations
+        .iter()
+        .filter(|invitation| match &email_request.filter {
+            EmailRecipientFilter::All => true,
+            EmailRecipientFilter::RsvpYes => {
+                invitation.response == Some(InvitationResponse::Yes)
+            }
+            EmailRecipientFilter::RsvpYesMaybe => matches!(
+                invitation.response,
+                Some(InvitationResponse::Yes | InvitationResponse::Maybe)
+            ),
+            EmailRecipientFilter::NotResponded => invitation.response.is_none(),
+        })
+        .collect();
+
+    if filtered_invitations.is_empty() {
+        return Err(SendCustomEmailError::BadRequest(
+            "No invitations match the selected filter".to_string(),
+        ));
+    }
+
+    // Prepare the email context
+    let mut context = Context::new();
+    context.insert("title", &event.title);
+    context.insert(
+        "time_begin",
+        &event.time_begin.format("%a %e %b %Y %H:%M").to_string(),
+    );
+    context.insert(
+        "time_end",
+        &event.time_end.format("%a %e %b %Y %H:%M").to_string(),
+    );
+    context.insert("message", &email_request.message);
+    context.insert("subject", &email_request.subject);
+
+    // Render the email body
+    let body = match tera.render("email_custom.html.tera", &context) {
+        Ok(body) => body,
+        Err(e) => {
+            return Err(SendCustomEmailError::InternalServerError(format!(
+                "Error rendering email: {e}"
+            )))
+        }
+    };
+
+    // Send emails to all filtered recipients
+    let recipient_emails: Vec<&str> = filtered_invitations
+        .iter()
+        .map(|inv| inv.email.as_str())
+        .collect();
+
+    match send_email(
+        sender,
+        recipient_emails,
+        email_request.subject.as_str(),
+        body.as_str(),
+    )
+    .await
+    {
+        Ok(()) => Ok(rocket::response::status::NoContent),
+        Err(e) => Err(SendCustomEmailError::InternalServerError(format!(
+            "Error sending email: {e}"
         ))),
     }
 }
