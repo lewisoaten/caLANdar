@@ -332,14 +332,14 @@ pub async fn patch_admin(
     email: String,
     invitation_request: Json<InvitationsPatchRequest>,
     pool: &State<PgPool>,
-    _as_admin: Option<bool>,
+    _as_admin: Option<bool>, // Required for route matching but unused - triggers AdminUser guard
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
     match event_invitation::respond(pool, event_id, email, invitation_request.into_inner()).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
-            "Error getting event, due to: {e}"
+            "Error responding to invitation, due to: {e}"
         ))),
     }
 }
@@ -368,7 +368,7 @@ pub async fn patch(
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
-            "Error getting event, due to: {e}"
+            "Error responding to invitation, due to: {e}"
         ))),
     }
 }
