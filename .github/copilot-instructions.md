@@ -9,6 +9,7 @@ This document provides comprehensive guidelines for GitHub Copilot agents workin
 **Repository size**: Medium (~28 Rust files, ~54 TypeScript/TSX files)
 **Type**: Full-stack web application
 **Languages & Frameworks**:
+
 - **Backend**: Rust 1.87.0, Rocket web framework, Shuttle deployment platform
 - **Frontend**: React 19, TypeScript 5.8, Vite 6, Material-UI 7
 - **Database**: PostgreSQL via SQLx with migrations
@@ -56,6 +57,7 @@ cargo shuttle run --working-directory api
 ```
 
 **Important**: The API uses SQLx with compile-time query checking. The `.sqlx/` directory contains cached query metadata. If you modify database queries or schema:
+
 1. Ensure the database is running
 2. Run `just update-sqlx` to regenerate the metadata
 
@@ -133,6 +135,7 @@ pre-commit run --all-files
 ```
 
 **Pre-commit checks include**:
+
 - YAML, JSON, TOML, XML validation
 - End of file fixing
 - Trailing whitespace removal
@@ -253,6 +256,7 @@ just clippy           # Run clippy via pre-commit
 - **Routes**: Organized by resource (users, events, games, etc.)
 
 **Key files**:
+
 - `api/src/main.rs`: Shuttle setup, route mounting
 - `api/src/auth.rs`: PASETO authentication logic
 - `api/src/controllers/`: Business logic for each resource
@@ -270,6 +274,7 @@ just clippy           # Run clippy via pre-commit
 - **API Proxy**: Vite dev server proxies `/api` to backend
 
 **Key files**:
+
 - `frontend/src/App.tsx`: Main application component
 - `frontend/vite.config.ts`: Vite config including API proxy
 - `frontend/eslint.config.mjs`: ESLint configuration
@@ -279,11 +284,13 @@ just clippy           # Run clippy via pre-commit
 ### Database Migrations
 
 Located in `api/migrations/`, migrations use SQLx's migration system:
+
 - Paired `.up.sql` and `.down.sql` files
 - Applied via `cargo sqlx migrate run` or `just migrate-run`
 - Track schema for: users, events, invitations, games, game suggestions, profiles
 
 **When adding migrations**:
+
 1. `just migrate-add <descriptive-name>`
 2. Edit the generated `.up.sql` and `.down.sql` files
 3. `just migrate-run` to apply
@@ -294,12 +301,14 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
 ### GitHub Actions Workflows
 
 **1. Rust CI (`.github/workflows/rust.yml`)**
+
 - Triggers: Push to main/staging/trying, PRs to main
 - Steps: Cargo build, cargo test
 - Uses cargo caching for speed
 
 **2. Frontend CI (`.github/workflows/frontend.yml`)**
-- Triggers: Push to main/staging/trying (if frontend/** changed), PRs to main
+
+- Triggers: Push to main/staging/trying (if frontend/\*\* changed), PRs to main
 - Steps:
   1. Setup Node.js 20
   2. `npm ci` to install dependencies
@@ -309,6 +318,7 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
   6. Upload Storybook artifact
 
 **3. Shuttle Deploy (`.github/workflows/shuttle-deploy.yml`)**
+
 - Triggers: Push to main only
 - Deploys API to Shuttle with secrets
 
@@ -329,6 +339,7 @@ The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your c
 
 **Cause**: SQLx query metadata (`.sqlx/query-*.json`) is stale.
 **Fix**:
+
 1. Ensure database is running (run API with Shuttle first)
 2. Run `just update-sqlx`
 
@@ -354,6 +365,7 @@ The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your c
 **Admin Access**: Add query parameter `as_admin=true` (requires admin token)
 
 **Email Provider**: Resend (for verification emails, invitations)
+
 - Requires `RESEND_API_KEY` environment variable
 - See `EMAIL_MIGRATION.md` for details
 
@@ -436,14 +448,16 @@ just dev
 ## Key Dependencies
 
 **Backend (Rust)**:
+
 - rocket 0.5.0 - Web framework
-- shuttle-* 0.57.0 - Deployment platform
+- shuttle-\* 0.57.0 - Deployment platform
 - sqlx 0.8.6 - Database access
 - rusty_paseto 0.8.0 - Authentication
 - rocket_okapi - OpenAPI documentation
 - resend-rs 0.19 - Email sending
 
 **Frontend (JavaScript/TypeScript)**:
+
 - react 19.1.0 - UI library
 - @mui/material 7.1.0 - Component library
 - vite 6.3.5 - Build tool
