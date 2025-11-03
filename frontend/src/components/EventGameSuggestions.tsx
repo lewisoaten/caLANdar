@@ -239,7 +239,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
               onClose={() => {
                 setOpen(false);
               }}
-              isOptionEqualToValue={(option, value) => option.name === value.name}
+              isOptionEqualToValue={(option, value) =>
+                option.name === value.name
+              }
               getOptionLabel={(option) => option.name}
               options={options}
               getOptionDisabled={(option) =>
