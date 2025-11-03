@@ -32,6 +32,6 @@ jobs:
         run: nix build --no-link .#devShells.$(nix eval --impure --raw --expr 'builtins.currentSystem').default
 
       - name: Test environment setup
-        shell: 'nix develop -c bash -e {0}'
+        shell: "nix develop -c bash -e {0}"
         run: |
           nix develop --impure -c just --list
