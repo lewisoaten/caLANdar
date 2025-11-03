@@ -49,6 +49,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [inputValue, setInputValue] = useState("");
+  const [commentValue, setCommentValue] = useState("");
   const [options, setOptions] = useState(defaultGames);
 
   const typingTimer = useRef<null | NodeJS.Timeout>(null);
@@ -154,12 +155,14 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         body: JSON.stringify({
           appid: value.appid,
           name: value.name,
+          comment: commentValue || null,
         }),
       })
         .then((response) => {
           if (response.status === 401) signOut();
           else if (response.ok) {
             setInputValue("");
+            setCommentValue("");
             return response
               .text()
               .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
@@ -225,54 +228,70 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         </Typography>
       </Grid>
       {props.responded ? (
-        <Grid size={12}>
-          <Autocomplete
-            id="game-suggestion"
-            open={open}
-            onOpen={() => {
-              setOpen(true);
-            }}
-            onClose={() => {
-              setOpen(false);
-            }}
-            isOptionEqualToValue={(option, value) => option.name === value.name}
-            getOptionLabel={(option) => option.name}
-            options={options}
-            getOptionDisabled={(option) =>
-              gameSuggestions.find((x) => x.appid === option.appid)
-                ? true
-                : false
-            }
-            handleHomeEndKeys={false}
-            loading={loading}
-            value={null}
-            inputValue={inputValue}
-            openOnFocus={false}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Suggest Game"
-                error={errorMessage ? true : false}
-                helperText={errorMessage}
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <React.Fragment>
-                      {loading ? (
-                        <CircularProgress color="inherit" size={20} />
-                      ) : null}
-                      {params.InputProps.endAdornment}
-                    </React.Fragment>
-                  ),
-                }}
-              />
-            )}
-            filterOptions={(x) => x}
-            onInputChange={handleInputChange}
-            onChange={handleInputSelect}
-            disabled={props.disabled}
-          />
-        </Grid>
+        <>
+          <Grid size={12}>
+            <Autocomplete
+              id="game-suggestion"
+              open={open}
+              onOpen={() => {
+                setOpen(true);
+              }}
+              onClose={() => {
+                setOpen(false);
+              }}
+              isOptionEqualToValue={(option, value) => option.name === value.name}
+              getOptionLabel={(option) => option.name}
+              options={options}
+              getOptionDisabled={(option) =>
+                gameSuggestions.find((x) => x.appid === option.appid)
+                  ? true
+                  : false
+              }
+              handleHomeEndKeys={false}
+              loading={loading}
+              value={null}
+              inputValue={inputValue}
+              openOnFocus={false}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Suggest Game"
+                  error={errorMessage ? true : false}
+                  helperText={errorMessage}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <React.Fragment>
+                        {loading ? (
+                          <CircularProgress color="inherit" size={20} />
+                        ) : null}
+                        {params.InputProps.endAdornment}
+                      </React.Fragment>
+                    ),
+                  }}
+                />
+              )}
+              filterOptions={(x) => x}
+              onInputChange={handleInputChange}
+              onChange={handleInputSelect}
+              disabled={props.disabled}
+            />
+          </Grid>
+          <Grid size={12}>
+            <TextField
+              id="game-comment"
+              label="Comment (optional)"
+              placeholder="e.g., Game supports 3 players per squad"
+              fullWidth
+              multiline
+              rows={2}
+              value={commentValue}
+              onChange={(e) => setCommentValue(e.target.value)}
+              disabled={props.disabled}
+              helperText="Explain why you're suggesting this game"
+            />
+          </Grid>
+        </>
       ) : (
         <React.Fragment>
           <Grid size={12}>
@@ -337,7 +356,17 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   </ListItemAvatar>
                   <ListItemText
                     primary={gameSuggestion.name}
-                    secondary={`${gameSuggestion.votes} want to play!`}
+                    secondary={
+                      <>
+                        {`${gameSuggestion.votes} want to play!`}
+                        {gameSuggestion.comment && (
+                          <>
+                            <br />
+                            {gameSuggestion.comment}
+                          </>
+                        )}
+                      </>
+                    }
                   />
                 </ListItemButton>
                 <ListItemButton></ListItemButton>
