@@ -314,7 +314,7 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
 
 **2. Frontend CI (`.github/workflows/frontend.yml`)**
 
-- Triggers: Push to main/staging/trying (if frontend/** changed), PRs to main
+- Triggers: Push to main/staging/trying (if frontend/\*\* changed), PRs to main
 - Steps:
   1. Setup Node.js 20
   2. `npm ci` to install dependencies
