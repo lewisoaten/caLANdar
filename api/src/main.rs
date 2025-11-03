@@ -227,6 +227,7 @@ async fn rocket(
                 routes::events::put,
                 routes::events::delete,
                 routes::event_invitations::post,
+                routes::event_invitations::resend,
                 routes::event_invitations::get,
                 routes::event_invitations::get_all_user,
                 routes::event_invitations::get_all,

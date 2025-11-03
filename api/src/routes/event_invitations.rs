@@ -156,6 +156,111 @@ pub async fn post(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+#[openapi(tag = "Event Invitations")]
+#[post(
+    "/events/<event_id>/invitations/<email>/resend?<_as_admin>",
+    format = "json"
+)]
+pub async fn resend(
+    event_id: i32,
+    email: String,
+    pool: &State<PgPool>,
+    key: &State<PasetoSymmetricKey<V4, Local>>,
+    sender: &State<Resend>,
+    tera: &State<Tera>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
+    // Check that the invitation exists and hasn't been responded to
+    let invitation: InvitationsResponse = match sqlx::query_as!(
+        InvitationsResponse,
+        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
+        FROM invitation
+        WHERE event_id=$1 AND LOWER(email) = LOWER($2)"#,
+        event_id,
+        email,
+    )
+    .fetch_one(pool.inner())
+    .await
+    {
+        Ok(invitation) => invitation,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(
+                "Invitation not found".to_string(),
+            ))
+        }
+    };
+
+    // Check if the user has already responded
+    if invitation.response.is_some() {
+        return Err(rocket::response::status::BadRequest(
+            "Cannot resend invitation to someone who has already RSVP'd".to_string(),
+        ));
+    }
+
+    // Get event details
+    let event = match event::filter(
+        pool.inner(),
+        event::Filter {
+            ids: Some(vec![event_id]),
+        },
+    )
+    .await
+    {
+        Ok(event) => {
+            if event.len() != 1 {
+                return Err(rocket::response::status::BadRequest(
+                    "Too many events returned for ID".to_string(),
+                ));
+            }
+
+            event[0].clone()
+        }
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(
+                "Error getting event details".to_string(),
+            ))
+        }
+    };
+
+    let mut context = Context::new();
+    context.insert("name", &email);
+    context.insert("title", &event.title);
+    context.insert(
+        "time_begin",
+        &event.time_begin.format("%a %e %b %Y %H:%M").to_string(),
+    );
+    context.insert(
+        "time_end",
+        &event.time_end.format("%a %e %b %Y %H:%M").to_string(),
+    );
+    context.insert("description", &event.description);
+
+    let email_details = PreauthEmailDetails {
+        address: email.to_string(),
+        subject: format!("{} - caLANdar Invitation", event.title),
+        template: "email_invitation.html.tera".to_string(),
+    };
+
+    match send_preauth_email(
+        email_details,
+        &mut context,
+        format!("/events/{}", event.id).as_str(),
+        Duration::hours(24),
+        key,
+        sender,
+        tera,
+    )
+    .await
+    {
+        Ok(()) => Ok(rocket::response::status::NoContent),
+        Err(_) => Err(rocket::response::status::BadRequest(
+            "Error sending invitation email".to_string(),
+        )),
+    }
+}
+
 #[openapi(tag = "Event Invitations")]
 #[get("/events/<event_id>/invitations/<email>", format = "json")]
 pub async fn get(
