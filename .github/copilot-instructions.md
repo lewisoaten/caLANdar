@@ -1,106 +1,487 @@
 # CaLANdar Development Instructions
 
-This document provides guidelines and instructions for GitHub Copilot to help with the development of CaLANdar, a web application for organizing LAN parties.
+This document provides comprehensive guidelines for GitHub Copilot agents working on CaLANdar, a web application for organizing LAN parties. Trust these instructions and only search for additional information if something is incomplete or incorrect.
 
-## Project Structure
+## Project Overview
 
-- `api/`: Rust backend using Rocket framework and Shuttle for deployment
-- `frontend/`: React frontend application
-- `proxy/`: Proxy configuration
+**What it does**: CaLANdar is a full-stack web application for organizing LAN parties, managing events, invitations, game suggestions, and user profiles.
 
-## Development Environment
+**Repository size**: Medium (~28 Rust files, ~54 TypeScript/TSX files)
+**Type**: Full-stack web application
+**Languages & Frameworks**:
 
-The project uses Nix flakes for development environment setup. All dependencies are defined in `flake.nix` including:
+- **Backend**: Rust 1.87.0, Rocket web framework, Shuttle deployment platform
+- **Frontend**: React 19, TypeScript 5.8, Vite 6, Material-UI 7
+- **Database**: PostgreSQL via SQLx with migrations
+- **Contract Testing**: Pact for API contract verification
 
-- Rust toolchain and cargo tools
-- Node.js
-- PostgreSQL
-- Just command runner
+## Critical: Development Environment Setup
 
-### Activating the Development Environment
+**ALL commands must be run inside the Nix development shell. This is mandatory.**
 
-Before running any commands, you must activate the Nix development shell:
+### Step 1: Activate Nix Environment (REQUIRED FIRST STEP)
 
 ```bash
-# Activate the Nix develop shell
+# ALWAYS run this first before any other command
 nix develop --impure
 
-# All commands must be run inside this environment
+# You'll see: "CaLANdar development environment activated!"
 ```
 
-All commands listed in this document must be executed within the activated Nix shell. The shell provides access to all required dependencies and tools. You can verify the environment is activated correctly by running:
+The Nix shell provides: Rust 1.87.0, cargo tools, Node.js 22, PostgreSQL, Just, pre-commit, and all other dependencies. **Do not try to use system-installed versions.**
+
+### Step 2: Verify Environment
 
 ```bash
-# Check available commands in justfile
+# Verify the environment is working
 just --list
 ```
 
-## Common Development Commands
+## Build Instructions
 
-Use the following commands to manage the application:
+**Important**: Prefer using Just commands when available (see "Using Just" section below). Just commands handle environment setup and complex sequences automatically. Direct cargo/npm commands are documented for cases where Just commands don't exist.
 
-### Running the Application
+### Backend (Rust API)
 
-- `just dev`: Runs both API and frontend in development mode
-- `just dev-api`: Runs only the API in development mode with auto-reload
-- `just dev-frontend`: Runs only the frontend in development mode
-
-### Database Operations
-
-- `just migrate-info`: Shows information about applied and pending migrations
-- `just migrate-add <name>`: Adds a new migration script
-- `just migrate-run`: Applies pending migrations
-- `just migrate-revert`: Reverts the last applied migration
-- `just update-sqlx`: Updates the SQLx JSON data file after schema changes
-
-### Testing
-
-- `just pact-api`: Runs the API and verifies the contract against the Pact files
-- `just pact-frontend`: Runs the frontend Pact tests
-
-### Pre-commit Checks
-
-The project uses pre-commit hooks to ensure code quality. Always run the pre-commit checks before committing changes:
+**Location**: `api/` directory
+**Build time**: ~90 seconds (first build), ~5-10 seconds (incremental)
+**Test time**: ~6 seconds
 
 ```bash
-# Run all pre-commit checks
-pre-commit run
+# Run API in development mode with auto-reload (PREFERRED)
+just dev-api
+
+# For background compilation during development (alternative)
+just bacon
+
+# Generic commands (use when Just commands don't exist):
+cd api && cargo build    # Build only
+cd api && cargo test     # Run tests
+cargo shuttle run --working-directory api  # Run with Shuttle
 ```
 
-This will execute various checks including:
+**Important**: The API uses SQLx with compile-time query checking. The `.sqlx/` directory contains cached query metadata. If you modify database queries or schema:
 
-- Code formatting (Rust, JavaScript)
-- Linting (ESLint, Clippy)
-- File format validation
-- Other quality checks
+1. Ensure the database is running (run `just dev-api` first)
+2. Run `just update-sqlx` to regenerate the metadata
 
-Running these checks before committing ensures your code meets the project's quality standards and prevents CI failures.
+### Frontend (React/TypeScript)
 
-Some checks will automatically fix issues, while others will require manual intervention. Always add fixes or address all issues before committing.
+**Location**: `frontend/` directory
+**Build time**: Depends on npm install (~10+ minutes first time)
+**Important**: npm install can take a VERY long time (10+ minutes) due to Pact dependencies downloading binaries. Be patient.
 
-## Authentication
+```bash
+# Run frontend in development mode (PREFERRED - includes npm install)
+just dev-frontend
 
-The application uses PASETO tokens for authentication:
+# Run Storybook for component development (PREFERRED)
+just dev-storybook
 
-- Regular users authenticate with a token
-- Admin users require additional `as_admin=true` query parameter
-- The API key for development is "put_something_here"
+# Generic commands (use when Just commands don't exist):
+cd frontend && npm install  # Install dependencies (takes 10+ minutes first time)
+cd frontend && npm ci       # Alternative for CI/reproducible builds
+cd frontend && npm test -- --run  # Run tests
+cd frontend && npm run build      # Build for production
+cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server
+cd frontend && npm run lint       # Run linting
+```
 
-## API Structure
+**Frontend builds output to**: `frontend/build/`
 
-- The API follows REST principles
-- OpenAPI documentation is available
-- Routes are organized by resource type (users, events, games, etc.)
+## Testing
 
-## Frontend Structure
+### Backend Tests
 
-- The frontend is a React application created with Create React App
-- Material-UI is used for the UI components
-- Storybook is available for component development
-- Pact tests are used for contract testing with the API
+```bash
+# Generic command
+cd api && cargo test
+```
 
-## Deployment
+Currently has 1 unit test in `api/src/auth.rs`. Tests run in ~6 seconds.
 
-- The backend is deployed using Shuttle
-- The frontend is deployed using Netlify
-- GitHub Actions are used for CI/CD
+### Frontend Tests
+
+```bash
+# Generic commands
+cd frontend && npm test -- --run  # Unit tests with Vitest
+cd frontend && npm run test:pact  # Pact contract tests
+```
+
+### Pact Contract Testing (PREFER Just commands)
+
+Pact tests verify the contract between frontend and API:
+
+```bash
+# Run API and verify against Pact files (PREFERRED)
+just pact-api
+
+# Generate Pact files from frontend tests (PREFERRED)
+just pact-frontend
+```
+
+Pact files are stored in `frontend/pacts/`.
+
+## Linting and Code Quality
+
+### Pre-commit Hooks (ALWAYS RUN BEFORE COMMITTING)
+
+**Critical**: The project uses pre-commit hooks that MUST pass for CI to succeed.
+
+```bash
+# Run all pre-commit checks (REQUIRED before committing)
+pre-commit run --all-files
+```
+
+**Pre-commit checks include**:
+
+- YAML, JSON, TOML, XML validation
+- End of file fixing
+- Trailing whitespace removal
+- Rust formatting (`rustfmt`) - runs on `api/Cargo.toml`
+- Rust linting (`clippy`) - very strict: `-D warnings`, `-D clippy::pedantic`, `-D clippy::nursery`, `-D clippy::unwrap_used`
+- Prettier formatting (JavaScript, TypeScript, Markdown, etc.)
+- ESLint (requires `frontend/node_modules` to exist)
+
+**Important**: The ESLint check will FAIL if frontend dependencies aren't installed. Always run `just dev-frontend` or `cd frontend && npm install` first.
+
+**Fix failures**: Some checks auto-fix (formatting). Others require manual changes. Always verify and stage fixes before committing.
+
+### Manual Linting
+
+```bash
+# Rust linting (PREFERRED)
+just clippy
+
+# Frontend linting (generic - no Just command available)
+cd frontend && npm run lint
+```
+
+**Rust Clippy is VERY strict**: It enforces pedantic and nursery lints, and forbids `.unwrap()`. Use proper error handling with `?` or `expect()` with descriptive messages.
+
+## Using Just (Task Runner)
+
+The `Justfile` defines common development tasks. **ALWAYS prefer Just commands over direct cargo/npm/other commands** when available. Just commands handle complex environment setup, database connections, and sequences automatically.
+
+**Why use Just commands?**
+
+- They include npm install for frontend tasks
+- They handle database URL configuration automatically
+- They manage process orchestration (e.g., `just dev` runs both API and frontend)
+- They ensure consistent command execution across environments
+
+```bash
+# List all available commands
+just --list
+
+# Run both API and frontend in development mode
+just dev
+
+# Run only API with auto-reload
+just dev-api
+
+# Run only frontend
+just dev-frontend
+
+# Run Storybook for component development
+just dev-storybook
+
+# Database migration commands (require running PostgreSQL container)
+just migrate-info      # Show migration status
+just migrate-add <name>  # Create new migration
+just migrate-run       # Apply pending migrations
+just migrate-revert    # Revert last migration
+just update-sqlx       # Update SQLx query metadata
+
+# Testing commands
+just pact-api          # Run API and verify Pact contracts
+just pact-frontend     # Run frontend Pact tests
+
+# Other development tools
+just bacon            # Run bacon (Rust background compiler)
+just clippy           # Run clippy via pre-commit
+```
+
+**Database commands note**: Migration commands expect a running PostgreSQL container named `shuttle_calandar-api_shared_postgres`. This is created automatically when you run the API with Shuttle.
+
+## Project Architecture
+
+### Directory Structure
+
+```
+.
+├── .github/
+│   └── workflows/          # CI/CD workflows
+│       ├── rust.yml        # Backend CI (build + test)
+│       ├── frontend.yml    # Frontend CI (test + build)
+│       └── shuttle-deploy.yml  # Deploy to Shuttle
+├── api/                    # Rust backend
+│   ├── src/
+│   │   ├── main.rs        # Entry point, Shuttle config
+│   │   ├── auth.rs        # PASETO token authentication
+│   │   ├── error.rs       # Error handling
+│   │   ├── util.rs        # Utilities
+│   │   ├── controllers/   # Business logic
+│   │   ├── repositories/  # Database access
+│   │   └── routes/        # API endpoints
+│   ├── migrations/        # SQLx database migrations
+│   ├── .sqlx/             # SQLx query metadata (cached)
+│   ├── Cargo.toml         # Rust dependencies
+│   ├── Rocket.toml        # Rocket configuration
+│   └── rust-toolchain.toml  # Rust version (1.87.0)
+├── frontend/              # React frontend
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   ├── pages/         # Page components
+│   │   ├── __tests__/     # Tests (including Pact)
+│   │   └── test/          # Test setup files
+│   ├── public/            # Static assets
+│   ├── pact/              # Pact test setup
+│   ├── pacts/             # Generated Pact contract files
+│   ├── .storybook/        # Storybook configuration
+│   ├── package.json       # npm dependencies
+│   ├── vite.config.ts     # Vite configuration
+│   ├── eslint.config.mjs  # ESLint configuration
+│   └── tsconfig.json      # TypeScript configuration
+├── proxy/                 # Nginx proxy configuration
+├── .pre-commit-config.yaml  # Pre-commit hooks config
+├── Justfile               # Task runner commands
+├── flake.nix              # Nix environment definition
+├── docker-compose.yml     # Local development with Docker
+└── README.md              # Basic project info
+```
+
+### Backend Architecture
+
+- **Framework**: Rocket (async web framework)
+- **Deployment**: Shuttle (serverless Rust platform)
+- **Database**: PostgreSQL via SQLx (compile-time checked queries)
+- **Authentication**: PASETO tokens (in `auth.rs`)
+- **API Documentation**: OpenAPI via `rocket_okapi`
+- **Structure**: Controllers → Repositories → Database
+- **Routes**: Organized by resource (users, events, games, etc.)
+
+**Key files**:
+
+- `api/src/main.rs`: Shuttle setup, route mounting
+- `api/src/auth.rs`: PASETO authentication logic
+- `api/src/controllers/`: Business logic for each resource
+- `api/src/repositories/`: Database queries
+- `api/migrations/`: SQL migration files
+
+### Frontend Architecture
+
+- **Framework**: React 19 with TypeScript
+- **Build Tool**: Vite 6 (NOT Create React App anymore)
+- **UI Library**: Material-UI 7 (@mui/material)
+- **Testing**: Vitest for unit tests, Pact for contract tests
+- **Component Development**: Storybook
+- **State Management**: React hooks and context
+- **API Proxy**: Vite dev server proxies `/api` to backend
+
+**Key files**:
+
+- `frontend/src/App.tsx`: Main application component
+- `frontend/vite.config.ts`: Vite config including API proxy
+- `frontend/eslint.config.mjs`: ESLint configuration
+- `frontend/package.json`: Dependencies and scripts
+- `frontend/.storybook/`: Storybook configuration
+
+### Database Migrations
+
+Located in `api/migrations/`, migrations use SQLx's migration system:
+
+- Paired `.up.sql` and `.down.sql` files
+- Applied via `cargo sqlx migrate run` or `just migrate-run`
+- Track schema for: users, events, invitations, games, game suggestions, profiles
+
+**When adding migrations**:
+
+1. `just migrate-add <descriptive-name>`
+2. Edit the generated `.up.sql` and `.down.sql` files
+3. `just migrate-run` to apply
+4. `just update-sqlx` to update query metadata
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+
+**1. Rust CI (`.github/workflows/rust.yml`)**
+
+- Triggers: Push to main/staging/trying, PRs to main
+- Steps: Cargo build, cargo test
+- Uses cargo caching for speed
+
+**2. Frontend CI (`.github/workflows/frontend.yml`)**
+
+- Triggers: Push to main/staging/trying (if frontend/\*\* changed), PRs to main
+- Steps:
+  1. Setup Node.js 20
+  2. `npm ci` to install dependencies
+  3. `npm test -- --run` to run tests
+  4. `npm run build` to build production bundle
+  5. `npm run build-storybook` to build Storybook
+  6. Upload Storybook artifact
+
+**3. Shuttle Deploy (`.github/workflows/shuttle-deploy.yml`)**
+
+- Triggers: Push to main only
+- Deploys API to Shuttle with secrets
+
+### Pre-commit CI
+
+The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your code must pass all pre-commit checks** or the PR will be blocked.
+
+**Skipped in CI**: ESLint, fmt, clippy (run locally instead)
+
+## Common Issues and Workarounds
+
+### Issue: "Error: Cannot find package 'globals'" from ESLint
+
+**Cause**: Frontend dependencies not installed.
+**Fix**: Run `just dev-frontend` (preferred) or `cd frontend && npm install`.
+
+### Issue: SQLx compile errors about missing tables/columns
+
+**Cause**: SQLx query metadata (`.sqlx/query-*.json`) is stale.
+**Fix**:
+
+1. Ensure database is running with `just dev-api`
+2. Run `just update-sqlx`
+
+### Issue: "shuttle_calandar-api_shared_postgres" container not found
+
+**Cause**: Database migration commands expect a running PostgreSQL container created by Shuttle.
+**Fix**: Run the API first with `just dev-api` to create the container.
+
+### Issue: npm install taking forever
+
+**Expected behavior**: The Pact dependency downloads large binaries. First install can take 10+ minutes. Be patient or use npm cache if available.
+
+### Issue: Clippy errors about `.unwrap()`
+
+**Cause**: Project enforces `-D clippy::unwrap_used`.
+**Fix**: Use `?` for error propagation or `.expect("descriptive message")` instead.
+
+## Authentication Details
+
+**Type**: PASETO (Platform-Agnostic Security Tokens)
+**Development API Key**: `"put_something_here"`
+**Header Format**: `Authorization: Bearer <token>`
+**Admin Access**: Add query parameter `as_admin=true` (requires admin token)
+
+**Email Provider**: Resend (for verification emails, invitations)
+
+- Requires `RESEND_API_KEY` environment variable
+- See `EMAIL_MIGRATION.md` for details
+
+## Configuration Files
+
+- **`.pre-commit-config.yaml`**: Pre-commit hook configuration
+- **`flake.nix`**: Nix environment with Rust, Node.js, PostgreSQL
+- **`Justfile`**: Task automation recipes
+- **`api/Rocket.toml`**: Rocket web framework config
+- **`api/rust-toolchain.toml`**: Rust version (1.87.0)
+- **`frontend/vite.config.ts`**: Vite build and dev server config
+- **`frontend/eslint.config.mjs`**: ESLint rules (flat config format)
+- **`frontend/tsconfig.json`**: TypeScript compiler options
+- **`.gitignore`**: Excludes: `node_modules`, `.cargo`, `.vscode/`, etc.
+
+## Quick Reference: Command Sequence for Common Tasks
+
+### Making a code change
+
+```bash
+# 1. Activate Nix environment
+nix develop --impure
+
+# 2. Make your changes to files
+
+# 3. If backend changes, test (build happens automatically with dev-api)
+just dev-api           # Run in development mode with auto-reload
+# OR for just testing:
+cd api && cargo test
+
+# 4. If frontend changes, test
+just dev-frontend      # Run in development mode (includes npm install)
+# OR for just testing:
+cd frontend && npm test -- --run
+
+# 5. If database schema changed, update SQLx metadata
+just update-sqlx
+
+# 6. Run pre-commit checks (includes clippy, prettier, etc.)
+pre-commit run --all-files
+
+# 7. Fix any issues, then commit
+git add .
+git commit -m "Your message"
+```
+
+### Adding a database migration
+
+```bash
+# 1. In Nix shell
+nix develop --impure
+
+# 2. Create migration (PREFERRED)
+just migrate-add my_feature_name
+
+# 3. Edit api/migrations/<timestamp>_my_feature_name.up.sql
+# 4. Edit api/migrations/<timestamp>_my_feature_name.down.sql
+
+# 5. Start API to create database (PREFERRED)
+just dev-api
+
+# 6. Apply migration in another terminal (PREFERRED)
+just migrate-run
+
+# 7. Update SQLx metadata (PREFERRED)
+just update-sqlx
+
+# 8. Test your changes
+cd api && cargo test
+```
+
+### Running the full stack locally
+
+```bash
+# Terminal 1: Nix shell and run everything
+nix develop --impure
+just dev
+
+# This runs both API and frontend with auto-reload
+# API: http://localhost:8000
+# Frontend: http://localhost:3000
+```
+
+## Key Dependencies
+
+**Backend (Rust)**:
+
+- rocket 0.5.0 - Web framework
+- shuttle-\* 0.57.0 - Deployment platform
+- sqlx 0.8.6 - Database access
+- rusty_paseto 0.8.0 - Authentication
+- rocket_okapi - OpenAPI documentation
+- resend-rs 0.19 - Email sending
+
+**Frontend (JavaScript/TypeScript)**:
+
+- react 19.1.0 - UI library
+- @mui/material 7.1.0 - Component library
+- vite 6.3.5 - Build tool
+- vitest 3.1.4 - Testing framework
+- @pact-foundation/pact 15.0.1 - Contract testing
+- typescript 5.8.3 - Type checking
+
+## Final Notes
+
+- **Always work in the Nix shell** - system tools won't work correctly
+- **Always run pre-commit checks** before committing to avoid CI failures
+- **npm install takes a long time** - be patient with Pact downloads
+- **Trust the Justfile** - use `just` commands instead of remembering complex sequences
+- **SQLx needs metadata** - run `just update-sqlx` after query/schema changes
+- **Clippy is strict** - no unwrap(), use proper error handling
+- If a command fails and you're not in the Nix shell, **activate it first**
+- Check GitHub Actions if CI fails - the workflows show exactly what runs
