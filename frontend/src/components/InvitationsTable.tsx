@@ -103,13 +103,16 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         },
       },
     ).then((response) => {
-      if (response.status === 401) signOut();
-      else if (response.status === 204) {
+      if (response.status === 401) {
+        signOut();
+      } else if (response.status === 204) {
         alert("Invitation resent successfully");
-      } else {
+      } else if (response.status === 400) {
         response.text().then((data) => {
           alert(`Unable to resend invitation: ${data}`);
         });
+      } else {
+        alert("Unable to resend invitation. Please try again later.");
       }
     });
   };
