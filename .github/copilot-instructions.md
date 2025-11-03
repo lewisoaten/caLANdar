@@ -39,6 +39,8 @@ just --list
 
 ## Build Instructions
 
+**Important**: Prefer using Just commands when available (see "Using Just" section below). Just commands handle environment setup and complex sequences automatically. Direct cargo/npm commands are documented for cases where Just commands don't exist.
+
 ### Backend (Rust API)
 
 **Location**: `api/` directory
@@ -46,19 +48,21 @@ just --list
 **Test time**: ~6 seconds
 
 ```bash
-# Build the API (must be in Nix shell)
-cd api && cargo build
+# Run API in development mode with auto-reload (PREFERRED)
+just dev-api
 
-# Run tests
-cd api && cargo test
+# For background compilation during development (alternative)
+just bacon
 
-# Build and run with Shuttle (for local development)
-cargo shuttle run --working-directory api
+# Generic commands (use when Just commands don't exist):
+cd api && cargo build    # Build only
+cd api && cargo test     # Run tests
+cargo shuttle run --working-directory api  # Run with Shuttle
 ```
 
 **Important**: The API uses SQLx with compile-time query checking. The `.sqlx/` directory contains cached query metadata. If you modify database queries or schema:
 
-1. Ensure the database is running
+1. Ensure the database is running (run `just dev-api` first)
 2. Run `just update-sqlx` to regenerate the metadata
 
 ### Frontend (React/TypeScript)
@@ -68,21 +72,19 @@ cargo shuttle run --working-directory api
 **Important**: npm install can take a VERY long time (10+ minutes) due to Pact dependencies downloading binaries. Be patient.
 
 ```bash
-# Install dependencies (REQUIRED before any frontend work)
-cd frontend && npm install
-# Note: This takes 10+ minutes on first run due to Pact binary downloads
+# Run frontend in development mode (PREFERRED - includes npm install)
+just dev-frontend
 
-# Alternative for CI/reproducible builds
-cd frontend && npm ci
+# Run Storybook for component development (PREFERRED)
+just dev-storybook
 
-# Run frontend tests
-cd frontend && npm test -- --run
-
-# Build for production
-cd frontend && npm run build
-
-# Run development server (requires API running)
-cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start
+# Generic commands (use when Just commands don't exist):
+cd frontend && npm install  # Install dependencies (takes 10+ minutes first time)
+cd frontend && npm ci       # Alternative for CI/reproducible builds
+cd frontend && npm test -- --run  # Run tests
+cd frontend && npm run build      # Build for production
+cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server
+cd frontend && npm run lint       # Run linting
 ```
 
 **Frontend builds output to**: `frontend/build/`
@@ -92,6 +94,7 @@ cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start
 ### Backend Tests
 
 ```bash
+# Generic command
 cd api && cargo test
 ```
 
@@ -100,24 +103,20 @@ Currently has 1 unit test in `api/src/auth.rs`. Tests run in ~6 seconds.
 ### Frontend Tests
 
 ```bash
-# Unit tests with Vitest
-cd frontend && npm test -- --run
-
-# Pact contract tests
-cd frontend && npm run test:pact
-# Or via Just:
-just pact-frontend
+# Generic commands
+cd frontend && npm test -- --run  # Unit tests with Vitest
+cd frontend && npm run test:pact  # Pact contract tests
 ```
 
-### Pact Contract Testing
+### Pact Contract Testing (PREFER Just commands)
 
 Pact tests verify the contract between frontend and API:
 
 ```bash
-# Run API and verify against Pact files
+# Run API and verify against Pact files (PREFERRED)
 just pact-api
 
-# Generate Pact files from frontend tests
+# Generate Pact files from frontend tests (PREFERRED)
 just pact-frontend
 ```
 
@@ -144,17 +143,17 @@ pre-commit run --all-files
 - Prettier formatting (JavaScript, TypeScript, Markdown, etc.)
 - ESLint (requires `frontend/node_modules` to exist)
 
-**Important**: The ESLint check will FAIL if frontend dependencies aren't installed. Always run `cd frontend && npm install` first.
+**Important**: The ESLint check will FAIL if frontend dependencies aren't installed. Always run `just dev-frontend` or `cd frontend && npm install` first.
 
 **Fix failures**: Some checks auto-fix (formatting). Others require manual changes. Always verify and stage fixes before committing.
 
 ### Manual Linting
 
 ```bash
-# Rust linting (via pre-commit)
+# Rust linting (PREFERRED)
 just clippy
 
-# Frontend linting
+# Frontend linting (generic - no Just command available)
 cd frontend && npm run lint
 ```
 
@@ -162,7 +161,14 @@ cd frontend && npm run lint
 
 ## Using Just (Task Runner)
 
-The `Justfile` defines common development tasks. **Always use Just commands when available** as they handle complex setup automatically.
+The `Justfile` defines common development tasks. **ALWAYS prefer Just commands over direct cargo/npm/other commands** when available. Just commands handle complex environment setup, database connections, and sequences automatically.
+
+**Why use Just commands?**
+
+- They include npm install for frontend tasks
+- They handle database URL configuration automatically
+- They manage process orchestration (e.g., `just dev` runs both API and frontend)
+- They ensure consistent command execution across environments
 
 ```bash
 # List all available commands
@@ -333,20 +339,20 @@ The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your c
 ### Issue: "Error: Cannot find package 'globals'" from ESLint
 
 **Cause**: Frontend dependencies not installed.
-**Fix**: Run `cd frontend && npm install` first.
+**Fix**: Run `just dev-frontend` (preferred) or `cd frontend && npm install`.
 
 ### Issue: SQLx compile errors about missing tables/columns
 
 **Cause**: SQLx query metadata (`.sqlx/query-*.json`) is stale.
 **Fix**:
 
-1. Ensure database is running (run API with Shuttle first)
+1. Ensure database is running with `just dev-api`
 2. Run `just update-sqlx`
 
 ### Issue: "shuttle_calandar-api_shared_postgres" container not found
 
 **Cause**: Database migration commands expect a running PostgreSQL container created by Shuttle.
-**Fix**: Run the API first with `cargo shuttle run --working-directory api` to create the container.
+**Fix**: Run the API first with `just dev-api` to create the container.
 
 ### Issue: npm install taking forever
 
@@ -391,16 +397,20 @@ nix develop --impure
 
 # 2. Make your changes to files
 
-# 3. If backend changes, build and test
-cd api && cargo build && cargo test
+# 3. If backend changes, test (build happens automatically with dev-api)
+just dev-api           # Run in development mode with auto-reload
+# OR for just testing:
+cd api && cargo test
 
-# 4. If frontend changes, build and test
-cd frontend && npm install && npm test -- --run && npm run build
+# 4. If frontend changes, test
+just dev-frontend      # Run in development mode (includes npm install)
+# OR for just testing:
+cd frontend && npm test -- --run
 
 # 5. If database schema changed, update SQLx metadata
 just update-sqlx
 
-# 6. Run pre-commit checks
+# 6. Run pre-commit checks (includes clippy, prettier, etc.)
 pre-commit run --all-files
 
 # 7. Fix any issues, then commit
@@ -414,19 +424,19 @@ git commit -m "Your message"
 # 1. In Nix shell
 nix develop --impure
 
-# 2. Create migration
+# 2. Create migration (PREFERRED)
 just migrate-add my_feature_name
 
 # 3. Edit api/migrations/<timestamp>_my_feature_name.up.sql
 # 4. Edit api/migrations/<timestamp>_my_feature_name.down.sql
 
-# 5. Start API to create database
-cargo shuttle run --working-directory api
+# 5. Start API to create database (PREFERRED)
+just dev-api
 
-# 6. Apply migration (in another terminal)
+# 6. Apply migration in another terminal (PREFERRED)
 just migrate-run
 
-# 7. Update SQLx metadata
+# 7. Update SQLx metadata (PREFERRED)
 just update-sqlx
 
 # 8. Test your changes
