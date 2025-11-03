@@ -1,17 +1,65 @@
 {
-  "name": "CaLANdar devcontainer (prebuilt)",
-  "image": "ghcr.io/lewisoaten/caLANdar-devcontainer:latest",
-  "workspaceFolder": "/workspace",
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
-  "runArgs": ["--init"],
-  "postCreateCommand": "echo 'Devcontainer image pulled. Run the Copilot Agent or set COPILOT_AGENT_AUTOSTART=true to auto-run.'",
+  "name": "CaLANdar Development Environment",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": true,
+      "azureDnsAutoDetection": true,
+      "installDockerBuildx": true,
+      "version": "latest",
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/devcontainers/features/nix:1": {
+      "version": "latest",
+      "multiUser": false,
+      "extraNixConfig": "experimental-features = nix-command flakes"
+    }
+  },
+  "forwardPorts": [3000, 8000, 6006],
+  "portsAttributes": {
+    "3000": {
+      "label": "Frontend (React)",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "API (Rust/Rocket)",
+      "onAutoForward": "notify"
+    },
+    "6006": {
+      "label": "Storybook",
+      "onAutoForward": "notify"
+    }
+  },
   "customizations": {
     "vscode": {
       "extensions": [
-        "github.copilot",
         "rust-lang.rust-analyzer",
-        "esbenp.prettier-vscode"
-      ]
+        "ms-vscode.vscode-typescript-next",
+        "ms-vscode.vscode-json",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+        "vadimcn.vscode-lldb",
+        "github.copilot",
+        "github.copilot-chat",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-eslint"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.buildScripts.enable": true,
+        "rust-analyzer.procMacro.enable": true,
+        "rust-analyzer.diagnostics.enable": true,
+        "editor.formatOnSave": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
     }
-  }
+  },
+  "postCreateCommand": "bash .devcontainer/init-dev-env.sh",
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=calandar-cargo-cache,target=/home/vscode/.cargo,type=volume",
+    "source=calandar-nix-cache,target=/home/vscode/.cache/nix,type=volume"
+  ]
 }
