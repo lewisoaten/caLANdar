@@ -34,4 +34,4 @@ jobs:
       - name: Test environment setup
         shell: "nix develop -c bash -e {0}"
         run: |
-          nix develop --impure -c just --list
+          just --list
