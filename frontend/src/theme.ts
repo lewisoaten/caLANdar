@@ -2,7 +2,7 @@ import { createTheme } from "@mui/material/styles";
 
 /**
  * CaLANdar Custom Theme - Futuristic Gamer Aesthetic
- * 
+ *
  * This theme provides a modern, high-contrast design tailored for gamers
  * organizing LAN parties. Features include:
  * - Deep purple/violet primary colors
@@ -10,7 +10,7 @@ import { createTheme } from "@mui/material/styles";
  * - Dark backgrounds with subtle gradients
  * - Bold, readable typography
  * - Glowing effects on interactive elements
- * 
+ *
  * To extend this theme:
  * - Modify palette colors below
  * - Add component-specific overrides in components section
