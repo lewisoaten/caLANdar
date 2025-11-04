@@ -102,6 +102,40 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     });
   };
 
+  const onResendClick = (
+    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+  ) => {
+    const email = event?.currentTarget.value;
+    fetch(
+      `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
+      },
+    )
+      .then((response) => {
+        if (response.status === 401) {
+          signOut();
+        } else if (response.status === 204) {
+          alert("Invitation resent successfully");
+        } else if (response.status === 400) {
+          response.text().then((data) => {
+            alert(`Unable to resend invitation: ${data}`);
+          });
+        } else {
+          alert("Unable to resend invitation. Please try again later.");
+        }
+      })
+      .catch((error) => {
+        console.error("Network error while resending invitation:", error);
+        alert("Network error. Please check your connection and try again.");
+      });
+  };
+
   const [open, setOpen] = useState(false);
 
   const handleClickOpen = () => {
@@ -303,6 +337,16 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               <TableCell>{invitation.lastModified.calendar()}</TableCell>
               <TableCell>
                 <Stack direction="row" spacing={1}>
+                  {invitation.response === null && (
+                    <Button
+                      onClick={(e) => onResendClick(e)}
+                      value={invitation.email}
+                      variant="contained"
+                      color="primary"
+                    >
+                      Resend Invite
+                    </Button>
+                  )}
                   <Button
                     onClick={() => handleEditClick(invitation)}
                     variant="contained"
