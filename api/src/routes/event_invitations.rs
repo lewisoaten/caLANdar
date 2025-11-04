@@ -195,7 +195,7 @@ pub async fn resend(
     // Check if the user has already responded
     if invitation.response.is_some() {
         return Err(rocket::response::status::BadRequest(
-            "Cannot resend invitation to someone who has already RSVP'd".to_string(),
+            "Cannot resend invitation to someone who has already responded".to_string(),
         ));
     }
 
