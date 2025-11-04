@@ -279,4 +279,143 @@ mod tests {
         // (end:10 AM falls in the 6 AM-12 PM bucket, start:6AM <= end:10AM and end:12PM > begin:10AM)
         assert_eq!(buckets.len(), 5, "24-hour event should have exactly 5 buckets when crossing bucket boundary");
     }
+
+    #[test]
+    fn test_get_day_quarter_buckets_with_minutes() {
+        // Test event with minute components (8:30 AM to 2:45 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 8, 30, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 14, 45, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM (partial), 12 PM-6 PM (partial) = 2 buckets
+        assert_eq!(buckets.len(), 2, "Event with minute components should calculate correctly");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_with_seconds() {
+        // Test event with second components (10:15:30 AM to 4:45:15 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 10, 15, 30).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 16, 45, 15).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM (partial), 12 PM-6 PM (partial) = 2 buckets
+        assert_eq!(buckets.len(), 2, "Event with second components should calculate correctly");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_start_exactly_at_bucket_with_seconds() {
+        // Test event starting exactly at bucket boundary but with seconds (12:00:01 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 1).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 18, 0, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 12 PM-6 PM, 6 PM-12 AM = 2 buckets
+        // (even though start is 1 second after 12 PM, the bucket starts at 12 PM)
+        assert_eq!(buckets.len(), 2, "Event starting 1 second after bucket boundary should include that bucket");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_end_just_before_bucket_with_seconds() {
+        // Test event ending just before bucket boundary (11:59:59 AM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 6, 0, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 11, 59, 59).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM = 1 bucket
+        // (end is 1 second before 12 PM, so 12 PM-6 PM bucket is not included)
+        assert_eq!(buckets.len(), 1, "Event ending 1 second before bucket boundary should not include next bucket");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_minutes_across_midnight() {
+        // Test overnight event with minute components (11:45 PM to 1:30 AM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 23, 45, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 16, 1, 30, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 PM-12 AM (partial), 12 AM-6 AM (partial) = 2 buckets
+        assert_eq!(buckets.len(), 2, "Overnight event with minutes should span buckets correctly");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_precise_multi_day_with_minutes() {
+        // Test multi-day event with precise times (Fri 7:15 AM to Sun 5:30 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 17, 7, 15, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 19, 17, 30, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Day 1 (Fri): 4 buckets (6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM)
+        // Day 2 (Sat): 4 buckets
+        // Day 3 (Sun): 2 buckets (6 AM-12 PM, 12 PM-6 PM)
+        // Total: 10 buckets (end at 5:30 PM means 6 PM bucket is NOT included since end:5:30PM < start:6PM)
+        assert_eq!(buckets.len(), 10, "Multi-day event with minute precision should calculate correctly");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_millisecond_before_boundary() {
+        // Test event ending exactly at bucket boundary minus 1 second (5:59:59 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 17, 59, 59).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 12 PM-6 PM = 1 bucket
+        // (end is 1 second before 6 PM, so 6 PM-12 AM bucket should not be included)
+        assert_eq!(buckets.len(), 1, "Event ending 1 second before 6 PM should not include 6 PM bucket");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_start_one_second_into_day() {
+        // Test event starting at 6:00:01 AM (1 second after reference point)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 6, 0, 1).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 18, 0, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM = 3 buckets
+        assert_eq!(buckets.len(), 3, "Event starting 1 second after 6 AM should include all relevant buckets");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_very_short_with_minutes() {
+        // Test very short event with minutes (30 minutes from 10:15 to 10:45)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 10, 15, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 10, 45, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM = 1 bucket
+        assert_eq!(buckets.len(), 1, "Very short event with minutes should be in single bucket");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_crossing_all_boundaries_with_precision() {
+        // Test event that crosses all 4 daily boundaries with minute precision
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 8, 27, 33).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 16, 2, 15, 47).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM = 4 buckets
+        assert_eq!(buckets.len(), 4, "Event crossing all boundaries with precision should have 4 buckets");
+    }
+
+    #[test]
+    fn test_get_day_quarter_buckets_end_exactly_on_next_bucket_start() {
+        // Test event ending exactly when next bucket starts (12:00:00 PM)
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 6, 0, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 0).unwrap();
+        
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+        
+        // Should include: 6 AM-12 PM, 12 PM-6 PM = 2 buckets
+        // (start:12PM <= end:12PM, so 12 PM bucket is included)
+        assert_eq!(buckets.len(), 2, "Event ending exactly at bucket start should include that bucket");
+    }
 }
