@@ -93,7 +93,6 @@ const theme = createTheme({
     h5: {
       fontWeight: 600,
       letterSpacing: "0em",
-      color: "#ffffff", // Ensure high contrast for card titles
     },
     h6: {
       fontWeight: 600,
@@ -306,25 +305,34 @@ const theme = createTheme({
     MuiDataGrid: {
       styleOverrides: {
         root: {
-          border: "1px solid rgba(95, 39, 221, 0.15)", // Subtle border
+          border: "1px solid rgba(95, 39, 221, 0.15)",
           borderRadius: 12,
+          backgroundColor: "transparent", // Transparent to match card backgrounds
+          "& .MuiDataGrid-main": {
+            backgroundColor: "transparent",
+          },
           "& .MuiDataGrid-cell": {
-            borderBottom: "1px solid rgba(95, 39, 221, 0.1)", // Very subtle cell borders
+            borderBottom: "1px solid rgba(95, 39, 221, 0.1)",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: "rgba(95, 39, 221, 0.05)", // Very subtle header background
+            backgroundColor: "rgba(95, 39, 221, 0.05)",
             borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
           },
           "& .MuiDataGrid-columnHeader": {
             fontWeight: 700,
           },
           "& .MuiDataGrid-footerContainer": {
+            backgroundColor: "transparent",
             borderTop: "1px solid rgba(95, 39, 221, 0.15)",
           },
           "& .MuiDataGrid-row": {
+            backgroundColor: "transparent",
             "&:hover": {
               backgroundColor: "rgba(95, 39, 221, 0.05)",
             },
+          },
+          "& .MuiDataGrid-virtualScroller": {
+            backgroundColor: "transparent",
           },
         },
       },
