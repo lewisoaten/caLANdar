@@ -1,7 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event_invitation, Error},
-    util::{is_attending_event, send_email, send_preauth_email, PreauthEmailDetails},
+    util::{is_attending_event, send_email_bcc, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
 use resend_rs::Resend;
@@ -335,7 +335,9 @@ pub async fn patch_admin(
     _as_admin: Option<bool>, // Required for route matching but unused - triggers AdminUser guard
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
-    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), true).await {
+    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), true)
+        .await
+    {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
@@ -364,7 +366,15 @@ pub async fn patch(
         ));
     }
 
-    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), false).await {
+    match event_invitation::respond(
+        pool,
+        event_id,
+        email,
+        invitation_request.into_inner(),
+        false,
+    )
+    .await
+    {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
@@ -511,13 +521,14 @@ pub async fn send_custom_email(
         }
     };
 
-    // Send emails to all filtered recipients
+    // Send emails to all filtered recipients using BCC
+    // This ensures recipients don't see each other's email addresses
     let recipient_emails: Vec<&str> = filtered_invitations
         .iter()
         .map(|inv| inv.email.as_str())
         .collect();
 
-    match send_email(
+    match send_email_bcc(
         sender,
         recipient_emails,
         email_request.subject.as_str(),

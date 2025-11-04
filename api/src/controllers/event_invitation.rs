@@ -139,7 +139,11 @@ mod tests {
         //          12 PM-6 PM (start:12PM<=end:6PM, end:6PM>begin:6AM) ✓
         //          6 PM-12 AM (start:6PM<=end:6PM FALSE)
         // Should have 2 buckets, but includes 6 PM bucket because start:6PM <= end:6PM
-        assert_eq!(buckets.len(), 3, "Single day event 6 AM to 6 PM should have 3 buckets");
+        assert_eq!(
+            buckets.len(),
+            3,
+            "Single day event 6 AM to 6 PM should have 3 buckets"
+        );
     }
 
     #[test]
@@ -164,7 +168,11 @@ mod tests {
 
         // Day 1 (Fri): 4 buckets, Day 2 (Sat): 4 buckets, Day 3 (Sun): 3 buckets = 11 total
         // (Sun includes 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM since start:6PM <= end:6PM)
-        assert_eq!(buckets.len(), 11, "Multi-day event should have correct bucket count");
+        assert_eq!(
+            buckets.len(),
+            11,
+            "Multi-day event should have correct bucket count"
+        );
     }
 
     #[test]
@@ -176,7 +184,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include partial bucket 6 AM-12 PM and partial bucket 12 PM-6 PM
-        assert_eq!(buckets.len(), 2, "Event starting mid-bucket should include that bucket");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event starting mid-bucket should include that bucket"
+        );
     }
 
     #[test]
@@ -188,7 +200,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM (bucket extends to 6 PM even though event ends at 4 PM)
-        assert_eq!(buckets.len(), 2, "Event ending mid-bucket should include that bucket");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event ending mid-bucket should include that bucket"
+        );
     }
 
     #[test]
@@ -200,7 +216,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 PM-12 AM (partial), 12 AM-6 AM (partial) = 2 buckets
-        assert_eq!(buckets.len(), 2, "Overnight event should span two buckets correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Overnight event should span two buckets correctly"
+        );
     }
 
     #[test]
@@ -213,7 +233,11 @@ mod tests {
 
         // Should include: 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM = 3 buckets
         // (start:12AM <= end:12AM, so midnight bucket is included)
-        assert_eq!(buckets.len(), 3, "Event on exact boundaries should count correctly");
+        assert_eq!(
+            buckets.len(),
+            3,
+            "Event on exact boundaries should count correctly"
+        );
     }
 
     #[test]
@@ -250,7 +274,11 @@ mod tests {
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM = 2 buckets
         // (midnight-6 AM bucket of that day is not included because it's before time_begin)
-        assert_eq!(buckets.len(), 2, "Event starting before 6 AM should be handled correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event starting before 6 AM should be handled correctly"
+        );
     }
 
     #[test]
@@ -263,7 +291,11 @@ mod tests {
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM = 2 buckets
         // (12 PM bucket: start:12PM <= end:12PM, so it's included)
-        assert_eq!(buckets.len(), 2, "Event starting at midnight should be handled correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event starting at midnight should be handled correctly"
+        );
     }
 
     #[test]
@@ -277,7 +309,11 @@ mod tests {
 
         // Should be 5 buckets: 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM, 6 AM-12 PM
         // (end:10 AM falls in the 6 AM-12 PM bucket, start:6AM <= end:10AM and end:12PM > begin:10AM)
-        assert_eq!(buckets.len(), 5, "24-hour event should have exactly 5 buckets when crossing bucket boundary");
+        assert_eq!(
+            buckets.len(),
+            5,
+            "24-hour event should have exactly 5 buckets when crossing bucket boundary"
+        );
     }
 
     #[test]
@@ -289,7 +325,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM (partial), 12 PM-6 PM (partial) = 2 buckets
-        assert_eq!(buckets.len(), 2, "Event with minute components should calculate correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event with minute components should calculate correctly"
+        );
     }
 
     #[test]
@@ -301,7 +341,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM (partial), 12 PM-6 PM (partial) = 2 buckets
-        assert_eq!(buckets.len(), 2, "Event with second components should calculate correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event with second components should calculate correctly"
+        );
     }
 
     #[test]
@@ -314,7 +358,11 @@ mod tests {
 
         // Should include: 12 PM-6 PM, 6 PM-12 AM = 2 buckets
         // (even though start is 1 second after 12 PM, the bucket starts at 12 PM)
-        assert_eq!(buckets.len(), 2, "Event starting 1 second after bucket boundary should include that bucket");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event starting 1 second after bucket boundary should include that bucket"
+        );
     }
 
     #[test]
@@ -327,7 +375,11 @@ mod tests {
 
         // Should include: 6 AM-12 PM = 1 bucket
         // (end is 1 second before 12 PM, so 12 PM-6 PM bucket is not included)
-        assert_eq!(buckets.len(), 1, "Event ending 1 second before bucket boundary should not include next bucket");
+        assert_eq!(
+            buckets.len(),
+            1,
+            "Event ending 1 second before bucket boundary should not include next bucket"
+        );
     }
 
     #[test]
@@ -339,7 +391,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 PM-12 AM (partial), 12 AM-6 AM (partial) = 2 buckets
-        assert_eq!(buckets.len(), 2, "Overnight event with minutes should span buckets correctly");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Overnight event with minutes should span buckets correctly"
+        );
     }
 
     #[test]
@@ -354,7 +410,11 @@ mod tests {
         // Day 2 (Sat): 4 buckets
         // Day 3 (Sun): 2 buckets (6 AM-12 PM, 12 PM-6 PM)
         // Total: 10 buckets (end at 5:30 PM means 6 PM bucket is NOT included since end:5:30PM < start:6PM)
-        assert_eq!(buckets.len(), 10, "Multi-day event with minute precision should calculate correctly");
+        assert_eq!(
+            buckets.len(),
+            10,
+            "Multi-day event with minute precision should calculate correctly"
+        );
     }
 
     #[test]
@@ -367,7 +427,11 @@ mod tests {
 
         // Should include: 12 PM-6 PM = 1 bucket
         // (end is 1 second before 6 PM, so 6 PM-12 AM bucket should not be included)
-        assert_eq!(buckets.len(), 1, "Event ending 1 second before 6 PM should not include 6 PM bucket");
+        assert_eq!(
+            buckets.len(),
+            1,
+            "Event ending 1 second before 6 PM should not include 6 PM bucket"
+        );
     }
 
     #[test]
@@ -379,7 +443,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM = 3 buckets
-        assert_eq!(buckets.len(), 3, "Event starting 1 second after 6 AM should include all relevant buckets");
+        assert_eq!(
+            buckets.len(),
+            3,
+            "Event starting 1 second after 6 AM should include all relevant buckets"
+        );
     }
 
     #[test]
@@ -391,7 +459,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM = 1 bucket
-        assert_eq!(buckets.len(), 1, "Very short event with minutes should be in single bucket");
+        assert_eq!(
+            buckets.len(),
+            1,
+            "Very short event with minutes should be in single bucket"
+        );
     }
 
     #[test]
@@ -403,7 +475,11 @@ mod tests {
         let buckets = get_day_quarter_buckets(time_begin, time_end);
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM = 4 buckets
-        assert_eq!(buckets.len(), 4, "Event crossing all boundaries with precision should have 4 buckets");
+        assert_eq!(
+            buckets.len(),
+            4,
+            "Event crossing all boundaries with precision should have 4 buckets"
+        );
     }
 
     #[test]
@@ -416,6 +492,10 @@ mod tests {
 
         // Should include: 6 AM-12 PM, 12 PM-6 PM = 2 buckets
         // (start:12PM <= end:12PM, so 12 PM bucket is included)
-        assert_eq!(buckets.len(), 2, "Event ending exactly at bucket start should include that bucket");
+        assert_eq!(
+            buckets.len(),
+            2,
+            "Event ending exactly at bucket start should include that bucket"
+        );
     }
 }
