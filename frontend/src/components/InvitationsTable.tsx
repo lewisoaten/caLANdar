@@ -70,8 +70,9 @@ const GridCellExpand = memo(function GridCellExpand(
   const [showPopper, setShowPopper] = useState(false);
 
   const handleMouseEnter = () => {
-    const isCurrentlyOverflown =
-      cellValue.current ? isOverflown(cellValue.current) : false;
+    const isCurrentlyOverflown = cellValue.current
+      ? isOverflown(cellValue.current)
+      : false;
     setShowPopper(isCurrentlyOverflown);
     setAnchorEl(cellDiv.current);
     setShowFullCell(true);

@@ -133,8 +133,7 @@ export const WithManyInvitations: Story = {
             avatarUrl: null,
             handle: `Player${i + 1}`,
             invitedAt: moment().subtract(i, "days"),
-            respondedAt:
-              i % 3 === 0 ? moment().subtract(i - 1, "days") : null,
+            respondedAt: i % 3 === 0 ? moment().subtract(i - 1, "days") : null,
             response: i % 3 === 0 ? RSVP.yes : i % 3 === 1 ? RSVP.maybe : null,
             attendance: i % 3 === 0 ? [0, 1, 2] : null,
             lastModified: moment().subtract(i - 1, "days"),
