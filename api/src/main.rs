@@ -95,7 +95,7 @@ impl Fairing for CORS {
     }
 }
 
-const EMAIL_TEMPLATES: [(&str, &str); 3] = [
+const EMAIL_TEMPLATES: [(&str, &str); 4] = [
     (
         "email_base.html.tera",
         r#"
@@ -151,6 +151,32 @@ const EMAIL_TEMPLATES: [(&str, &str); 3] = [
         <p>If you did not request this email, please ignore it.</p>
 
         <p>Happy hunting,</p>
+
+        <p>Lewis</p>
+    {% endblock content %}
+    "#,
+    ),
+    (
+        "email_custom.html.tera",
+        r#"
+    {% extends "email_base.html.tera" %}
+
+    {% block content %}
+        <p>Hello,</p>
+
+        <p>This is an update about <strong>{{ title }}</strong>.</p>
+
+        <p>Event details:</p>
+        <ul>
+            <li><strong>Starts:</strong> {{ time_begin }}</li>
+            <li><strong>Ends:</strong> {{ time_end }}</li>
+        </ul>
+
+        <p>{{ message | linebreaksbr }}</p>
+
+        <p>You can view more details and manage your RSVP at <a href="https://calandar.org">calandar.org</a>.</p>
+
+        <p>See you there,</p>
 
         <p>Lewis</p>
     {% endblock content %}
@@ -232,7 +258,9 @@ async fn rocket(
                 routes::event_invitations::get_all_user,
                 routes::event_invitations::get_all,
                 routes::event_invitations::delete,
+                routes::event_invitations::patch_admin,
                 routes::event_invitations::patch,
+                routes::event_invitations::send_custom_email,
                 routes::games::steam_game_update_v2,
                 routes::games::get_steam_game,
                 routes::event_games::get_all,

@@ -17,6 +17,7 @@ import {
   ListItemButton,
   Stack,
   Grid,
+  Button,
 } from "@mui/material";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
@@ -49,6 +50,8 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [inputValue, setInputValue] = useState("");
+  const [commentValue, setCommentValue] = useState("");
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [options, setOptions] = useState(defaultGames);
 
   const typingTimer = useRef<null | NodeJS.Timeout>(null);
@@ -144,31 +147,52 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     setOpen(false);
 
     if (reason === "selectOption" && value) {
-      fetch(`/api/events/${props.event_id}/suggested_games`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({
-          appid: value.appid,
-          name: value.name,
-        }),
-      })
-        .then((response) => {
-          if (response.status === 401) signOut();
-          else if (response.ok) {
-            setInputValue("");
-            return response
-              .text()
-              .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
-          }
-        })
-        .then((data) => {
-          if (data) sortAndAddGameSuggestions([...gameSuggestions, data]);
-        });
+      // Store the selected game but don't submit yet
+      setSelectedGame(value);
+    } else if (reason === "clear") {
+      // Clear selection when autocomplete is cleared
+      setSelectedGame(null);
+      setCommentValue("");
     }
+  };
+
+  const handleSubmit = () => {
+    if (!selectedGame) return;
+
+    const trimmedComment = commentValue.trim();
+
+    fetch(`/api/events/${props.event_id}/suggested_games`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({
+        appid: selectedGame.appid,
+        comment: trimmedComment || null,
+      }),
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok) {
+          setInputValue("");
+          setCommentValue("");
+          setSelectedGame(null);
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+        }
+      })
+      .then((data) => {
+        if (data) sortAndAddGameSuggestions([...gameSuggestions, data]);
+      });
+  };
+
+  const handleCancel = () => {
+    setSelectedGame(null);
+    setCommentValue("");
+    setInputValue("");
   };
 
   const handleVote = (
@@ -225,54 +249,96 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         </Typography>
       </Grid>
       {props.responded ? (
-        <Grid size={12}>
-          <Autocomplete
-            id="game-suggestion"
-            open={open}
-            onOpen={() => {
-              setOpen(true);
-            }}
-            onClose={() => {
-              setOpen(false);
-            }}
-            isOptionEqualToValue={(option, value) => option.name === value.name}
-            getOptionLabel={(option) => option.name}
-            options={options}
-            getOptionDisabled={(option) =>
-              gameSuggestions.find((x) => x.appid === option.appid)
-                ? true
-                : false
-            }
-            handleHomeEndKeys={false}
-            loading={loading}
-            value={null}
-            inputValue={inputValue}
-            openOnFocus={false}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Suggest Game"
-                error={errorMessage ? true : false}
-                helperText={errorMessage}
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <React.Fragment>
-                      {loading ? (
-                        <CircularProgress color="inherit" size={20} />
-                      ) : null}
-                      {params.InputProps.endAdornment}
-                    </React.Fragment>
-                  ),
-                }}
-              />
-            )}
-            filterOptions={(x) => x}
-            onInputChange={handleInputChange}
-            onChange={handleInputSelect}
-            disabled={props.disabled}
-          />
-        </Grid>
+        <>
+          <Grid size={12}>
+            <Autocomplete
+              id="game-suggestion"
+              open={open}
+              onOpen={() => {
+                setOpen(true);
+              }}
+              onClose={() => {
+                setOpen(false);
+              }}
+              isOptionEqualToValue={(option, value) =>
+                option.name === value.name
+              }
+              getOptionLabel={(option) => option.name}
+              options={options}
+              getOptionDisabled={(option) =>
+                gameSuggestions.find((x) => x.appid === option.appid)
+                  ? true
+                  : false
+              }
+              handleHomeEndKeys={false}
+              loading={loading}
+              value={selectedGame}
+              inputValue={inputValue}
+              openOnFocus={false}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Suggest Game"
+                  error={errorMessage ? true : false}
+                  helperText={errorMessage}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <React.Fragment>
+                        {loading ? (
+                          <CircularProgress color="inherit" size={20} />
+                        ) : null}
+                        {params.InputProps.endAdornment}
+                      </React.Fragment>
+                    ),
+                  }}
+                />
+              )}
+              filterOptions={(x) => x}
+              onInputChange={handleInputChange}
+              onChange={handleInputSelect}
+              disabled={props.disabled}
+            />
+          </Grid>
+          {selectedGame && (
+            <>
+              <Grid size={12}>
+                <TextField
+                  id="game-comment"
+                  label="Comment (optional)"
+                  placeholder="e.g., Game supports 3 players per squad"
+                  fullWidth
+                  multiline
+                  rows={2}
+                  value={commentValue}
+                  onChange={(e) => setCommentValue(e.target.value)}
+                  disabled={props.disabled}
+                  helperText="Explain why you're suggesting this game"
+                  inputProps={{ maxLength: 500 }}
+                />
+              </Grid>
+              <Grid size={12}>
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleSubmit}
+                    disabled={props.disabled}
+                  >
+                    Submit
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={handleCancel}
+                    disabled={props.disabled}
+                  >
+                    Cancel
+                  </Button>
+                </Stack>
+              </Grid>
+            </>
+          )}
+        </>
       ) : (
         <React.Fragment>
           <Grid size={12}>
@@ -337,7 +403,17 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   </ListItemAvatar>
                   <ListItemText
                     primary={gameSuggestion.name}
-                    secondary={`${gameSuggestion.votes} want to play!`}
+                    secondary={
+                      <>
+                        {`${gameSuggestion.votes} want to play!`}
+                        {gameSuggestion.comment && (
+                          <>
+                            <br />
+                            {gameSuggestion.comment}
+                          </>
+                        )}
+                      </>
+                    }
                   />
                 </ListItemButton>
                 <ListItemButton></ListItemButton>

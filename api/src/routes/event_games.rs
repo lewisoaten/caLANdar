@@ -66,6 +66,7 @@ pub async fn get_all(
 pub struct EventGameSuggestionResponse {
     pub appid: i64,
     pub name: String,
+    pub comment: Option<String>,
     pub last_modified: DateTime<Utc>,
     pub requested_at: DateTime<Utc>,
     pub suggestion_last_modified: DateTime<Utc>,
@@ -101,6 +102,7 @@ custom_errors!(EventGameSuggestionError, InternalServerError);
 #[serde(crate = "rocket::serde")]
 pub struct EventGameSuggestionRequest {
     pub appid: i64,
+    pub comment: Option<String>,
 }
 
 #[openapi(tag = "Event Games")]

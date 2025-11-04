@@ -19,6 +19,7 @@ export const defaultGamer: Gamer = {
 export type GameSuggestion = {
   appid: number;
   name: string;
+  comment: string | null;
   lastModified: moment.Moment;
   requestedAt: moment.Moment;
   suggestionLastModified: moment.Moment;
@@ -34,6 +35,7 @@ export const defaultGameSuggestions: GameSuggestion[] = [];
 export const defaultGameSuggestion: GameSuggestion = {
   appid: 0,
   name: "",
+  comment: null,
   lastModified: moment(),
   requestedAt: moment(),
   suggestionLastModified: moment(),

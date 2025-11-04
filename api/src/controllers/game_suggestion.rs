@@ -43,6 +43,7 @@ impl From<game_suggestion::GameSuggestion> for EventGameSuggestionResponse {
         Self {
             appid: game_suggestion.game_id,
             name: game_suggestion.game_name,
+            comment: game_suggestion.comment,
             last_modified: game_suggestion.last_modified,
             requested_at: game_suggestion.requested_at,
             suggestion_last_modified: game_suggestion.last_modified,
@@ -294,7 +295,15 @@ pub async fn create(
     };
 
     // Insert game suggestion
-    match game_suggestion::create(pool, event_id, new_event_game_suggestion.appid, email).await {
+    match game_suggestion::create(
+        pool,
+        event_id,
+        new_event_game_suggestion.appid,
+        email,
+        new_event_game_suggestion.comment,
+    )
+    .await
+    {
         Ok(game_suggestion) => Ok(add_owners_to_game(pool, game_suggestion, &invitations).await?),
         Err(e) => Err(Error::Controller(format!(
             "Unable to get event due to: {e}"
@@ -414,6 +423,7 @@ async fn add_owners_to_game(
     Ok(EventGameSuggestionResponse {
         appid: game_suggestion.game_id,
         name: game_suggestion.game_name,
+        comment: game_suggestion.comment,
         last_modified: game_suggestion.last_modified,
         requested_at: game_suggestion.requested_at,
         suggestion_last_modified: game_suggestion.last_modified,
