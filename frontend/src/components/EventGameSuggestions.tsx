@@ -159,6 +159,8 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const handleSubmit = () => {
     if (!selectedGame) return;
 
+    const trimmedComment = commentValue.trim();
+
     fetch(`/api/events/${props.event_id}/suggested_games`, {
       method: "POST",
       headers: {
@@ -168,7 +170,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       },
       body: JSON.stringify({
         appid: selectedGame.appid,
-        comment: commentValue.trim() || null,
+        comment: trimmedComment || null,
       }),
     })
       .then((response) => {
@@ -312,6 +314,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   onChange={(e) => setCommentValue(e.target.value)}
                   disabled={props.disabled}
                   helperText="Explain why you're suggesting this game"
+                  inputProps={{ maxLength: 500 }}
                 />
               </Grid>
               <Grid size={12}>
