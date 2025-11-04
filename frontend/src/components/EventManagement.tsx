@@ -151,7 +151,6 @@ const EventManagement = () => {
                 p: 2,
                 display: "flex",
                 flexDirection: "column",
-                height: 240,
               }}
             >
               <InvitationsTable event={event} as_admin={true} />
