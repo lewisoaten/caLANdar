@@ -31,9 +31,11 @@ import {
   GridRowParams,
   GridActionsCellItem,
   GridRenderCellParams,
+  GridActionsCellItemProps,
 } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import SendIcon from "@mui/icons-material/Send";
 import {
   InvitationData,
   defaultInvitationsData,
@@ -292,6 +294,55 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       });
   };
 
+  // Helper to be used by DataGrid actions (accepts email directly)
+  const handleResendInvitation = useCallback(
+    (email: string) => () => {
+      fetch(
+        `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+        },
+      )
+        .then((response) => {
+          if (response.status === 401) {
+            signOut();
+          } else if (response.status === 204) {
+            enqueueSnackbar("Invitation resent successfully", {
+              variant: "success",
+            });
+          } else if (response.status === 400) {
+            response.text().then((data) => {
+              enqueueSnackbar(`Unable to resend invitation: ${data}`, {
+                variant: "error",
+              });
+            });
+          } else {
+            enqueueSnackbar(
+              "Unable to resend invitation. Please try again later.",
+              {
+                variant: "error",
+              },
+            );
+          }
+        })
+        .catch((error) => {
+          console.error("Network error while resending invitation:", error);
+          enqueueSnackbar(
+            "Network error. Please check your connection and try again.",
+            {
+              variant: "error",
+            },
+          );
+        });
+    },
+    [event_id, token, signOut, enqueueSnackbar],
+  );
+
   const [open, setOpen] = useState(false);
 
   const handleClickOpen = () => {
@@ -530,21 +581,41 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       field: "actions",
       type: "actions",
       headerName: "Actions",
-      flex: 0.5,
-      getActions: (params: GridRowParams) => [
-        <GridActionsCellItem
-          key="edit"
-          icon={<EditIcon />}
-          label="Edit"
-          onClick={handleEditInvitation(params.row.email)}
-        />,
-        <GridActionsCellItem
-          key="delete"
-          icon={<DeleteIcon />}
-          label="Remove"
-          onClick={handleDeleteInvitation(params.row.email)}
-        />,
-      ],
+      flex: 0.9,
+      getActions: (params: GridRowParams) => {
+        const actions = [] as React.ReactElement<
+          GridActionsCellItemProps,
+          any
+        >[];
+        // Only show resend if the invitee hasn't responded yet
+        if (params.row.response == null) {
+          actions.push(
+            <GridActionsCellItem
+              key="resend"
+              icon={<SendIcon />}
+              label="Resend"
+              onClick={handleResendInvitation(params.row.email)}
+            />,
+          );
+        }
+        actions.push(
+          <GridActionsCellItem
+            key="edit"
+            icon={<EditIcon />}
+            label="Edit"
+            onClick={handleEditInvitation(params.row.email)}
+          />,
+        );
+        actions.push(
+          <GridActionsCellItem
+            key="delete"
+            icon={<DeleteIcon />}
+            label="Remove"
+            onClick={handleDeleteInvitation(params.row.email)}
+          />,
+        );
+        return actions;
+      },
     },
   ];
 
@@ -560,6 +631,23 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           getRowId={(row) => row.email}
           autoHeight
           disableRowSelectionOnClick
+          sx={{
+            // Ensure the actions cell and its inner container align items to the right
+            "& .dt-actions-cell": {
+              display: "flex",
+              justifyContent: "flex-end",
+              paddingRight: 1,
+            },
+            "& .MuiDataGrid-cell--withRenderer": {
+              // ensure cells with custom renderers stretch so our flex-end works
+              display: "flex",
+            },
+            "& .MuiDataGrid-cell .MuiGridActionsCell-root": {
+              width: "100%",
+              display: "flex",
+              justifyContent: "flex-end",
+            },
+          }}
           initialState={{
             sorting: {
               sortModel: [{ field: "invitedAt", sort: "desc" }],
