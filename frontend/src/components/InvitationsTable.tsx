@@ -70,7 +70,8 @@ const GridCellExpand = memo(function GridCellExpand(
   const [showPopper, setShowPopper] = useState(false);
 
   const handleMouseEnter = () => {
-    const isCurrentlyOverflown = isOverflown(cellValue.current!);
+    const isCurrentlyOverflown =
+      cellValue.current ? isOverflown(cellValue.current) : false;
     setShowPopper(isCurrentlyOverflown);
     setAnchorEl(cellDiv.current);
     setShowFullCell(true);
@@ -141,7 +142,9 @@ const GridCellExpand = memo(function GridCellExpand(
         >
           <Paper
             elevation={1}
-            style={{ minHeight: wrapper.current!.offsetHeight - 3 }}
+            style={{
+              minHeight: wrapper.current ? wrapper.current.offsetHeight - 3 : 0,
+            }}
           >
             <Typography
               variant="body2"
@@ -476,7 +479,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (value: moment.Moment) => formatMomentDate(value),
+      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
     },
     {
       field: "response",
@@ -520,7 +523,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (value: moment.Moment) => formatMomentDate(value),
+      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
     },
     {
       field: "actions",
