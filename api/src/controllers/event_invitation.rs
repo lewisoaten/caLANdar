@@ -58,6 +58,7 @@ pub async fn respond(
     event_id: i32,
     email: String,
     invitation_response: InvitationsPatchRequest,
+    is_admin: bool,
 ) -> Result<(), Error> {
     let event = match is_event_active(pool, event_id).await {
         Err(e) => {
@@ -65,10 +66,14 @@ pub async fn respond(
                 "Unable to check if event is active, due to: {e}"
             )))
         }
-        Ok((false, _)) => {
-            return Err(Error::NotPermitted(
-                "You can only respond to invitations for active events".to_string(),
-            ))
+        Ok((false, event)) => {
+            // Admins can edit invitations for inactive events
+            if !is_admin {
+                return Err(Error::NotPermitted(
+                    "You can only respond to invitations for active events".to_string(),
+                ));
+            }
+            event
         }
         Ok((true, event)) => event,
     };

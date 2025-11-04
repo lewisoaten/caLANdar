@@ -335,7 +335,7 @@ pub async fn patch_admin(
     _as_admin: Option<bool>, // Required for route matching but unused - triggers AdminUser guard
     _user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
-    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner()).await {
+    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), true).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
@@ -364,7 +364,7 @@ pub async fn patch(
         ));
     }
 
-    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner()).await {
+    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), false).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
         Err(e) => Err(InvitationsPatchError::InternalServerError(format!(
