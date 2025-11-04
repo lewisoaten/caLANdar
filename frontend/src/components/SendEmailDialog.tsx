@@ -15,6 +15,7 @@ import {
   InputLabel,
   SelectChangeEvent,
 } from "@mui/material";
+import { useSnackbar } from "notistack";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { EventData } from "../types/events";
 
@@ -32,6 +33,7 @@ export default function SendEmailDialog(props: SendEmailDialogProps) {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
+  const { enqueueSnackbar } = useSnackbar();
 
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -75,7 +77,7 @@ export default function SendEmailDialog(props: SendEmailDialogProps) {
     })
       .then((response) => {
         if (response.status === 204) {
-          alert("Email sent successfully!");
+          enqueueSnackbar("Email sent successfully!", { variant: "success" });
           // Reset form
           setSubject("");
           setMessage("");
@@ -83,17 +85,17 @@ export default function SendEmailDialog(props: SendEmailDialogProps) {
           onClose();
         } else if (response.status === 400) {
           return response.text().then((data) => {
-            const error = `Invalid request: ${data}`;
-            alert(error);
-            throw new Error(error);
+            enqueueSnackbar(`Invalid request: ${data}`, { variant: "error" });
+            throw new Error(`Invalid request: ${data}`);
           });
         } else if (response.status === 401) {
           signOut();
         } else {
           return response.text().then((data) => {
-            const error = `Something went wrong: ${data}`;
-            alert(error);
-            throw new Error(error);
+            enqueueSnackbar(`Something went wrong: ${data}`, {
+              variant: "error",
+            });
+            throw new Error(`Something went wrong: ${data}`);
           });
         }
       })

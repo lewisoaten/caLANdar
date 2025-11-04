@@ -373,7 +373,7 @@ pub async fn patch(
     }
 }
 
-#[derive(Deserialize, Serialize, JsonSchema)]
+#[derive(Deserialize, Serialize, JsonSchema, Debug)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub enum EmailRecipientFilter {
     All,
@@ -481,9 +481,10 @@ pub async fn send_custom_email(
         .collect();
 
     if filtered_invitations.is_empty() {
-        return Err(SendCustomEmailError::BadRequest(
-            "No invitations match the selected filter".to_string(),
-        ));
+        return Err(SendCustomEmailError::BadRequest(format!(
+            "No invitations match the selected filter: {:?}",
+            email_request.filter
+        )));
     }
 
     // Prepare the email context
