@@ -34,9 +34,23 @@ fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -
         // Iterate over each 6-hour bucket, starting from 6 AM
         for &hour in &[6, 12, 18, 0] {
             let bucket_start = if hour == 0 {
-                current_day + Duration::days(1) // Move to midnight of the next day
+                // Midnight of the next day
+                current_day
+                    .date_naive()
+                    .succ_opt()
+                    .expect("Invalid date")
+                    .and_hms_opt(0, 0, 0)
+                    .expect("Invalid time")
+                    .and_local_timezone(Utc)
+                    .unwrap()
             } else {
-                current_day + Duration::hours(i64::from(hour))
+                // Set time to specific hour on current day
+                current_day
+                    .date_naive()
+                    .and_hms_opt(hour, 0, 0)
+                    .expect("Invalid time")
+                    .and_local_timezone(Utc)
+                    .unwrap()
             };
             let bucket_end = bucket_start + Duration::hours(6);
 
@@ -79,17 +93,14 @@ pub async fn respond(
     };
 
     // Check if attendence has the same number of elements as day quarter buckets for the events duration
-    // Admins can bypass this check to handle edge cases like event duration changes
-    if !is_admin {
-        if let Some(ref attendance) = invitation_response.attendance {
-            let day_quarter_buckets = get_day_quarter_buckets(event.time_begin, event.time_end).len();
-            let attendance_length = attendance.len();
+    if let Some(ref attendance) = invitation_response.attendance {
+        let day_quarter_buckets = get_day_quarter_buckets(event.time_begin, event.time_end).len();
+        let attendance_length = attendance.len();
 
-            if attendance_length != day_quarter_buckets {
-                return Err(Error::Controller(format!(
-                    "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
-                )));
-            }
+        if attendance_length != day_quarter_buckets {
+            return Err(Error::Controller(format!(
+                "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
+            )));
         }
     }
 
