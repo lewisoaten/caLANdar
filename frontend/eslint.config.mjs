@@ -1,11 +1,15 @@
 import globals from "globals";
-import { fixupPluginRules } from "@eslint/compat";
+import { fixupPluginRules, includeIgnoreFile } from "@eslint/compat";
 import pluginJs from "@eslint/js";
 import tseslint from "typescript-eslint";
 import pluginReact from "eslint-plugin-react";
 import pluginReactHooks from "eslint-plugin-react-hooks";
+import { fileURLToPath } from "node:url";
+
+const gitignorePath = fileURLToPath(new URL(".gitignore", import.meta.url));
 
 export default [
+  includeIgnoreFile(gitignorePath, "Imported .gitignore patterns"),
   {
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
   },
@@ -39,6 +43,8 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
+      "react/jsx-uses-react": "off",
+      "react/react-in-jsx-scope": "off",
     },
   },
 ];

@@ -6,7 +6,6 @@ import {
   beforeEach,
   afterEach,
   afterAll,
-  vi,
 } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
