@@ -1,5 +1,5 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import type { Meta, StoryObj } from "@storybook/react";
-import { fn } from "@storybook/test";
 import { http, HttpResponse } from "msw";
 import RefreshGamesButton from "../components/RefreshGamesButton";
 import { useState } from "react";

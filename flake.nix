@@ -53,6 +53,13 @@
               # Cargo will create this directory if it doesn't exist and needs to write.
               export CARGO_HOME="$ROOT_PATH/.cargo"
 
+              # Isolate npm's cache and prefix to the project, just like cargo.
+              # This prevents conflicts with your global ~/.npm cache or config.
+              export NPM_CONFIG_CACHE="$ROOT_PATH/.npm-cache"
+              export NPM_CONFIG_PREFIX="$ROOT_PATH/.npm-prefix"
+              # Add the local prefix's bin directory to the PATH
+              export PATH="$ROOT_PATH/.npm-prefix/bin:$PATH"
+
               echo "CaLANdar development environment activated! Run 'just --list' to see available commands."
             '';
           };
