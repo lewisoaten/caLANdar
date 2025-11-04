@@ -1,5 +1,13 @@
 import * as React from "react";
-import { useEffect, useState, useContext } from "react";
+import {
+  useEffect,
+  useState,
+  useContext,
+  useCallback,
+  useRef,
+  memo,
+} from "react";
+import moment from "moment";
 import {
   Box,
   Dialog,
@@ -7,11 +15,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Button,
   Stack,
@@ -19,7 +22,18 @@ import {
   Popover,
   ToggleButtonGroup,
   ToggleButton,
+  Paper,
+  Popper,
 } from "@mui/material";
+import {
+  DataGrid,
+  GridColDef,
+  GridRowParams,
+  GridActionsCellItem,
+  GridRenderCellParams,
+} from "@mui/x-data-grid";
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import {
   InvitationData,
   defaultInvitationsData,
@@ -31,6 +45,127 @@ import { dateParser } from "../utils";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData } from "../types/events";
 import { useSnackbar } from "notistack";
+import { GridApiCommunity } from "@mui/x-data-grid/models/api/gridApiCommunity";
+
+interface GridCellExpandProps {
+  value: string;
+  width: number;
+}
+
+function isOverflown(element: Element): boolean {
+  return (
+    element.scrollHeight > element.clientHeight ||
+    element.scrollWidth > element.clientWidth
+  );
+}
+
+const GridCellExpand = memo(function GridCellExpand(
+  props: GridCellExpandProps,
+) {
+  const { width, value } = props;
+  const wrapper = useRef<HTMLDivElement | null>(null);
+  const cellDiv = useRef(null);
+  const cellValue = useRef(null);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [showFullCell, setShowFullCell] = useState(false);
+  const [showPopper, setShowPopper] = useState(false);
+
+  const handleMouseEnter = () => {
+    const isCurrentlyOverflown = isOverflown(cellValue.current!);
+    setShowPopper(isCurrentlyOverflown);
+    setAnchorEl(cellDiv.current);
+    setShowFullCell(true);
+  };
+
+  const handleMouseLeave = () => {
+    setShowFullCell(false);
+  };
+
+  useEffect(() => {
+    if (!showFullCell) {
+      return undefined;
+    }
+
+    function handleKeyDown(nativeEvent: KeyboardEvent) {
+      // IE11, Edge (prior to using Bink?) use 'Esc'
+      if (nativeEvent.key === "Escape" || nativeEvent.key === "Esc") {
+        setShowFullCell(false);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [setShowFullCell, showFullCell]);
+
+  return (
+    <Box
+      ref={wrapper}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      sx={{
+        alignItems: "center",
+        lineHeight: "24px",
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        display: "flex",
+      }}
+    >
+      <Box
+        ref={cellDiv}
+        sx={{
+          height: "100%",
+          width,
+          display: "block",
+          position: "absolute",
+          top: 0,
+        }}
+      />
+      <Box
+        ref={cellValue}
+        sx={{
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+        }}
+      >
+        {value}
+      </Box>
+      {showPopper && (
+        <Popper
+          open={showFullCell && anchorEl !== null}
+          anchorEl={anchorEl}
+          style={{ width, marginLeft: -17 }}
+        >
+          <Paper
+            elevation={1}
+            style={{ minHeight: wrapper.current!.offsetHeight - 3 }}
+          >
+            <Typography
+              variant="body2"
+              style={{ padding: 8 }}
+              sx={{ whiteSpace: "pre-wrap" }}
+            >
+              {value}
+            </Typography>
+          </Paper>
+        </Popper>
+      )}
+    </Box>
+  );
+});
+
+function renderCellExpand(params: GridRenderCellParams) {
+  return (
+    <GridCellExpand
+      value={params.value || ""}
+      width={params.colDef.computedWidth}
+    />
+  );
+}
 
 interface InvitationsTableProps {
   event: EventData;
@@ -76,31 +211,49 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     }
   }, [event_id]);
 
-  const onClick = (event: React.MouseEvent<HTMLButtonElement, MouseEvent>) => {
-    const email = event?.currentTarget.value;
-    fetch(
-      `/api/events/${event_id}/invitations/${encodeURIComponent(email)}?as_admin=true`,
-      {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
+  const handleDeleteInvitation = useCallback(
+    (email: string) => () => {
+      fetch(
+        `/api/events/${event_id}/invitations/${encodeURIComponent(email)}?as_admin=true`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
         },
-      },
-    ).then((response) => {
-      if (response.status === 401) signOut();
-      else if (response.status === 204) {
-        const remainingInvitations = invitations.filter(function (invitation) {
-          return invitation.email !== email;
-        });
-        setInvitations(remainingInvitations);
-      } else {
-        alert("Unable to delete invitation");
-        throw new Error("Unable to delete invitation");
+      ).then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.status === 204) {
+          const remainingInvitations = invitations.filter(
+            (invitation) => invitation.email !== email,
+          );
+          setInvitations(remainingInvitations);
+          enqueueSnackbar("Invitation deleted successfully", {
+            variant: "success",
+          });
+        } else {
+          enqueueSnackbar("Unable to delete invitation", { variant: "error" });
+        }
+      });
+    },
+    [event_id, invitations, token, signOut, enqueueSnackbar],
+  );
+
+  const handleEditInvitation = useCallback(
+    (email: string) => () => {
+      const invitation = invitations.find((inv) => inv.email === email);
+      if (invitation) {
+        setEditingInvitation(invitation);
+        setEditHandle(invitation.handle || "");
+        setEditResponse(invitation.response);
+        setEditAttendance(invitation.attendance);
+        setEditOpen(true);
       }
-    });
-  };
+    },
+    [invitations],
+  );
 
   const onResendClick = (
     event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
@@ -189,15 +342,8 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       }),
     ).then((results) => {
       setInvitations([...invitations, ...results]);
+      enqueueSnackbar("Invitations sent successfully", { variant: "success" });
     });
-  };
-
-  const handleEditClick = (invitation: InvitationData) => {
-    setEditingInvitation(invitation);
-    setEditHandle(invitation.handle || "");
-    setEditResponse(invitation.response);
-    setEditAttendance(invitation.attendance);
-    setEditOpen(true);
   };
 
   const handleEditClose = () => {
@@ -273,13 +419,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     setEditAttendance(newAttendance);
   };
 
+  // Popover state for attendance display
   const [popoverAnchorEl, setPopoverAnchorEl] = useState<HTMLElement | null>(
     null,
   );
-
   const [popoverInvitation, setPopoverInvitation] = useState<InvitationData>(
     defaultInvitationData,
   );
+  const popoverOpen = Boolean(popoverAnchorEl);
 
   const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
     if (!popoverOpen) {
@@ -298,76 +445,153 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     setPopoverAnchorEl(null);
   };
 
-  const popoverOpen = Boolean(popoverAnchorEl);
+  // DataGrid columns definition
+  const columns: GridColDef[] = [
+    {
+      field: "email",
+      headerName: "Email",
+      type: "string",
+      flex: 1.5,
+      editable: false,
+      renderCell: renderCellExpand,
+    },
+    {
+      field: "handle",
+      headerName: "Handle",
+      type: "string",
+      flex: 1,
+      editable: false,
+      renderCell: renderCellExpand,
+    },
+    {
+      field: "invitedAt",
+      headerName: "Invitation Sent",
+      type: "dateTime",
+      flex: 1,
+      editable: false,
+      valueFormatter: (
+        value: moment.Moment,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        if (value == null) {
+          return "";
+        }
+        return value.calendar();
+      },
+    },
+    {
+      field: "response",
+      headerName: "Response",
+      type: "string",
+      flex: 0.7,
+      editable: false,
+    },
+    {
+      field: "respondedAt",
+      headerName: "Response Sent",
+      type: "dateTime",
+      flex: 1,
+      editable: false,
+      valueFormatter: (
+        value: moment.Moment | null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment | null, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        if (value == null) {
+          return "";
+        }
+        return value.calendar();
+      },
+    },
+    {
+      field: "attendance",
+      headerName: "Attendance",
+      type: "string",
+      flex: 1,
+      editable: false,
+      renderCell: (params: GridRenderCellParams) => {
+        const attendance = params.value as number[] | null;
+        return (
+          <Box
+            id={"attendance-" + params.row.email}
+            onMouseEnter={handlePopoverOpen}
+            onClick={handlePopoverOpen}
+            onMouseLeave={handlePopoverClose}
+            sx={{ cursor: attendance ? "pointer" : "default" }}
+          >
+            {attendance ? attendance.join(", ") : ""}
+          </Box>
+        );
+      },
+    },
+    {
+      field: "lastModified",
+      headerName: "Last Modified",
+      type: "dateTime",
+      flex: 1,
+      editable: false,
+      valueFormatter: (
+        value: moment.Moment,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _row: any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        _column: GridColDef<any, moment.Moment, string>,
+        _apiRef: React.MutableRefObject<GridApiCommunity>,
+      ) => {
+        if (value == null) {
+          return "";
+        }
+        return value.calendar();
+      },
+    },
+    {
+      field: "actions",
+      type: "actions",
+      headerName: "Actions",
+      flex: 0.5,
+      getActions: (params: GridRowParams) => [
+        <GridActionsCellItem
+          key="edit"
+          icon={<EditIcon />}
+          label="Edit"
+          onClick={handleEditInvitation(params.row.email)}
+        />,
+        <GridActionsCellItem
+          key="delete"
+          icon={<DeleteIcon />}
+          label="Remove"
+          onClick={handleDeleteInvitation(params.row.email)}
+        />,
+      ],
+    },
+  ];
 
   return (
     <React.Fragment>
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
         Invitations
       </Typography>
-      <Table size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Email</TableCell>
-            <TableCell>Handle</TableCell>
-            <TableCell>Invitation Sent</TableCell>
-            <TableCell>Response</TableCell>
-            <TableCell>Response Sent</TableCell>
-            <TableCell>Attendance</TableCell>
-            <TableCell>Last Modified</TableCell>
-            <TableCell>Action</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {invitations.map((invitation) => (
-            <TableRow key={invitation.email}>
-              <TableCell>{invitation.email}</TableCell>
-              <TableCell>{invitation.handle}</TableCell>
-              <TableCell>{invitation.invitedAt.calendar()}</TableCell>
-              <TableCell>{invitation.response}</TableCell>
-              <TableCell>{invitation.respondedAt?.calendar()}</TableCell>
-              <TableCell
-                id={"attendance-" + invitation.email}
-                onMouseEnter={handlePopoverOpen}
-                onClick={handlePopoverOpen}
-                onMouseLeave={handlePopoverClose}
-              >
-                {invitation.attendance}
-              </TableCell>
-              <TableCell>{invitation.lastModified.calendar()}</TableCell>
-              <TableCell>
-                <Stack direction="row" spacing={1}>
-                  {invitation.response === null && (
-                    <Button
-                      onClick={(e) => onResendClick(e)}
-                      value={invitation.email}
-                      variant="contained"
-                      color="primary"
-                    >
-                      Resend Invite
-                    </Button>
-                  )}
-                  <Button
-                    onClick={() => handleEditClick(invitation)}
-                    variant="contained"
-                    color="primary"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    onClick={(e) => onClick(e)}
-                    value={invitation.email}
-                    variant="contained"
-                    color="error"
-                  >
-                    Remove
-                  </Button>
-                </Stack>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <Box sx={{ width: "100%" }}>
+        <DataGrid
+          rows={invitations}
+          columns={columns}
+          getRowId={(row) => row.email}
+          autoHeight
+          disableRowSelectionOnClick
+          initialState={{
+            sorting: {
+              sortModel: [{ field: "invitedAt", sort: "desc" }],
+            },
+          }}
+        />
+      </Box>
       <Popover
         sx={{
           pointerEvents: "none",
