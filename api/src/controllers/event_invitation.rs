@@ -79,14 +79,17 @@ pub async fn respond(
     };
 
     // Check if attendence has the same number of elements as day quarter buckets for the events duration
-    if let Some(ref attendance) = invitation_response.attendance {
-        let day_quarter_buckets = get_day_quarter_buckets(event.time_begin, event.time_end).len();
-        let attendance_length = attendance.len();
+    // Admins can bypass this check to handle edge cases like event duration changes
+    if !is_admin {
+        if let Some(ref attendance) = invitation_response.attendance {
+            let day_quarter_buckets = get_day_quarter_buckets(event.time_begin, event.time_end).len();
+            let attendance_length = attendance.len();
 
-        if attendance_length != day_quarter_buckets {
-            return Err(Error::Controller(format!(
-                "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
-            )));
+            if attendance_length != day_quarter_buckets {
+                return Err(Error::Controller(format!(
+                    "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
+                )));
+            }
         }
     }
 

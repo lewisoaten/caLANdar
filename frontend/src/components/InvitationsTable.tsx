@@ -229,6 +229,10 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     newResponse: string,
   ) => {
     setEditResponse(newResponse as RSVP);
+    // Clear attendance if response is "No"
+    if (newResponse === RSVP.no) {
+      setEditAttendance(null);
+    }
   };
 
   const handleEditAttendanceChange = (newAttendance: number[]) => {
