@@ -35,6 +35,36 @@ pub async fn send_email(
     }
 }
 
+pub async fn send_email_bcc(
+    sender: &Resend,
+    bccs: Vec<&str>,
+    subject: &str,
+    body: &str,
+) -> Result<(), String> {
+    let from = "CaLANdar <lewis+calandar@updates.oaten.name>";
+    let reply_to = "lewis+calandar@oaten.name";
+
+    // Send to the from address so there's a valid "to" recipient
+    // All actual recipients are in BCC to hide email addresses from each other
+    let mut email = CreateEmailBaseOptions::new(from, vec![from], subject)
+        .with_reply(reply_to)
+        .with_html(body);
+
+    // Add each BCC recipient individually
+    for bcc in bccs {
+        email = email.with_bcc(bcc);
+    }
+
+    match sender.emails.send(email).await {
+        Ok(_response) => Ok(()),
+        Err(e) => {
+            // Try to log more details if possible
+            eprintln!("Resend error: {e:?}");
+            Err(format!("Resend error: {e}"))
+        }
+    }
+}
+
 pub struct PreauthEmailDetails {
     pub address: String,
     pub subject: String,
