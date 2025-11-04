@@ -57,8 +57,8 @@ const theme = createTheme({
       paper: "#232946", // Dark blue-purple
     },
     text: {
-      primary: "#fffffe", // Near white
-      secondary: "#b8c1ec", // Light purple-blue
+      primary: "#ffffff", // Pure white for maximum contrast
+      secondary: "#d0d7f7", // Lighter purple-blue for better readability
       disabled: "#7f8ba3",
     },
     divider: "rgba(95, 39, 221, 0.2)", // Semi-transparent violet
@@ -93,6 +93,7 @@ const theme = createTheme({
     h5: {
       fontWeight: 600,
       letterSpacing: "0em",
+      color: "#ffffff", // Ensure high contrast for card titles
     },
     h6: {
       fontWeight: 600,
@@ -153,6 +154,7 @@ const theme = createTheme({
           borderRadius: 8,
           padding: "10px 24px",
           transition: "all 0.3s ease-in-out",
+          fontWeight: 700, // Bolder text for better contrast
         },
         contained: {
           boxShadow: "0px 4px 12px rgba(95, 39, 221, 0.4)",
@@ -161,11 +163,24 @@ const theme = createTheme({
             transform: "translateY(-2px)",
           },
         },
+        containedPrimary: {
+          backgroundColor: "#5F27DD",
+          color: "#ffffff", // Ensure white text on primary buttons
+          "&:hover": {
+            backgroundColor: "#7540ee",
+          },
+        },
         outlined: {
           borderWidth: 2,
           "&:hover": {
             borderWidth: 2,
             boxShadow: "0px 4px 12px rgba(95, 39, 221, 0.3)",
+          },
+        },
+        text: {
+          color: "#ffffff", // White text for better contrast
+          "&:hover": {
+            backgroundColor: "rgba(95, 39, 221, 0.1)",
           },
         },
       },
@@ -243,11 +258,11 @@ const theme = createTheme({
     MuiTableCell: {
       styleOverrides: {
         root: {
-          borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
+          borderBottom: "1px solid rgba(95, 39, 221, 0.15)", // Reduced contrast
         },
         head: {
           fontWeight: 700,
-          background: "rgba(95, 39, 221, 0.1)",
+          background: "rgba(95, 39, 221, 0.05)", // Subtle background
         },
       },
     },
@@ -285,6 +300,32 @@ const theme = createTheme({
           borderRadius: 12,
           border: "2px solid rgba(95, 39, 221, 0.3)",
           boxShadow: "0px 12px 40px rgba(95, 39, 221, 0.6)",
+        },
+      },
+    },
+    MuiDataGrid: {
+      styleOverrides: {
+        root: {
+          border: "1px solid rgba(95, 39, 221, 0.15)", // Subtle border
+          borderRadius: 12,
+          "& .MuiDataGrid-cell": {
+            borderBottom: "1px solid rgba(95, 39, 221, 0.1)", // Very subtle cell borders
+          },
+          "& .MuiDataGrid-columnHeaders": {
+            backgroundColor: "rgba(95, 39, 221, 0.05)", // Very subtle header background
+            borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
+          },
+          "& .MuiDataGrid-columnHeader": {
+            fontWeight: 700,
+          },
+          "& .MuiDataGrid-footerContainer": {
+            borderTop: "1px solid rgba(95, 39, 221, 0.15)",
+          },
+          "& .MuiDataGrid-row": {
+            "&:hover": {
+              backgroundColor: "rgba(95, 39, 221, 0.05)",
+            },
+          },
         },
       },
     },
