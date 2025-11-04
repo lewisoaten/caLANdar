@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Meta, StoryObj } from "@storybook/react";
 import { http, HttpResponse } from "msw";
 import InvitationsTable from "../components/InvitationsTable";
@@ -21,6 +20,7 @@ const mockEvent = {
   id: 1,
   title: "Summer LAN Party",
   description: "Annual summer gaming event",
+  image: undefined,
   timeBegin: moment().startOf("day").hour(18),
   timeEnd: moment().add(2, "days").startOf("day").hour(12),
   createdAt: moment().subtract(7, "days"),

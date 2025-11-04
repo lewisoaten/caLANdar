@@ -480,9 +480,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const [popoverInvitation, setPopoverInvitation] = useState<InvitationData>(
     defaultInvitationData,
   );
-  const popoverOpen = Boolean(popoverAnchorEl);
 
   const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
+    const popoverOpen = Boolean(popoverAnchorEl);
     if (!popoverOpen) {
       const email = event?.currentTarget.id.replace("attendance-", "");
       const invitation = invitations.find(
@@ -498,6 +498,8 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const handlePopoverClose = () => {
     setPopoverAnchorEl(null);
   };
+
+  const popoverOpen = Boolean(popoverAnchorEl);
 
   // Reusable date formatter for DataGrid columns
   const formatMomentDate = (value: moment.Moment | null) => {
@@ -583,10 +585,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       headerName: "Actions",
       flex: 0.9,
       getActions: (params: GridRowParams) => {
-        const actions = [] as React.ReactElement<
-          GridActionsCellItemProps,
-          any
-        >[];
+        const actions: React.ReactElement<GridActionsCellItemProps>[] = [];
         // Only show resend if the invitee hasn't responded yet
         if (params.row.response == null) {
           actions.push(
