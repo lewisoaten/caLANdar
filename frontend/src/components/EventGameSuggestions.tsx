@@ -154,8 +154,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         },
         body: JSON.stringify({
           appid: value.appid,
-          name: value.name,
-          comment: commentValue || null,
+          comment: commentValue.trim() || null,
         }),
       })
         .then((response) => {
