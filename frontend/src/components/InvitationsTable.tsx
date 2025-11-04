@@ -45,7 +45,6 @@ import { dateParser } from "../utils";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData } from "../types/events";
 import { useSnackbar } from "notistack";
-import { GridApiCommunity } from "@mui/x-data-grid/models/api/gridApiCommunity";
 
 interface GridCellExpandProps {
   value: string;
@@ -419,7 +418,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     setEditAttendance(newAttendance);
   };
 
-  // Popover state for attendance display
+  // State and handlers for attendance popover
   const [popoverAnchorEl, setPopoverAnchorEl] = useState<HTMLElement | null>(
     null,
   );
@@ -443,6 +442,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
 
   const handlePopoverClose = () => {
     setPopoverAnchorEl(null);
+  };
+
+  // Reusable date formatter for DataGrid columns
+  const formatMomentDate = (value: moment.Moment | null) => {
+    if (value == null) {
+      return "";
+    }
+    return value.calendar();
   };
 
   // DataGrid columns definition
@@ -469,19 +476,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (
-        value: moment.Moment,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _row: any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _column: GridColDef<any, moment.Moment, string>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
-      ) => {
-        if (value == null) {
-          return "";
-        }
-        return value.calendar();
-      },
+      valueFormatter: (value: moment.Moment) => formatMomentDate(value),
     },
     {
       field: "response",
@@ -496,19 +491,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (
-        value: moment.Moment | null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _row: any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _column: GridColDef<any, moment.Moment | null, string>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
-      ) => {
-        if (value == null) {
-          return "";
-        }
-        return value.calendar();
-      },
+      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
     },
     {
       field: "attendance",
@@ -537,19 +520,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       type: "dateTime",
       flex: 1,
       editable: false,
-      valueFormatter: (
-        value: moment.Moment,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _row: any,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        _column: GridColDef<any, moment.Moment, string>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
-      ) => {
-        if (value == null) {
-          return "";
-        }
-        return value.calendar();
-      },
+      valueFormatter: (value: moment.Moment) => formatMomentDate(value),
     },
     {
       field: "actions",
