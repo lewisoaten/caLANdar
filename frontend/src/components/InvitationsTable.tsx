@@ -191,30 +191,37 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           attendance: editAttendance,
         }),
       },
-    ).then((response) => {
-      if (response.status === 401) {
-        signOut();
-      } else if (response.status === 204) {
-        enqueueSnackbar("Invitation updated successfully", {
-          variant: "success",
+    )
+      .then((response) => {
+        if (response.status === 401) {
+          signOut();
+        } else if (response.status === 204) {
+          enqueueSnackbar("Invitation updated successfully", {
+            variant: "success",
+          });
+          setEditOpen(false);
+          // Update the local state
+          const updatedInvitations = invitations.map((inv) =>
+            inv.email === editingInvitation.email
+              ? {
+                  ...inv,
+                  handle: editHandle,
+                  response: editResponse,
+                  attendance: editAttendance,
+                }
+              : inv,
+          );
+          setInvitations(updatedInvitations);
+        } else {
+          enqueueSnackbar("Unable to update invitation", { variant: "error" });
+        }
+      })
+      .catch((error) => {
+        console.error("Network error updating invitation:", error);
+        enqueueSnackbar("Network error: Unable to update invitation", {
+          variant: "error",
         });
-        setEditOpen(false);
-        // Update the local state
-        const updatedInvitations = invitations.map((inv) =>
-          inv.email === editingInvitation.email
-            ? {
-                ...inv,
-                handle: editHandle,
-                response: editResponse,
-                attendance: editAttendance,
-              }
-            : inv,
-        );
-        setInvitations(updatedInvitations);
-      } else {
-        enqueueSnackbar("Unable to update invitation", { variant: "error" });
-      }
-    });
+      });
   };
 
   const handleEditResponseChange = (
@@ -407,7 +414,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
                 </ToggleButton>
               </ToggleButtonGroup>
             </Box>
-            {editResponse && editResponse !== RSVP.no && (
+            {editResponse !== null && editResponse !== RSVP.no && (
               <Box>
                 <Typography variant="subtitle2" gutterBottom>
                   Times Attending
