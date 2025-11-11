@@ -223,6 +223,7 @@ const theme = createTheme({
         root: {
           backgroundImage: "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
           border: "1px solid rgba(95, 39, 221, 0.1)",
+          overflow: "hidden", // Prevent content from escaping Paper boundaries
         },
       },
     },
@@ -366,13 +367,21 @@ const theme = createTheme({
           border: "1px solid rgba(95, 39, 221, 0.15)",
           borderRadius: 12,
           backgroundColor: "transparent", // Transparent to match card backgrounds
+          // Force transparent on ALL possible background-having elements
+          "& *": {
+            backgroundColor: "transparent !important",
+          },
           "& .MuiDataGrid-main": {
-            backgroundColor: "transparent",
+            backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-cell": {
             borderBottom: "1px solid rgba(95, 39, 221, 0.1)",
+            backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-container--top": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-container--bottom": {
             backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-columnHeaders": {
@@ -383,31 +392,62 @@ const theme = createTheme({
           "& .MuiDataGrid-columnHeadersInner": {
             backgroundColor: "transparent !important",
           },
+          "& .MuiDataGrid-columnHeaderRow": {
+            backgroundColor: "transparent !important",
+          },
           "& .MuiDataGrid-columnHeader": {
             fontWeight: 700,
             backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-columnHeaderTitle": {
             fontWeight: 700,
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-iconButtonContainer": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-menuIcon": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-sortIcon": {
+            backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-filler": {
             backgroundColor: "transparent !important", // Remove filler background
           },
+          "& .MuiDataGrid-filler--header": {
+            backgroundColor: "transparent !important",
+          },
           "& .MuiDataGrid-scrollbarFiller": {
             backgroundColor: "transparent !important",
           },
+          "& .MuiDataGrid-scrollbarFiller--header": {
+            backgroundColor: "transparent !important",
+          },
           "& .MuiDataGrid-footerContainer": {
-            backgroundColor: "transparent",
+            backgroundColor: "transparent !important",
             borderTop: "1px solid rgba(95, 39, 221, 0.15)",
           },
           "& .MuiDataGrid-row": {
-            backgroundColor: "transparent",
+            backgroundColor: "transparent !important",
             "&:hover": {
-              backgroundColor: "rgba(95, 39, 221, 0.05)",
+              backgroundColor: "rgba(95, 39, 221, 0.05) !important",
             },
           },
           "& .MuiDataGrid-virtualScroller": {
-            backgroundColor: "transparent",
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-virtualScrollerContent": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-virtualScrollerRenderZone": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-overlayWrapper": {
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-overlayWrapperInner": {
+            backgroundColor: "transparent !important",
           },
         },
       },
