@@ -1,5 +1,24 @@
 import { createTheme } from "@mui/material/styles";
 
+// Extend MUI theme to include DataGrid component types
+declare module "@mui/material/styles" {
+  interface ComponentNameToClassKey {
+    MuiDataGrid: any;
+  }
+
+  interface ComponentsPropsList {
+    MuiDataGrid: any;
+  }
+
+  interface Components {
+    MuiDataGrid?: {
+      defaultProps?: any;
+      styleOverrides?: any;
+      variants?: any;
+    };
+  }
+}
+
 /**
  * CaLANdar Custom Theme - Futuristic Gamer Aesthetic
  *
