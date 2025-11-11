@@ -223,7 +223,6 @@ const theme = createTheme({
         root: {
           backgroundImage: "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
           border: "1px solid rgba(95, 39, 221, 0.1)",
-          // Removed overflow: auto to allow Paper to expand with content
         },
       },
     },
@@ -373,10 +372,16 @@ const theme = createTheme({
           "& .MuiDataGrid-cell": {
             borderBottom: "1px solid rgba(95, 39, 221, 0.1)",
           },
+          "& .MuiDataGrid-container--top": {
+            backgroundColor: "transparent !important",
+          },
           "& .MuiDataGrid-columnHeaders": {
             backgroundColor: "transparent !important", // Force transparent to match rest of table
             backgroundImage: "none !important", // Remove any default background gradients
             borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
+          },
+          "& .MuiDataGrid-columnHeadersInner": {
+            backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-columnHeader": {
             fontWeight: 700,
@@ -384,6 +389,12 @@ const theme = createTheme({
           },
           "& .MuiDataGrid-columnHeaderTitle": {
             fontWeight: 700,
+          },
+          "& .MuiDataGrid-filler": {
+            backgroundColor: "transparent !important", // Remove filler background
+          },
+          "& .MuiDataGrid-scrollbarFiller": {
+            backgroundColor: "transparent !important",
           },
           "& .MuiDataGrid-footerContainer": {
             backgroundColor: "transparent",
