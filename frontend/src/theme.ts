@@ -223,7 +223,7 @@ const theme = createTheme({
         root: {
           backgroundImage: "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
           border: "1px solid rgba(95, 39, 221, 0.1)",
-          overflow: "auto", // Prevent content overflow
+          // Removed overflow: auto to allow Paper to expand with content
         },
       },
     },
@@ -264,9 +264,11 @@ const theme = createTheme({
             backgroundColor: "transparent",
             paddingLeft: "4px",
             paddingRight: "4px",
+            color: "#d0d7f7", // Light purple-blue color for labels
             "&.Mui-focused": {
               // Add background to label when focused to prevent glow cutting through
               backgroundColor: "#232946",
+              color: "#d0d7f7", // Keep same light color when focused (not primary purple)
             },
           },
         },
@@ -331,6 +333,34 @@ const theme = createTheme({
         },
       },
     },
+    MuiPopper: {
+      styleOverrides: {
+        root: {
+          "& .MuiPaper-root": {
+            backgroundImage:
+              "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
+            border: "1px solid rgba(95, 39, 221, 0.3)",
+          },
+        },
+      },
+    },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: "#232946",
+          border: "1px solid rgba(95, 39, 221, 0.3)",
+          color: "#ffffff",
+          fontSize: "0.875rem",
+          boxShadow: "0px 4px 12px rgba(95, 39, 221, 0.4)",
+        },
+        arrow: {
+          color: "#232946",
+          "&::before": {
+            border: "1px solid rgba(95, 39, 221, 0.3)",
+          },
+        },
+      },
+    },
     MuiDataGrid: {
       styleOverrides: {
         root: {
@@ -344,10 +374,15 @@ const theme = createTheme({
             borderBottom: "1px solid rgba(95, 39, 221, 0.1)",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: "transparent", // Transparent to match rest of table
+            backgroundColor: "transparent !important", // Force transparent to match rest of table
+            backgroundImage: "none !important", // Remove any default background gradients
             borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
           },
           "& .MuiDataGrid-columnHeader": {
+            fontWeight: 700,
+            backgroundColor: "transparent !important",
+          },
+          "& .MuiDataGrid-columnHeaderTitle": {
             fontWeight: 700,
           },
           "& .MuiDataGrid-footerContainer": {
