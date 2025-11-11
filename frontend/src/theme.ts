@@ -223,6 +223,7 @@ const theme = createTheme({
         root: {
           backgroundImage: "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
           border: "1px solid rgba(95, 39, 221, 0.1)",
+          overflow: "auto", // Prevent content overflow
         },
       },
     },
@@ -259,6 +260,15 @@ const theme = createTheme({
               boxShadow: "0px 0px 8px rgba(8, 247, 254, 0.5)",
             },
           },
+          "& .MuiInputLabel-root": {
+            backgroundColor: "transparent",
+            paddingLeft: "4px",
+            paddingRight: "4px",
+            "&.Mui-focused": {
+              // Add background to label when focused to prevent glow cutting through
+              backgroundColor: "#232946",
+            },
+          },
         },
       },
     },
@@ -280,7 +290,7 @@ const theme = createTheme({
         },
         head: {
           fontWeight: 700,
-          background: "rgba(95, 39, 221, 0.05)", // Subtle background
+          background: "transparent", // Transparent to match rest of table
         },
       },
     },
@@ -334,7 +344,7 @@ const theme = createTheme({
             borderBottom: "1px solid rgba(95, 39, 221, 0.1)",
           },
           "& .MuiDataGrid-columnHeaders": {
-            backgroundColor: "rgba(95, 39, 221, 0.05)",
+            backgroundColor: "transparent", // Transparent to match rest of table
             borderBottom: "1px solid rgba(95, 39, 221, 0.2)",
           },
           "& .MuiDataGrid-columnHeader": {
