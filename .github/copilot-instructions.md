@@ -134,12 +134,15 @@ Pact files are stored in `frontend/pacts/`.
 
 ## Linting and Code Quality
 
-### Pre-commit Hooks (ALWAYS RUN BEFORE COMMITTING)
+### Pre-commit Hooks (MANDATORY BEFORE EVERY COMMIT)
 
-**Critical**: The project uses pre-commit hooks that MUST pass for CI to succeed.
+**Critical**: The project uses pre-commit hooks that MUST pass for CI to succeed. **You MUST run `just pre-commit` before every commit and it MUST exit with code 0 before you can commit.**
 
 ```bash
-# Run all pre-commit checks (REQUIRED before committing)
+# Run all pre-commit checks (MANDATORY before committing)
+just pre-commit
+
+# Alternative (same as above)
 pre-commit run --all-files
 ```
 
@@ -153,25 +156,32 @@ pre-commit run --all-files
 - Prettier formatting (JavaScript, TypeScript, Markdown, etc.)
 - ESLint (requires `frontend/node_modules` to exist)
 
-**Important**: The ESLint check will FAIL if frontend dependencies aren't installed. Always run `just dev-frontend` or `cd frontend && npm install` first.
+**Important**: The ESLint check will FAIL if frontend dependencies aren't installed. Always run `just frontend-install` or `just dev-frontend` first.
 
 **Fix failures**: Some checks auto-fix (formatting). Others require manual changes. Always verify and stage fixes before committing.
+
+**Workflow for committing**:
+1. Make your code changes
+2. Run `just pre-commit` - it MUST exit 0
+3. If there are failures, fix them and run `just pre-commit` again
+4. Only commit when `just pre-commit` exits successfully (code 0)
 
 ### Manual Linting
 
 **NEVER use `npm run lint` directly**. Always use pre-commit hooks via the Justfile:
 
 ```bash
-# Run all linting checks (REQUIRED - uses pre-commit hooks)
-pre-commit run --all-files
+# Run all linting checks (MANDATORY - uses pre-commit hooks)
+just pre-commit
 
 # Rust linting only (PREFERRED)
 just clippy
 ```
 
 **DO NOT use these commands**:
-- ❌ `cd frontend && npm run lint` - Use `pre-commit run --all-files` instead
-- ❌ `npm run lint` - Use `pre-commit run --all-files` instead
+- ❌ `cd frontend && npm run lint` - Use `just pre-commit` instead
+- ❌ `npm run lint` - Use `just pre-commit` instead
+- ❌ `pre-commit run --all-files` - Use `just pre-commit` instead (preferred)
 
 **Rust Clippy is VERY strict**: It enforces pedantic and nursery lints, and forbids `.unwrap()`. Use proper error handling with `?` or `expect()` with descriptive messages.
 
@@ -219,9 +229,12 @@ just frontend-build       # Build frontend for production
 just pact-api          # Run API and verify Pact contracts
 just pact-frontend     # Run frontend Pact tests
 
+# Code quality and linting (MANDATORY before committing)
+just pre-commit        # Run all pre-commit hooks (MUST exit 0 before commit)
+just clippy            # Run clippy only via pre-commit
+
 # Other development tools
-just bacon            # Run bacon (Rust background compiler)
-just clippy           # Run clippy via pre-commit
+just bacon             # Run bacon (Rust background compiler)
 ```
 
 **Database commands note**: Migration commands expect a running PostgreSQL container named `shuttle_calandar-api_shared_postgres`. This is created automatically when you run the API with Shuttle.

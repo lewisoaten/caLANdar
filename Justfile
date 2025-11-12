@@ -53,6 +53,9 @@ bacon:
 clippy:
 	pre-commit run clippy
 
+pre-commit:
+	pre-commit run --all-files
+
 frontend-install:
 	cd frontend && npm install
 
