@@ -3,18 +3,18 @@ import { createTheme } from "@mui/material/styles";
 // Extend MUI theme to include DataGrid component types
 declare module "@mui/material/styles" {
   interface ComponentNameToClassKey {
-    MuiDataGrid: any;
+    MuiDataGrid: Record<string, string>;
   }
 
   interface ComponentsPropsList {
-    MuiDataGrid: any;
+    MuiDataGrid: Record<string, unknown>;
   }
 
   interface Components {
     MuiDataGrid?: {
-      defaultProps?: any;
-      styleOverrides?: any;
-      variants?: any;
+      defaultProps?: Record<string, unknown>;
+      styleOverrides?: Record<string, unknown>;
+      variants?: Array<unknown>;
     };
   }
 }
