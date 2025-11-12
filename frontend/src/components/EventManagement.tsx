@@ -102,25 +102,9 @@ const EventManagement = () => {
                 p: 2,
                 display: "flex",
                 flexDirection: "column",
-                height: 240,
               }}
             >
-              <Typography
-                component="h2"
-                variant="h6"
-                color="primary"
-                gutterBottom
-              >
-                {event.title}
-              </Typography>
-              <Typography
-                variant="body1"
-                gutterBottom
-                sx={{ whiteSpace: "pre-wrap" }}
-              >
-                {event.description}
-              </Typography>
-              <Stack direction="row" spacing={2}>
+              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
                 <Button onClick={editOnClick} variant="contained">
                   Edit
                 </Button>
@@ -139,6 +123,21 @@ const EventManagement = () => {
                   Delete
                 </Button>
               </Stack>
+              <Typography
+                component="h2"
+                variant="h6"
+                color="primary"
+                gutterBottom
+              >
+                {event.title}
+              </Typography>
+              <Typography
+                variant="body1"
+                gutterBottom
+                sx={{ whiteSpace: "pre-wrap" }}
+              >
+                {event.description}
+              </Typography>
             </Paper>
           </Grid>
         </Grid>
