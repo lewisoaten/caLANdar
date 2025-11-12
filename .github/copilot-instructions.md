@@ -78,12 +78,20 @@ just dev-frontend
 # Run Storybook for component development (PREFERRED)
 just dev-storybook
 
+# Install dependencies (PREFERRED - takes 10+ minutes first time)
+just frontend-install
+
+# Install dependencies for CI (PREFERRED - reproducible builds)
+just frontend-install-ci
+
+# Run frontend tests (PREFERRED)
+just frontend-test
+
+# Build frontend for production (PREFERRED)
+just frontend-build
+
 # Generic commands (use when Just commands don't exist):
-cd frontend && npm install  # Install dependencies (takes 10+ minutes first time)
-cd frontend && npm ci       # Alternative for CI/reproducible builds
-cd frontend && npm test -- --run  # Run tests
-cd frontend && npm run build      # Build for production
-cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server
+cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server (already covered by just dev-frontend)
 ```
 
 **Frontend builds output to**: `frontend/build/`
@@ -200,6 +208,12 @@ just migrate-add <name>  # Create new migration
 just migrate-run       # Apply pending migrations
 just migrate-revert    # Revert last migration
 just update-sqlx       # Update SQLx query metadata
+
+# Frontend commands
+just frontend-install     # Install frontend dependencies
+just frontend-install-ci  # Install frontend dependencies (CI mode)
+just frontend-test        # Run frontend tests
+just frontend-build       # Build frontend for production
 
 # Testing commands
 just pact-api          # Run API and verify Pact contracts

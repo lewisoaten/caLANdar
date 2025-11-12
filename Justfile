@@ -53,6 +53,18 @@ bacon:
 clippy:
 	pre-commit run clippy
 
+frontend-install:
+	cd frontend && npm install
+
+frontend-install-ci:
+	cd frontend && npm ci
+
+frontend-test:
+	cd frontend && npm test -- --run
+
+frontend-build:
+	cd frontend && npm run build
+
 pact-api:
 	#!/usr/bin/env bash
 	set -euxo pipefail
