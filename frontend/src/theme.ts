@@ -163,6 +163,28 @@ const theme = createTheme({
         },
       },
     },
+    MuiTypography: {
+      styleOverrides: {
+        h1: {
+          color: "#d0d7f7", // Use lighter secondary color for all headings
+        },
+        h2: {
+          color: "#d0d7f7",
+        },
+        h3: {
+          color: "#d0d7f7",
+        },
+        h4: {
+          color: "#d0d7f7",
+        },
+        h5: {
+          color: "#d0d7f7",
+        },
+        h6: {
+          color: "#d0d7f7",
+        },
+      },
+    },
     MuiButton: {
       defaultProps: {
         disableElevation: false,
@@ -223,7 +245,7 @@ const theme = createTheme({
         root: {
           backgroundImage: "linear-gradient(135deg, #232946 0%, #1a1f3a 100%)",
           border: "1px solid rgba(95, 39, 221, 0.1)",
-          overflow: "hidden", // Prevent content from escaping Paper boundaries
+          overflow: "auto", // Allow scrolling for overflow content
         },
       },
     },
