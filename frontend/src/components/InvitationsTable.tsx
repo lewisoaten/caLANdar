@@ -24,6 +24,11 @@ import {
   ToggleButton,
   Paper,
   Popper,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent,
 } from "@mui/material";
 import {
   DataGrid,
@@ -194,6 +199,11 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const [editResponse, setEditResponse] = useState<RSVP | null>(null);
   const [editAttendance, setEditAttendance] = useState<number[] | null>(null);
 
+  // Pre-fill invitation state
+  const [availableEvents, setAvailableEvents] = useState<EventData[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<number | "">(0);
+  const [emailsValue, setEmailsValue] = useState<string>("");
+
   useEffect(() => {
     if (event_id) {
       fetch(`/api/events/${event_id}/invitations?as_admin=${props.as_admin}`, {
@@ -260,40 +270,6 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     [invitations],
   );
 
-  const onResendClick = (
-    event: React.MouseEvent<HTMLButtonElement, MouseEvent>,
-  ) => {
-    const email = event?.currentTarget.value;
-    fetch(
-      `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-      },
-    )
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-        } else if (response.status === 204) {
-          alert("Invitation resent successfully");
-        } else if (response.status === 400) {
-          response.text().then((data) => {
-            alert(`Unable to resend invitation: ${data}`);
-          });
-        } else {
-          alert("Unable to resend invitation. Please try again later.");
-        }
-      })
-      .catch((error) => {
-        console.error("Network error while resending invitation:", error);
-        alert("Network error. Please check your connection and try again.");
-      });
-  };
-
   // Helper to be used by DataGrid actions (accepts email directly)
   const handleResendInvitation = useCallback(
     (email: string) => () => {
@@ -347,10 +323,79 @@ export default function InvitationsTable(props: InvitationsTableProps) {
 
   const handleClickOpen = () => {
     setOpen(true);
+    // Fetch available events when opening the dialog
+    fetch(`/api/events?as_admin=true`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as EventData[]);
+      })
+      .then((data) => {
+        if (data) {
+          // Filter out the current event
+          const otherEvents = data.filter((evt) => evt.id !== event_id);
+          setAvailableEvents(otherEvents);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching events:", error);
+        enqueueSnackbar("Failed to load events for pre-fill", {
+          variant: "error",
+        });
+      });
   };
 
   const handleClose = () => {
     setOpen(false);
+    // Reset pre-fill state
+    setSelectedEventId(0);
+    setEmailsValue("");
+  };
+
+  const handleEventSelect = (event: SelectChangeEvent<number | "">) => {
+    const selectedId = event.target.value as number | "";
+    setSelectedEventId(selectedId);
+
+    if (selectedId && selectedId !== 0) {
+      // Fetch invitations for the selected event
+      fetch(`/api/events/${selectedId}/invitations?as_admin=true`, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
+      })
+        .then((response) => {
+          if (response.status === 401) signOut();
+          else if (response.ok)
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
+        })
+        .then((data) => {
+          if (data) {
+            // Extract emails and populate the text field
+            const emails = data.map((inv) => inv.email).join(", ");
+            setEmailsValue(emails);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching invitations:", error);
+          enqueueSnackbar("Failed to load invitations for selected event", {
+            variant: "error",
+          });
+        });
+    } else {
+      setEmailsValue("");
+    }
   };
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -691,6 +736,28 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               by commas.
             </DialogContentText>
 
+            <FormControl fullWidth margin="dense">
+              <InputLabel id="event-select-label">
+                Pre-fill from another event (optional)
+              </InputLabel>
+              <Select
+                labelId="event-select-label"
+                id="event-select"
+                value={selectedEventId}
+                label="Pre-fill from another event (optional)"
+                onChange={handleEventSelect}
+              >
+                <MenuItem value={0}>
+                  <em>None</em>
+                </MenuItem>
+                {availableEvents.map((evt) => (
+                  <MenuItem key={evt.id} value={evt.id}>
+                    {evt.title} ({evt.timeBegin.format("MMM D, YYYY")})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
             <TextField
               id="emails"
               name="emails"
@@ -702,6 +769,8 @@ export default function InvitationsTable(props: InvitationsTableProps) {
               fullWidth
               variant="outlined"
               multiline
+              value={emailsValue}
+              onChange={(e) => setEmailsValue(e.target.value)}
             />
           </DialogContent>
           <DialogActions>
