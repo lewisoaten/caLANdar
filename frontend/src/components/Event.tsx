@@ -104,7 +104,7 @@ const Event = () => {
               right: 0,
               bottom: 0,
               background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.6) 40%, rgba(22,22,26,0.9) 60%, #16161a 80%)",
+                "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.75) 30%, rgba(22,22,26,0.95) 50%, #16161a 70%)",
               zIndex: -1,
             }}
             role="presentation"
