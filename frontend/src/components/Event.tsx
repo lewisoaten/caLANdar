@@ -102,11 +102,12 @@ const Event = () => {
                 p: 3,
                 display: "flex",
                 flexDirection: "column",
-                // Frosted glass effect
-                backdropFilter: "blur(12px)",
-                backgroundColor: "rgba(35, 41, 70, 0.4)",
-                border: "1px solid rgba(95, 39, 221, 0.5)",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3)",
+                // Frosted glass effect - use !important to override theme defaults
+                backdropFilter: "blur(12px) !important",
+                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
+                backgroundImage: "none !important", // Override theme gradient
+                border: "1px solid rgba(95, 39, 221, 0.5) !important",
+                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
                 // Accessibility: high contrast text
                 color: "#ffffff",
                 // Smooth transitions (disabled if user prefers reduced motion)
@@ -114,8 +115,8 @@ const Event = () => {
                   ? "none"
                   : "all 0.3s ease-in-out",
                 "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7)",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4)",
+                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
+                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
                 },
                 // Ensure keyboard focus is visible
                 "&:focus-within": {
@@ -142,10 +143,12 @@ const Event = () => {
                   <Paper
                     variant="outlined"
                     sx={{
-                      backdropFilter: "blur(8px)",
-                      backgroundColor: "rgba(35, 41, 70, 0.3)",
-                      border: "1px solid rgba(8, 247, 254, 0.4)",
-                      boxShadow: "0 0 16px -4px rgba(8, 247, 254, 0.2)",
+                      backdropFilter: "blur(8px) !important",
+                      backgroundColor: "rgba(35, 41, 70, 0.3) !important",
+                      backgroundImage: "none !important", // Override theme gradient
+                      border: "1px solid rgba(8, 247, 254, 0.4) !important",
+                      boxShadow:
+                        "0 0 16px -4px rgba(8, 247, 254, 0.2) !important",
                     }}
                   >
                     <Typography
@@ -197,18 +200,19 @@ const Event = () => {
                 display: "flex",
                 flexDirection: "column",
                 minHeight: "300px",
-                // Frosted glass effect
-                backdropFilter: "blur(12px)",
-                backgroundColor: "rgba(35, 41, 70, 0.4)",
-                border: "1px solid rgba(95, 39, 221, 0.5)",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3)",
+                // Frosted glass effect - use !important to override theme defaults
+                backdropFilter: "blur(12px) !important",
+                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
+                backgroundImage: "none !important", // Override theme gradient
+                border: "1px solid rgba(95, 39, 221, 0.5) !important",
+                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
                 color: "#ffffff",
                 transition: prefersReducedMotion
                   ? "none"
                   : "all 0.3s ease-in-out",
                 "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7)",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4)",
+                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
+                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
                 },
                 "&:focus-within": {
                   outline: "2px solid rgba(8, 247, 254, 0.8)",
@@ -230,18 +234,19 @@ const Event = () => {
                 display: "flex",
                 flexDirection: "column",
                 minHeight: "300px",
-                // Frosted glass effect
-                backdropFilter: "blur(12px)",
-                backgroundColor: "rgba(35, 41, 70, 0.4)",
-                border: "1px solid rgba(95, 39, 221, 0.5)",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3)",
+                // Frosted glass effect - use !important to override theme defaults
+                backdropFilter: "blur(12px) !important",
+                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
+                backgroundImage: "none !important", // Override theme gradient
+                border: "1px solid rgba(95, 39, 221, 0.5) !important",
+                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
                 color: "#ffffff",
                 transition: prefersReducedMotion
                   ? "none"
                   : "all 0.3s ease-in-out",
                 "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7)",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4)",
+                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
+                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
                 },
                 "&:focus-within": {
                   outline: "2px solid rgba(8, 247, 254, 0.8)",
