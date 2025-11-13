@@ -74,16 +74,16 @@ const Event = () => {
       {/* Portal background layers to document body so they appear behind Dashboard */}
       {createPortal(
         <>
-          {/* Full-page blurred background image */}
+          {/* Background image positioned at top, fading to solid color */}
           <Box
             sx={{
               position: "fixed",
               top: 0,
               left: 0,
               right: 0,
-              bottom: 0,
+              height: "70vh", // Image occupies top portion only
               backgroundImage: `url("${eventImageUrl}")`,
-              backgroundSize: "cover",
+              backgroundSize: "contain", // Show full image without extreme zoom
               backgroundPosition: "center top",
               backgroundRepeat: "no-repeat",
               filter: "blur(24px) saturate(1.05) brightness(0.9)",
@@ -95,7 +95,7 @@ const Event = () => {
             aria-hidden="true"
           />
 
-          {/* Gradient overlay for readability */}
+          {/* Gradient overlay fading from image to solid background */}
           <Box
             sx={{
               position: "fixed",
@@ -104,7 +104,7 @@ const Event = () => {
               right: 0,
               bottom: 0,
               background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.7) 60%, #16161a 100%)",
+                "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.6) 40%, rgba(22,22,26,0.9) 60%, #16161a 80%)",
               zIndex: -1,
             }}
             role="presentation"
