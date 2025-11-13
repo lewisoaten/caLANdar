@@ -86,7 +86,7 @@ const Event = () => {
               backgroundSize: "contain", // Show full image without extreme zoom
               backgroundPosition: "center top",
               backgroundRepeat: "no-repeat",
-              filter: "blur(24px) saturate(1.05) brightness(0.9)",
+              filter: "blur(8px) saturate(1.05) brightness(0.9)",
               zIndex: -2,
               // Preload the image for performance
               imageRendering: "auto",
