@@ -1,6 +1,7 @@
 import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
+import { createPortal } from "react-dom";
 import { Container, Paper, Typography, Grid, Box } from "@mui/material";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
@@ -43,6 +44,21 @@ const Event = () => {
       });
   }, []);
 
+  // Cleanup: Reset Dashboard background when component unmounts
+  useEffect(() => {
+    // Make Dashboard's main area transparent to show background
+    const mainElement = document.querySelector("main");
+    if (mainElement instanceof HTMLElement) {
+      const originalBackground = mainElement.style.background;
+      mainElement.style.background = "transparent";
+
+      return () => {
+        // Restore original background on unmount
+        mainElement.style.background = originalBackground;
+      };
+    }
+  }, []);
+
   // Construct image URL (use default if none is provided)
   const eventImageUrl = event.image
     ? `data:image/jpeg;base64,${event.image}`
@@ -55,42 +71,48 @@ const Event = () => {
 
   return (
     <>
-      {/* Full-page blurred background image */}
-      <Box
-        sx={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundImage: `url("${eventImageUrl}")`,
-          backgroundSize: "cover",
-          backgroundPosition: "center top",
-          backgroundRepeat: "no-repeat",
-          filter: "blur(24px) saturate(1.05) brightness(0.9)",
-          zIndex: -2,
-          // Preload the image for performance
-          imageRendering: "auto",
-        }}
-        role="presentation"
-        aria-hidden="true"
-      />
+      {/* Portal background layers to document body so they appear behind Dashboard */}
+      {createPortal(
+        <>
+          {/* Full-page blurred background image */}
+          <Box
+            sx={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundImage: `url("${eventImageUrl}")`,
+              backgroundSize: "cover",
+              backgroundPosition: "center top",
+              backgroundRepeat: "no-repeat",
+              filter: "blur(24px) saturate(1.05) brightness(0.9)",
+              zIndex: -2,
+              // Preload the image for performance
+              imageRendering: "auto",
+            }}
+            role="presentation"
+            aria-hidden="true"
+          />
 
-      {/* Gradient overlay for readability */}
-      <Box
-        sx={{
-          position: "fixed",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.7) 60%, #16161a 100%)",
-          zIndex: -1,
-        }}
-        role="presentation"
-        aria-hidden="true"
-      />
+          {/* Gradient overlay for readability */}
+          <Box
+            sx={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.7) 60%, #16161a 100%)",
+              zIndex: -1,
+            }}
+            role="presentation"
+            aria-hidden="true"
+          />
+        </>,
+        document.body,
+      )}
 
       {/* Main content with frosted glass panels */}
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4, position: "relative" }}>
