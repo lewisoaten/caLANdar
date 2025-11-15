@@ -388,22 +388,6 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
                     />
                   </Box>
                 )}
-                <TextField
-                  label="Or paste Image URL"
-                  value={
-                    formData.image?.startsWith("data:")
-                      ? ""
-                      : formData.image || ""
-                  }
-                  onChange={(e) => {
-                    setFormData({ ...formData, image: e.target.value || null });
-                    setImagePreview(e.target.value || null);
-                  }}
-                  fullWidth
-                  size="small"
-                  inputProps={{ "aria-label": "Floorplan image URL" }}
-                  helperText="Provide a URL if not uploading"
-                />
               </Stack>
             </Box>
             <TextField

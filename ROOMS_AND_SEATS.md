@@ -22,7 +22,7 @@ CREATE TABLE room (
     event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    image TEXT,  -- URL to floorplan image
+    image TEXT,  -- Base64-encoded image data or URL to floorplan image
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -35,7 +35,7 @@ CREATE TABLE room (
 - `event_id`: Reference to the parent event
 - `name`: Room name (e.g., "Main Hall", "Meeting Room A")
 - `description`: Optional room description
-- `image`: Optional URL to a floorplan image
+- `image`: Base64-encoded image data uploaded by admin
 - `sort_order`: Display order (lower numbers first)
 - `created_at`: Timestamp when room was created
 - `last_modified`: Timestamp of last modification
@@ -185,7 +185,7 @@ Delete a seat.
 Displays a gallery of rooms with their floorplan images. Allows admins to:
 
 - Add new rooms
-- Edit room details (name, description, image URL, sort order)
+- Edit room details (name, description, uploaded image, sort order)
 - Delete rooms
 - Select a room for seat editing
 
@@ -249,7 +249,7 @@ The main event management page now includes:
 
 1. **Enable Seating:** Toggle seating on in the Event Seating Configuration
 2. **Add Rooms:** Use the Room Manager to add one or more rooms
-3. **Add Floorplan Image (optional):** Edit room to add a floorplan image URL
+3. **Upload Floorplan Image:** Click "Upload Image" to select a floorplan image from your computer
 4. **Add Seats:**
    - **Visual method:** Select a room, then click on the floorplan to place seats
    - **Keyboard method:** Use the Seat List to add seats with specific coordinates
@@ -278,10 +278,8 @@ All components follow WCAG 2.1 AA accessibility standards:
 
 Potential improvements for future iterations:
 
-- Drag-and-drop seat positioning in the floorplan editor
 - Bulk seat import from CSV
 - Seat reservation status visualization
 - Room capacity management
 - Seat categories/types (e.g., VIP, standard)
-- Floorplan image upload (instead of URL only)
 - Automatic seat labeling (e.g., generate A1-A10, B1-B10)
