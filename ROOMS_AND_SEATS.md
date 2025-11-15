@@ -5,6 +5,7 @@ This document describes the multi-room floorplans and seat definition feature fo
 ## Overview
 
 This feature allows event administrators to:
+
 - Define multiple rooms for an event, each with its own floorplan image
 - Place and manage seats on each room's floorplan
 - Provide both visual (floorplan editor) and accessible (table view) interfaces for seat management
@@ -29,6 +30,7 @@ CREATE TABLE room (
 ```
 
 **Fields:**
+
 - `id`: Unique room identifier
 - `event_id`: Reference to the parent event
 - `name`: Room name (e.g., "Main Hall", "Meeting Room A")
@@ -57,6 +59,7 @@ CREATE TABLE seat (
 ```
 
 **Fields:**
+
 - `id`: Unique seat identifier
 - `event_id`: Reference to the parent event
 - `room_id`: Reference to the parent room
@@ -74,9 +77,11 @@ All endpoints require admin authentication (`as_admin=true` query parameter).
 ### Room Endpoints
 
 #### GET `/api/events/{eventId}/rooms`
+
 Get all rooms for an event.
 
 **Response:**
+
 ```json
 [
   {
@@ -93,12 +98,15 @@ Get all rooms for an event.
 ```
 
 #### GET `/api/events/{eventId}/rooms/{roomId}`
+
 Get a specific room.
 
 #### POST `/api/events/{eventId}/rooms`
+
 Create a new room.
 
 **Request Body:**
+
 ```json
 {
   "name": "Main Hall",
@@ -109,17 +117,21 @@ Create a new room.
 ```
 
 #### PUT `/api/events/{eventId}/rooms/{roomId}`
+
 Update an existing room.
 
 #### DELETE `/api/events/{eventId}/rooms/{roomId}`
+
 Delete a room (and all its seats).
 
 ### Seat Endpoints
 
 #### GET `/api/events/{eventId}/seats`
+
 Get all seats for an event (across all rooms).
 
 **Response:**
+
 ```json
 [
   {
@@ -137,12 +149,15 @@ Get all seats for an event (across all rooms).
 ```
 
 #### GET `/api/events/{eventId}/seats/{seatId}`
+
 Get a specific seat.
 
 #### POST `/api/events/{eventId}/seats`
+
 Create a new seat.
 
 **Request Body:**
+
 ```json
 {
   "roomId": 1,
@@ -154,31 +169,38 @@ Create a new seat.
 ```
 
 #### PUT `/api/events/{eventId}/seats/{seatId}`
+
 Update an existing seat.
 
 #### DELETE `/api/events/{eventId}/seats/{seatId}`
+
 Delete a seat.
 
 ## Frontend Components
 
 ### RoomManager
+
 **Location:** `frontend/src/components/RoomManager.tsx`
 
 Displays a gallery of rooms with their floorplan images. Allows admins to:
+
 - Add new rooms
 - Edit room details (name, description, image URL, sort order)
 - Delete rooms
 - Select a room for seat editing
 
 **Accessibility:**
+
 - Keyboard navigable
 - ARIA labels for all interactive elements
 - Works on mobile devices
 
 ### FloorplanEditor
+
 **Location:** `frontend/src/components/FloorplanEditor.tsx`
 
 Visual editor for placing seats on a floorplan:
+
 - Displays the room's floorplan image (if available)
 - Click on the floorplan to add a new seat at that position
 - Seats are displayed as circular markers with their labels
@@ -186,14 +208,17 @@ Visual editor for placing seats on a floorplan:
 - Coordinates are stored as percentages (0.0 to 1.0) for responsive positioning
 
 **Accessibility:**
+
 - Floorplan area has proper ARIA labels
 - Keyboard accessible through SeatList component
 - Touch-friendly on mobile devices
 
 ### SeatList
+
 **Location:** `frontend/src/components/SeatList.tsx`
 
 Accessible table view of all seats in a room:
+
 - Displays all seats in a data table
 - Shows label, description, and coordinates
 - Edit and delete buttons for each seat
@@ -202,15 +227,18 @@ Accessible table view of all seats in a room:
 - Screen reader compatible
 
 **Accessibility:**
+
 - Semantic HTML table structure
 - ARIA labels for all controls
 - Keyboard navigation support
 - Works without JavaScript (fallback)
 
 ### EventManagement Integration
+
 **Location:** `frontend/src/components/EventManagement.tsx`
 
 The main event management page now includes:
+
 1. Event details and actions
 2. Seating configuration toggle
 3. Room manager (room gallery)
@@ -222,7 +250,7 @@ The main event management page now includes:
 1. **Enable Seating:** Toggle seating on in the Event Seating Configuration
 2. **Add Rooms:** Use the Room Manager to add one or more rooms
 3. **Add Floorplan Image (optional):** Edit room to add a floorplan image URL
-4. **Add Seats:** 
+4. **Add Seats:**
    - **Visual method:** Select a room, then click on the floorplan to place seats
    - **Keyboard method:** Use the Seat List to add seats with specific coordinates
 5. **Edit Seats:** Hover over seats in the floorplan or use the table view

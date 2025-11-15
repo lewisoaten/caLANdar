@@ -28,9 +28,16 @@ import { Room, Seat, SeatSubmit } from "../types/events";
 interface SeatListProps {
   eventId: number;
   room: Room | null;
+  refreshKey: number;
+  onSeatsChanged: () => void;
 }
 
-const SeatList: React.FC<SeatListProps> = ({ eventId, room }) => {
+const SeatList: React.FC<SeatListProps> = ({
+  eventId,
+  room,
+  refreshKey,
+  onSeatsChanged,
+}) => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
@@ -76,7 +83,7 @@ const SeatList: React.FC<SeatListProps> = ({ eventId, room }) => {
 
   useEffect(() => {
     fetchSeats();
-  }, [fetchSeats]);
+  }, [fetchSeats, refreshKey]);
 
   const handleAddSeat = () => {
     if (!room) return;
@@ -119,6 +126,7 @@ const SeatList: React.FC<SeatListProps> = ({ eventId, room }) => {
         if (response.status === 401) signOut();
         else if (response.status === 204) {
           fetchSeats();
+          onSeatsChanged();
         } else {
           alert("Failed to delete seat");
         }
@@ -157,6 +165,7 @@ const SeatList: React.FC<SeatListProps> = ({ eventId, room }) => {
       .then((data) => {
         if (data) {
           fetchSeats();
+          onSeatsChanged();
           setEditDialogOpen(false);
         }
       })

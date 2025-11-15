@@ -22,9 +22,16 @@ import { Room, Seat, SeatSubmit } from "../types/events";
 interface FloorplanEditorProps {
   eventId: number;
   room: Room | null;
+  refreshKey: number;
+  onSeatsChanged: () => void;
 }
 
-const FloorplanEditor: React.FC<FloorplanEditorProps> = ({ eventId, room }) => {
+const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
+  eventId,
+  room,
+  refreshKey,
+  onSeatsChanged,
+}) => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
@@ -72,7 +79,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({ eventId, room }) => {
 
   useEffect(() => {
     fetchSeats();
-  }, [fetchSeats]);
+  }, [fetchSeats, refreshKey]);
 
   const handleFloorplanClick = (
     event: React.MouseEvent<HTMLDivElement, MouseEvent>,
@@ -130,6 +137,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({ eventId, room }) => {
         if (response.status === 401) signOut();
         else if (response.status === 204) {
           fetchSeats();
+          onSeatsChanged();
         } else {
           alert("Failed to delete seat");
         }
@@ -168,6 +176,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({ eventId, room }) => {
       .then((data) => {
         if (data) {
           fetchSeats();
+          onSeatsChanged();
           setEditDialogOpen(false);
         }
       })

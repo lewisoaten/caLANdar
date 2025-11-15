@@ -16,10 +16,12 @@ import {
   CardMedia,
   CardContent,
   CardActions,
+  CircularProgress,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import AddIcon from "@mui/icons-material/Add";
+import UploadIcon from "@mui/icons-material/Upload";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { Room, RoomSubmit } from "../types/events";
@@ -44,6 +46,8 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
     image: null,
     sortOrder: 0,
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const fetchRooms = useCallback(() => {
     fetch(`/api/events/${eventId}/rooms?as_admin=true`, {
@@ -82,6 +86,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
       image: null,
       sortOrder: rooms.length,
     });
+    setImagePreview(null);
     setEditDialogOpen(true);
   };
 
@@ -93,7 +98,41 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
       image: room.image,
       sortOrder: room.sortOrder,
     });
+    setImagePreview(room.image);
     setEditDialogOpen(true);
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image size must be less than 5MB");
+      return;
+    }
+
+    setUploadingImage(true);
+
+    // Convert to base64 data URL
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      setFormData({ ...formData, image: base64String });
+      setImagePreview(base64String);
+      setUploadingImage(false);
+    };
+    reader.onerror = () => {
+      alert("Failed to read image file");
+      setUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleDeleteRoom = (roomId: number) => {
@@ -301,16 +340,72 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
               fullWidth
               inputProps={{ "aria-label": "Room description" }}
             />
-            <TextField
-              label="Floorplan Image URL"
-              value={formData.image || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, image: e.target.value || null })
-              }
-              fullWidth
-              inputProps={{ "aria-label": "Floorplan image URL" }}
-              helperText="URL to an image of the room's floorplan"
-            />
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Floorplan Image
+              </Typography>
+              <Stack spacing={2}>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={
+                    uploadingImage ? (
+                      <CircularProgress size={20} />
+                    ) : (
+                      <UploadIcon />
+                    )
+                  }
+                  disabled={uploadingImage}
+                  fullWidth
+                >
+                  {uploadingImage ? "Uploading..." : "Upload Image"}
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    aria-label="Upload floorplan image"
+                  />
+                </Button>
+                {imagePreview && (
+                  <Box
+                    sx={{
+                      border: "1px solid",
+                      borderColor: "divider",
+                      borderRadius: 1,
+                      overflow: "hidden",
+                      maxHeight: 200,
+                    }}
+                  >
+                    <img
+                      src={imagePreview}
+                      alt="Floorplan preview"
+                      style={{
+                        width: "100%",
+                        height: "auto",
+                        display: "block",
+                      }}
+                    />
+                  </Box>
+                )}
+                <TextField
+                  label="Or paste Image URL"
+                  value={
+                    formData.image?.startsWith("data:")
+                      ? ""
+                      : formData.image || ""
+                  }
+                  onChange={(e) => {
+                    setFormData({ ...formData, image: e.target.value || null });
+                    setImagePreview(e.target.value || null);
+                  }}
+                  fullWidth
+                  size="small"
+                  inputProps={{ "aria-label": "Floorplan image URL" }}
+                  helperText="Provide a URL if not uploading"
+                />
+              </Stack>
+            </Box>
             <TextField
               label="Sort Order"
               type="number"

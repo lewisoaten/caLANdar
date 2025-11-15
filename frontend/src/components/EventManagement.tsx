@@ -28,6 +28,7 @@ const EventManagement = () => {
   const [open, setOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [seatsRefreshKey, setSeatsRefreshKey] = useState(0);
 
   const handleClose = (value?: EventData) => {
     setOpen(false);
@@ -41,6 +42,11 @@ const EventManagement = () => {
   const navigate = useNavigate();
 
   const { id } = useParams();
+
+  const handleSeatsChanged = () => {
+    // Increment the key to trigger a refresh in both FloorplanEditor and SeatList
+    setSeatsRefreshKey((prev) => prev + 1);
+  };
 
   const updateEvent = () => {
     fetch(`/api/events/${id}?as_admin=true`, {
@@ -168,10 +174,20 @@ const EventManagement = () => {
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 6, lg: 6 }}>
-            <FloorplanEditor eventId={event.id} room={selectedRoom} />
+            <FloorplanEditor
+              eventId={event.id}
+              room={selectedRoom}
+              refreshKey={seatsRefreshKey}
+              onSeatsChanged={handleSeatsChanged}
+            />
           </Grid>
           <Grid size={{ xs: 12, md: 6, lg: 6 }}>
-            <SeatList eventId={event.id} room={selectedRoom} />
+            <SeatList
+              eventId={event.id}
+              room={selectedRoom}
+              refreshKey={seatsRefreshKey}
+              onSeatsChanged={handleSeatsChanged}
+            />
           </Grid>
         </Grid>
       </Container>
