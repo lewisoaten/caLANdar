@@ -7,5 +7,6 @@ pub mod invitation;
 pub mod profile;
 pub mod room;
 pub mod seat;
+pub mod seat_reservation;
 pub mod steam_api;
 pub mod user_games;
