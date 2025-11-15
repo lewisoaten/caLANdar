@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod event_games;
 pub mod event_invitations;
+pub mod event_seating;
 pub mod events;
 pub mod gamers;
 pub mod games;

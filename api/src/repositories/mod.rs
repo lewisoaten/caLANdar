@@ -1,4 +1,5 @@
 pub mod event;
+pub mod event_seating_config;
 pub mod game;
 pub mod game_suggestion;
 pub mod game_update;

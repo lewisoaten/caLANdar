@@ -44,3 +44,27 @@ export const defaultCreateEvent: CreateEvent = {
   timeBegin: roundUpHour(),
   timeEnd: roundUpHour(),
 };
+
+export type EventSeatingConfig = {
+  eventId: number;
+  hasSeating: boolean;
+  allowUnspecifiedSeat: boolean;
+  unspecifiedSeatLabel: string;
+  createdAt: moment.Moment;
+  lastModified: moment.Moment;
+};
+
+export const defaultEventSeatingConfig: EventSeatingConfig = {
+  eventId: 0,
+  hasSeating: false,
+  allowUnspecifiedSeat: false,
+  unspecifiedSeatLabel: "Unspecified Seat",
+  createdAt: moment(),
+  lastModified: moment(),
+};
+
+export type EventSeatingConfigSubmit = {
+  hasSeating: boolean;
+  allowUnspecifiedSeat: boolean;
+  unspecifiedSeatLabel: string;
+};

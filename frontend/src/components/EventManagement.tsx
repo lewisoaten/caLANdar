@@ -15,6 +15,7 @@ import { EventData, defaultEventData } from "../types/events";
 import InvitationsTable from "./InvitationsTable";
 import EventsAdminDialog from "./EventsAdminDialog";
 import SendEmailDialog from "./SendEmailDialog";
+import EventSeatingConfig from "./EventSeatingConfig";
 
 const EventManagement = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -139,6 +140,13 @@ const EventManagement = () => {
                 {event.description}
               </Typography>
             </Paper>
+          </Grid>
+        </Grid>
+      </Container>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
+            <EventSeatingConfig eventId={event.id} />
           </Grid>
         </Grid>
       </Container>

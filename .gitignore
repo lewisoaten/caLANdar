@@ -7,3 +7,4 @@ node_modules
 .rustup
 .npm-cache/
 .npm-prefix/
+Secrets.toml
