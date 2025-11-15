@@ -79,14 +79,14 @@ const Event = () => {
             sx={{
               position: "fixed",
               top: 0,
-              left: 0,
+              left: { xs: 0, sm: 240 },
               right: 0,
-              height: "70vh", // Image occupies top portion only
+              height: "100%", // Image occupies top portion only
               backgroundImage: `url("${eventImageUrl}")`,
               backgroundSize: "contain", // Show full image without extreme zoom
               backgroundPosition: "center top",
               backgroundRepeat: "no-repeat",
-              filter: "blur(8px) saturate(1.05) brightness(0.9)",
+              filter: "blur(1px) saturate(1.05) brightness(0.9)",
               zIndex: -2,
               // Preload the image for performance
               imageRendering: "auto",
