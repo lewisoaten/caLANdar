@@ -46,6 +46,8 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
     x: 0.5,
     y: 0.5,
   });
+  const [draggingSeat, setDraggingSeat] = useState<Seat | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -84,7 +86,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
   const handleFloorplanClick = (
     event: React.MouseEvent<HTMLDivElement, MouseEvent>,
   ) => {
-    if (!room || !containerRef.current) return;
+    if (!room || !containerRef.current || isDragging) return;
 
     const rect = containerRef.current.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width;
@@ -100,6 +102,102 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
       y,
     });
     setEditDialogOpen(true);
+  };
+
+  const handleSeatMouseDown = (
+    seat: Seat,
+    event: React.MouseEvent<HTMLDivElement, MouseEvent>,
+  ) => {
+    // Don't start drag if clicking on edit/delete buttons
+    if ((event.target as HTMLElement).closest("button")) {
+      return;
+    }
+    event.stopPropagation();
+    setDraggingSeat(seat);
+    setIsDragging(true);
+  };
+
+  const handleSeatDrag = (
+    event: React.MouseEvent<HTMLDivElement, MouseEvent>,
+  ) => {
+    if (!draggingSeat || !containerRef.current || !room) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(
+      0,
+      Math.min(1, (event.clientX - rect.left) / rect.width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(1, (event.clientY - rect.top) / rect.height),
+    );
+
+    // Update seat position optimistically in local state
+    setSeats((prevSeats) =>
+      prevSeats.map((s) => (s.id === draggingSeat.id ? { ...s, x, y } : s)),
+    );
+  };
+
+  const handleSeatDragEnd = (
+    event: React.MouseEvent<HTMLDivElement, MouseEvent>,
+  ) => {
+    if (!draggingSeat || !containerRef.current || !room) {
+      setDraggingSeat(null);
+      setIsDragging(false);
+      return;
+    }
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(
+      0,
+      Math.min(1, (event.clientX - rect.left) / rect.width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(1, (event.clientY - rect.top) / rect.height),
+    );
+
+    // Save the new position to the server
+    fetch(`/api/events/${eventId}/seats/${draggingSeat.id}?as_admin=true`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+      body: JSON.stringify({
+        roomId: draggingSeat.roomId,
+        label: draggingSeat.label,
+        description: draggingSeat.description,
+        x,
+        y,
+      }),
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok) {
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as Seat);
+        } else {
+          throw new Error("Failed to update seat position");
+        }
+      })
+      .then((data) => {
+        if (data) {
+          fetchSeats();
+          onSeatsChanged();
+        }
+      })
+      .catch((error) => {
+        console.error("Error updating seat position:", error);
+        // Revert to original position on error
+        fetchSeats();
+      })
+      .finally(() => {
+        setDraggingSeat(null);
+        setIsDragging(false);
+      });
   };
 
   const handleEditSeat = (
@@ -220,6 +318,9 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
       <Box
         ref={containerRef}
         onClick={handleFloorplanClick}
+        onMouseMove={isDragging ? handleSeatDrag : undefined}
+        onMouseUp={isDragging ? handleSeatDragEnd : undefined}
+        onMouseLeave={isDragging ? handleSeatDragEnd : undefined}
         sx={{
           position: "relative",
           width: "100%",
@@ -228,10 +329,10 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
           borderColor: "divider",
           borderRadius: 1,
           overflow: "hidden",
-          cursor: "crosshair",
+          cursor: isDragging ? "grabbing" : "crosshair",
           backgroundColor: room.image ? "transparent" : "grey.100",
         }}
-        aria-label="Floorplan editor - click to add seats"
+        aria-label="Floorplan editor - click to add seats, drag to move them"
         role="button"
         tabIndex={0}
       >
@@ -265,6 +366,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
         {seats.map((seat) => (
           <Box
             key={seat.id}
+            onMouseDown={(e) => handleSeatMouseDown(seat, e)}
             sx={{
               position: "absolute",
               left: `${seat.x * 100}%`,
@@ -280,13 +382,18 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               justifyContent: "center",
               fontSize: "0.75rem",
               fontWeight: "bold",
-              cursor: "pointer",
+              cursor: draggingSeat?.id === seat.id ? "grabbing" : "grab",
+              userSelect: "none",
               "&:hover": {
                 backgroundColor: "primary.dark",
               },
+              ...(draggingSeat?.id === seat.id && {
+                opacity: 0.8,
+                zIndex: 1000,
+              }),
             }}
             title={seat.description || seat.label}
-            aria-label={`Seat ${seat.label}${seat.description ? `: ${seat.description}` : ""}`}
+            aria-label={`Seat ${seat.label}${seat.description ? `: ${seat.description}` : ""} - drag to move`}
           >
             <span>{seat.label}</span>
             <Box
@@ -338,8 +445,8 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
       </Box>
 
       <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-        Click on the floorplan to add a new seat. Hover over seats to edit or
-        delete them.
+        Click on the floorplan to add a new seat. Drag seats to move them, or
+        hover over them to edit or delete.
       </Typography>
 
       <Dialog
