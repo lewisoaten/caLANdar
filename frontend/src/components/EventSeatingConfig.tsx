@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
 import {
   Paper,
   Typography,
@@ -32,11 +32,7 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({ eventId }) => {
   const [loading, setLoading] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => {
-    fetchConfig();
-  }, [eventId]);
-
-  const fetchConfig = () => {
+  const fetchConfig = useCallback(() => {
     fetch(`/api/events/${eventId}/seating-config?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
@@ -62,7 +58,11 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({ eventId }) => {
       .catch((error) => {
         console.error("Error fetching seating config:", error);
       });
-  };
+  }, [eventId, token, signOut]);
+
+  useEffect(() => {
+    fetchConfig();
+  }, [fetchConfig]);
 
   const handleSave = () => {
     setLoading(true);

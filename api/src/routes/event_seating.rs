@@ -75,7 +75,6 @@ impl SchemaExample for EventSeatingConfigSubmit {
 custom_errors!(
     EventSeatingConfigGetError,
     Unauthorized,
-    NotFound,
     InternalServerError
 );
 
