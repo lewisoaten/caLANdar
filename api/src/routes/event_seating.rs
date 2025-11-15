@@ -22,19 +22,19 @@ use super::SchemaExample;
 pub struct EventSeatingConfig {
     /// The event ID this configuration belongs to.
     pub event_id: i32,
-    
+
     /// Whether seating is enabled for this event.
     pub has_seating: bool,
-    
+
     /// Whether the 'unspecified seat' option is allowed.
     pub allow_unspecified_seat: bool,
-    
+
     /// Label for the unspecified seat option.
     pub unspecified_seat_label: String,
-    
+
     /// The date the configuration was created.
     pub created_at: DateTime<Utc>,
-    
+
     /// The last time this configuration was modified.
     pub last_modified: DateTime<Utc>,
 }
