@@ -107,12 +107,7 @@ pub async fn get_all(
     }
 }
 
-custom_errors!(
-    SeatGetError,
-    Unauthorized,
-    NotFound,
-    InternalServerError
-);
+custom_errors!(SeatGetError, Unauthorized, NotFound, InternalServerError);
 
 /// Get a specific seat (admin only).
 #[openapi(tag = "Seats")]
@@ -133,12 +128,7 @@ pub async fn get(
     }
 }
 
-custom_errors!(
-    SeatPostError,
-    Unauthorized,
-    BadRequest,
-    InternalServerError
-);
+custom_errors!(SeatPostError, Unauthorized, BadRequest, InternalServerError);
 
 /// Create a new seat (admin only).
 #[openapi(tag = "Seats")]

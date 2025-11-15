@@ -101,12 +101,7 @@ pub async fn get_all(
     }
 }
 
-custom_errors!(
-    RoomGetError,
-    Unauthorized,
-    NotFound,
-    InternalServerError
-);
+custom_errors!(RoomGetError, Unauthorized, NotFound, InternalServerError);
 
 /// Get a specific room (admin only).
 #[openapi(tag = "Rooms")]
@@ -127,12 +122,7 @@ pub async fn get(
     }
 }
 
-custom_errors!(
-    RoomPostError,
-    Unauthorized,
-    BadRequest,
-    InternalServerError
-);
+custom_errors!(RoomPostError, Unauthorized, BadRequest, InternalServerError);
 
 /// Create a new room (admin only).
 #[openapi(tag = "Rooms")]

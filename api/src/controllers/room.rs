@@ -34,17 +34,11 @@ pub async fn get(pool: &PgPool, room_id: i32) -> Result<Option<Room>, Error> {
     match room::get(pool, room_id).await {
         Ok(Some(room)) => Ok(Some(Room::from(room))),
         Ok(None) => Ok(None),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get room due to: {e}"
-        ))),
+        Err(e) => Err(Error::Controller(format!("Unable to get room due to: {e}"))),
     }
 }
 
-pub async fn create(
-    pool: &PgPool,
-    event_id: i32,
-    room_submit: RoomSubmit,
-) -> Result<Room, Error> {
+pub async fn create(pool: &PgPool, event_id: i32, room_submit: RoomSubmit) -> Result<Room, Error> {
     if room_submit.name.trim().is_empty() {
         return Err(Error::BadInput("Room name cannot be empty".to_string()));
     }
@@ -66,11 +60,7 @@ pub async fn create(
     }
 }
 
-pub async fn update(
-    pool: &PgPool,
-    room_id: i32,
-    room_submit: RoomSubmit,
-) -> Result<Room, Error> {
+pub async fn update(pool: &PgPool, room_id: i32, room_submit: RoomSubmit) -> Result<Room, Error> {
     if room_submit.name.trim().is_empty() {
         return Err(Error::BadInput("Room name cannot be empty".to_string()));
     }

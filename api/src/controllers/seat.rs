@@ -35,17 +35,11 @@ pub async fn get(pool: &PgPool, seat_id: i32) -> Result<Option<Seat>, Error> {
     match seat::get(pool, seat_id).await {
         Ok(Some(seat)) => Ok(Some(Seat::from(seat))),
         Ok(None) => Ok(None),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get seat due to: {e}"
-        ))),
+        Err(e) => Err(Error::Controller(format!("Unable to get seat due to: {e}"))),
     }
 }
 
-pub async fn create(
-    pool: &PgPool,
-    event_id: i32,
-    seat_submit: SeatSubmit,
-) -> Result<Seat, Error> {
+pub async fn create(pool: &PgPool, event_id: i32, seat_submit: SeatSubmit) -> Result<Seat, Error> {
     if seat_submit.label.trim().is_empty() {
         return Err(Error::BadInput("Seat label cannot be empty".to_string()));
     }
