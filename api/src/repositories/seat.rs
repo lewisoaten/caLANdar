@@ -38,6 +38,7 @@ pub async fn get_all_by_event(pool: &PgPool, event_id: i32) -> Result<Vec<Seat>,
     .await
 }
 
+#[allow(dead_code)]
 pub async fn get_all_by_room(pool: &PgPool, room_id: i32) -> Result<Vec<Seat>, sqlx::Error> {
     sqlx::query_as!(
         Seat,

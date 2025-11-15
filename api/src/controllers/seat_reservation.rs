@@ -2,9 +2,7 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::{
-        event_seating_config, invitation, seat, seat_reservation,
-    },
+    repositories::{event_seating_config, invitation, seat, seat_reservation},
     routes::seat_reservations::{SeatReservation, SeatReservationSubmit},
     util::is_event_active,
 };
@@ -28,13 +26,13 @@ fn has_bucket_overlap(buckets1: &[u8], buckets2: &[u8]) -> bool {
     if buckets1.len() != buckets2.len() {
         return false;
     }
-    
+
     for (b1, b2) in buckets1.iter().zip(buckets2.iter()) {
         if *b1 == 1 && *b2 == 1 {
             return true;
         }
     }
-    
+
     false
 }
 
@@ -51,7 +49,7 @@ async fn check_seat_conflicts(
     }
 
     let seat_id_value = seat_id.expect("seat_id should be Some");
-    
+
     // Get all existing reservations for this seat
     let existing_reservations = match seat_reservation::get_by_seat(pool, seat_id_value).await {
         Ok(reservations) => reservations,
@@ -82,7 +80,10 @@ async fn check_seat_conflicts(
 /// Get all seat reservations for an event (admin only)
 pub async fn get_all(pool: &PgPool, event_id: i32) -> Result<Vec<SeatReservation>, Error> {
     match seat_reservation::get_all_by_event(pool, event_id).await {
-        Ok(reservations) => Ok(reservations.into_iter().map(SeatReservation::from).collect()),
+        Ok(reservations) => Ok(reservations
+            .into_iter()
+            .map(SeatReservation::from)
+            .collect()),
         Err(e) => Err(Error::Controller(format!(
             "Unable to get seat reservations due to: {e}"
         ))),
@@ -104,7 +105,62 @@ pub async fn get_by_email(
     }
 }
 
+/// Validate that a seat exists and belongs to the given event
+async fn validate_seat(pool: &PgPool, seat_id: i32, event_id: i32) -> Result<(), Error> {
+    match seat::get(pool, seat_id).await {
+        Ok(None) => Err(Error::BadInput(format!(
+            "Seat with ID {seat_id} does not exist"
+        ))),
+        Ok(Some(seat_data)) => {
+            if seat_data.event_id == event_id {
+                Ok(())
+            } else {
+                Err(Error::BadInput(format!(
+                    "Seat {seat_id} does not belong to event {event_id}"
+                )))
+            }
+        }
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to validate seat due to: {e}"
+        ))),
+    }
+}
+
+/// Validate that unspecified seats are allowed for the event
+async fn validate_unspecified_seat_allowed(pool: &PgPool, event_id: i32) -> Result<(), Error> {
+    match event_seating_config::get(pool, event_id).await {
+        Ok(Some(config)) => {
+            if config.allow_unspecified_seat {
+                Ok(())
+            } else {
+                Err(Error::BadInput(
+                    "Unspecified seat reservations are not allowed for this event".to_string(),
+                ))
+            }
+        }
+        Ok(None) => Err(Error::BadInput(
+            "Seating is not configured for this event".to_string(),
+        )),
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to check seating config due to: {e}"
+        ))),
+    }
+}
+
+/// Validate attendance buckets length matches event duration
+fn validate_attendance_buckets(buckets: &[u8], expected_count: usize) -> Result<(), Error> {
+    if buckets.len() == expected_count {
+        Ok(())
+    } else {
+        Err(Error::BadInput(format!(
+            "Attendance buckets length mismatch. Expected {expected_count}, got {}",
+            buckets.len()
+        )))
+    }
+}
+
 /// Create a new seat reservation
+#[allow(clippy::too_many_lines)]
 pub async fn create(
     pool: &PgPool,
     event_id: i32,
@@ -159,36 +215,12 @@ pub async fn create(
         event.time_end,
     )
     .len();
-    
-    if submit.attendance_buckets.len() != expected_bucket_count {
-        return Err(Error::BadInput(format!(
-            "Attendance buckets length mismatch. Expected {expected_bucket_count}, got {}",
-            submit.attendance_buckets.len()
-        )));
-    }
+
+    validate_attendance_buckets(&submit.attendance_buckets, expected_bucket_count)?;
 
     // If a specific seat is requested, validate it exists and check for conflicts
     if let Some(seat_id) = submit.seat_id {
-        // Check if seat exists and belongs to this event
-        match seat::get(pool, seat_id).await {
-            Ok(None) => {
-                return Err(Error::BadInput(format!(
-                    "Seat with ID {seat_id} does not exist"
-                )))
-            }
-            Ok(Some(seat_data)) => {
-                if seat_data.event_id != event_id {
-                    return Err(Error::BadInput(format!(
-                        "Seat {seat_id} does not belong to event {event_id}"
-                    )));
-                }
-            }
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to validate seat due to: {e}"
-                )))
-            }
-        }
+        validate_seat(pool, seat_id, event_id).await?;
 
         // Check for conflicts
         if check_seat_conflicts(pool, Some(seat_id), &submit.attendance_buckets, None).await? {
@@ -199,25 +231,7 @@ pub async fn create(
         }
     } else {
         // For unspecified seat, check if it's allowed
-        match event_seating_config::get(pool, event_id).await {
-            Ok(Some(config)) => {
-                if !config.allow_unspecified_seat {
-                    return Err(Error::BadInput(
-                        "Unspecified seat reservations are not allowed for this event".to_string(),
-                    ));
-                }
-            }
-            Ok(None) => {
-                return Err(Error::BadInput(
-                    "Seating is not configured for this event".to_string(),
-                ))
-            }
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to check seating config due to: {e}"
-                )))
-            }
-        }
+        validate_unspecified_seat_allowed(pool, event_id).await?;
     }
 
     // Check if user already has a reservation for this event
@@ -246,6 +260,7 @@ pub async fn create(
 }
 
 /// Update an existing seat reservation
+#[allow(clippy::too_many_lines)]
 pub async fn update(
     pool: &PgPool,
     event_id: i32,
@@ -292,40 +307,21 @@ pub async fn update(
         event.time_end,
     )
     .len();
-    
-    if submit.attendance_buckets.len() != expected_bucket_count {
-        return Err(Error::BadInput(format!(
-            "Attendance buckets length mismatch. Expected {expected_bucket_count}, got {}",
-            submit.attendance_buckets.len()
-        )));
-    }
+
+    validate_attendance_buckets(&submit.attendance_buckets, expected_bucket_count)?;
 
     // If a specific seat is requested, validate it and check for conflicts
     if let Some(seat_id) = submit.seat_id {
-        // Check if seat exists and belongs to this event
-        match seat::get(pool, seat_id).await {
-            Ok(None) => {
-                return Err(Error::BadInput(format!(
-                    "Seat with ID {seat_id} does not exist"
-                )))
-            }
-            Ok(Some(seat_data)) => {
-                if seat_data.event_id != event_id {
-                    return Err(Error::BadInput(format!(
-                        "Seat {seat_id} does not belong to event {event_id}"
-                    )));
-                }
-            }
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to validate seat due to: {e}"
-                )))
-            }
-        }
+        validate_seat(pool, seat_id, event_id).await?;
 
         // Check for conflicts (excluding this user's existing reservation)
-        if check_seat_conflicts(pool, Some(seat_id), &submit.attendance_buckets, Some(&email))
-            .await?
+        if check_seat_conflicts(
+            pool,
+            Some(seat_id),
+            &submit.attendance_buckets,
+            Some(&email),
+        )
+        .await?
         {
             return Err(Error::Conflict(
                 "This seat is already reserved for one or more of the selected time buckets"
@@ -334,35 +330,12 @@ pub async fn update(
         }
     } else {
         // For unspecified seat, check if it's allowed
-        match event_seating_config::get(pool, event_id).await {
-            Ok(Some(config)) => {
-                if !config.allow_unspecified_seat {
-                    return Err(Error::BadInput(
-                        "Unspecified seat reservations are not allowed for this event".to_string(),
-                    ));
-                }
-            }
-            Ok(None) => {
-                return Err(Error::BadInput(
-                    "Seating is not configured for this event".to_string(),
-                ))
-            }
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to check seating config due to: {e}"
-                )))
-            }
-        }
+        validate_unspecified_seat_allowed(pool, event_id).await?;
     }
 
     // Update the reservation
-    match seat_reservation::update(
-        pool,
-        existing.id,
-        submit.seat_id,
-        submit.attendance_buckets,
-    )
-    .await
+    match seat_reservation::update(pool, existing.id, submit.seat_id, submit.attendance_buckets)
+        .await
     {
         Ok(reservation) => Ok(SeatReservation::from(reservation)),
         Err(e) => Err(Error::Controller(format!(

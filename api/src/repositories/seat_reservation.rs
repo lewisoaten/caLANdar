@@ -39,7 +39,11 @@ pub async fn get_all_by_event(
 }
 
 /// Get a specific seat reservation by ID
-pub async fn get(pool: &PgPool, reservation_id: i32) -> Result<Option<SeatReservation>, sqlx::Error> {
+#[allow(dead_code)]
+pub async fn get(
+    pool: &PgPool,
+    reservation_id: i32,
+) -> Result<Option<SeatReservation>, sqlx::Error> {
     sqlx::query_as!(
         SeatReservation,
         r#"
@@ -88,10 +92,7 @@ pub async fn get_by_email(
 }
 
 /// Get all reservations for a specific seat
-pub async fn get_by_seat(
-    pool: &PgPool,
-    seat_id: i32,
-) -> Result<Vec<SeatReservation>, sqlx::Error> {
+pub async fn get_by_seat(pool: &PgPool, seat_id: i32) -> Result<Vec<SeatReservation>, sqlx::Error> {
     sqlx::query_as!(
         SeatReservation,
         r#"
@@ -182,6 +183,7 @@ pub async fn update(
 }
 
 /// Delete a seat reservation
+#[allow(dead_code)]
 pub async fn delete(pool: &PgPool, reservation_id: i32) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
@@ -196,11 +198,7 @@ pub async fn delete(pool: &PgPool, reservation_id: i32) -> Result<(), sqlx::Erro
 }
 
 /// Delete a seat reservation by email and event
-pub async fn delete_by_email(
-    pool: &PgPool,
-    event_id: i32,
-    email: &str,
-) -> Result<(), sqlx::Error> {
+pub async fn delete_by_email(pool: &PgPool, event_id: i32, email: &str) -> Result<(), sqlx::Error> {
     sqlx::query!(
         r#"
         DELETE FROM seat_reservation

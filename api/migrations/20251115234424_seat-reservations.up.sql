@@ -10,9 +10,9 @@ CREATE TABLE seat_reservation (
     attendance_buckets BYTEA NOT NULL,  -- Array of bytes representing time buckets (1=attending, 0=not attending)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
+
     -- Foreign key to ensure invitation exists
-    CONSTRAINT fk_invitation FOREIGN KEY (event_id, invitation_email) 
+    CONSTRAINT fk_invitation FOREIGN KEY (event_id, invitation_email)
         REFERENCES invitation(event_id, email) ON DELETE CASCADE
 );
 
