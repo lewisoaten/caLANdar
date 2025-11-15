@@ -2,7 +2,8 @@ import * as React from "react";
 import moment from "moment";
 import { useEffect, useState, useContext } from "react";
 import { createPortal } from "react-dom";
-import { Container, Paper, Typography, Grid, Box } from "@mui/material";
+import { Container, Paper, Typography, Grid, Box, alpha } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
@@ -18,6 +19,7 @@ const Event = () => {
   const [event, setEvent] = useState(defaultEventData);
   const [loaded, setLoaded] = useState(false);
   const [responded, setResponded] = useState(false);
+  const theme = useTheme();
 
   const { id } = useParams();
 
@@ -64,10 +66,50 @@ const Event = () => {
     ? `data:image/jpeg;base64,${event.image}`
     : "/static/lan_party_image.jpg";
 
-  // Check if user prefers reduced motion
-  const prefersReducedMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Check if user prefers reduced motion (reactive to changes)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e: MediaQueryListEvent) =>
+      setPrefersReducedMotion(e.matches);
+    // Set initial value in case it changed since mount
+    setPrefersReducedMotion(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handler);
+    return () => {
+      mediaQuery.removeEventListener("change", handler);
+    };
+  }, []);
+
+  // Preload the background image for performance
+  useEffect(() => {
+    const img = new Image();
+    img.src = eventImageUrl;
+  }, [eventImageUrl]);
+
+  // Frosted glass styles - extracted to avoid duplication
+  const frostedGlassSx = {
+    backdropFilter: "blur(12px)",
+    backgroundColor: alpha(theme.palette.background.paper, 0.4),
+    backgroundImage: "none !important", // Override theme gradient
+    border: `1px solid ${alpha(theme.palette.primary.main, 0.5)}`,
+    boxShadow: `0 0 24px -4px ${alpha(theme.palette.primary.main, 0.3)}`,
+    color: theme.palette.text.primary,
+    transition: prefersReducedMotion ? "none" : "all 0.3s ease-in-out",
+    "&:hover": {
+      border: `1px solid ${alpha(theme.palette.primary.main, 0.7)}`,
+      boxShadow: `0 0 32px -2px ${alpha(theme.palette.primary.main, 0.4)}`,
+    },
+    "&:focus-within": {
+      outline: `2px solid ${alpha(theme.palette.secondary.main, 0.8)}`,
+      outlineOffset: "2px",
+    },
+  };
 
   return (
     <>
@@ -81,14 +123,13 @@ const Event = () => {
               top: 0,
               left: { xs: 0, sm: 240 },
               right: 0,
-              height: "100%", // Image occupies top portion only
+              height: "70vh", // Image occupies top 70% of viewport
               backgroundImage: `url("${eventImageUrl}")`,
               backgroundSize: "contain", // Show full image without extreme zoom
               backgroundPosition: "center top",
               backgroundRepeat: "no-repeat",
-              filter: "blur(1px) saturate(1.05) brightness(0.9)",
+              filter: "blur(8px) saturate(1.05) brightness(0.9)",
               zIndex: -2,
-              // Preload the image for performance
               imageRendering: "auto",
             }}
             role="presentation"
@@ -103,8 +144,7 @@ const Event = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              background:
-                "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.75) 30%, rgba(22,22,26,0.95) 50%, #16161a 70%)",
+              background: `linear-gradient(to bottom, ${alpha("#000", 0.5)} 0%, ${alpha("#000", 0.75)} 30%, ${alpha(theme.palette.background.default, 0.95)} 50%, ${theme.palette.background.default} 70%)`,
               zIndex: -1,
             }}
             role="presentation"
@@ -121,30 +161,10 @@ const Event = () => {
           <Grid size={{ xs: 12, md: 12, lg: 12 }}>
             <Paper
               sx={{
+                ...frostedGlassSx,
                 p: 3,
                 display: "flex",
                 flexDirection: "column",
-                // Frosted glass effect - use !important to override theme defaults
-                backdropFilter: "blur(12px) !important",
-                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
-                backgroundImage: "none !important", // Override theme gradient
-                border: "1px solid rgba(95, 39, 221, 0.5) !important",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
-                // Accessibility: high contrast text
-                color: "#ffffff",
-                // Smooth transitions (disabled if user prefers reduced motion)
-                transition: prefersReducedMotion
-                  ? "none"
-                  : "all 0.3s ease-in-out",
-                "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
-                },
-                // Ensure keyboard focus is visible
-                "&:focus-within": {
-                  outline: "2px solid rgba(8, 247, 254, 0.8)",
-                  outlineOffset: "2px",
-                },
               }}
             >
               <Grid container spacing={2}>
@@ -153,7 +173,7 @@ const Event = () => {
                     component="h2"
                     variant="h4"
                     sx={{
-                      color: "#d0d7f7",
+                      color: theme.palette.text.secondary,
                       fontWeight: 700,
                     }}
                     gutterBottom
@@ -165,12 +185,14 @@ const Event = () => {
                   <Paper
                     variant="outlined"
                     sx={{
-                      backdropFilter: "blur(8px) !important",
-                      backgroundColor: "rgba(35, 41, 70, 0.3) !important",
+                      backdropFilter: "blur(8px)",
+                      backgroundColor: alpha(
+                        theme.palette.background.paper,
+                        0.3,
+                      ),
                       backgroundImage: "none !important", // Override theme gradient
-                      border: "1px solid rgba(8, 247, 254, 0.4) !important",
-                      boxShadow:
-                        "0 0 16px -4px rgba(8, 247, 254, 0.2) !important",
+                      border: `1px solid ${alpha(theme.palette.secondary.main, 0.4)}`,
+                      boxShadow: `0 0 16px -4px ${alpha(theme.palette.secondary.main, 0.2)}`,
                     }}
                   >
                     <Typography
@@ -179,7 +201,7 @@ const Event = () => {
                       display="block"
                       align="center"
                       sx={{
-                        color: "#08F7FE",
+                        color: theme.palette.secondary.main,
                         fontWeight: 600,
                       }}
                       gutterBottom
@@ -194,7 +216,7 @@ const Event = () => {
                     gutterBottom
                     sx={{
                       whiteSpace: "pre-wrap",
-                      color: "#ffffff",
+                      color: theme.palette.text.primary,
                       lineHeight: 1.7,
                     }}
                   >
@@ -218,28 +240,11 @@ const Event = () => {
           <Grid size={{ xs: 12, md: 6, lg: 6 }}>
             <Paper
               sx={{
+                ...frostedGlassSx,
                 p: 3,
                 display: "flex",
                 flexDirection: "column",
                 minHeight: "300px",
-                // Frosted glass effect - use !important to override theme defaults
-                backdropFilter: "blur(12px) !important",
-                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
-                backgroundImage: "none !important", // Override theme gradient
-                border: "1px solid rgba(95, 39, 221, 0.5) !important",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
-                color: "#ffffff",
-                transition: prefersReducedMotion
-                  ? "none"
-                  : "all 0.3s ease-in-out",
-                "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
-                },
-                "&:focus-within": {
-                  outline: "2px solid rgba(8, 247, 254, 0.8)",
-                  outlineOffset: "2px",
-                },
               }}
             >
               {loaded && (
@@ -252,28 +257,11 @@ const Event = () => {
           <Grid size={{ xs: 12, md: 6, lg: 6 }}>
             <Paper
               sx={{
+                ...frostedGlassSx,
                 p: 3,
                 display: "flex",
                 flexDirection: "column",
                 minHeight: "300px",
-                // Frosted glass effect - use !important to override theme defaults
-                backdropFilter: "blur(12px) !important",
-                backgroundColor: "rgba(35, 41, 70, 0.4) !important",
-                backgroundImage: "none !important", // Override theme gradient
-                border: "1px solid rgba(95, 39, 221, 0.5) !important",
-                boxShadow: "0 0 24px -4px rgba(95, 39, 221, 0.3) !important",
-                color: "#ffffff",
-                transition: prefersReducedMotion
-                  ? "none"
-                  : "all 0.3s ease-in-out",
-                "&:hover": {
-                  border: "1px solid rgba(95, 39, 221, 0.7) !important",
-                  boxShadow: "0 0 32px -2px rgba(95, 39, 221, 0.4) !important",
-                },
-                "&:focus-within": {
-                  outline: "2px solid rgba(8, 247, 254, 0.8)",
-                  outlineOffset: "2px",
-                },
               }}
             >
               {loaded && (
