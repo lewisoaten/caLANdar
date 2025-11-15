@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            event_id,\n            name,\n            description,\n            image,\n            sort_order,\n            created_at,\n            last_modified\n        FROM room\n        WHERE event_id = $1\n        ORDER BY sort_order, id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "image",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "64a127ad872b873c78c31fd2cfd284ecd79a5619ef26515371efc5ddfbc136ca"
+}

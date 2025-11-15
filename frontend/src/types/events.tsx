@@ -68,3 +68,64 @@ export type EventSeatingConfigSubmit = {
   allowUnspecifiedSeat: boolean;
   unspecifiedSeatLabel: string;
 };
+
+export type Room = {
+  id: number;
+  eventId: number;
+  name: string;
+  description: string | null;
+  image: string | null;
+  sortOrder: number;
+  createdAt: moment.Moment;
+  lastModified: moment.Moment;
+};
+
+export const defaultRoom: Room = {
+  id: 0,
+  eventId: 0,
+  name: "",
+  description: null,
+  image: null,
+  sortOrder: 0,
+  createdAt: moment(),
+  lastModified: moment(),
+};
+
+export type RoomSubmit = {
+  name: string;
+  description: string | null;
+  image: string | null;
+  sortOrder: number;
+};
+
+export type Seat = {
+  id: number;
+  eventId: number;
+  roomId: number;
+  label: string;
+  description: string | null;
+  x: number;
+  y: number;
+  createdAt: moment.Moment;
+  lastModified: moment.Moment;
+};
+
+export const defaultSeat: Seat = {
+  id: 0,
+  eventId: 0,
+  roomId: 0,
+  label: "",
+  description: null,
+  x: 0.5,
+  y: 0.5,
+  createdAt: moment(),
+  lastModified: moment(),
+};
+
+export type SeatSubmit = {
+  roomId: number;
+  label: string;
+  description: string | null;
+  x: number;
+  y: number;
+};

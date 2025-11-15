@@ -6,6 +6,8 @@ pub mod events;
 pub mod gamers;
 pub mod games;
 pub mod profiles;
+pub mod rooms;
+pub mod seats;
 
 /// Trait for adds examples to API documentation
 trait SchemaExample {

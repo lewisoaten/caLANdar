@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        DELETE FROM room\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "79577d2ede1ef6b2c507e5b372a566dcb319c243929d0ffec61534feea875f5c"
+}

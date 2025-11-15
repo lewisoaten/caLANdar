@@ -11,11 +11,14 @@ import {
 import { useParams, useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { EventData, defaultEventData } from "../types/events";
+import { EventData, defaultEventData, Room } from "../types/events";
 import InvitationsTable from "./InvitationsTable";
 import EventsAdminDialog from "./EventsAdminDialog";
 import SendEmailDialog from "./SendEmailDialog";
 import EventSeatingConfig from "./EventSeatingConfig";
+import RoomManager from "./RoomManager";
+import FloorplanEditor from "./FloorplanEditor";
+import SeatList from "./SeatList";
 
 const EventManagement = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -24,6 +27,8 @@ const EventManagement = () => {
   const [event, setEvent] = useState(defaultEventData);
   const [open, setOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
+  const [seatsRefreshKey, setSeatsRefreshKey] = useState(0);
 
   const handleClose = (value?: EventData) => {
     setOpen(false);
@@ -37,6 +42,11 @@ const EventManagement = () => {
   const navigate = useNavigate();
 
   const { id } = useParams();
+
+  const handleSeatsChanged = () => {
+    // Increment the key to trigger a refresh in both FloorplanEditor and SeatList
+    setSeatsRefreshKey((prev) => prev + 1);
+  };
 
   const updateEvent = () => {
     fetch(`/api/events/${id}?as_admin=true`, {
@@ -93,6 +103,10 @@ const EventManagement = () => {
     setEmailDialogOpen(false);
   };
 
+  const handleRoomSelect = (room: Room | null) => {
+    setSelectedRoom(room);
+  };
+
   return (
     <React.Fragment>
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -147,6 +161,33 @@ const EventManagement = () => {
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 12, lg: 12 }}>
             <EventSeatingConfig eventId={event.id} />
+          </Grid>
+        </Grid>
+      </Container>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
+            <RoomManager eventId={event.id} onRoomSelect={handleRoomSelect} />
+          </Grid>
+        </Grid>
+      </Container>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={3}>
+          <Grid size={{ xs: 12, md: 6, lg: 6 }}>
+            <FloorplanEditor
+              eventId={event.id}
+              room={selectedRoom}
+              refreshKey={seatsRefreshKey}
+              onSeatsChanged={handleSeatsChanged}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 6, lg: 6 }}>
+            <SeatList
+              eventId={event.id}
+              room={selectedRoom}
+              refreshKey={seatsRefreshKey}
+              onSeatsChanged={handleSeatsChanged}
+            />
           </Grid>
         </Grid>
       </Container>
