@@ -261,6 +261,8 @@ async fn rocket(
                 routes::event_invitations::patch_admin,
                 routes::event_invitations::patch,
                 routes::event_invitations::send_custom_email,
+                routes::event_seating::get,
+                routes::event_seating::put,
                 routes::games::steam_game_update_v2,
                 routes::games::get_steam_game,
                 routes::event_games::get_all,
