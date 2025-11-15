@@ -44,6 +44,12 @@ pub async fn create(pool: &PgPool, event_id: i32, seat_submit: SeatSubmit) -> Re
         return Err(Error::BadInput("Seat label cannot be empty".to_string()));
     }
 
+    if seat_submit.x < 0.0 || seat_submit.x > 1.0 || seat_submit.y < 0.0 || seat_submit.y > 1.0 {
+        return Err(Error::BadInput(
+            "Coordinates must be between 0.0 and 1.0".to_string(),
+        ));
+    }
+
     match seat::create(
         pool,
         event_id,
@@ -65,6 +71,12 @@ pub async fn create(pool: &PgPool, event_id: i32, seat_submit: SeatSubmit) -> Re
 pub async fn update(pool: &PgPool, seat_id: i32, seat_submit: SeatSubmit) -> Result<Seat, Error> {
     if seat_submit.label.trim().is_empty() {
         return Err(Error::BadInput("Seat label cannot be empty".to_string()));
+    }
+
+    if seat_submit.x < 0.0 || seat_submit.x > 1.0 || seat_submit.y < 0.0 || seat_submit.y > 1.0 {
+        return Err(Error::BadInput(
+            "Coordinates must be between 0.0 and 1.0".to_string(),
+        ));
     }
 
     match seat::update(

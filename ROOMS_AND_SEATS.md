@@ -10,6 +10,8 @@ This feature allows event administrators to:
 - Place and manage seats on each room's floorplan
 - Provide both visual (floorplan editor) and accessible (table view) interfaces for seat management
 
+**Performance Note:** Uploaded images are stored as base64-encoded data URLs in the database. While this simplifies deployment, large images can impact performance. A 5MB image becomes approximately 6.7MB when base64-encoded and will be transferred with every room query. For best performance, keep uploaded images under 1MB by resizing or compressing them before upload.
+
 ## Database Schema
 
 ### Room Table
@@ -204,6 +206,7 @@ Visual editor for placing seats on a floorplan:
 - Displays the room's floorplan image (if available)
 - Click on the floorplan to add a new seat at that position
 - Seats are displayed as circular markers with their labels
+- Drag seats to reposition them on the floorplan
 - Hover over seats to see edit/delete buttons
 - Coordinates are stored as percentages (0.0 to 1.0) for responsive positioning
 
@@ -251,7 +254,7 @@ The main event management page now includes:
 2. **Add Rooms:** Use the Room Manager to add one or more rooms
 3. **Upload Floorplan Image:** Click "Upload Image" to select a floorplan image from your computer
 4. **Add Seats:**
-   - **Visual method:** Select a room, then click on the floorplan to place seats
+   - **Visual method:** Select a room, then click on the floorplan to place seats, or drag existing seats to reposition them
    - **Keyboard method:** Use the Seat List to add seats with specific coordinates
 5. **Edit Seats:** Hover over seats in the floorplan or use the table view
 6. **Delete Seats/Rooms:** Use the delete buttons (confirms before deletion)

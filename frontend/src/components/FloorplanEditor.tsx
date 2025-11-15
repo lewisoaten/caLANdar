@@ -48,6 +48,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
   });
   const [draggingSeat, setDraggingSeat] = useState<Seat | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [hoveredSeatId, setHoveredSeatId] = useState<number | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -367,6 +368,8 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
           <Box
             key={seat.id}
             onMouseDown={(e) => handleSeatMouseDown(seat, e)}
+            onMouseEnter={() => setHoveredSeatId(seat.id)}
+            onMouseLeave={() => setHoveredSeatId(null)}
             sx={{
               position: "absolute",
               left: `${seat.x * 100}%`,
@@ -401,11 +404,8 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                 position: "absolute",
                 top: -5,
                 right: -5,
-                display: "none",
+                display: hoveredSeatId === seat.id ? "flex" : "none",
                 gap: 0.5,
-                ".MuiBox-root:hover &": {
-                  display: "flex",
-                },
               }}
             >
               <IconButton
@@ -502,7 +502,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                   "aria-label": "X position",
                 }}
                 fullWidth
-                helperText="0.0 to 1.0"
+                helperText="0.0 (left) to 1.0 (right)"
               />
               <TextField
                 label="Y Position"
@@ -521,7 +521,7 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                   "aria-label": "Y position",
                 }}
                 fullWidth
-                helperText="0.0 to 1.0"
+                helperText="0.0 (top) to 1.0 (bottom)"
               />
             </Stack>
           </Stack>
