@@ -21,8 +21,8 @@ CREATE TABLE seat_reservation (
     attendance_buckets BYTEA NOT NULL,  -- Array of bytes (1=attending, 0=not attending)
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_modified TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    
-    CONSTRAINT fk_invitation FOREIGN KEY (event_id, invitation_email) 
+
+    CONSTRAINT fk_invitation FOREIGN KEY (event_id, invitation_email)
         REFERENCES invitation(event_id, email) ON DELETE CASCADE
 );
 ```
@@ -49,16 +49,19 @@ CREATE TABLE seat_reservation (
 ### Attendance Buckets
 
 Attendance buckets divide the event duration into 6-hour time periods starting from 6 AM:
+
 - 6 AM - 12 PM (noon)
 - 12 PM - 6 PM
 - 6 PM - 12 AM (midnight)
 - 12 AM - 6 AM
 
 Each bucket is represented by a single byte in the `attendance_buckets` array:
+
 - `1` = user will attend during this period
 - `0` = user will not attend during this period
 
 **Example:** For a Friday 6 AM to Sunday 6 PM event:
+
 - Friday: 4 buckets (6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM, 12 AM-6 AM)
 - Saturday: 4 buckets
 - Sunday: 3 buckets (6 AM-12 PM, 12 PM-6 PM, 6 PM-12 AM)
@@ -68,11 +71,13 @@ Each bucket is represented by a single byte in the `attendance_buckets` array:
 ### Unspecified Seat
 
 An "unspecified seat" reservation allows users to reserve a spot at the event without choosing a specific physical seat. This is useful for:
+
 - Events where exact seating isn't important
 - Users who are undecided about their exact location
 - Events with flexible seating arrangements
 
 **Technical Details:**
+
 - Represented by `seat_id = NULL` in the database
 - Multiple users can have unspecified seat reservations simultaneously
 - Must be enabled in the event's seating configuration (`allow_unspecified_seat = true`)
@@ -83,17 +88,20 @@ An "unspecified seat" reservation allows users to reserve a spot at the event wi
 The system prevents double-booking by checking for overlapping attendance buckets on the same seat:
 
 **Logic:**
+
 1. For a specific seat (not unspecified), get all existing reservations
 2. For each existing reservation, check if any attendance bucket overlaps with the new reservation
 3. If any bucket has `1` (attending) in both the existing and new reservation, it's a conflict
 4. Reject the reservation with a 409 Conflict error
 
 **Example Conflict:**
+
 - Existing reservation: seat_id=5, buckets=`[1,1,0,0]` (Fri 6 AM-6 PM)
 - New reservation: seat_id=5, buckets=`[0,1,1,0]` (Fri 12 PM-12 AM)
 - Result: Conflict! Both users want the seat from 12 PM-6 PM (bucket #2)
 
 **No Conflict:**
+
 - Existing reservation: seat_id=5, buckets=`[1,1,0,0]` (Fri 6 AM-6 PM)
 - New reservation: seat_id=5, buckets=`[0,0,1,1]` (Fri 6 PM-6 AM Sat)
 - Result: No conflict. Different time periods.
@@ -111,6 +119,7 @@ Users can only manage their own reservations.
 Get the current user's seat reservation for this event.
 
 **Response:**
+
 ```json
 {
   "id": 1,
@@ -124,6 +133,7 @@ Get the current user's seat reservation for this event.
 ```
 
 **Status Codes:**
+
 - 200 OK: Reservation found
 - 404 Not Found: No reservation for this event
 
@@ -132,6 +142,7 @@ Get the current user's seat reservation for this event.
 Create a new seat reservation for the current user.
 
 **Request Body:**
+
 ```json
 {
   "seatId": 5,
@@ -140,6 +151,7 @@ Create a new seat reservation for the current user.
 ```
 
 For an unspecified seat:
+
 ```json
 {
   "seatId": null,
@@ -148,6 +160,7 @@ For an unspecified seat:
 ```
 
 **Status Codes:**
+
 - 201 Created: Reservation created successfully
 - 400 Bad Request: Invalid input (e.g., seat doesn't exist, wrong bucket count)
 - 409 Conflict: Seat is already reserved for those time periods, or user already has a reservation
@@ -159,6 +172,7 @@ Update the current user's existing seat reservation.
 **Request Body:** Same as POST
 
 **Status Codes:**
+
 - 200 OK: Reservation updated
 - 400 Bad Request: Invalid input
 - 404 Not Found: User has no existing reservation
@@ -169,6 +183,7 @@ Update the current user's existing seat reservation.
 Delete the current user's seat reservation.
 
 **Status Codes:**
+
 - 204 No Content: Reservation deleted
 - 401 Unauthorized: Not logged in or event is inactive
 
@@ -181,6 +196,7 @@ Admins can manage all reservations. Add `?as_admin=true` to the request.
 Get all seat reservations for the event.
 
 **Response:**
+
 ```json
 [
   {
@@ -211,6 +227,7 @@ Update a specific user's seat reservation.
 **Request Body:** Same as user POST
 
 **Status Codes:**
+
 - 200 OK: Reservation updated
 - 400 Bad Request: Invalid input
 - 404 Not Found: No reservation for this email
@@ -221,6 +238,7 @@ Update a specific user's seat reservation.
 Delete a specific user's seat reservation.
 
 **Status Codes:**
+
 - 204 No Content: Reservation deleted
 
 ## Business Rules & Invariants
@@ -243,18 +261,18 @@ Delete a specific user's seat reservation.
 
 ### Error Conditions
 
-| Error | HTTP Status | Description |
-|-------|-------------|-------------|
-| No invitation | 400 Bad Request | User is not invited to the event |
-| Seat doesn't exist | 400 Bad Request | Invalid `seatId` |
-| Seat wrong event | 400 Bad Request | Seat belongs to a different event |
-| Wrong bucket count | 400 Bad Request | `attendanceBuckets` length doesn't match event duration |
-| Unspecified not allowed | 400 Bad Request | Event doesn't allow unspecified seats |
-| No seating config | 400 Bad Request | Event has no seating configuration |
-| Already has reservation | 409 Conflict | User already has a reservation (use PUT to update) |
-| Seat conflict | 409 Conflict | Another user has reserved this seat for overlapping times |
-| Event inactive | 401 Unauthorized | Event has already ended (non-admin) |
-| Not found | 404 Not Found | No reservation exists for this user |
+| Error                   | HTTP Status      | Description                                               |
+| ----------------------- | ---------------- | --------------------------------------------------------- |
+| No invitation           | 400 Bad Request  | User is not invited to the event                          |
+| Seat doesn't exist      | 400 Bad Request  | Invalid `seatId`                                          |
+| Seat wrong event        | 400 Bad Request  | Seat belongs to a different event                         |
+| Wrong bucket count      | 400 Bad Request  | `attendanceBuckets` length doesn't match event duration   |
+| Unspecified not allowed | 400 Bad Request  | Event doesn't allow unspecified seats                     |
+| No seating config       | 400 Bad Request  | Event has no seating configuration                        |
+| Already has reservation | 409 Conflict     | User already has a reservation (use PUT to update)        |
+| Seat conflict           | 409 Conflict     | Another user has reserved this seat for overlapping times |
+| Event inactive          | 401 Unauthorized | Event has already ended (non-admin)                       |
+| Not found               | 404 Not Found    | No reservation exists for this user                       |
 
 ## Implementation Details
 
@@ -265,18 +283,19 @@ fn has_bucket_overlap(buckets1: &[u8], buckets2: &[u8]) -> bool {
     if buckets1.len() != buckets2.len() {
         return false;
     }
-    
+
     for (b1, b2) in buckets1.iter().zip(buckets2.iter()) {
         if *b1 == 1 && *b2 == 1 {
             return true;  // Both users want this time slot
         }
     }
-    
+
     false
 }
 ```
 
 This algorithm:
+
 1. Ensures both reservations have the same number of buckets
 2. Checks each bucket pair
 3. Returns `true` if any bucket has `1` in both arrays (overlap)
@@ -286,6 +305,7 @@ This algorithm:
 **Location:** `api/src/repositories/seat_reservation.rs`
 
 Key functions:
+
 - `get_all_by_event(pool, event_id)` - Get all reservations for an event
 - `get_by_email(pool, event_id, email)` - Get a user's reservation
 - `get_by_seat(pool, seat_id)` - Get all reservations for a seat (for conflict checks)
@@ -298,6 +318,7 @@ Key functions:
 **Location:** `api/src/controllers/seat_reservation.rs`
 
 Responsibilities:
+
 - Validate inputs (seat exists, bucket count correct, etc.)
 - Check permissions (event active, user authorized)
 - Perform conflict detection
@@ -309,6 +330,7 @@ Responsibilities:
 **Location:** `api/src/routes/seat_reservations.rs`
 
 Responsibilities:
+
 - Define HTTP endpoints and methods
 - Parse request bodies
 - Authenticate users (via `User` or `AdminUser` guards)
@@ -322,6 +344,7 @@ Responsibilities:
 Location: `api/src/controllers/seat_reservation.rs`
 
 Tests for bucket overlap detection:
+
 - `test_has_bucket_overlap_no_overlap` - Different time slots, no conflict
 - `test_has_bucket_overlap_with_overlap` - Same time slots, conflict
 - `test_has_bucket_overlap_all_overlap` - Complete overlap
