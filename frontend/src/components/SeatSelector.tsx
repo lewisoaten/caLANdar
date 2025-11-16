@@ -180,6 +180,38 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
       });
   }, [eventId, token, signOut, seatingConfig]);
 
+  // Validate current reservation against seating config and available seats
+  useEffect(() => {
+    if (!currentReservation || !seatingConfig || !dataLoaded) return;
+
+    // Check if user has unspecified seat but it's no longer allowed
+    if (
+      currentReservation.seatId === null &&
+      !seatingConfig.allowUnspecifiedSeat
+    ) {
+      enqueueSnackbar(
+        "Your unspecified seat reservation is no longer valid. The event now requires a specific seat. Please select a seat.",
+        { variant: "warning", persist: true },
+      );
+      // Clear the invalid reservation from state
+      setCurrentReservation(null);
+      return;
+    }
+
+    // Check if user's specific seat no longer exists
+    if (currentReservation.seatId !== null && seats.length > 0) {
+      const seatExists = seats.some((s) => s.id === currentReservation.seatId);
+      if (!seatExists) {
+        enqueueSnackbar(
+          "Your reserved seat has been removed by the admin. Please select a new seat.",
+          { variant: "warning", persist: true },
+        );
+        // Clear the invalid reservation from state
+        setCurrentReservation(null);
+      }
+    }
+  }, [currentReservation, seatingConfig, seats, dataLoaded, enqueueSnackbar]);
+
   // Fetch user profile for avatar
   useEffect(() => {
     if (!token || !userDetails?.email) return;
