@@ -424,14 +424,19 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   ) => {
     setSelectedSeatId(seatId);
 
-    if (seatId === null) {
-      // Unspecified seat
+    // Use provided label if available, otherwise use defaults
+    if (label !== undefined) {
+      // Explicit label provided (either from seat or unspecified seat)
+      setSelectedSeatLabel(label);
+      setSelectedSeatRoomName(roomName || null);
+    } else if (seatId === null) {
+      // Unspecified seat without explicit label
       setSelectedSeatLabel(allowUnspecifiedSeat ? unspecifiedSeatLabel : null);
       setSelectedSeatRoomName(null);
     } else {
-      // Use provided label and roomName from WizardSeatSelector
-      setSelectedSeatLabel(label || null);
-      setSelectedSeatRoomName(roomName || null);
+      // Specific seat without label (shouldn't happen with current implementation)
+      setSelectedSeatLabel(null);
+      setSelectedSeatRoomName(null);
     }
   };
 
