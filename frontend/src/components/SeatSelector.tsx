@@ -178,7 +178,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
         console.error("Error fetching seat reservation:", error);
         setDataLoaded(true);
       });
-  }, [eventId, token, signOut, seatingConfig]);
+  }, [eventId, token, signOut, seatingConfig, attendanceBuckets]);
 
   // Validate current reservation against seating config and available seats
   useEffect(() => {

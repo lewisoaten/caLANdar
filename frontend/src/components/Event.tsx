@@ -25,7 +25,7 @@ const Event = () => {
   const email = userDetails?.email;
   const [event, setEvent] = useState(defaultEventData);
   const [loaded, setLoaded] = useState(false);
-  const [responded, setResponded] = useState(false);
+  const [responded, setResponded] = useState(0);
   const [invitation, setInvitation] = useState(defaultInvitationData);
   const theme = useTheme();
 
@@ -325,7 +325,7 @@ const Event = () => {
                   eventId={event.id}
                   attendanceBuckets={invitation.attendance}
                   disabled={event.timeEnd.isSameOrBefore(moment())}
-                  onReservationChange={() => setResponded((prev) => !prev)}
+                  onReservationChange={() => setResponded((prev) => prev + 1)}
                 />
               </Paper>
             </Grid>
