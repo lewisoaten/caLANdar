@@ -104,10 +104,13 @@ const server = setupServer(
       attendance: [1, 1, 0, 0],
     });
   }),
-  http.post("/api/events/:eventId/seat-reservations/check-availability", ({ request }) => {
-    console.log("[MSW] check-availability request:", request.url);
-    return HttpResponse.json(mockAvailableSeats);
-  }),
+  http.post(
+    "/api/events/:eventId/seat-reservations/check-availability",
+    ({ request }) => {
+      console.log("[MSW] check-availability request:", request.url);
+      return HttpResponse.json(mockAvailableSeats);
+    },
+  ),
 );
 
 beforeAll(() => server.listen({ onUnhandledRequest: "warn" }));
