@@ -258,7 +258,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                 </Typography>
               </Box>
 
-              {hasSeating && seatLabel && (
+              {hasSeating && (
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     <EventSeatIcon
@@ -268,9 +268,11 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                     Seat
                   </Typography>
                   <Typography variant="body1">
-                    {seatRoomName
-                      ? `${seatRoomName} - ${seatLabel}`
-                      : seatLabel}
+                    {seatLabel
+                      ? seatRoomName
+                        ? `${seatRoomName} - ${seatLabel}`
+                        : seatLabel
+                      : "Loading..."}
                   </Typography>
                 </Box>
               )}

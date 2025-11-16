@@ -102,15 +102,17 @@ export default function ReviewStep(props: ReviewStepProps) {
                   </Box>
                 </Grid>
 
-                {props.hasSeating && props.seatLabel && (
+                {props.hasSeating && (
                   <Grid size={12}>
                     <Box display="flex" alignItems="center" gap={1}>
                       <EventSeatIcon color="primary" />
                       <Typography variant="body1" component="span">
                         <strong>Seat:</strong>{" "}
-                        {props.seatRoomName
-                          ? `${props.seatRoomName} - ${props.seatLabel}`
-                          : props.seatLabel}
+                        {props.seatLabel
+                          ? props.seatRoomName
+                            ? `${props.seatRoomName} - ${props.seatLabel}`
+                            : props.seatLabel
+                          : "Loading..."}
                       </Typography>
                     </Box>
                   </Grid>
