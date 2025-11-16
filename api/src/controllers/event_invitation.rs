@@ -3,7 +3,10 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::invitation::{self, Response},
+    repositories::{
+        invitation::{self, Response},
+        seat_reservation,
+    },
     routes::event_invitations::{InvitationResponse, InvitationsPatchRequest},
     util::is_event_active,
 };
@@ -19,7 +22,7 @@ impl From<InvitationResponse> for Response {
     }
 }
 
-fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
+pub fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
     let mut buckets = Vec::new();
 
     // Start from 6 AM of time_begin's date
@@ -101,6 +104,14 @@ pub async fn respond(
             return Err(Error::Controller(format!(
                 "You must indicate attendence for the exact duration of the event. Expected: {day_quarter_buckets}, got: {attendance_length}"
             )));
+        }
+
+        // Delete any existing seat reservation when attendance is updated
+        // The user will need to create a new reservation after changing their attendance
+        if let Err(e) = seat_reservation::delete_by_email(pool, event_id, &email).await {
+            // Log the error but don't fail the invitation update
+            // The seat reservation might not exist, which is fine
+            eprintln!("Note: Could not delete seat reservation for {email}: {e}");
         }
     }
 
