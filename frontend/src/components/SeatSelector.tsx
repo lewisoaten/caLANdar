@@ -296,6 +296,19 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
   const handleRemoveReservation = async () => {
     if (!currentReservation) return;
 
+    // Check if seating is mandatory (no unspecified seat allowed and user has a specific seat)
+    if (
+      seatingConfig &&
+      !seatingConfig.allowUnspecifiedSeat &&
+      currentReservation.seatId !== null
+    ) {
+      enqueueSnackbar(
+        "Seat selection is mandatory for this event. Please select a different seat instead of removing your reservation.",
+        { variant: "warning" },
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {

@@ -27,6 +27,7 @@ import {
 } from "../types/invitations";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData } from "../types/events";
+import moment from "moment";
 
 interface InvitationResponseProps {
   event: EventData;
@@ -34,6 +35,32 @@ interface InvitationResponseProps {
   disabled: boolean;
   asAdmin?: boolean;
 }
+
+// Helper function to calculate default attendance (all buckets = 1)
+const calculateDefaultAttendance = (
+  timeBegin: moment.Moment,
+  timeEnd: moment.Moment,
+): number[] => {
+  const numberOfDays =
+    moment(timeEnd).startOf("day").diff(moment(timeBegin).startOf("day"), "days") +
+    1;
+
+  const dates = Array.from(Array(numberOfDays)).map((_, day_number) => {
+    return Array.from(Array(4)).map((_, bucket_number) => {
+      const day = moment(timeBegin).startOf("day").add(day_number, "days");
+      const bucket = moment(day).add(6 * (bucket_number + 1), "hours");
+      if (
+        timeBegin < moment(bucket).add(6, "hours") &&
+        timeEnd >= bucket
+      ) {
+        return 1;
+      }
+      return 0;
+    });
+  });
+
+  return dates.flat().filter((e) => e === 1);
+};
 
 export default function InvitationResponse(props: InvitationResponseProps) {
   const { signOut } = useContext(UserDispatchContext);
@@ -113,9 +140,16 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       clearTimeout(typingTimer.current);
     }
 
+    // If attendance is null and user is RSVPing yes/maybe, set default attendance (all buckets)
+    const defaultAttendance =
+      !invitation.attendance && newAlignment !== RSVP.no
+        ? calculateDefaultAttendance(props.event.timeBegin, props.event.timeEnd)
+        : invitation.attendance;
+
     const newInvitation = {
       ...invitation,
       response: newAlignment as RSVP,
+      attendance: defaultAttendance,
     };
 
     setInvitation(newInvitation);
@@ -142,9 +176,16 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       clearTimeout(typingTimer.current);
     }
 
+    // If attendance is null and user has RSVPed yes/maybe, set default attendance (all buckets)
+    const defaultAttendance =
+      !invitation.attendance && invitation.response && invitation.response !== RSVP.no
+        ? calculateDefaultAttendance(props.event.timeBegin, props.event.timeEnd)
+        : invitation.attendance;
+
     const newInvitation = {
       ...invitation,
       handle: event.target.value,
+      attendance: defaultAttendance,
     };
 
     setInvitation(newInvitation);
