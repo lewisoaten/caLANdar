@@ -13,9 +13,11 @@ import {
   Card,
   CardContent,
   CardMedia,
+  Avatar,
 } from "@mui/material";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PersonIcon from "@mui/icons-material/Person";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { Room, Seat, EventSeatingConfig } from "../types/events";
@@ -60,6 +62,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
 
   // Fetch seating configuration
   useEffect(() => {
@@ -176,6 +179,31 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
         setDataLoaded(true);
       });
   }, [eventId, token, signOut, seatingConfig]);
+
+  // Fetch user profile for avatar
+  useEffect(() => {
+    if (!token || !userDetails?.email) return;
+
+    fetch(`/api/profiles/${encodeURIComponent(userDetails.email)}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.ok)
+          return response.text().then((data) => JSON.parse(data, dateParser));
+      })
+      .then((data) => {
+        if (data?.avatarUrl) {
+          setUserAvatarUrl(data.avatarUrl);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching user profile:", error);
+      });
+  }, [token, userDetails?.email]);
 
   // Check seat availability when attendance buckets change
   useEffect(() => {
@@ -545,7 +573,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                     height: 44,
                                     borderRadius: "50%",
                                     backgroundColor: seat.isOwnSeat
-                                      ? "primary.main"
+                                      ? "transparent"
                                       : seat.isOccupied
                                         ? "action.disabledBackground"
                                         : "success.main",
@@ -558,12 +586,10 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                         ? "not-allowed"
                                         : "pointer",
                                     pointerEvents: "auto",
-                                    border: seat.isOwnSeat
-                                      ? "3px solid"
-                                      : "2px solid",
-                                    borderColor: seat.isOwnSeat
-                                      ? "secondary.main"
-                                      : "transparent",
+                                    border: !seat.isOwnSeat ? "2px solid" : "none",
+                                    borderColor: !seat.isOwnSeat
+                                      ? "transparent"
+                                      : undefined,
                                     fontSize: "0.75rem",
                                     fontWeight: "bold",
                                     opacity: seat.isOccupied ? 0.5 : 1,
@@ -595,7 +621,23 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                   }}
                                 >
                                   {seat.isOwnSeat ? (
-                                    <CheckCircleIcon fontSize="small" />
+                                    <Avatar
+                                      src={
+                                        userAvatarUrl ||
+                                        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+                                      }
+                                      alt="Your seat"
+                                      sx={{
+                                        width: 36,
+                                        height: 36,
+                                        border: "3px solid",
+                                        borderColor: "secondary.main",
+                                      }}
+                                    >
+                                      <PersonIcon />
+                                    </Avatar>
+                                  ) : seat.isOccupied ? (
+                                    <EventSeatIcon fontSize="small" />
                                   ) : (
                                     <EventSeatIcon fontSize="small" />
                                   )}
