@@ -325,7 +325,7 @@ const Event = () => {
                   eventId={event.id}
                   attendanceBuckets={invitation.attendance}
                   disabled={event.timeEnd.isSameOrBefore(moment())}
-                  onReservationChange={() => setResponded(!responded)}
+                  onReservationChange={() => setResponded((prev) => !prev)}
                 />
               </Paper>
             </Grid>
