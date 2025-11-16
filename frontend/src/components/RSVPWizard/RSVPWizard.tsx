@@ -53,14 +53,17 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasSeating, setHasSeating] = useState(false);
   const [allowUnspecifiedSeat, setAllowUnspecifiedSeat] = useState(false);
-  const [seatReservationId, setSeatReservationId] = useState<number | null>(
-    null,
-  );
-  const [seatLabel, setSeatLabel] = useState<string | null>(null);
-  const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
   const [unspecifiedSeatLabel, setUnspecifiedSeatLabel] =
     useState<string>("Unspecified Seat");
-  const [fetchingSeatInfo, setFetchingSeatInfo] = useState(false);
+
+  // Seat selection state - null means unspecified/skip
+  const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null);
+  const [selectedSeatLabel, setSelectedSeatLabel] = useState<string | null>(
+    null,
+  );
+  const [selectedSeatRoomName, setSelectedSeatRoomName] = useState<
+    string | null
+  >(null);
 
   // Check if event has seating configured
   useEffect(() => {
@@ -91,7 +94,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       });
   }, [props.event.id, token, signOut]);
 
-  // Check if user has an existing seat reservation
+  // Check if user has an existing seat reservation and load it into wizard state
   useEffect(() => {
     if (!props.event.id || !token || !email || !hasSeating) return;
 
@@ -105,15 +108,11 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       .then((response) => {
         if (response.status === 404) {
           // No reservation exists
-          setSeatReservationId(null);
-          // If optional seating, default to unspecified seat
-          if (allowUnspecifiedSeat) {
-            setSeatLabel(unspecifiedSeatLabel);
-            setSeatRoomName(null);
-          } else {
-            setSeatLabel(null);
-            setSeatRoomName(null);
-          }
+          setSelectedSeatId(null);
+          setSelectedSeatLabel(
+            allowUnspecifiedSeat ? unspecifiedSeatLabel : null,
+          );
+          setSelectedSeatRoomName(null);
           return null;
         }
         if (response.status === 401) {
@@ -125,13 +124,16 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       })
       .then((data) => {
         if (data?.id) {
-          setSeatReservationId(data.id);
           // Fetch seat label if seatId is not null
           if (data.seatId === null) {
             // Unspecified seat
-            setSeatLabel(unspecifiedSeatLabel);
-            setSeatRoomName(null);
+            setSelectedSeatId(null);
+            setSelectedSeatLabel(unspecifiedSeatLabel);
+            setSelectedSeatRoomName(null);
           } else if (data.seatId) {
+            // Set the selected seat ID
+            setSelectedSeatId(data.seatId);
+
             // Fetch the actual seat label and room
             fetch(`/api/events/${props.event.id}/seats/${data.seatId}`, {
               headers: {
@@ -146,7 +148,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
               })
               .then((seatData) => {
                 if (seatData?.label) {
-                  setSeatLabel(seatData.label);
+                  setSelectedSeatLabel(seatData.label);
                   // Fetch room name
                   if (seatData.roomId) {
                     fetch(
@@ -165,7 +167,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
                       })
                       .then((roomData) => {
                         if (roomData?.name) {
-                          setSeatRoomName(roomData.name);
+                          setSelectedSeatRoomName(roomData.name);
                         }
                       })
                       .catch((error) => {
@@ -180,11 +182,13 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           }
         } else if (allowUnspecifiedSeat) {
           // No reservation but optional seating - default to unspecified
-          setSeatLabel(unspecifiedSeatLabel);
-          setSeatRoomName(null);
+          setSelectedSeatId(null);
+          setSelectedSeatLabel(unspecifiedSeatLabel);
+          setSelectedSeatRoomName(null);
         } else {
-          setSeatLabel(null);
-          setSeatRoomName(null);
+          setSelectedSeatId(null);
+          setSelectedSeatLabel(null);
+          setSelectedSeatRoomName(null);
         }
       })
       .catch((error) => {
@@ -235,16 +239,16 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         if (response === RSVP.no) return true;
         return attendance !== null && attendance.some((v) => v === 1);
       case 3: // Seat or Review step
-        // If this is the seat step and seat is required, check if user has a reservation
+        // If this is the seat step and seat is required, check if user has selected a seat
         if (steps[activeStep] === "Seat") {
           // Seat is required if seating is enabled and unspecified seat is not allowed
           const seatRequired = hasSeating && !allowUnspecifiedSeat;
           if (seatRequired) {
-            // User must have a seat reservation to proceed
-            return seatReservationId !== null && !fetchingSeatInfo;
+            // User must have selected a seat to proceed
+            return selectedSeatId !== null;
           }
-          // If not required, still wait for fetching to complete
-          return !fetchingSeatInfo;
+          // If not required, seat selection is always valid
+          return true;
         }
         return true; // Seat selection is optional or this is review
       case 4: // Final review step
@@ -297,7 +301,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     setHandleValid(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
 
     // For "No" response, we don't need handle or attendance
@@ -310,41 +314,90 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             props.event.timeEnd,
           );
 
-    fetch(
-      `/api/events/${props.event.id}/invitations/${encodeURIComponent(email)}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
+    try {
+      // Step 1: Save RSVP
+      const rsvpResponse = await fetch(
+        `/api/events/${props.event.id}/invitations/${encodeURIComponent(email)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({
+            handle: response === RSVP.no ? null : handle,
+            response: response,
+            attendance: finalAttendance,
+          }),
         },
-        body: JSON.stringify({
-          handle: response === RSVP.no ? null : handle,
-          response: response,
-          attendance: finalAttendance,
-        }),
-      },
-    )
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-        } else if (response.status === 204) {
-          enqueueSnackbar("RSVP saved successfully", { variant: "success" });
+      );
+
+      if (rsvpResponse.status === 401) {
+        signOut();
+        return;
+      }
+
+      if (rsvpResponse.status !== 204) {
+        throw new Error("Unable to save RSVP");
+      }
+
+      // Step 2: Save seat reservation if seating is enabled and user is attending
+      if (hasSeating && response !== RSVP.no) {
+        try {
+          // Delete any existing reservation first
+          await fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+          });
+
+          // Create new reservation with selected seat (or null for unspecified)
+          const seatReservationResponse = await fetch(
+            `/api/events/${props.event.id}/seat-reservations`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Authorization: "Bearer " + token,
+              },
+              body: JSON.stringify({
+                seatId: selectedSeatId, // null means unspecified seat
+                attendanceBuckets: finalAttendance,
+              }),
+            },
+          );
+
+          if (!seatReservationResponse.ok) {
+            throw new Error("Unable to save seat reservation");
+          }
+        } catch (seatError) {
+          console.error("Error saving seat reservation:", seatError);
+          enqueueSnackbar("RSVP saved but failed to reserve seat", {
+            variant: "warning",
+          });
           props.onSaved();
           props.onClose();
           resetWizard();
-        } else {
-          throw new Error("Unable to save RSVP");
+          return;
         }
-      })
-      .catch((error) => {
-        console.error("Error saving RSVP:", error);
-        enqueueSnackbar("Failed to save RSVP", { variant: "error" });
-      })
-      .finally(() => {
-        setSaving(false);
-      });
+      }
+
+      // Success!
+      enqueueSnackbar("RSVP saved successfully", { variant: "success" });
+      props.onSaved();
+      props.onClose();
+      resetWizard();
+    } catch (error) {
+      console.error("Error saving RSVP:", error);
+      enqueueSnackbar("Failed to save RSVP", { variant: "error" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Handle response change - update attendance when switching to Yes/Maybe
@@ -360,6 +413,66 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       setAttendance(
         calculateDefaultAttendance(props.event.timeBegin, props.event.timeEnd),
       );
+    }
+  };
+
+  // Handle seat selection change
+  const handleSeatSelect = async (seatId: number | null) => {
+    setSelectedSeatId(seatId);
+
+    // Fetch seat info to update label and room name for display
+    if (seatId === null) {
+      // Unspecified seat
+      setSelectedSeatLabel(allowUnspecifiedSeat ? unspecifiedSeatLabel : null);
+      setSelectedSeatRoomName(null);
+    } else {
+      // Fetch seat details
+      try {
+        const seatResponse = await fetch(
+          `/api/events/${props.event.id}/seats/${seatId}`,
+          {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+          },
+        );
+
+        if (seatResponse.ok) {
+          const seatData = await seatResponse.json();
+          if (seatData?.label) {
+            setSelectedSeatLabel(seatData.label);
+
+            // Fetch room name
+            if (seatData.roomId) {
+              const roomResponse = await fetch(
+                `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+                {
+                  headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    Authorization: "Bearer " + token,
+                  },
+                },
+              );
+
+              if (roomResponse.ok) {
+                const roomData = await roomResponse.json();
+                if (roomData?.name) {
+                  setSelectedSeatRoomName(roomData.name);
+                } else {
+                  setSelectedSeatRoomName(null);
+                }
+              }
+            } else {
+              setSelectedSeatRoomName(null);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching seat details:", error);
+      }
     }
   };
 
@@ -401,108 +514,9 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             attendanceBuckets={attendance}
             hasSeating={hasSeating}
             allowUnspecifiedSeat={allowUnspecifiedSeat}
+            selectedSeatId={selectedSeatId}
+            onSeatSelect={handleSeatSelect}
             disabled={saving}
-            onReservationChange={async () => {
-              // Seat reservation changed, refresh the reservation status
-              // Re-fetch to update seatReservationId and seatLabel
-              if (!props.event.id || !token || !email) return;
-
-              setFetchingSeatInfo(true);
-              try {
-                const response = await fetch(
-                  `/api/events/${props.event.id}/seat-reservations/me`,
-                  {
-                    headers: {
-                      "Content-Type": "application/json",
-                      Accept: "application/json",
-                      Authorization: "Bearer " + token,
-                    },
-                  },
-                );
-
-                if (response.status === 404) {
-                  setSeatReservationId(null);
-                  // If optional seating, default to unspecified seat
-                  if (allowUnspecifiedSeat) {
-                    setSeatLabel(unspecifiedSeatLabel);
-                    setSeatRoomName(null);
-                  } else {
-                    setSeatLabel(null);
-                    setSeatRoomName(null);
-                  }
-                  return;
-                }
-
-                if (!response.ok) return;
-
-                const data = await response.json();
-
-                if (data?.id) {
-                  setSeatReservationId(data.id);
-
-                  // Fetch seat label
-                  if (data.seatId === null) {
-                    setSeatLabel(unspecifiedSeatLabel);
-                    setSeatRoomName(null);
-                  } else if (data.seatId) {
-                    const seatResponse = await fetch(
-                      `/api/events/${props.event.id}/seats/${data.seatId}`,
-                      {
-                        headers: {
-                          "Content-Type": "application/json",
-                          Accept: "application/json",
-                          Authorization: "Bearer " + token,
-                        },
-                      },
-                    );
-
-                    if (seatResponse.ok) {
-                      const seatData = await seatResponse.json();
-
-                      if (seatData?.label) {
-                        setSeatLabel(seatData.label);
-
-                        // Fetch room name
-                        if (seatData.roomId) {
-                          const roomResponse = await fetch(
-                            `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-                            {
-                              headers: {
-                                "Content-Type": "application/json",
-                                Accept: "application/json",
-                                Authorization: "Bearer " + token,
-                              },
-                            },
-                          );
-
-                          if (roomResponse.ok) {
-                            const roomData = await roomResponse.json();
-                            if (roomData?.name) {
-                              setSeatRoomName(roomData.name);
-                            }
-                          }
-                        } else {
-                          setSeatRoomName(null);
-                        }
-                      }
-                    }
-                  }
-                } else if (allowUnspecifiedSeat) {
-                  // No reservation but optional seating - default to unspecified
-                  setSeatReservationId(null);
-                  setSeatLabel(unspecifiedSeatLabel);
-                  setSeatRoomName(null);
-                } else {
-                  setSeatReservationId(null);
-                  setSeatLabel(null);
-                  setSeatRoomName(null);
-                }
-              } catch (error) {
-                console.error("Error fetching seat reservation:", error);
-              } finally {
-                setFetchingSeatInfo(false);
-              }
-            }}
           />
         );
       case "Review":
@@ -513,8 +527,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             attendance={attendance}
             timeBegin={props.event.timeBegin}
             timeEnd={props.event.timeEnd}
-            seatLabel={seatLabel}
-            seatRoomName={seatRoomName}
+            seatLabel={selectedSeatLabel}
+            seatRoomName={selectedSeatRoomName}
             hasSeating={hasSeating}
           />
         );

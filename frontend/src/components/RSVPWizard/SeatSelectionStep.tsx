@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Typography, Stack } from "@mui/material";
-import SeatSelector from "../SeatSelector";
+import WizardSeatSelector from "./WizardSeatSelector";
 
 interface SeatSelectionStepProps {
   eventId: number;
@@ -8,7 +8,8 @@ interface SeatSelectionStepProps {
   disabled?: boolean;
   hasSeating: boolean;
   allowUnspecifiedSeat: boolean;
-  onReservationChange?: () => void;
+  selectedSeatId: number | null;
+  onSeatSelect: (seatId: number | null) => void;
 }
 
 export default function SeatSelectionStep(props: SeatSelectionStepProps) {
@@ -28,11 +29,13 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
           ? "You can select a seat now or skip this step and choose one later."
           : "Please select a seat to continue. This event requires seat selection."}
       </Typography>
-      <SeatSelector
+      <WizardSeatSelector
         eventId={props.eventId}
         attendanceBuckets={props.attendanceBuckets}
+        selectedSeatId={props.selectedSeatId}
+        onSeatSelect={props.onSeatSelect}
+        allowUnspecifiedSeat={props.allowUnspecifiedSeat}
         disabled={props.disabled || false}
-        onReservationChange={props.onReservationChange}
       />
     </Stack>
   );
