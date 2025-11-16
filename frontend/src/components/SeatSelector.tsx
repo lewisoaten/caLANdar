@@ -182,7 +182,14 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
 
   // Validate current reservation against seating config and available seats
   useEffect(() => {
-    if (!currentReservation || !seatingConfig || !dataLoaded) return;
+    if (
+      !currentReservation ||
+      !seatingConfig ||
+      !dataLoaded ||
+      !seats ||
+      seats.length === 0
+    )
+      return;
 
     // Check if user has unspecified seat but it's no longer allowed
     if (
@@ -199,7 +206,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
     }
 
     // Check if user's specific seat no longer exists
-    if (currentReservation.seatId !== null && seats.length > 0) {
+    if (currentReservation.seatId !== null) {
       const seatExists = seats.some((s) => s.id === currentReservation.seatId);
       if (!seatExists) {
         enqueueSnackbar(
@@ -558,15 +565,23 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
 
                       {/* Floorplan visualization if image exists */}
                       {room.image && (
-                        <Box sx={{ position: "relative", mb: 2 }}>
+                        <Box
+                          sx={{
+                            position: "relative",
+                            mb: 2,
+                            paddingTop: "75%",
+                          }}
+                        >
                           <CardMedia
                             component="img"
                             image={room.image}
                             alt={`${room.name} floorplan`}
                             sx={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
                               width: "100%",
-                              height: "auto",
-                              maxHeight: 400,
+                              height: "100%",
                               objectFit: "contain",
                               border: "1px solid",
                               borderColor: "divider",
@@ -618,7 +633,9 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                         ? "not-allowed"
                                         : "pointer",
                                     pointerEvents: "auto",
-                                    border: !seat.isOwnSeat ? "2px solid" : "none",
+                                    border: !seat.isOwnSeat
+                                      ? "2px solid"
+                                      : "none",
                                     borderColor: !seat.isOwnSeat
                                       ? "transparent"
                                       : undefined,
@@ -668,8 +685,6 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                     >
                                       <PersonIcon />
                                     </Avatar>
-                                  ) : seat.isOccupied ? (
-                                    <EventSeatIcon fontSize="small" />
                                   ) : (
                                     <EventSeatIcon fontSize="small" />
                                   )}
