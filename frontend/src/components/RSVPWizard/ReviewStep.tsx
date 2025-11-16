@@ -1,12 +1,5 @@
 import * as React from "react";
-import {
-  Typography,
-  Stack,
-  Card,
-  CardContent,
-  Grid,
-  Box,
-} from "@mui/material";
+import { Typography, Stack, Card, CardContent, Grid, Box } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
