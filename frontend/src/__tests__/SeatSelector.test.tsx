@@ -36,7 +36,8 @@ const mockRooms = [
     eventId: 1,
     name: "Main Hall",
     description: "The main gaming hall",
-    image: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    image:
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
     sortOrder: 0,
     createdAt: "2025-01-15T10:00:00Z",
     lastModified: "2025-01-15T10:00:00Z",
@@ -140,9 +141,7 @@ describe("SeatSelector", () => {
     renderSeatSelector({ attendanceBuckets: null });
     await waitFor(() => {
       expect(
-        screen.getByText(
-          /Please select your RSVP and attendance times above/i,
-        ),
+        screen.getByText(/Please select your RSVP and attendance times above/i),
       ).toBeInTheDocument();
     });
   });
@@ -177,21 +176,24 @@ describe("SeatSelector", () => {
     const onReservationChange = vi.fn();
 
     server.use(
-      http.post("/api/events/:eventId/seat-reservations/me", async ({ request }) => {
-        const body = await request.json();
-        return HttpResponse.json(
-          {
-            id: 1,
-            eventId: 1,
-            seatId: body.seatId,
-            invitationEmail: "test@example.com",
-            attendanceBuckets: body.attendanceBuckets,
-            createdAt: "2025-01-15T10:00:00Z",
-            lastModified: "2025-01-15T10:00:00Z",
-          },
-          { status: 200 },
-        );
-      }),
+      http.post(
+        "/api/events/:eventId/seat-reservations/me",
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(
+            {
+              id: 1,
+              eventId: 1,
+              seatId: body.seatId,
+              invitationEmail: "test@example.com",
+              attendanceBuckets: body.attendanceBuckets,
+              createdAt: "2025-01-15T10:00:00Z",
+              lastModified: "2025-01-15T10:00:00Z",
+            },
+            { status: 200 },
+          );
+        },
+      ),
     );
 
     renderSeatSelector({ onReservationChange });
@@ -214,10 +216,7 @@ describe("SeatSelector", () => {
 
     server.use(
       http.post("/api/events/:eventId/seat-reservations/me", () => {
-        return HttpResponse.json(
-          { error: "Seat conflict" },
-          { status: 409 },
-        );
+        return HttpResponse.json({ error: "Seat conflict" }, { status: 409 });
       }),
     );
 
@@ -260,9 +259,7 @@ describe("SeatSelector", () => {
     renderSeatSelector();
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/You have reserved seat/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/You have reserved seat/i)).toBeInTheDocument();
     });
   });
 
@@ -344,21 +341,24 @@ describe("SeatSelector", () => {
     const onReservationChange = vi.fn();
 
     server.use(
-      http.post("/api/events/:eventId/seat-reservations/me", async ({ request }) => {
-        const body = await request.json();
-        return HttpResponse.json(
-          {
-            id: 1,
-            eventId: 1,
-            seatId: body.seatId,
-            invitationEmail: "test@example.com",
-            attendanceBuckets: body.attendanceBuckets,
-            createdAt: "2025-01-15T10:00:00Z",
-            lastModified: "2025-01-15T10:00:00Z",
-          },
-          { status: 200 },
-        );
-      }),
+      http.post(
+        "/api/events/:eventId/seat-reservations/me",
+        async ({ request }) => {
+          const body = await request.json();
+          return HttpResponse.json(
+            {
+              id: 1,
+              eventId: 1,
+              seatId: body.seatId,
+              invitationEmail: "test@example.com",
+              attendanceBuckets: body.attendanceBuckets,
+              createdAt: "2025-01-15T10:00:00Z",
+              lastModified: "2025-01-15T10:00:00Z",
+            },
+            { status: 200 },
+          );
+        },
+      ),
     );
 
     renderSeatSelector({ onReservationChange });
@@ -372,7 +372,7 @@ describe("SeatSelector", () => {
     const enabledButton = seatButtons.find(
       (button) => !(button as HTMLButtonElement).disabled,
     );
-    
+
     if (enabledButton) {
       // Tab to the button and press Enter
       enabledButton.focus();

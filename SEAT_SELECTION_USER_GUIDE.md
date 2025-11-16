@@ -42,12 +42,14 @@ Seats are color-coded for easy identification:
 ### Step 4: Select Your Seat
 
 **Using the Visual Floorplan:**
+
 1. Look at the floorplan image showing the room layout
 2. Seats appear as circular markers on the floorplan
 3. Click on an available (green) seat marker
 4. The seat will turn blue and show a checkmark
 
 **Using the List View:**
+
 1. Scroll through the list of seat buttons below the floorplan
 2. Click on an available seat button
 3. You'll see a success message confirming your reservation
@@ -55,10 +57,12 @@ Seats are color-coded for easy identification:
 ### Step 5: Manage Your Reservation
 
 **To Change Your Seat:**
+
 - Simply click on a different available seat
 - Your reservation will automatically update
 
 **To Remove Your Reservation:**
+
 - Click the "Remove" button in the green alert box showing your current seat
 - Your seat will be released for others to reserve
 
@@ -73,6 +77,7 @@ Seats are color-coded for easy identification:
 - This prevents blocking seats during times you won't be attending
 
 **After changing attendance times:**
+
 1. The system will show you which seats are available for your new times
 2. Select a new seat (your previous seat may not be available)
 
@@ -87,11 +92,13 @@ The system prevents double-booking:
 ### Accessibility Features
 
 **Keyboard Navigation:**
+
 - Press Tab to move between seats
 - Press Enter or Space to select a highlighted seat
 - All seats have descriptive labels for screen readers
 
 **Mobile Use:**
+
 - Tap targets are sized for easy touch selection (minimum 44x44 pixels)
 - The layout adapts to your screen size
 - Both floorplan and list views work on mobile devices
@@ -101,6 +108,7 @@ The system prevents double-booking:
 ### "Please select your RSVP and attendance times above"
 
 You need to:
+
 1. Set your handle
 2. Choose Yes or Maybe for RSVP
 3. Select at least one attendance time period
@@ -108,6 +116,7 @@ You need to:
 ### "This seat is already reserved"
 
 The seat you tried to select is occupied during your attendance times. Try:
+
 1. Selecting a different seat (green ones are available)
 2. Changing your attendance times if you're flexible
 3. Choosing an unspecified seat if the option is available
@@ -119,6 +128,7 @@ The event organizer hasn't set up seating yet. Contact them if you believe this 
 ### Seat disappeared after changing times
 
 When you change attendance times, your seat reservation is removed. This is by design:
+
 1. Your old reservation may conflict with your new times
 2. Different seats may be available for different time periods
 3. Select a new seat after confirming your new attendance times

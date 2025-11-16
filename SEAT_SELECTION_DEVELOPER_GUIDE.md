@@ -19,6 +19,7 @@ The seat selection feature consists of:
 **Purpose**: Provides a user interface for gamers to select seats for an event.
 
 **Key Features**:
+
 - Visual seat map overlay on floorplan images
 - List view for keyboard/screen reader accessibility
 - Real-time availability checking
@@ -27,16 +28,18 @@ The seat selection feature consists of:
 - Full keyboard navigation support
 
 **Props**:
+
 ```typescript
 interface SeatSelectorProps {
-  eventId: number;                    // Event ID
+  eventId: number; // Event ID
   attendanceBuckets: number[] | null; // User's attendance time buckets
-  disabled: boolean;                  // Disable all interactions
-  onReservationChange?: () => void;   // Callback when reservation changes
+  disabled: boolean; // Disable all interactions
+  onReservationChange?: () => void; // Callback when reservation changes
 }
 ```
 
 **Component State**:
+
 - `rooms`: Array of Room objects for the event
 - `seats`: Array of Seat objects across all rooms
 - `seatingConfig`: Event seating configuration
@@ -46,6 +49,7 @@ interface SeatSelectorProps {
 - `dataLoaded`: Initial data fetch completed
 
 **Data Flow**:
+
 1. Component mounts and fetches seating config
 2. If seating is enabled, fetches rooms and seats
 3. Fetches user's current reservation (if exists)
@@ -57,12 +61,13 @@ interface SeatSelectorProps {
 **Location**: `frontend/src/types/seat_reservations.tsx`
 
 **Types**:
+
 ```typescript
 // Main reservation object
 export type SeatReservation = {
   id: number;
   eventId: number;
-  seatId: number | null;      // null = unspecified seat
+  seatId: number | null; // null = unspecified seat
   invitationEmail: string;
   attendanceBuckets: number[];
   createdAt: moment.Moment;
@@ -90,6 +95,7 @@ export type SeatAvailabilityResponse = {
 **Location**: `frontend/src/components/Event.tsx`
 
 **Changes Made**:
+
 1. Import SeatSelector component and types
 2. Add state for invitation data (for attendance buckets)
 3. Fetch invitation data on mount and when responded changes
@@ -106,57 +112,68 @@ The SeatSelector appears as a full-width panel below the Attendees and Game Sugg
 The SeatSelector integrates with these backend endpoints:
 
 ### GET /api/events/{eventId}/seating
+
 Fetches event seating configuration.
 
 **Usage in Component**:
+
 ```typescript
 fetch(`/api/events/${eventId}/seating`, {
   headers: {
-    "Authorization": "Bearer " + token,
+    Authorization: "Bearer " + token,
   },
-})
+});
 ```
 
 **Response**: EventSeatingConfig object
 
 ### GET /api/events/{eventId}/rooms?as_admin=true
+
 Fetches all rooms for an event.
 
 **Note**: Uses admin parameter but accessible to all authenticated users for read-only.
 
 ### GET /api/events/{eventId}/seats?as_admin=true
+
 Fetches all seats for an event.
 
 **Note**: Same admin access pattern as rooms.
 
 ### GET /api/events/{eventId}/seat-reservations/me
+
 Fetches current user's seat reservation.
 
 **Returns**:
+
 - 200: SeatReservation object
 - 404: No reservation found (user hasn't selected a seat yet)
 
 ### POST /api/events/{eventId}/seat-reservations/me
+
 Creates a new seat reservation for current user.
 
 **Request Body**: SeatReservationSubmit
 **Responses**:
+
 - 200: Created successfully
 - 400: Invalid request (validation error)
 - 409: Conflict (seat already reserved for those times)
 
 ### PUT /api/events/{eventId}/seat-reservations/me
+
 Updates current user's existing seat reservation.
 
 **Request Body**: SeatReservationSubmit
 **Responses**: Same as POST
 
 ### DELETE /api/events/{eventId}/seat-reservations/me
+
 Removes current user's seat reservation.
 
 **Response**: 204 No Content on success
 
 ### POST /api/events/{eventId}/seat-reservations/check-availability
+
 Checks which seats are available for given attendance buckets.
 
 **Request Body**: SeatAvailabilityRequest
@@ -169,22 +186,27 @@ Checks which seats are available for given attendance buckets.
 The component handles these error scenarios:
 
 ### 401 Unauthorized
+
 - Calls signOut() from UserDispatchContext
 - Redirects user to sign-in
 
 ### 404 Not Found (Reservation)
+
 - Normal case when user hasn't selected a seat yet
 - Sets currentReservation to null
 
 ### 409 Conflict
+
 - Seat already reserved by another user
 - Shows user-friendly error: "This seat is already reserved for the selected times. Please choose another seat."
 
 ### 400 Bad Request
+
 - Validation error (e.g., wrong bucket count, seat doesn't exist)
 - Shows error message from server
 
 ### General Errors
+
 - Catches network errors
 - Logs to console
 - Shows generic error notification
@@ -194,11 +216,13 @@ The component handles these error scenarios:
 ### Keyboard Navigation
 
 **Seat Buttons in List View**:
+
 - Tab order: Top to bottom, left to right
 - Enter/Space: Select seat
 - Disabled seats: tabindex="-1" (not focusable)
 
 **Seat Markers on Floorplan**:
+
 - Each seat has tabindex="0" (focusable)
 - Role: "button"
 - onKeyDown: Handles Enter and Space keys
@@ -207,30 +231,35 @@ The component handles these error scenarios:
 ### ARIA Labels
 
 **Seat Buttons/Markers**:
+
 ```typescript
 aria-label={`Seat ${seat.label}${
-  seat.isOwnSeat ? " (your seat)" : 
-  seat.isOccupied ? " (occupied)" : 
+  seat.isOwnSeat ? " (your seat)" :
+  seat.isOccupied ? " (occupied)" :
   " (available)"
 }`}
 ```
 
 **Seat Status Chips**:
+
 - Clearly labeled: "Available", "Your Seat", "Occupied"
 - Icons with text for clarity
 
 **Interactive Elements**:
+
 - All buttons have descriptive labels
 - Loading states announced to screen readers
 
 ### Screen Reader Support
 
 **Visual Hierarchy**:
+
 - Semantic HTML (h2, h3, etc.)
 - Proper heading levels
 - Lists for seat collections
 
 **Status Updates**:
+
 - Success/error messages use Snackbar (notistack)
 - Screen readers announce notifications
 
@@ -241,6 +270,7 @@ aria-label={`Seat ${seat.label}${
 **Minimum Size**: 44x44 pixels (WCAG AA requirement)
 
 **Implementation**:
+
 ```typescript
 sx={{
   minWidth: 44,
@@ -250,6 +280,7 @@ sx={{
 ```
 
 **Applied to**:
+
 - Seat buttons in list view
 - Seat markers on floorplan
 - Action buttons (Select, Remove, etc.)
@@ -257,6 +288,7 @@ sx={{
 ### Layout Adaptation
 
 **Grid Breakpoints**:
+
 ```typescript
 <Grid size={{ xs: 6, sm: 4, md: 3 }}>
   {/* Seat button */}
@@ -268,6 +300,7 @@ sx={{
 - md (900px+): 4 columns
 
 **Room Cards**:
+
 - Full width on all screen sizes
 - Floorplan scales to container width
 - List view grid adapts as above
@@ -275,11 +308,13 @@ sx={{
 ### Interaction Patterns
 
 **Floorplan Markers**:
+
 - onClick: Primary interaction
 - Hover effects: Disabled on touch devices (via CSS)
 - No double-tap required (single tap selects)
 
 **Buttons**:
+
 - No hover-dependent functionality
 - Clear focus/active states
 - Large enough for thumb interaction
@@ -289,34 +324,41 @@ sx={{
 ### API Calls
 
 **On Mount**:
+
 - 3-4 parallel requests (config, rooms, seats, reservation)
 - Uses Promise.then chains, not blocking
 
 **On Attendance Change**:
+
 - 1 request: check-availability
 - Debounced via useEffect dependency
 
 **On Seat Selection**:
+
 - 1 request: POST or PUT reservation
 - Loading state prevents multiple submissions
 
 ### Rendering
 
 **Large Seat Lists**:
+
 - React's efficient reconciliation
 - Keys on seat IDs for stable identity
 
 **Floorplan Overlay**:
+
 - Absolute positioning (no layout thrashing)
 - Percentage-based coordinates (no recalculation)
 
 ### Data Updates
 
 **State Management**:
+
 - Local component state (no global state needed)
 - Callback for parent refresh (onReservationChange)
 
 **Refetching**:
+
 - On successful reservation change
 - On attendance bucket change
 - Not on every render
@@ -324,11 +366,13 @@ sx={{
 ## Testing
 
 ### Test File Location
+
 `frontend/src/__tests__/SeatSelector.test.tsx`
 
 ### Test Coverage
 
 **Unit Tests** (provided, but may need MSW debugging):
+
 - Renders correctly
 - Shows/hides sections based on state
 - Handles API responses
@@ -337,6 +381,7 @@ sx={{
 - Disabled state
 
 **Integration Testing Approach**:
+
 1. Use MSW to mock API endpoints
 2. MemoryRouter for routing context
 3. UserProvider for authentication context
@@ -362,6 +407,7 @@ sx={{
 ### Theme Integration
 
 Uses Material-UI theme:
+
 - `theme.palette.primary.main`: Selected seat, buttons
 - `theme.palette.success.main`: Available seats
 - `theme.palette.action.disabledBackground`: Occupied seats
@@ -370,6 +416,7 @@ Uses Material-UI theme:
 ### Frosted Glass Effect
 
 Inherits from Event page's frostedGlassSx:
+
 ```typescript
 sx={{
   backdropFilter: "blur(12px)",
@@ -381,6 +428,7 @@ sx={{
 ### Responsive Utilities
 
 Uses MUI Grid v2 system:
+
 ```typescript
 import { Grid } from "@mui/material";
 
@@ -405,21 +453,25 @@ Potential improvements:
 ### Common Issues
 
 **Component doesn't render**:
+
 - Check: seatingConfig.hasSeating is true
 - Check: API endpoints return 200 status
 - Check: User has valid token in localStorage
 
 **Seats don't appear**:
+
 - Check: rooms and seats arrays populated
 - Check: seats have correct roomId
 - Check: API responses use camelCase (not snake_case)
 
 **Availability check fails**:
+
 - Check: attendanceBuckets is not null
 - Check: attendanceBuckets is array of 1s and 0s
 - Check: Bucket count matches event duration
 
 **Keyboard navigation not working**:
+
 - Check: tabindex is 0 or -1 (not undefined)
 - Check: onKeyDown handler attached
 - Check: Event propagation not stopped elsewhere
@@ -427,16 +479,19 @@ Potential improvements:
 ### Dev Tools
 
 **React DevTools**:
+
 - Inspect component state (rooms, seats, currentReservation)
 - Check prop values (attendanceBuckets)
 - Monitor re-renders
 
 **Network Tab**:
+
 - Check API endpoint URLs
 - Inspect request/response bodies
 - Verify status codes
 
 **Console**:
+
 - Error logs from catch blocks
 - Network errors
 - Component mount/unmount logs
@@ -461,11 +516,13 @@ Follows project conventions:
 ### Pre-commit Hooks
 
 Before committing changes:
+
 ```bash
 just pre-commit
 ```
 
 This runs:
+
 - Prettier formatting
 - ESLint linting
 - TypeScript type checking
@@ -487,6 +544,7 @@ When modifying the SeatSelector:
 ## Questions?
 
 For technical questions:
+
 - Check the API documentation (SEAT_RESERVATIONS.md)
 - Review the backend implementation (api/src/routes/seat_reservations.rs)
 - Consult the rooms/seats documentation (ROOMS_AND_SEATS.md)
