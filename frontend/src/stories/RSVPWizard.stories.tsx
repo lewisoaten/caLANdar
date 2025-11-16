@@ -29,7 +29,7 @@ const mockEvent = {
   description: "Join us for an epic weekend of gaming!",
   timeBegin: moment().add(7, "days"),
   timeEnd: moment().add(9, "days"),
-  image: null,
+  image: undefined,
   createdAt: moment(),
   lastModified: moment(),
 };

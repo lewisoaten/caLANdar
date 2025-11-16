@@ -28,7 +28,7 @@ const mockEvent = {
   description: "A test event",
   timeBegin: moment().add(1, "days"),
   timeEnd: moment().add(2, "days"),
-  image: null,
+  image: undefined,
   createdAt: moment(),
   lastModified: moment(),
 };
