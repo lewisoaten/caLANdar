@@ -57,6 +57,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     null,
   );
   const [seatLabel, setSeatLabel] = useState<string | null>(null);
+  const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
   const [unspecifiedSeatLabel, setUnspecifiedSeatLabel] =
     useState<string>("Unspecified Seat");
 
@@ -102,8 +103,16 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     })
       .then((response) => {
         if (response.status === 404) {
+          // No reservation exists
           setSeatReservationId(null);
-          setSeatLabel(null);
+          // If optional seating, default to unspecified seat
+          if (allowUnspecifiedSeat) {
+            setSeatLabel(unspecifiedSeatLabel);
+            setSeatRoomName(null);
+          } else {
+            setSeatLabel(null);
+            setSeatRoomName(null);
+          }
           return null;
         }
         if (response.status === 401) {
@@ -120,8 +129,9 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           if (data.seatId === null) {
             // Unspecified seat
             setSeatLabel(unspecifiedSeatLabel);
+            setSeatRoomName(null);
           } else if (data.seatId) {
-            // Fetch the actual seat label
+            // Fetch the actual seat label and room
             fetch(`/api/events/${props.event.id}/seats/${data.seatId}`, {
               headers: {
                 "Content-Type": "application/json",
@@ -136,20 +146,58 @@ export default function RSVPWizard(props: RSVPWizardProps) {
               .then((seatData) => {
                 if (seatData?.label) {
                   setSeatLabel(seatData.label);
+                  // Fetch room name
+                  if (seatData.roomId) {
+                    fetch(
+                      `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+                      {
+                        headers: {
+                          "Content-Type": "application/json",
+                          Accept: "application/json",
+                          Authorization: "Bearer " + token,
+                        },
+                      },
+                    )
+                      .then((response) => {
+                        if (response.ok) return response.json();
+                        return null;
+                      })
+                      .then((roomData) => {
+                        if (roomData?.name) {
+                          setSeatRoomName(roomData.name);
+                        }
+                      })
+                      .catch((error) => {
+                        console.error("Error fetching room:", error);
+                      });
+                  }
                 }
               })
               .catch((error) => {
                 console.error("Error fetching seat:", error);
               });
           }
+        } else if (allowUnspecifiedSeat) {
+          // No reservation but optional seating - default to unspecified
+          setSeatLabel(unspecifiedSeatLabel);
+          setSeatRoomName(null);
         } else {
           setSeatLabel(null);
+          setSeatRoomName(null);
         }
       })
       .catch((error) => {
         console.error("Error fetching seat reservation:", error);
       });
-  }, [props.event.id, token, email, hasSeating, signOut, unspecifiedSeatLabel]);
+  }, [
+    props.event.id,
+    token,
+    email,
+    hasSeating,
+    signOut,
+    unspecifiedSeatLabel,
+    allowUnspecifiedSeat,
+  ]);
 
   // Define steps based on response
   const getSteps = () => {
@@ -366,7 +414,14 @@ export default function RSVPWizard(props: RSVPWizardProps) {
                 .then((response) => {
                   if (response.status === 404) {
                     setSeatReservationId(null);
-                    setSeatLabel(null);
+                    // If optional seating, default to unspecified seat
+                    if (allowUnspecifiedSeat) {
+                      setSeatLabel(unspecifiedSeatLabel);
+                      setSeatRoomName(null);
+                    } else {
+                      setSeatLabel(null);
+                      setSeatRoomName(null);
+                    }
                     return null;
                   }
                   if (response.ok) return response.json();
@@ -378,6 +433,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
                     // Fetch seat label
                     if (data.seatId === null) {
                       setSeatLabel(unspecifiedSeatLabel);
+                      setSeatRoomName(null);
                     } else if (data.seatId) {
                       fetch(
                         `/api/events/${props.event.id}/seats/${data.seatId}`,
@@ -396,15 +452,46 @@ export default function RSVPWizard(props: RSVPWizardProps) {
                         .then((seatData) => {
                           if (seatData?.label) {
                             setSeatLabel(seatData.label);
+                            // Fetch room name
+                            if (seatData.roomId) {
+                              fetch(
+                                `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+                                {
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    Accept: "application/json",
+                                    Authorization: "Bearer " + token,
+                                  },
+                                },
+                              )
+                                .then((response) => {
+                                  if (response.ok) return response.json();
+                                  return null;
+                                })
+                                .then((roomData) => {
+                                  if (roomData?.name) {
+                                    setSeatRoomName(roomData.name);
+                                  }
+                                })
+                                .catch((error) => {
+                                  console.error("Error fetching room:", error);
+                                });
+                            }
                           }
                         })
                         .catch((error) => {
                           console.error("Error fetching seat:", error);
                         });
                     }
+                  } else if (allowUnspecifiedSeat) {
+                    // No reservation but optional seating - default to unspecified
+                    setSeatReservationId(null);
+                    setSeatLabel(unspecifiedSeatLabel);
+                    setSeatRoomName(null);
                   } else {
                     setSeatReservationId(null);
                     setSeatLabel(null);
+                    setSeatRoomName(null);
                   }
                 })
                 .catch((error) => {
@@ -422,6 +509,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             timeBegin={props.event.timeBegin}
             timeEnd={props.event.timeEnd}
             seatLabel={seatLabel}
+            seatRoomName={seatRoomName}
             hasSeating={hasSeating}
           />
         );

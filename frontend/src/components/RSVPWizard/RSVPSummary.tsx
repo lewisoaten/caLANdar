@@ -33,6 +33,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
   const token = userDetails?.token;
 
   const [seatLabel, setSeatLabel] = useState<string | null>(null);
+  const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
   const [hasSeating, setHasSeating] = useState(false);
 
   // Fetch seating config and seat reservation
@@ -56,6 +57,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
           setHasSeating(data.hasSeating || false);
           const unspecifiedLabel =
             data.unspecifiedSeatLabel || "Unspecified Seat";
+          const allowUnspecifiedSeat = data.allowUnspecifiedSeat || false;
 
           // If seating is enabled and user has responded, fetch seat reservation
           if (
@@ -72,7 +74,14 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
             })
               .then((response) => {
                 if (response.status === 404) {
-                  setSeatLabel(null);
+                  // No reservation - if optional seating, default to unspecified
+                  if (allowUnspecifiedSeat) {
+                    setSeatLabel(unspecifiedLabel);
+                    setSeatRoomName(null);
+                  } else {
+                    setSeatLabel(null);
+                    setSeatRoomName(null);
+                  }
                   return null;
                 }
                 if (response.ok) return response.json();
@@ -82,8 +91,9 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                 if (reservationData) {
                   if (reservationData.seatId === null) {
                     setSeatLabel(unspecifiedLabel);
+                    setSeatRoomName(null);
                   } else if (reservationData.seatId) {
-                    // Fetch seat label
+                    // Fetch seat label and room
                     fetch(
                       `/api/events/${props.event.id}/seats/${reservationData.seatId}`,
                       {
@@ -101,12 +111,41 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                       .then((seatData) => {
                         if (seatData?.label) {
                           setSeatLabel(seatData.label);
+                          // Fetch room name
+                          if (seatData.roomId) {
+                            fetch(
+                              `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+                              {
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  Accept: "application/json",
+                                  Authorization: "Bearer " + token,
+                                },
+                              },
+                            )
+                              .then((response) => {
+                                if (response.ok) return response.json();
+                                return null;
+                              })
+                              .then((roomData) => {
+                                if (roomData?.name) {
+                                  setSeatRoomName(roomData.name);
+                                }
+                              })
+                              .catch((error) => {
+                                console.error("Error fetching room:", error);
+                              });
+                          }
                         }
                       })
                       .catch((error) => {
                         console.error("Error fetching seat:", error);
                       });
                   }
+                } else if (allowUnspecifiedSeat) {
+                  // No reservation but optional seating - default to unspecified
+                  setSeatLabel(unspecifiedLabel);
+                  setSeatRoomName(null);
                 }
               })
               .catch((error) => {
@@ -219,7 +258,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                 </Typography>
               </Box>
 
-              {hasSeating && (
+              {hasSeating && seatLabel && (
                 <Box>
                   <Typography variant="body2" color="text.secondary">
                     <EventSeatIcon
@@ -229,7 +268,9 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                     Seat
                   </Typography>
                   <Typography variant="body1">
-                    {seatLabel || "Not selected"}
+                    {seatRoomName
+                      ? `${seatRoomName} - ${seatLabel}`
+                      : seatLabel}
                   </Typography>
                 </Box>
               )}

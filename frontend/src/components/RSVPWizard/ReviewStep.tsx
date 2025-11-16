@@ -17,6 +17,7 @@ interface ReviewStepProps {
   timeBegin: moment.Moment;
   timeEnd: moment.Moment;
   seatLabel?: string | null;
+  seatRoomName?: string | null;
   hasSeating: boolean;
 }
 
@@ -101,13 +102,15 @@ export default function ReviewStep(props: ReviewStepProps) {
                   </Box>
                 </Grid>
 
-                {props.hasSeating && (
+                {props.hasSeating && props.seatLabel && (
                   <Grid size={12}>
                     <Box display="flex" alignItems="center" gap={1}>
                       <EventSeatIcon color="primary" />
                       <Typography variant="body1" component="span">
                         <strong>Seat:</strong>{" "}
-                        {props.seatLabel || "Not selected"}
+                        {props.seatRoomName
+                          ? `${props.seatRoomName} - ${props.seatLabel}`
+                          : props.seatLabel}
                       </Typography>
                     </Box>
                   </Grid>
