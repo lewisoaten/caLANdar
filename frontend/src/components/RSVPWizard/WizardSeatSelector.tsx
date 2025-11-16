@@ -105,7 +105,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   useEffect(() => {
     if (!eventId || !token || !attendanceBuckets) return;
 
-    fetch(`/api/events/${eventId}/seat-availability`, {
+    fetch(`/api/events/${eventId}/seat-reservations/check-availability`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
