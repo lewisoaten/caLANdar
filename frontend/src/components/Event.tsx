@@ -7,17 +7,10 @@ import { useTheme } from "@mui/material/styles";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
-import {
-  EventData,
-  defaultEventData,
-  EventSeatingConfig,
-  defaultEventSeatingConfig,
-  Seat,
-} from "../types/events";
+import { EventData, defaultEventData } from "../types/events";
 import InvitationResponse from "./InvitationResponse";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
-import SeatReservation from "./SeatReservation";
 
 const Event = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -26,9 +19,6 @@ const Event = () => {
   const [event, setEvent] = useState(defaultEventData);
   const [loaded, setLoaded] = useState(false);
   const [responded, setResponded] = useState(false);
-  const [seatingConfig, setSeatingConfig] = useState(defaultEventSeatingConfig);
-  const [seats, setSeats] = useState<Seat[]>([]);
-  const [seatingLoaded, setSeatingLoaded] = useState(false);
   const theme = useTheme();
 
   const { id } = useParams();
@@ -55,62 +45,6 @@ const Event = () => {
         }
       });
   }, []);
-
-  // Fetch seating configuration
-  useEffect(() => {
-    if (!token || !id) return;
-
-    fetch(`/api/events/${id}/seating`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-        } else if (response.ok) {
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as EventSeatingConfig);
-        }
-        return null;
-      })
-      .then((data) => {
-        if (data) {
-          setSeatingConfig(data);
-          // If seating is enabled, fetch seats
-          if (data.hasSeating) {
-            return fetch(`/api/events/${id}/seats?as_admin=true`, {
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-            });
-          }
-        }
-        setSeatingLoaded(true);
-        return null;
-      })
-      .then((response) => {
-        if (response && response.ok) {
-          return response.text().then((data) => JSON.parse(data) as Seat[]);
-        }
-        return null;
-      })
-      .then((seats) => {
-        if (seats) {
-          setSeats(seats);
-        }
-        setSeatingLoaded(true);
-      })
-      .catch((error) => {
-        console.error("Error fetching seating data:", error);
-        setSeatingLoaded(true);
-      });
-  }, [id, token]);
 
   // Cleanup: Reset Dashboard background when component unmounts
   useEffect(() => {
@@ -298,19 +232,6 @@ const Event = () => {
                     />
                   )}
                 </Grid>
-                {seatingLoaded && seatingConfig.hasSeating && (
-                  <Grid size={12}>
-                    <SeatReservation
-                      event={event}
-                      seats={seats}
-                      allowUnspecifiedSeat={seatingConfig.allowUnspecifiedSeat}
-                      unspecifiedSeatLabel={seatingConfig.unspecifiedSeatLabel}
-                      disabled={
-                        !responded || event.timeEnd.isSameOrBefore(moment())
-                      }
-                    />
-                  </Grid>
-                )}
               </Grid>
             </Paper>
           </Grid>
