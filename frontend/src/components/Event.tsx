@@ -8,14 +8,9 @@ import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
-import {
-  InvitationData,
-  defaultInvitationData,
-  RSVP,
-} from "../types/invitations";
+import { InvitationData, defaultInvitationData } from "../types/invitations";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
-import SeatSelector from "./SeatSelector";
 import { RSVPWizard, RSVPSummary } from "./RSVPWizard";
 
 const Event = () => {
@@ -264,6 +259,7 @@ const Event = () => {
                   {loaded && (
                     <RSVPSummary
                       invitation={invitation}
+                      event={event}
                       onEdit={() => setWizardOpen(true)}
                       disabled={event.timeEnd.isSameOrBefore(moment())}
                     />
@@ -310,27 +306,6 @@ const Event = () => {
               )}
             </Paper>
           </Grid>
-
-          {/* Seat Selection Panel */}
-          {loaded && invitation.response && invitation.response !== RSVP.no && (
-            <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-              <Paper
-                sx={{
-                  ...frostedGlassSx,
-                  p: 3,
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                <SeatSelector
-                  eventId={event.id}
-                  attendanceBuckets={invitation.attendance}
-                  disabled={event.timeEnd.isSameOrBefore(moment())}
-                  onReservationChange={() => setResponded((prev) => prev + 1)}
-                />
-              </Paper>
-            </Grid>
-          )}
         </Grid>
       </Container>
 

@@ -268,7 +268,10 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             attendanceBuckets={attendance}
             hasSeating={hasSeating}
             disabled={saving}
-            onSkip={handleNext}
+            onReservationChange={() => {
+              // Seat reservation changed, no need to do anything here
+              // as the seat is saved independently
+            }}
           />
         );
       case "Review":

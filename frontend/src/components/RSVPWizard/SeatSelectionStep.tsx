@@ -1,12 +1,13 @@
 import * as React from "react";
-import { Typography, Stack, Alert, Button } from "@mui/material";
+import { Typography, Stack } from "@mui/material";
+import SeatSelector from "../SeatSelector";
 
 interface SeatSelectionStepProps {
   eventId: number;
   attendanceBuckets: number[] | null;
   disabled?: boolean;
   hasSeating: boolean;
-  onSkip?: () => void;
+  onReservationChange?: () => void;
 }
 
 export default function SeatSelectionStep(props: SeatSelectionStepProps) {
@@ -22,15 +23,12 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
       <Typography variant="body2" color="text.secondary">
         You can select a seat now or skip this step and choose one later.
       </Typography>
-      <Alert severity="info">
-        Seat selection will be available after you complete your RSVP. You can
-        come back later to choose your seat on the event page.
-      </Alert>
-      {props.onSkip && (
-        <Button variant="outlined" onClick={props.onSkip} fullWidth>
-          Skip for now
-        </Button>
-      )}
+      <SeatSelector
+        eventId={props.eventId}
+        attendanceBuckets={props.attendanceBuckets}
+        disabled={props.disabled || false}
+        onReservationChange={props.onReservationChange}
+      />
     </Stack>
   );
 }

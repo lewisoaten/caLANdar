@@ -4,6 +4,17 @@ import { RSVPSummary } from "../components/RSVPWizard";
 import { RSVP } from "../types/invitations";
 import moment from "moment";
 
+const mockEvent = {
+  id: 1,
+  title: "Summer LAN Party 2025",
+  description: "Join us for an epic weekend of gaming!",
+  timeBegin: moment().add(7, "days").hour(18).minute(0),
+  timeEnd: moment().add(9, "days").hour(12).minute(0),
+  image: undefined,
+  createdAt: moment(),
+  lastModified: moment(),
+};
+
 const meta = {
   title: "Components/RSVPSummary",
   component: RSVPSummary,
@@ -16,6 +27,7 @@ const meta = {
   },
   args: {
     onEdit: fn(),
+    event: mockEvent,
   },
 } satisfies Meta<typeof RSVPSummary>;
 

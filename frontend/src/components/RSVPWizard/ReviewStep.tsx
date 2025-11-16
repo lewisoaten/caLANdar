@@ -1,5 +1,12 @@
 import * as React from "react";
-import { Typography, Stack, Card, CardContent, Grid, Box } from "@mui/material";
+import {
+  Typography,
+  Stack,
+  Card,
+  CardContent,
+  Grid,
+  Box,
+} from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
@@ -7,6 +14,7 @@ import PersonIcon from "@mui/icons-material/Person";
 import EventIcon from "@mui/icons-material/Event";
 import { RSVP } from "../../types/invitations";
 import moment from "moment";
+import { getAttendanceDescription } from "../../utils/attendanceDescription";
 
 interface ReviewStepProps {
   response: RSVP | null;
@@ -43,12 +51,12 @@ export default function ReviewStep(props: ReviewStepProps) {
     }
   };
 
-  const getAttendanceText = (attendance: number[] | null) => {
-    if (!attendance || attendance.length === 0) {
-      return "No attendance selected";
-    }
-    const selectedCount = attendance.filter((v) => v === 1).length;
-    return `${selectedCount} time slot${selectedCount !== 1 ? "s" : ""} selected`;
+  const getAttendanceText = (
+    attendance: number[] | null,
+    timeBegin: moment.Moment,
+    timeEnd: moment.Moment,
+  ) => {
+    return getAttendanceDescription(attendance, timeBegin, timeEnd);
   };
 
   return (
@@ -88,7 +96,11 @@ export default function ReviewStep(props: ReviewStepProps) {
                     <EventIcon color="primary" />
                     <Typography variant="body1" component="span">
                       <strong>Attendance:</strong>{" "}
-                      {getAttendanceText(props.attendance)}
+                      {getAttendanceText(
+                        props.attendance,
+                        props.timeBegin,
+                        props.timeEnd,
+                      )}
                     </Typography>
                   </Box>
                 </Grid>

@@ -13,9 +13,12 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
 import { RSVP, InvitationData } from "../../types/invitations";
+import { EventData } from "../../types/events";
+import { getAttendanceDescription } from "../../utils/attendanceDescription";
 
 interface RSVPSummaryProps {
   invitation: InvitationData;
+  event: EventData;
   onEdit: () => void;
   disabled?: boolean;
 }
@@ -63,11 +66,11 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
   };
 
   const getAttendanceText = (attendance: number[] | null) => {
-    if (!attendance || attendance.length === 0) {
-      return "No attendance selected";
-    }
-    const selectedCount = attendance.filter((v) => v === 1).length;
-    return `${selectedCount} time slot${selectedCount !== 1 ? "s" : ""}`;
+    return getAttendanceDescription(
+      attendance,
+      props.event.timeBegin,
+      props.event.timeEnd,
+    );
   };
 
   return (
