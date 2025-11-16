@@ -292,3 +292,65 @@ pub async fn delete_admin(
         )),
     }
 }
+
+/// Request body for checking seat availability
+#[derive(Deserialize, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct SeatAvailabilityRequest {
+    /// Attendance buckets to check availability for
+    pub attendance_buckets: Vec<u8>,
+}
+
+impl SchemaExample for SeatAvailabilityRequest {
+    fn example() -> Self {
+        Self {
+            attendance_buckets: vec![1, 1, 0, 0],
+        }
+    }
+}
+
+/// Response for seat availability check
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct SeatAvailabilityResponse {
+    /// List of available seat IDs for the requested time buckets
+    pub available_seat_ids: Vec<i32>,
+}
+
+impl SchemaExample for SeatAvailabilityResponse {
+    fn example() -> Self {
+        Self {
+            available_seat_ids: vec![1, 2, 3, 5, 7],
+        }
+    }
+}
+
+custom_errors!(SeatAvailabilityCheckError, BadRequest, InternalServerError);
+
+/// Check seat availability for given attendance buckets
+///
+/// Returns a list of seat IDs that are available (no conflicts) for the requested time buckets.
+/// This helps users see which seats are free before updating their attendance or creating a reservation.
+#[openapi(tag = "Seat Reservations")]
+#[post(
+    "/events/<event_id>/seat-reservations/check-availability",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn check_availability(
+    event_id: i32,
+    request: Json<SeatAvailabilityRequest>,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<SeatAvailabilityResponse>, SeatAvailabilityCheckError> {
+    match seat_reservation::check_availability(pool, event_id, &request.attendance_buckets).await {
+        Ok(available_seats) => Ok(Json(SeatAvailabilityResponse {
+            available_seat_ids: available_seats,
+        })),
+        Err(e) => Err(SeatAvailabilityCheckError::InternalServerError(format!(
+            "Error checking seat availability: {e}"
+        ))),
+    }
+}

@@ -427,6 +427,54 @@ pub async fn delete(
     }
 }
 
+/// Check seat availability for given attendance buckets
+/// Returns a list of seat IDs that are available (no conflicts) for the given time buckets
+pub async fn check_availability(
+    pool: &PgPool,
+    event_id: i32,
+    attendance_buckets: &[u8],
+) -> Result<Vec<i32>, Error> {
+    // Get all seats for this event
+    let all_seats = match seat::get_all_by_event(pool, event_id).await {
+        Ok(seats) => seats,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get seats for event due to: {e}"
+            )))
+        }
+    };
+
+    // Get all seat reservations for this event
+    let reservations = match seat_reservation::get_all_by_event(pool, event_id).await {
+        Ok(res) => res,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get seat reservations due to: {e}"
+            )))
+        }
+    };
+
+    // Filter seats that are available (no conflicts)
+    let available_seats: Vec<i32> = all_seats
+        .into_iter()
+        .filter(|seat| {
+            // Check if this seat has any conflicting reservations
+            let has_conflict = reservations.iter().any(|reservation| {
+                // Only check reservations for this specific seat
+                if reservation.seat_id != Some(seat.id) {
+                    return false;
+                }
+                // Check for bucket overlap
+                has_bucket_overlap(attendance_buckets, &reservation.attendance_buckets)
+            });
+            !has_conflict
+        })
+        .map(|seat| seat.id)
+        .collect();
+
+    Ok(available_seats)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -187,6 +187,38 @@ Delete the current user's seat reservation.
 - 204 No Content: Reservation deleted
 - 401 Unauthorized: Not logged in or event is inactive
 
+#### POST /check-availability
+
+Check which seats are available for given attendance buckets. This is useful before updating attendance or creating a reservation.
+
+**Request Body:**
+
+```json
+{
+  "attendanceBuckets": [1, 1, 0, 1]
+}
+```
+
+**Response:**
+
+```json
+{
+  "availableSeatIds": [1, 2, 3, 5, 7, 10]
+}
+```
+
+**Status Codes:**
+
+- 200 OK: Returns list of available seat IDs
+- 400 Bad Request: Invalid input
+- 500 Internal Server Error: Unable to check availability
+
+**Use Case:**
+This endpoint allows users to preview which seats are available before:
+
+- Creating a new seat reservation
+- Updating their attendance time buckets (which deletes their current reservation)
+
 ### Admin Endpoints
 
 Admins can manage all reservations. Add `?as_admin=true` to the request.
@@ -250,6 +282,25 @@ Delete a specific user's seat reservation.
 3. **Unspecified Seats Have No Conflicts**: Multiple users can have unspecified seat reservations simultaneously
 4. **Invitation Required**: Users can only reserve seats for events they're invited to
 5. **Bucket Count Must Match**: Attendance buckets must match the event's duration (calculated from start/end times)
+6. **Attendance Sync**: When a user updates their invitation attendance buckets via `/events/{eventId}/invitations`, any existing seat reservation is automatically deleted to maintain consistency
+
+### Important: Attendance Updates and Seat Reservations
+
+**When a user updates their event attendance via the invitation endpoint:**
+
+1. Their seat reservation is automatically deleted
+2. They must create a new seat reservation after updating attendance
+3. Use the `/check-availability` endpoint before updating attendance to see which seats will be available with the new time buckets
+
+**Recommended UI Flow:**
+
+1. User wants to change attendance times
+2. Call `/check-availability` with new attendance buckets to show available seats
+3. User confirms attendance change (knowing their current reservation will be deleted)
+4. Update invitation attendance via `/events/{eventId}/invitations`
+5. User creates new seat reservation with desired seat
+
+This design ensures seat reservations always match the user's actual attendance times and prevents seats from being blocked during times when users won't be attending.
 
 ### Validation Rules
 

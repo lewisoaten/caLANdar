@@ -280,6 +280,7 @@ async fn rocket(
                 routes::seat_reservations::delete_me,
                 routes::seat_reservations::put_admin,
                 routes::seat_reservations::delete_admin,
+                routes::seat_reservations::check_availability,
                 routes::games::steam_game_update_v2,
                 routes::games::get_steam_game,
                 routes::event_games::get_all,
