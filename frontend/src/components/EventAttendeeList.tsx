@@ -20,7 +20,7 @@ import {
 
 interface EventAttendeListProps {
   event_id: number;
-  responded: boolean;
+  responded: number;
 }
 
 export default function EventAttendeeList(props: EventAttendeListProps) {

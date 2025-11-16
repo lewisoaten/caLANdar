@@ -27,10 +27,11 @@ import {
 } from "../types/invitations";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData } from "../types/events";
+import { calculateDefaultAttendance } from "../utils/attendance";
 
 interface InvitationResponseProps {
   event: EventData;
-  setResponded: Dispatch<SetStateAction<boolean>>;
+  setResponded: Dispatch<SetStateAction<number>>;
   disabled: boolean;
   asAdmin?: boolean;
 }
@@ -98,7 +99,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
           );
 
           if (data.response && data.handle && data.response !== RSVP.no) {
-            props.setResponded(true);
+            props.setResponded((prev) => prev + 1);
             setAttendanceSelectorVisible(true);
           }
         }
@@ -113,9 +114,16 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       clearTimeout(typingTimer.current);
     }
 
+    // If attendance is null and user RSVP is yes/maybe, set default attendance (all buckets)
+    const defaultAttendance =
+      !invitation.attendance && newAlignment !== RSVP.no
+        ? calculateDefaultAttendance(props.event.timeBegin, props.event.timeEnd)
+        : invitation.attendance;
+
     const newInvitation = {
       ...invitation,
       response: newAlignment as RSVP,
+      attendance: defaultAttendance,
     };
 
     setInvitation(newInvitation);
@@ -142,9 +150,18 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       clearTimeout(typingTimer.current);
     }
 
+    // If attendance is null and user has RSVP'd yes/maybe, set default attendance (all buckets)
+    const defaultAttendance =
+      !invitation.attendance &&
+      invitation.response &&
+      invitation.response !== RSVP.no
+        ? calculateDefaultAttendance(props.event.timeBegin, props.event.timeEnd)
+        : invitation.attendance;
+
     const newInvitation = {
       ...invitation,
       handle: event.target.value,
+      attendance: defaultAttendance,
     };
 
     setInvitation(newInvitation);
@@ -206,7 +223,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         setHandleColour("primary");
         enqueueSnackbar("RSVP saved", { variant: "success" });
         if (newInvitation.response !== RSVP.no) {
-          props.setResponded(true);
+          props.setResponded((prev) => prev + 1);
         }
       } else {
         alert("Unable to set response");

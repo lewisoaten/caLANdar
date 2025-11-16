@@ -8,17 +8,25 @@ import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
+import {
+  InvitationData,
+  defaultInvitationData,
+  RSVP,
+} from "../types/invitations";
 import InvitationResponse from "./InvitationResponse";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
+import SeatSelector from "./SeatSelector";
 
 const Event = () => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
+  const email = userDetails?.email;
   const [event, setEvent] = useState(defaultEventData);
   const [loaded, setLoaded] = useState(false);
-  const [responded, setResponded] = useState(false);
+  const [responded, setResponded] = useState(0);
+  const [invitation, setInvitation] = useState(defaultInvitationData);
   const theme = useTheme();
 
   const { id } = useParams();
@@ -45,6 +53,34 @@ const Event = () => {
         }
       });
   }, []);
+
+  // Fetch invitation data for attendance buckets
+  useEffect(() => {
+    if (!id || !token || !email) return;
+
+    fetch(`/api/events/${id}/invitations/${encodeURIComponent(email)}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as InvitationData);
+      })
+      .then((data) => {
+        if (data) {
+          setInvitation(data);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching invitation:", error);
+      });
+  }, [id, token, email, responded, signOut]);
 
   // Cleanup: Reset Dashboard background when component unmounts
   useEffect(() => {
@@ -273,6 +309,27 @@ const Event = () => {
               )}
             </Paper>
           </Grid>
+
+          {/* Seat Selection Panel */}
+          {loaded && invitation.response && invitation.response !== RSVP.no && (
+            <Grid size={{ xs: 12, md: 12, lg: 12 }}>
+              <Paper
+                sx={{
+                  ...frostedGlassSx,
+                  p: 3,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <SeatSelector
+                  eventId={event.id}
+                  attendanceBuckets={invitation.attendance}
+                  disabled={event.timeEnd.isSameOrBefore(moment())}
+                  onReservationChange={() => setResponded((prev) => prev + 1)}
+                />
+              </Paper>
+            </Grid>
+          )}
         </Grid>
       </Container>
     </>
