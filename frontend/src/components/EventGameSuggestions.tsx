@@ -34,7 +34,7 @@ import GameOwners from "./GameOwners";
 
 interface EventGameSuggestionsProps {
   event_id: number;
-  responded: boolean;
+  responded: number;
   disabled: boolean;
 }
 

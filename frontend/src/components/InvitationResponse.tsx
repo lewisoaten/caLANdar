@@ -31,7 +31,7 @@ import { calculateDefaultAttendance } from "../utils/attendance";
 
 interface InvitationResponseProps {
   event: EventData;
-  setResponded: Dispatch<SetStateAction<boolean>>;
+  setResponded: Dispatch<SetStateAction<number>>;
   disabled: boolean;
   asAdmin?: boolean;
 }
@@ -99,7 +99,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
           );
 
           if (data.response && data.handle && data.response !== RSVP.no) {
-            props.setResponded(true);
+            props.setResponded((prev) => prev + 1);
             setAttendanceSelectorVisible(true);
           }
         }
@@ -223,7 +223,7 @@ export default function InvitationResponse(props: InvitationResponseProps) {
         setHandleColour("primary");
         enqueueSnackbar("RSVP saved", { variant: "success" });
         if (newInvitation.response !== RSVP.no) {
-          props.setResponded(true);
+          props.setResponded((prev) => prev + 1);
         }
       } else {
         alert("Unable to set response");

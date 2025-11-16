@@ -139,7 +139,7 @@ const gameSearchResult: Game[] = [
 export const Default: Story = {
   args: {
     event_id: 1,
-    responded: true,
+    responded: 1,
     disabled: false,
   },
   parameters: {
