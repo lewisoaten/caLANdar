@@ -219,17 +219,20 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
     }
   }, [currentReservation, seatingConfig, seats, dataLoaded, enqueueSnackbar]);
 
-  // Fetch user profile for avatar
+  // Fetch user's invitation to get avatar URL
   useEffect(() => {
-    if (!token || !userDetails?.email) return;
+    if (!token || !userDetails?.email || !eventId) return;
 
-    fetch(`/api/profiles/${encodeURIComponent(userDetails.email)}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
+    fetch(
+      `/api/events/${eventId}/invitations/${encodeURIComponent(userDetails.email)}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
       },
-    })
+    )
       .then((response) => {
         if (response.ok)
           return response.text().then((data) => JSON.parse(data, dateParser));
@@ -240,9 +243,9 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
         }
       })
       .catch((error) => {
-        console.error("Error fetching user profile:", error);
+        console.error("Error fetching user invitation for avatar:", error);
       });
-  }, [token, userDetails?.email]);
+  }, [token, userDetails?.email, eventId]);
 
   // Check seat availability when attendance buckets change
   useEffect(() => {
