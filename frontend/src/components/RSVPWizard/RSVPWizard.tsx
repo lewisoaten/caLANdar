@@ -60,6 +60,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
   const [unspecifiedSeatLabel, setUnspecifiedSeatLabel] =
     useState<string>("Unspecified Seat");
+  const [fetchingSeatInfo, setFetchingSeatInfo] = useState(false);
 
   // Check if event has seating configured
   useEffect(() => {
@@ -240,8 +241,10 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           const seatRequired = hasSeating && !allowUnspecifiedSeat;
           if (seatRequired) {
             // User must have a seat reservation to proceed
-            return seatReservationId !== null;
+            return seatReservationId !== null && !fetchingSeatInfo;
           }
+          // If not required, still wait for fetching to complete
+          return !fetchingSeatInfo;
         }
         return true; // Seat selection is optional or this is review
       case 4: // Final review step
@@ -399,104 +402,106 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             hasSeating={hasSeating}
             allowUnspecifiedSeat={allowUnspecifiedSeat}
             disabled={saving}
-            onReservationChange={() => {
+            onReservationChange={async () => {
               // Seat reservation changed, refresh the reservation status
               // Re-fetch to update seatReservationId and seatLabel
               if (!props.event.id || !token || !email) return;
 
-              fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
-                headers: {
-                  "Content-Type": "application/json",
-                  Accept: "application/json",
-                  Authorization: "Bearer " + token,
-                },
-              })
-                .then((response) => {
-                  if (response.status === 404) {
-                    setSeatReservationId(null);
-                    // If optional seating, default to unspecified seat
-                    if (allowUnspecifiedSeat) {
-                      setSeatLabel(unspecifiedSeatLabel);
-                      setSeatRoomName(null);
-                    } else {
-                      setSeatLabel(null);
-                      setSeatRoomName(null);
-                    }
-                    return null;
-                  }
-                  if (response.ok) return response.json();
-                  return null;
-                })
-                .then((data) => {
-                  if (data?.id) {
-                    setSeatReservationId(data.id);
-                    // Fetch seat label
-                    if (data.seatId === null) {
-                      setSeatLabel(unspecifiedSeatLabel);
-                      setSeatRoomName(null);
-                    } else if (data.seatId) {
-                      fetch(
-                        `/api/events/${props.event.id}/seats/${data.seatId}`,
-                        {
-                          headers: {
-                            "Content-Type": "application/json",
-                            Accept: "application/json",
-                            Authorization: "Bearer " + token,
-                          },
-                        },
-                      )
-                        .then((response) => {
-                          if (response.ok) return response.json();
-                          return null;
-                        })
-                        .then((seatData) => {
-                          if (seatData?.label) {
-                            setSeatLabel(seatData.label);
-                            // Fetch room name
-                            if (seatData.roomId) {
-                              fetch(
-                                `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-                                {
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                    Accept: "application/json",
-                                    Authorization: "Bearer " + token,
-                                  },
-                                },
-                              )
-                                .then((response) => {
-                                  if (response.ok) return response.json();
-                                  return null;
-                                })
-                                .then((roomData) => {
-                                  if (roomData?.name) {
-                                    setSeatRoomName(roomData.name);
-                                  }
-                                })
-                                .catch((error) => {
-                                  console.error("Error fetching room:", error);
-                                });
-                            }
-                          }
-                        })
-                        .catch((error) => {
-                          console.error("Error fetching seat:", error);
-                        });
-                    }
-                  } else if (allowUnspecifiedSeat) {
-                    // No reservation but optional seating - default to unspecified
-                    setSeatReservationId(null);
+              setFetchingSeatInfo(true);
+              try {
+                const response = await fetch(
+                  `/api/events/${props.event.id}/seat-reservations/me`,
+                  {
+                    headers: {
+                      "Content-Type": "application/json",
+                      Accept: "application/json",
+                      Authorization: "Bearer " + token,
+                    },
+                  },
+                );
+
+                if (response.status === 404) {
+                  setSeatReservationId(null);
+                  // If optional seating, default to unspecified seat
+                  if (allowUnspecifiedSeat) {
                     setSeatLabel(unspecifiedSeatLabel);
                     setSeatRoomName(null);
                   } else {
-                    setSeatReservationId(null);
                     setSeatLabel(null);
                     setSeatRoomName(null);
                   }
-                })
-                .catch((error) => {
-                  console.error("Error fetching seat reservation:", error);
-                });
+                  return;
+                }
+
+                if (!response.ok) return;
+
+                const data = await response.json();
+
+                if (data?.id) {
+                  setSeatReservationId(data.id);
+
+                  // Fetch seat label
+                  if (data.seatId === null) {
+                    setSeatLabel(unspecifiedSeatLabel);
+                    setSeatRoomName(null);
+                  } else if (data.seatId) {
+                    const seatResponse = await fetch(
+                      `/api/events/${props.event.id}/seats/${data.seatId}`,
+                      {
+                        headers: {
+                          "Content-Type": "application/json",
+                          Accept: "application/json",
+                          Authorization: "Bearer " + token,
+                        },
+                      },
+                    );
+
+                    if (seatResponse.ok) {
+                      const seatData = await seatResponse.json();
+
+                      if (seatData?.label) {
+                        setSeatLabel(seatData.label);
+
+                        // Fetch room name
+                        if (seatData.roomId) {
+                          const roomResponse = await fetch(
+                            `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+                            {
+                              headers: {
+                                "Content-Type": "application/json",
+                                Accept: "application/json",
+                                Authorization: "Bearer " + token,
+                              },
+                            },
+                          );
+
+                          if (roomResponse.ok) {
+                            const roomData = await roomResponse.json();
+                            if (roomData?.name) {
+                              setSeatRoomName(roomData.name);
+                            }
+                          }
+                        } else {
+                          setSeatRoomName(null);
+                        }
+                      }
+                    }
+                  }
+                } else if (allowUnspecifiedSeat) {
+                  // No reservation but optional seating - default to unspecified
+                  setSeatReservationId(null);
+                  setSeatLabel(unspecifiedSeatLabel);
+                  setSeatRoomName(null);
+                } else {
+                  setSeatReservationId(null);
+                  setSeatLabel(null);
+                  setSeatRoomName(null);
+                }
+              } catch (error) {
+                console.error("Error fetching seat reservation:", error);
+              } finally {
+                setFetchingSeatInfo(false);
+              }
             }}
           />
         );
