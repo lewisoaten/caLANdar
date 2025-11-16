@@ -9,6 +9,7 @@ pub mod gamer;
 pub mod profile;
 pub mod room;
 pub mod seat;
+pub mod seat_reservation;
 
 // Custom controller error
 #[derive(Debug)]
@@ -18,6 +19,8 @@ pub enum Error {
     BadInput(String),
     NoData(String),
     NotPermitted(String),
+    Conflict(String),
+    NotFound(String),
 }
 
 impl Display for Error {
@@ -26,7 +29,9 @@ impl Display for Error {
             Error::Controller(reason)
             | Error::BadInput(reason)
             | Error::NoData(reason)
-            | Error::NotPermitted(reason) => reason.fmt(f),
+            | Error::NotPermitted(reason)
+            | Error::Conflict(reason)
+            | Error::NotFound(reason) => reason.fmt(f),
         }
     }
 }

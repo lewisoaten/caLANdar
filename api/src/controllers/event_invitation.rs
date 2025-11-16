@@ -19,7 +19,7 @@ impl From<InvitationResponse> for Response {
     }
 }
 
-fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
+pub fn get_day_quarter_buckets(time_begin: DateTime<Utc>, time_end: DateTime<Utc>) -> Vec<u8> {
     let mut buckets = Vec::new();
 
     // Start from 6 AM of time_begin's date
