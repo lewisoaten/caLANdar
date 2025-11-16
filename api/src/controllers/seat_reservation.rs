@@ -44,11 +44,9 @@ async fn check_seat_conflicts(
     exclude_email: Option<&str>,
 ) -> Result<bool, Error> {
     // If seat_id is None (unspecified seat), there's no conflict
-    if seat_id.is_none() {
+    let Some(seat_id_value) = seat_id else {
         return Ok(false);
-    }
-
-    let seat_id_value = seat_id.expect("seat_id should be Some");
+    };
 
     // Get all existing reservations for this seat
     let existing_reservations = match seat_reservation::get_by_seat(pool, seat_id_value).await {
@@ -218,6 +216,27 @@ pub async fn create(
 
     validate_attendance_buckets(&submit.attendance_buckets, expected_bucket_count)?;
 
+    // Validate that seating is enabled for this event
+    match event_seating_config::get(pool, event_id).await {
+        Ok(Some(config)) => {
+            if !config.has_seating {
+                return Err(Error::BadInput(
+                    "Seating is not enabled for this event".to_string(),
+                ));
+            }
+        }
+        Ok(None) => {
+            return Err(Error::BadInput(
+                "Seating is not configured for this event".to_string(),
+            ));
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to check seating config due to: {e}"
+            )));
+        }
+    }
+
     // If a specific seat is requested, validate it exists and check for conflicts
     if let Some(seat_id) = submit.seat_id {
         validate_seat(pool, seat_id, event_id).await?;
@@ -235,11 +254,21 @@ pub async fn create(
     }
 
     // Check if user already has a reservation for this event
-    if let Ok(Some(existing)) = seat_reservation::get_by_email(pool, event_id, &email).await {
-        return Err(Error::Conflict(format!(
-            "You already have a reservation (ID: {}) for this event. Please update or delete it first.",
-            existing.id
-        )));
+    match seat_reservation::get_by_email(pool, event_id, &email).await {
+        Ok(Some(existing)) => {
+            return Err(Error::Conflict(format!(
+                "You already have a reservation (ID: {}) for this event. Please update or delete it first.",
+                existing.id
+            )));
+        }
+        Ok(None) => {
+            // No existing reservation, proceed
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to check for existing reservation due to: {e}"
+            )));
+        }
     }
 
     // Create the reservation
@@ -309,6 +338,27 @@ pub async fn update(
     .len();
 
     validate_attendance_buckets(&submit.attendance_buckets, expected_bucket_count)?;
+
+    // Validate that seating is enabled for this event
+    match event_seating_config::get(pool, event_id).await {
+        Ok(Some(config)) => {
+            if !config.has_seating {
+                return Err(Error::BadInput(
+                    "Seating is not enabled for this event".to_string(),
+                ));
+            }
+        }
+        Ok(None) => {
+            return Err(Error::BadInput(
+                "Seating is not configured for this event".to_string(),
+            ));
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to check seating config due to: {e}"
+            )));
+        }
+    }
 
     // If a specific seat is requested, validate it and check for conflicts
     if let Some(seat_id) = submit.seat_id {

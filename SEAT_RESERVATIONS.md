@@ -161,7 +161,7 @@ For an unspecified seat:
 
 **Status Codes:**
 
-- 201 Created: Reservation created successfully
+- 200 OK: Reservation created successfully
 - 400 Bad Request: Invalid input (e.g., seat doesn't exist, wrong bucket count)
 - 409 Conflict: Seat is already reserved for those time periods, or user already has a reservation
 
