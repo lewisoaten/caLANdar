@@ -111,14 +111,14 @@ The SeatSelector appears as a full-width panel below the Attendees and Game Sugg
 
 The SeatSelector integrates with these backend endpoints:
 
-### GET /api/events/{eventId}/seating
+### GET /api/events/{eventId}/seating-config?as_admin=true
 
 Fetches event seating configuration.
 
 **Usage in Component**:
 
 ```typescript
-fetch(`/api/events/${eventId}/seating`, {
+fetch(`/api/events/${eventId}/seating-config?as_admin=true`, {
   headers: {
     Authorization: "Bearer " + token,
   },

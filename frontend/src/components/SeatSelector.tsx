@@ -65,7 +65,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
   useEffect(() => {
     if (!eventId || !token) return;
 
-    fetch(`/api/events/${eventId}/seating`, {
+    fetch(`/api/events/${eventId}/seating-config?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",

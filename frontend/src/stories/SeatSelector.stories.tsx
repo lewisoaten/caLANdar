@@ -102,7 +102,7 @@ const meta = {
     layout: "padded",
     msw: {
       handlers: [
-        http.get("/api/events/:eventId/seating", () => {
+        http.get("/api/events/:eventId/seating-config", () => {
           return HttpResponse.json(mockSeatingConfig);
         }),
         http.get("/api/events/:eventId/rooms", () => {
@@ -173,7 +173,7 @@ export const WithReservation: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get("/api/events/:eventId/seating", () => {
+        http.get("/api/events/:eventId/seating-config", () => {
           return HttpResponse.json(mockSeatingConfig);
         }),
         http.get("/api/events/:eventId/rooms", () => {
@@ -223,7 +223,7 @@ export const LimitedAvailability: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get("/api/events/:eventId/seating", () => {
+        http.get("/api/events/:eventId/seating-config", () => {
           return HttpResponse.json(mockSeatingConfig);
         }),
         http.get("/api/events/:eventId/rooms", () => {
@@ -257,7 +257,7 @@ export const NoUnspecifiedSeat: Story = {
   parameters: {
     msw: {
       handlers: [
-        http.get("/api/events/:eventId/seating", () => {
+        http.get("/api/events/:eventId/seating-config", () => {
           return HttpResponse.json({
             ...mockSeatingConfig,
             allowUnspecifiedSeat: false,

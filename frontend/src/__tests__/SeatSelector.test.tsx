@@ -75,7 +75,7 @@ const mockAvailableSeats = {
 
 // Set up MSW server
 const server = setupServer(
-  http.get("/api/events/:eventId/seating", () => {
+  http.get("/api/events/:eventId/seating-config", () => {
     return HttpResponse.json(mockSeatingConfig, { status: 200 });
   }),
   http.get("/api/events/:eventId/rooms", () => {
@@ -317,7 +317,7 @@ describe("SeatSelector", () => {
 
   test("returns null when seating is not configured", async () => {
     server.use(
-      http.get("/api/events/:eventId/seating", () => {
+      http.get("/api/events/:eventId/seating-config", () => {
         return HttpResponse.json(
           {
             eventId: 1,
