@@ -96,7 +96,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
   // Check if user has an existing seat reservation and load it into wizard state
   useEffect(() => {
-    if (!props.event.id || !token || !email || !hasSeating) return;
+    if (!props.open || !props.event.id || !token || !email || !hasSeating) return;
 
     fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
       headers: {
@@ -195,13 +195,12 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         console.error("Error fetching seat reservation:", error);
       });
   }, [
+    props.open,
     props.event.id,
     token,
     email,
     hasSeating,
     signOut,
-    unspecifiedSeatLabel,
-    allowUnspecifiedSeat,
   ]);
 
   // Define steps based on response
