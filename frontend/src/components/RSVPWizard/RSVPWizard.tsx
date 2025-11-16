@@ -417,62 +417,17 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   };
 
   // Handle seat selection change
-  const handleSeatSelect = async (seatId: number | null) => {
+  const handleSeatSelect = (seatId: number | null, label?: string, roomName?: string) => {
     setSelectedSeatId(seatId);
 
-    // Fetch seat info to update label and room name for display
     if (seatId === null) {
       // Unspecified seat
       setSelectedSeatLabel(allowUnspecifiedSeat ? unspecifiedSeatLabel : null);
       setSelectedSeatRoomName(null);
     } else {
-      // Fetch seat details
-      try {
-        const seatResponse = await fetch(
-          `/api/events/${props.event.id}/seats/${seatId}`,
-          {
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              Authorization: "Bearer " + token,
-            },
-          },
-        );
-
-        if (seatResponse.ok) {
-          const seatData = await seatResponse.json();
-          if (seatData?.label) {
-            setSelectedSeatLabel(seatData.label);
-
-            // Fetch room name
-            if (seatData.roomId) {
-              const roomResponse = await fetch(
-                `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                    Authorization: "Bearer " + token,
-                  },
-                },
-              );
-
-              if (roomResponse.ok) {
-                const roomData = await roomResponse.json();
-                if (roomData?.name) {
-                  setSelectedSeatRoomName(roomData.name);
-                } else {
-                  setSelectedSeatRoomName(null);
-                }
-              }
-            } else {
-              setSelectedSeatRoomName(null);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching seat details:", error);
-      }
+      // Use provided label and roomName from WizardSeatSelector
+      setSelectedSeatLabel(label || null);
+      setSelectedSeatRoomName(roomName || null);
     }
   };
 

@@ -22,7 +22,7 @@ interface WizardSeatSelectorProps {
   eventId: number;
   attendanceBuckets: number[] | null;
   selectedSeatId: number | null;
-  onSeatSelect: (seatId: number | null) => void;
+  onSeatSelect: (seatId: number | null, label?: string, roomName?: string) => void;
   allowUnspecifiedSeat: boolean;
   disabled: boolean;
 }
@@ -128,14 +128,60 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       });
   }, [eventId, token, attendanceBuckets, signOut]);
 
-  const handleSeatClick = (seatId: number) => {
+  const handleSeatClick = async (seatId: number) => {
     if (disabled) return;
 
     // Toggle selection
     if (selectedSeatId === seatId) {
       onSeatSelect(null);
     } else {
-      onSeatSelect(seatId);
+      // Fetch seat details before calling callback
+      const seat = seats.find(s => s.id === seatId);
+      if (seat) {
+        try {
+          // Fetch seat details to get label
+          const seatResponse = await fetch(`/api/events/${eventId}/seats/${seatId}`, {
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+          });
+          
+          if (seatResponse.ok) {
+            const seatData = await seatResponse.json();
+            let roomName: string | undefined;
+            
+            // Fetch room name if roomId exists
+            if (seatData.roomId) {
+              const roomResponse = await fetch(`/api/events/${eventId}/rooms/${seatData.roomId}`, {
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  Authorization: "Bearer " + token,
+                },
+              });
+              
+              if (roomResponse.ok) {
+                const roomData = await roomResponse.json();
+                roomName = roomData.name;
+              }
+            }
+            
+            // Call callback with full seat information
+            onSeatSelect(seatId, seatData.label, roomName);
+          } else {
+            // Fallback: just pass seatId
+            onSeatSelect(seatId);
+          }
+        } catch (error) {
+          console.error("Error fetching seat details:", error);
+          // Fallback: just pass seatId
+          onSeatSelect(seatId);
+        }
+      } else {
+        onSeatSelect(seatId);
+      }
     }
   };
 
