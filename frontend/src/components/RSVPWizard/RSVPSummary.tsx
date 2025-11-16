@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useState, useEffect, useContext } from "react";
 import {
   Card,
   CardContent,
@@ -12,9 +13,11 @@ import EditIcon from "@mui/icons-material/Edit";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
+import EventSeatIcon from "@mui/icons-material/EventSeat";
 import { RSVP, InvitationData } from "../../types/invitations";
 import { EventData } from "../../types/events";
 import { getAttendanceDescription } from "../../utils/attendanceDescription";
+import { UserContext, UserDispatchContext } from "../../UserProvider";
 
 interface RSVPSummaryProps {
   invitation: InvitationData;
@@ -25,6 +28,97 @@ interface RSVPSummaryProps {
 
 export default function RSVPSummary(props: RSVPSummaryProps) {
   const { invitation } = props;
+  const { signOut } = useContext(UserDispatchContext);
+  const userDetails = useContext(UserContext);
+  const token = userDetails?.token;
+
+  const [seatLabel, setSeatLabel] = useState<string | null>(null);
+  const [hasSeating, setHasSeating] = useState(false);
+
+  // Fetch seating config and seat reservation
+  useEffect(() => {
+    if (!props.event.id || !token) return;
+
+    // Fetch seating config
+    fetch(`/api/events/${props.event.id}/seating-config?as_admin=true`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok) return response.json();
+      })
+      .then((data) => {
+        if (data) {
+          setHasSeating(data.hasSeating || false);
+          const unspecifiedLabel =
+            data.unspecifiedSeatLabel || "Unspecified Seat";
+
+          // If seating is enabled and user has responded, fetch seat reservation
+          if (
+            data.hasSeating &&
+            invitation.response &&
+            invitation.response !== RSVP.no
+          ) {
+            fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                Authorization: "Bearer " + token,
+              },
+            })
+              .then((response) => {
+                if (response.status === 404) {
+                  setSeatLabel(null);
+                  return null;
+                }
+                if (response.ok) return response.json();
+                return null;
+              })
+              .then((reservationData) => {
+                if (reservationData) {
+                  if (reservationData.seatId === null) {
+                    setSeatLabel(unspecifiedLabel);
+                  } else if (reservationData.seatId) {
+                    // Fetch seat label
+                    fetch(
+                      `/api/events/${props.event.id}/seats/${reservationData.seatId}`,
+                      {
+                        headers: {
+                          "Content-Type": "application/json",
+                          Accept: "application/json",
+                          Authorization: "Bearer " + token,
+                        },
+                      },
+                    )
+                      .then((response) => {
+                        if (response.ok) return response.json();
+                        return null;
+                      })
+                      .then((seatData) => {
+                        if (seatData?.label) {
+                          setSeatLabel(seatData.label);
+                        }
+                      })
+                      .catch((error) => {
+                        console.error("Error fetching seat:", error);
+                      });
+                  }
+                }
+              })
+              .catch((error) => {
+                console.error("Error fetching seat reservation:", error);
+              });
+          }
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching seating config:", error);
+      });
+  }, [props.event.id, token, invitation.response, signOut]);
 
   const getResponseColor = (response: RSVP | null) => {
     switch (response) {
@@ -124,6 +218,21 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                   {getAttendanceText(invitation.attendance)}
                 </Typography>
               </Box>
+
+              {hasSeating && (
+                <Box>
+                  <Typography variant="body2" color="text.secondary">
+                    <EventSeatIcon
+                      fontSize="small"
+                      sx={{ verticalAlign: "middle", mr: 0.5 }}
+                    />
+                    Seat
+                  </Typography>
+                  <Typography variant="body1">
+                    {seatLabel || "Not selected"}
+                  </Typography>
+                </Box>
+              )}
             </>
           )}
 

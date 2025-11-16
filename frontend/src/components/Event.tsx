@@ -27,6 +27,14 @@ const Event = () => {
 
   const { id } = useParams();
 
+  // Initialize responded state when invitation is loaded
+  useEffect(() => {
+    if (invitation.response) {
+      // If invitation has a response, set responded to 1 to show attendees/suggestions
+      setResponded(1);
+    }
+  }, [invitation.response]);
+
   useEffect(() => {
     fetch(`/api/events/${id}`, {
       headers: {

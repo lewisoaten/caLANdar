@@ -5,6 +5,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import HelpIcon from "@mui/icons-material/Help";
 import PersonIcon from "@mui/icons-material/Person";
 import EventIcon from "@mui/icons-material/Event";
+import EventSeatIcon from "@mui/icons-material/EventSeat";
 import { RSVP } from "../../types/invitations";
 import moment from "moment";
 import { getAttendanceDescription } from "../../utils/attendanceDescription";
@@ -15,6 +16,8 @@ interface ReviewStepProps {
   attendance: number[] | null;
   timeBegin: moment.Moment;
   timeEnd: moment.Moment;
+  seatLabel?: string | null;
+  hasSeating: boolean;
 }
 
 export default function ReviewStep(props: ReviewStepProps) {
@@ -97,6 +100,18 @@ export default function ReviewStep(props: ReviewStepProps) {
                     </Typography>
                   </Box>
                 </Grid>
+
+                {props.hasSeating && (
+                  <Grid size={12}>
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <EventSeatIcon color="primary" />
+                      <Typography variant="body1" component="span">
+                        <strong>Seat:</strong>{" "}
+                        {props.seatLabel || "Not selected"}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                )}
               </>
             )}
           </Grid>
