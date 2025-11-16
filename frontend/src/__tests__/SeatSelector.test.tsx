@@ -179,7 +179,10 @@ describe("SeatSelector", () => {
       http.post(
         "/api/events/:eventId/seat-reservations/me",
         async ({ request }) => {
-          const body = await request.json();
+          const body = (await request.json()) as {
+            seatId: number | null;
+            attendanceBuckets: number[];
+          };
           return HttpResponse.json(
             {
               id: 1,
@@ -344,7 +347,10 @@ describe("SeatSelector", () => {
       http.post(
         "/api/events/:eventId/seat-reservations/me",
         async ({ request }) => {
-          const body = await request.json();
+          const body = (await request.json()) as {
+            seatId: number | null;
+            attendanceBuckets: number[];
+          };
           return HttpResponse.json(
             {
               id: 1,
