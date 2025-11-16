@@ -417,7 +417,11 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   };
 
   // Handle seat selection change
-  const handleSeatSelect = (seatId: number | null, label?: string, roomName?: string) => {
+  const handleSeatSelect = (
+    seatId: number | null,
+    label?: string,
+    roomName?: string,
+  ) => {
     setSelectedSeatId(seatId);
 
     if (seatId === null) {
@@ -469,6 +473,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             attendanceBuckets={attendance}
             hasSeating={hasSeating}
             allowUnspecifiedSeat={allowUnspecifiedSeat}
+            unspecifiedSeatLabel={unspecifiedSeatLabel}
             selectedSeatId={selectedSeatId}
             onSeatSelect={handleSeatSelect}
             disabled={saving}
