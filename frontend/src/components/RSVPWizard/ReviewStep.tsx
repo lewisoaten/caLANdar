@@ -109,8 +109,8 @@ export default function ReviewStep(props: ReviewStepProps) {
           color="text.secondary"
           sx={{ fontStyle: "italic" }}
         >
-          After confirming, you&apos;ll be able to view attendees, suggest
-          games, and select a seat (if available).
+          After confirming, you&apos;ll be able to view attendees and suggest
+          games.
         </Typography>
       )}
     </Stack>

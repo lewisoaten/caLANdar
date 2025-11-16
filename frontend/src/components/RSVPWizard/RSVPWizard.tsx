@@ -52,6 +52,10 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [saving, setSaving] = useState(false);
   const [showExitWarning, setShowExitWarning] = useState(false);
   const [hasSeating, setHasSeating] = useState(false);
+  const [allowUnspecifiedSeat, setAllowUnspecifiedSeat] = useState(false);
+  const [seatReservationId, setSeatReservationId] = useState<number | null>(
+    null,
+  );
 
   // Check if event has seating configured
   useEffect(() => {
@@ -71,12 +75,46 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       .then((data) => {
         if (data) {
           setHasSeating(data.hasSeating || false);
+          setAllowUnspecifiedSeat(data.allowUnspecifiedSeat || false);
         }
       })
       .catch((error) => {
         console.error("Error fetching seating config:", error);
       });
   }, [props.event.id, token, signOut]);
+
+  // Check if user has an existing seat reservation
+  useEffect(() => {
+    if (!props.event.id || !token || !email || !hasSeating) return;
+
+    fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 404) {
+          setSeatReservationId(null);
+          return null;
+        }
+        if (response.status === 401) {
+          signOut();
+          return null;
+        }
+        if (response.ok) return response.json();
+        return null;
+      })
+      .then((data) => {
+        if (data?.id) {
+          setSeatReservationId(data.id);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching seat reservation:", error);
+      });
+  }, [props.event.id, token, email, hasSeating, signOut]);
 
   // Define steps based on response
   const getSteps = () => {
@@ -113,7 +151,16 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         if (response === RSVP.no) return true;
         return attendance !== null && attendance.some((v) => v === 1);
       case 3: // Seat or Review step
-        return true; // Seat selection is optional
+        // If this is the seat step and seat is required, check if user has a reservation
+        if (steps[activeStep] === "Seat") {
+          // Seat is required if seating is enabled and unspecified seat is not allowed
+          const seatRequired = hasSeating && !allowUnspecifiedSeat;
+          if (seatRequired) {
+            // User must have a seat reservation to proceed
+            return seatReservationId !== null;
+          }
+        }
+        return true; // Seat selection is optional or this is review
       case 4: // Final review step
         return true;
       default:
@@ -267,10 +314,38 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             eventId={props.event.id}
             attendanceBuckets={attendance}
             hasSeating={hasSeating}
+            allowUnspecifiedSeat={allowUnspecifiedSeat}
             disabled={saving}
             onReservationChange={() => {
-              // Seat reservation changed, no need to do anything here
-              // as the seat is saved independently
+              // Seat reservation changed, refresh the reservation status
+              // Re-fetch to update seatReservationId
+              if (!props.event.id || !token || !email) return;
+
+              fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
+                headers: {
+                  "Content-Type": "application/json",
+                  Accept: "application/json",
+                  Authorization: "Bearer " + token,
+                },
+              })
+                .then((response) => {
+                  if (response.status === 404) {
+                    setSeatReservationId(null);
+                    return null;
+                  }
+                  if (response.ok) return response.json();
+                  return null;
+                })
+                .then((data) => {
+                  if (data?.id) {
+                    setSeatReservationId(data.id);
+                  } else {
+                    setSeatReservationId(null);
+                  }
+                })
+                .catch((error) => {
+                  console.error("Error fetching seat reservation:", error);
+                });
             }}
           />
         );

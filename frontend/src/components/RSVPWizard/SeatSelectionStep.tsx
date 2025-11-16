@@ -7,6 +7,7 @@ interface SeatSelectionStepProps {
   attendanceBuckets: number[] | null;
   disabled?: boolean;
   hasSeating: boolean;
+  allowUnspecifiedSeat: boolean;
   onReservationChange?: () => void;
 }
 
@@ -15,13 +16,17 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
     return null;
   }
 
+  const isOptional = props.allowUnspecifiedSeat;
+
   return (
     <Stack spacing={3}>
       <Typography variant="h6" component="h2">
-        Choose your seat (Optional)
+        Choose your seat {isOptional ? "(Optional)" : ""}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        You can select a seat now or skip this step and choose one later.
+        {isOptional
+          ? "You can select a seat now or skip this step and choose one later."
+          : "Please select a seat to continue. This event requires seat selection."}
       </Typography>
       <SeatSelector
         eventId={props.eventId}
