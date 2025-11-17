@@ -663,13 +663,14 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                   title={`${seat.label}${seat.description ? ` - ${seat.description}` : ""}`}
                                   placement="top"
                                 >
-                                  <Box
-                                    onClick={() => {
-                                      if (!seat.isOccupied && !disabled) {
-                                        handleSeatSelect(seat.id);
-                                      }
-                                    }}
-                                    sx={{
+                                  <span>
+                                    <Box
+                                      onClick={() => {
+                                        if (!seat.isOccupied && !disabled) {
+                                          handleSeatSelect(seat.id);
+                                        }
+                                      }}
+                                      sx={{
                                       position: "absolute",
                                       left: `${seat.x * 100}%`,
                                       top: `${seat.y * 100}%`,
@@ -736,6 +737,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                       <EventSeatIcon fontSize="small" />
                                     )}
                                   </Box>
+                                  </span>
                                 </Tooltip>
                               );
                             })}
