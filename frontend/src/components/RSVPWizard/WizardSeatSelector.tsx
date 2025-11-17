@@ -156,6 +156,11 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
           onSeatSelect(seat.id, seat.label);
         }
       } else {
+        // This should not happen: seatId exists but seat data is missing.
+        // This indicates a data inconsistency.
+        console.warn(
+          `handleSeatClick: seatId ${seatId} not found in seats array.`,
+        );
         onSeatSelect(seatId);
       }
     }

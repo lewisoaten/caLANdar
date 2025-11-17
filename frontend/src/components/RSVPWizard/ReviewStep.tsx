@@ -22,12 +22,6 @@ interface ReviewStepProps {
 }
 
 export default function ReviewStep(props: ReviewStepProps) {
-  console.log("ReviewStep props:", {
-    seatLabel: props.seatLabel,
-    seatRoomName: props.seatRoomName,
-    hasSeating: props.hasSeating,
-  });
-
   const getResponseIcon = (response: RSVP | null) => {
     switch (response) {
       case RSVP.yes:

@@ -134,6 +134,9 @@ pub async fn get_user(
 }
 
 /// Get all seats for an event if the user has been invited.
+///
+/// Rank 2: Lower priority than the admin route (rank 1) for the same path.
+/// Rocket matches routes in order of rank, so admin users will match the rank 1 route first.
 #[openapi(tag = "Seats")]
 #[get("/events/<event_id>/seats", format = "json", rank = 2)]
 pub async fn get_all_user(

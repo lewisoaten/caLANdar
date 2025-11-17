@@ -422,29 +422,9 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     label?: string,
     roomName?: string,
   ) => {
-    console.log("handleSeatSelect called:", { seatId, label, roomName });
     setSelectedSeatId(seatId);
-
-    // Use provided label if available, otherwise use defaults
-    if (label !== undefined) {
-      // Explicit label provided (either from seat or unspecified seat)
-      console.log("Setting seat label to:", label, "room:", roomName);
-      setSelectedSeatLabel(label);
-      setSelectedSeatRoomName(roomName || null);
-    } else if (seatId === null) {
-      // Unspecified seat without explicit label
-      console.log(
-        "Setting unspecified seat label:",
-        allowUnspecifiedSeat ? unspecifiedSeatLabel : null,
-      );
-      setSelectedSeatLabel(allowUnspecifiedSeat ? unspecifiedSeatLabel : null);
-      setSelectedSeatRoomName(null);
-    } else {
-      // Specific seat without label (shouldn't happen with current implementation)
-      console.log("No label provided, setting to null");
-      setSelectedSeatLabel(null);
-      setSelectedSeatRoomName(null);
-    }
+    setSelectedSeatLabel(label || null);
+    setSelectedSeatRoomName(roomName || null);
   };
 
   const renderStepContent = (step: number) => {

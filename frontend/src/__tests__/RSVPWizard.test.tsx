@@ -36,7 +36,6 @@ const mockEvent = {
 // Set up MSW server
 const server = setupServer(
   http.get("/api/events/:eventId/seating-config", ({ request }) => {
-    console.log("[MSW] GET seating-config", request.url);
     return HttpResponse.json({
       eventId: 1,
       hasSeating: false,
@@ -48,9 +47,7 @@ const server = setupServer(
   }),
   http.patch("/api/events/:eventId/invitations/*", async ({ request }) => {
     // Match any email (encoded or not)
-    console.log("[MSW] PATCH invitations", request.url);
     const body = await request.json();
-    console.log("[MSW] PATCH body:", body);
     return new HttpResponse(null, { status: 204 });
   }),
 );

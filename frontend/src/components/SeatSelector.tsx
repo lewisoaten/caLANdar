@@ -363,7 +363,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
           }
           return Array.from(updated);
         });
-        fetchSeatAvailability();
+        // fetchSeatAvailability() removed - useEffect will handle this
         enqueueSnackbar("Seat reservation saved successfully", {
           variant: "success",
         });
@@ -671,36 +671,36 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                         }
                                       }}
                                       sx={{
-                                      position: "absolute",
-                                      left: `${seat.x * 100}%`,
-                                      top: `${seat.y * 100}%`,
-                                      transform: "translate(-50%, -50%)",
-                                      width: 44,
-                                      height: 44,
-                                      borderRadius: "50%",
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "center",
-                                      cursor:
-                                        seat.isOccupied || disabled
-                                          ? "not-allowed"
-                                          : "pointer",
-                                      pointerEvents: "auto",
-                                      fontSize: "0.75rem",
-                                      fontWeight: "bold",
-                                      transition: "all 0.2s",
-                                      "&:hover": {
-                                        transform:
-                                          !seat.isOccupied && !disabled
-                                            ? "translate(-50%, -50%) scale(1.1)"
-                                            : "translate(-50%, -50%)",
-                                      },
-                                      // Ensure minimum tap target size for accessibility
-                                      minWidth: 44,
-                                      minHeight: 44,
-                                      zIndex: 1,
-                                      ...seatVisualStyle,
-                                    }}
+                                        position: "absolute",
+                                        left: `${seat.x * 100}%`,
+                                        top: `${seat.y * 100}%`,
+                                        transform: "translate(-50%, -50%)",
+                                        width: 44,
+                                        height: 44,
+                                        borderRadius: "50%",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "center",
+                                        cursor:
+                                          seat.isOccupied || disabled
+                                            ? "not-allowed"
+                                            : "pointer",
+                                        pointerEvents: "auto",
+                                        fontSize: "0.75rem",
+                                        fontWeight: "bold",
+                                        transition: "all 0.2s",
+                                        "&:hover": {
+                                          transform:
+                                            !seat.isOccupied && !disabled
+                                              ? "translate(-50%, -50%) scale(1.1)"
+                                              : "translate(-50%, -50%)",
+                                        },
+                                        // Ensure minimum tap target size for accessibility
+                                        minWidth: 44,
+                                        minHeight: 44,
+                                        zIndex: 1,
+                                        ...seatVisualStyle,
+                                      }}
                                     role="button"
                                     aria-label={`Seat ${seat.label}${seat.isOwnSeat ? " (your seat)" : seat.isOccupied ? " (occupied)" : " (available)"}`}
                                     tabIndex={
