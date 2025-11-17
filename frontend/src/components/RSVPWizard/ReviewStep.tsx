@@ -108,11 +108,11 @@ export default function ReviewStep(props: ReviewStepProps) {
                       <EventSeatIcon color="primary" />
                       <Typography variant="body1" component="span">
                         <strong>Seat:</strong>{" "}
-                        {props.seatLabel
+                        {props.seatLabel !== null && props.seatLabel !== undefined
                           ? props.seatRoomName
                             ? `${props.seatRoomName} - ${props.seatLabel}`
                             : props.seatLabel
-                          : "Loading..."}
+                          : "Not selected"}
                       </Typography>
                     </Box>
                   </Grid>
