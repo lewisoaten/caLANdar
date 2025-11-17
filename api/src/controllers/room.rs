@@ -1,8 +1,8 @@
 use sqlx::PgPool;
 
 use crate::{
-    controllers::Error,
-    repositories::room,
+    controllers::{ensure_user_invited, Error},
+    repositories::{room, seat, seat_reservation},
     routes::rooms::{Room, RoomSubmit},
 };
 
@@ -30,12 +30,75 @@ pub async fn get_all(pool: &PgPool, event_id: i32) -> Result<Vec<Room>, Error> {
     }
 }
 
+pub async fn get_all_for_invited_user(
+    pool: &PgPool,
+    event_id: i32,
+    user_email: &str,
+) -> Result<Vec<Room>, Error> {
+    ensure_user_invited(pool, event_id, user_email).await?;
+    get_all(pool, event_id).await
+}
+
 pub async fn get(pool: &PgPool, room_id: i32) -> Result<Option<Room>, Error> {
     match room::get(pool, room_id).await {
         Ok(Some(room)) => Ok(Some(Room::from(room))),
         Ok(None) => Ok(None),
         Err(e) => Err(Error::Controller(format!("Unable to get room due to: {e}"))),
     }
+}
+
+pub async fn get_reserved_room_for_user(
+    pool: &PgPool,
+    event_id: i32,
+    room_id: i32,
+    email: &str,
+) -> Result<Room, Error> {
+    ensure_user_invited(pool, event_id, email).await?;
+
+    let room = match room::get(pool, room_id).await {
+        Ok(Some(room)) => {
+            if room.event_id != event_id {
+                return Err(Error::NotFound(format!(
+                    "Room with ID {room_id} does not belong to event {event_id}",
+                )));
+            }
+            Room::from(room)
+        }
+        Ok(None) => return Err(Error::NotFound(format!("Room with ID {room_id} not found"))),
+        Err(e) => return Err(Error::Controller(format!("Unable to get room due to: {e}"))),
+    };
+
+    let reservation = match seat_reservation::get_by_email(pool, event_id, email).await {
+        Ok(Some(reservation)) => reservation,
+        Ok(None) => {
+            return Err(Error::NotFound(format!(
+                "No seat reservation found for {email} at event {event_id}"
+            )))
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get seat reservation for {email}: {e}"
+            )))
+        }
+    };
+
+    let seat_id = reservation.seat_id.ok_or_else(|| {
+        Error::NotFound("You have not selected a specific seat for this event".to_string())
+    })?;
+
+    let seat = match seat::get(pool, seat_id).await {
+        Ok(Some(seat)) => seat,
+        Ok(None) => return Err(Error::NotFound(format!("Seat with ID {seat_id} not found"))),
+        Err(e) => return Err(Error::Controller(format!("Unable to get seat due to: {e}"))),
+    };
+
+    if seat.room_id != room_id {
+        return Err(Error::NotFound(
+            "You have not reserved a seat in this room for this event".to_string(),
+        ));
+    }
+
+    Ok(room)
 }
 
 pub async fn create(pool: &PgPool, event_id: i32, room_submit: RoomSubmit) -> Result<Room, Error> {

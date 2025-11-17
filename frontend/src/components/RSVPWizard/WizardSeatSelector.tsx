@@ -24,6 +24,7 @@ interface WizardSeatSelectorProps {
   eventId: number;
   attendanceBuckets: number[] | null;
   selectedSeatId: number | null;
+  reservedSeatId: number | null;
   onSeatSelect: (
     seatId: number | null,
     label?: string,
@@ -43,6 +44,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   eventId,
   attendanceBuckets,
   selectedSeatId,
+  reservedSeatId,
   onSeatSelect,
   allowUnspecifiedSeat,
   unspecifiedSeatLabel = "Unspecified Seat",
@@ -64,7 +66,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
     setLoading(true);
 
     // Fetch rooms
-    fetch(`/api/events/${eventId}/rooms?as_admin=true`, {
+    fetch(`/api/events/${eventId}/rooms`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -85,7 +87,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       });
 
     // Fetch seats
-    fetch(`/api/events/${eventId}/seats?as_admin=true`, {
+    fetch(`/api/events/${eventId}/seats`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -146,52 +148,12 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       // Fetch seat details before calling callback
       const seat = seats.find((s) => s.id === seatId);
       if (seat) {
-        try {
-          // Fetch seat details to get label
-          const seatResponse = await fetch(
-            `/api/events/${eventId}/seats/${seatId}`,
-            {
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-            },
-          );
-
-          if (seatResponse.ok) {
-            const seatData = await seatResponse.json();
-            let roomName: string | undefined;
-
-            // Fetch room name if roomId exists
-            if (seatData.roomId) {
-              const roomResponse = await fetch(
-                `/api/events/${eventId}/rooms/${seatData.roomId}`,
-                {
-                  headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                    Authorization: "Bearer " + token,
-                  },
-                },
-              );
-
-              if (roomResponse.ok) {
-                const roomData = await roomResponse.json();
-                roomName = roomData.name;
-              }
-            }
-
-            // Call callback with full seat information
-            onSeatSelect(seatId, seatData.label, roomName);
-          } else {
-            // Fallback: just pass seatId
-            onSeatSelect(seatId);
-          }
-        } catch (error) {
-          console.error("Error fetching seat details:", error);
-          // Fallback: just pass seatId
-          onSeatSelect(seatId);
+        const room = rooms.find((r) => r.id === seat.roomId);
+        if (room) {
+          // Call callback with full seat information
+          onSeatSelect(seat.id, seat.label, room.name);
+        } else {
+          onSeatSelect(seat.id, seat.label);
         }
       } else {
         onSeatSelect(seatId);
@@ -222,7 +184,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
   const seatsWithAvailability: SeatWithAvailability[] = seats.map((seat) => ({
     ...seat,
-    isAvailable: availableSeats.includes(seat.id),
+    isAvailable: availableSeats.includes(seat.id) || seat.id === reservedSeatId,
     isSelected: selectedSeatId === seat.id,
   }));
 
@@ -344,7 +306,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
                             backgroundColor: seat.isSelected
                               ? "primary.main"
                               : !seat.isAvailable
-                                ? "action.disabledBackground"
+                                ? "text.disabled"
                                 : "success.main",
                             color: "white",
                             display: "flex",
@@ -361,8 +323,6 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
                               : "transparent",
                             fontSize: "0.75rem",
                             fontWeight: "bold",
-                            opacity:
-                              !seat.isAvailable && !seat.isSelected ? 0.5 : 1,
                             transition: "all 0.2s",
                             "&:hover": {
                               transform:

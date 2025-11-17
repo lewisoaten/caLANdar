@@ -10,6 +10,7 @@ interface SeatSelectionStepProps {
   allowUnspecifiedSeat: boolean;
   unspecifiedSeatLabel?: string;
   selectedSeatId: number | null;
+  reservedSeatId: number | null;
   onSeatSelect: (
     seatId: number | null,
     label?: string,
@@ -41,6 +42,7 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
         onSeatSelect={props.onSeatSelect}
         allowUnspecifiedSeat={props.allowUnspecifiedSeat}
         unspecifiedSeatLabel={props.unspecifiedSeatLabel}
+        reservedSeatId={props.reservedSeatId}
         disabled={props.disabled || false}
       />
     </Stack>

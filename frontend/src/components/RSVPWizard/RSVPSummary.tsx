@@ -41,7 +41,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
     if (!props.event.id || !token) return;
 
     // Fetch seating config
-    fetch(`/api/events/${props.event.id}/seating-config?as_admin=true`, {
+    fetch(`/api/events/${props.event.id}/seating-config`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",

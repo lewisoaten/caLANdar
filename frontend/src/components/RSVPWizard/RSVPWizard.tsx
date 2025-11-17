@@ -58,6 +58,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
   // Seat selection state - null means unspecified/skip
   const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null);
+  const [reservedSeatId, setReservedSeatId] = useState<number | null>(null);
   const [selectedSeatLabel, setSelectedSeatLabel] = useState<string | null>(
     null,
   );
@@ -69,7 +70,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   useEffect(() => {
     if (!props.event.id || !token) return;
 
-    fetch(`/api/events/${props.event.id}/seating-config?as_admin=true`, {
+    fetch(`/api/events/${props.event.id}/seating-config`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -96,7 +97,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
   // Check if user has an existing seat reservation and load it into wizard state
   useEffect(() => {
-    if (!props.open || !props.event.id || !token || !email || !hasSeating) return;
+    if (!props.open || !props.event.id || !token || !email || !hasSeating)
+      return;
 
     fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
       headers: {
@@ -109,6 +111,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         if (response.status === 404) {
           // No reservation exists
           setSelectedSeatId(null);
+          setReservedSeatId(null);
           setSelectedSeatLabel(
             allowUnspecifiedSeat ? unspecifiedSeatLabel : null,
           );
@@ -128,11 +131,13 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           if (data.seatId === null) {
             // Unspecified seat
             setSelectedSeatId(null);
+            setReservedSeatId(null);
             setSelectedSeatLabel(unspecifiedSeatLabel);
             setSelectedSeatRoomName(null);
           } else if (data.seatId) {
             // Set the selected seat ID
             setSelectedSeatId(data.seatId);
+            setReservedSeatId(data.seatId);
 
             // Fetch the actual seat label and room
             fetch(`/api/events/${props.event.id}/seats/${data.seatId}`, {
@@ -183,10 +188,12 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         } else if (allowUnspecifiedSeat) {
           // No reservation but optional seating - default to unspecified
           setSelectedSeatId(null);
+          setReservedSeatId(null);
           setSelectedSeatLabel(unspecifiedSeatLabel);
           setSelectedSeatRoomName(null);
         } else {
           setSelectedSeatId(null);
+          setReservedSeatId(null);
           setSelectedSeatLabel(null);
           setSelectedSeatRoomName(null);
         }
@@ -194,14 +201,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       .catch((error) => {
         console.error("Error fetching seat reservation:", error);
       });
-  }, [
-    props.open,
-    props.event.id,
-    token,
-    email,
-    hasSeating,
-    signOut,
-  ]);
+  }, [props.open, props.event.id, token, email, hasSeating, signOut]);
 
   // Define steps based on response
   const getSteps = () => {
@@ -298,6 +298,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     setHandle(props.initialData?.handle || "");
     setAttendance(props.initialData?.attendance || null);
     setHandleValid(false);
+    setReservedSeatId(null);
   };
 
   const handleSave = async () => {
@@ -356,7 +357,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
           // Create new reservation with selected seat (or null for unspecified)
           const seatReservationResponse = await fetch(
-            `/api/events/${props.event.id}/seat-reservations`,
+            `/api/events/${props.event.id}/seat-reservations/me`,
             {
               method: "POST",
               headers: {
@@ -486,6 +487,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             allowUnspecifiedSeat={allowUnspecifiedSeat}
             unspecifiedSeatLabel={unspecifiedSeatLabel}
             selectedSeatId={selectedSeatId}
+            reservedSeatId={reservedSeatId}
             onSeatSelect={handleSeatSelect}
             disabled={saving}
           />

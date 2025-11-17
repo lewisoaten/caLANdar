@@ -1,8 +1,8 @@
 use sqlx::PgPool;
 
 use crate::{
-    controllers::Error,
-    repositories::seat,
+    controllers::{ensure_user_invited, Error},
+    repositories::{seat, seat_reservation},
     routes::seats::{Seat, SeatSubmit},
 };
 
@@ -28,6 +28,58 @@ pub async fn get_all(pool: &PgPool, event_id: i32) -> Result<Vec<Seat>, Error> {
         Err(e) => Err(Error::Controller(format!(
             "Unable to get seats due to: {e}"
         ))),
+    }
+}
+
+pub async fn get_all_for_invited_user(
+    pool: &PgPool,
+    event_id: i32,
+    email: &str,
+) -> Result<Vec<Seat>, Error> {
+    ensure_user_invited(pool, event_id, email).await?;
+    get_all(pool, event_id).await
+}
+
+pub async fn get_reserved_seat_for_user(
+    pool: &PgPool,
+    event_id: i32,
+    seat_id: i32,
+    email: &str,
+) -> Result<Seat, Error> {
+    ensure_user_invited(pool, event_id, email).await?;
+
+    let seat = match seat::get(pool, seat_id).await {
+        Ok(Some(seat)) => {
+            if seat.event_id != event_id {
+                return Err(Error::NotFound(format!(
+                    "Seat with ID {seat_id} does not belong to event {event_id}",
+                )));
+            }
+            Seat::from(seat)
+        }
+        Ok(None) => return Err(Error::NotFound(format!("Seat with ID {seat_id} not found"))),
+        Err(e) => return Err(Error::Controller(format!("Unable to get seat due to: {e}"))),
+    };
+
+    let reservation = match seat_reservation::get_by_email(pool, event_id, email).await {
+        Ok(Some(reservation)) => reservation,
+        Ok(None) => {
+            return Err(Error::NotFound(format!(
+                "No seat reservation found for {email} at event {event_id}"
+            )))
+        }
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get seat reservation for {email}: {e}"
+            )))
+        }
+    };
+
+    match reservation.seat_id {
+        Some(reservation_seat_id) if reservation_seat_id == seat_id => Ok(seat),
+        Some(_) | None => Err(Error::NotFound(
+            "You have not reserved this seat for this event".to_string(),
+        )),
     }
 }
 

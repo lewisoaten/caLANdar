@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 use crate::{
-    controllers::Error,
+    controllers::{ensure_user_invited, Error},
     repositories::event_seating_config,
     routes::event_seating::{EventSeatingConfig, EventSeatingConfigSubmit},
 };
@@ -29,6 +29,22 @@ pub async fn get(pool: &PgPool, event_id: i32) -> Result<Option<EventSeatingConf
     }
 }
 
+pub async fn get_or_default(pool: &PgPool, event_id: i32) -> Result<EventSeatingConfig, Error> {
+    match get(pool, event_id).await? {
+        Some(config) => Ok(config),
+        None => Ok(default_config(event_id)),
+    }
+}
+
+pub async fn get_or_default_for_invited_user(
+    pool: &PgPool,
+    event_id: i32,
+    email: &str,
+) -> Result<EventSeatingConfig, Error> {
+    ensure_user_invited(pool, event_id, email).await?;
+    get_or_default(pool, event_id).await
+}
+
 pub async fn upsert(
     pool: &PgPool,
     event_id: i32,
@@ -47,5 +63,16 @@ pub async fn upsert(
         Err(e) => Err(Error::Controller(format!(
             "Unable to save seating config due to: {e}"
         ))),
+    }
+}
+
+fn default_config(event_id: i32) -> EventSeatingConfig {
+    EventSeatingConfig {
+        event_id,
+        has_seating: false,
+        allow_unspecified_seat: false,
+        unspecified_seat_label: "Unspecified Seat".to_string(),
+        created_at: chrono::Utc::now(),
+        last_modified: chrono::Utc::now(),
     }
 }
