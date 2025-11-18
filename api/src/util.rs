@@ -163,3 +163,34 @@ pub async fn is_event_active(pool: &PgPool, id: i32) -> Result<(bool, Event), St
 
     Ok((is_active, event))
 }
+
+use crate::repositories::audit_log;
+use rocket::serde::json::serde_json::Value as JsonValue;
+
+/// Helper function to log audit entries
+/// Fails softly - errors are logged but don't block the operation
+pub async fn log_audit(
+    pool: &PgPool,
+    user_id: Option<String>,
+    action: String,
+    entity_type: String,
+    entity_id: Option<String>,
+    metadata: Option<JsonValue>,
+) {
+    let audit_entry = audit_log::AuditLogInsert {
+        user_id,
+        action,
+        entity_type,
+        entity_id,
+        metadata,
+        ip_address: None, // Can be enhanced later if request context is passed
+        user_agent: None, // Can be enhanced later if request context is passed
+    };
+
+    match audit_log::insert(pool, audit_entry).await {
+        Ok(_) => {}
+        Err(e) => {
+            log::error!("Failed to write audit log: {e}");
+        }
+    }
+}
