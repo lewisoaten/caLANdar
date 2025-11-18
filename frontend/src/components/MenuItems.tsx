@@ -9,6 +9,7 @@ import PeopleIcon from "@mui/icons-material/People";
 import AccountBoxIcon from "@mui/icons-material/AccountBox";
 import LoginIcon from "@mui/icons-material/Login";
 import EventIcon from "@mui/icons-material/Event";
+import HistoryIcon from "@mui/icons-material/History";
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import { Link } from "react-router-dom";
@@ -209,6 +210,12 @@ export default function MenuItems(props: MenuItemsProps) {
               <PeopleIcon />
             </ListItemIcon>
             <ListItemText primary="Gamer Management" />
+          </ListItemButton>
+          <ListItemButton component={Link} to="/admin/audit">
+            <ListItemIcon>
+              <HistoryIcon />
+            </ListItemIcon>
+            <ListItemText primary="Audit Log" />
           </ListItemButton>
           <RefreshGamesButton
             loadingState={props.updateButtonLoadingState}
