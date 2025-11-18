@@ -65,6 +65,11 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [selectedSeatRoomName, setSelectedSeatRoomName] = useState<
     string | null
   >(null);
+  const clearSeatSelection = () => {
+    setSelectedSeatId(null);
+    setSelectedSeatLabel(null);
+    setSelectedSeatRoomName(null);
+  };
 
   // Check if event has seating configured
   useEffect(() => {
@@ -298,6 +303,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     setHandle(props.initialData?.handle || "");
     setAttendance(props.initialData?.attendance || null);
     setHandleValid(false);
+    clearSeatSelection();
     setReservedSeatId(null);
   };
 
@@ -416,6 +422,12 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     }
   };
 
+  // Handle attendance change - always clear any seat selection to avoid stale seats
+  const handleAttendanceChange = (newAttendance: number[] | null) => {
+    setAttendance(newAttendance);
+    clearSeatSelection();
+  };
+
   // Handle seat selection change
   const handleSeatSelect = (
     seatId: number | null,
@@ -454,7 +466,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             timeBegin={props.event.timeBegin}
             timeEnd={props.event.timeEnd}
             value={attendance}
-            onChange={setAttendance}
+            onChange={handleAttendanceChange}
             disabled={saving}
           />
         );
