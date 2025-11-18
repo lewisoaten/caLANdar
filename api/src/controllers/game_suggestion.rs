@@ -381,39 +381,57 @@ async fn add_owners_to_game(
     let mut gamer_unowned = Vec::new();
     let gamer_unknown = Vec::new();
 
-    for invitation in invitations {
-        if invitation.response != Some(invitation::Response::Yes)
-            && invitation.response != Some(invitation::Response::Maybe)
-        {
-            continue;
+    // Filter invitations to only those with yes/maybe responses
+    let attending_invitations: Vec<&invitation::Invitation> = invitations
+        .iter()
+        .filter(|i| {
+            i.response == Some(invitation::Response::Yes)
+                || i.response == Some(invitation::Response::Maybe)
+        })
+        .collect();
+
+    // Get all emails for attending invitations
+    let attending_emails: Vec<String> = attending_invitations
+        .iter()
+        .map(|i| i.email.clone())
+        .collect();
+
+    // Batch query: Get all user games for this game_id and all attending emails in one query
+    let user_games = match user_games::filter(
+        pool,
+        user_games::Filter {
+            appid: Some(game_suggestion.game_id),
+            emails: Some(attending_emails.clone()),
+            count: attending_emails.len() as i64,
+            page: 0,
+        },
+    )
+    .await
+    {
+        Ok(user_games) => user_games,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get user games due to: {e}"
+            )))
         }
+    };
 
-        let user_games = match user_games::filter(
-            pool,
-            user_games::Filter {
-                appid: Some(game_suggestion.game_id),
-                emails: Some(vec![invitation.email.clone()]),
-                count: 1,
-                page: 0,
-            },
-        )
-        .await
-        {
-            Ok(user_games) => user_games,
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to get user games due to: {e}"
-                )))
-            }
-        };
+    // Build a set of emails that own the game for quick lookup
+    let owner_emails: std::collections::HashSet<String> = user_games
+        .into_iter()
+        .flat_map(|game| game.emails.unwrap_or_default())
+        .map(|email| email.to_lowercase())
+        .collect();
 
-        if user_games.is_empty() {
-            gamer_unowned.push(Gamer {
+    // Categorize invitations based on ownership
+    for invitation in attending_invitations {
+        if owner_emails.contains(&invitation.email.to_lowercase()) {
+            gamer_owned.push(Gamer {
                 avatar_url: invitation.avatar_url.clone(),
                 handle: invitation.handle.clone(),
             });
         } else {
-            gamer_owned.push(Gamer {
+            gamer_unowned.push(Gamer {
                 avatar_url: invitation.avatar_url.clone(),
                 handle: invitation.handle.clone(),
             });
