@@ -40,11 +40,11 @@ pub struct AuditLogFilter {
 /// Insert a new audit log entry
 pub async fn insert(pool: &PgPool, audit: AuditLogInsert) -> Result<AuditLog, sqlx::Error> {
     let result = sqlx::query_as::<_, AuditLog>(
-        r#"
+        r"
         INSERT INTO audit_log (user_id, action, entity_type, entity_id, metadata, ip_address, user_agent)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
         RETURNING id, timestamp, user_id, action, entity_type, entity_id, metadata, ip_address, user_agent
-        "#
+        "
     )
     .bind(audit.user_id)
     .bind(audit.action)
@@ -60,10 +60,7 @@ pub async fn insert(pool: &PgPool, audit: AuditLogInsert) -> Result<AuditLog, sq
 }
 
 /// Query audit logs with filters
-pub async fn filter(
-    pool: &PgPool,
-    filter: AuditLogFilter,
-) -> Result<Vec<AuditLog>, sqlx::Error> {
+pub async fn filter(pool: &PgPool, filter: AuditLogFilter) -> Result<Vec<AuditLog>, sqlx::Error> {
     let limit = filter.limit.unwrap_or(50);
     let offset = filter.offset.unwrap_or(0);
 
@@ -101,10 +98,7 @@ pub async fn filter(
     query.push(" OFFSET ");
     query.push_bind(offset);
 
-    let results = query
-        .build_query_as::<AuditLog>()
-        .fetch_all(pool)
-        .await?;
+    let results = query.build_query_as::<AuditLog>().fetch_all(pool).await?;
 
     Ok(results)
 }

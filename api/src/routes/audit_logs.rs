@@ -5,7 +5,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use rocket::{
     get,
-    serde::{json::Json, json::serde_json::Value as JsonValue, Deserialize, Serialize},
+    serde::{json::serde_json::Value as JsonValue, json::Json, Deserialize, Serialize},
     State,
 };
 use rocket_okapi::okapi::schemars;
@@ -98,6 +98,7 @@ pub struct AuditLogsQueryParams {
 custom_errors!(AuditLogsGetError, Unauthorized, InternalServerError);
 
 /// Get audit logs (admin only)
+#[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Audit")]
 #[get("/audit-logs?<user_id>&<entity_type>&<action>&<from_timestamp>&<to_timestamp>&<limit>&<offset>&<_as_admin>")]
 pub async fn get_audit_logs(
@@ -117,7 +118,7 @@ pub async fn get_audit_logs(
         .as_ref()
         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&Utc));
-    
+
     let to_ts = to_timestamp
         .as_ref()
         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())

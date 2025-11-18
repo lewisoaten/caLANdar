@@ -136,7 +136,8 @@ const AuditLog = () => {
 
       if (userId) params.append("user_id", userId);
       if (entityType) params.append("entity_type", entityType);
-      if (fromTimestamp) params.append("from_timestamp", fromTimestamp.toISOString());
+      if (fromTimestamp)
+        params.append("from_timestamp", fromTimestamp.toISOString());
       if (toTimestamp) params.append("to_timestamp", toTimestamp.toISOString());
 
       const response = await fetch(`/api/audit-logs?${params.toString()}`, {
@@ -167,7 +168,9 @@ const AuditLog = () => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };

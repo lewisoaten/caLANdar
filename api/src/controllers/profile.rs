@@ -108,7 +108,7 @@ pub async fn edit(
                 Some(metadata),
             )
             .await;
-            
+
             Ok(Profile::from(profile))
         }
         Err(e) => Err(Error::Controller(format!(

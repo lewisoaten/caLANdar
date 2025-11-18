@@ -62,10 +62,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-pub async fn get_logs(
-    pool: &PgPool,
-    filter: AuditLogFilter,
-) -> Result<AuditLogsResult, Error> {
+pub async fn get_logs(pool: &PgPool, filter: AuditLogFilter) -> Result<AuditLogsResult, Error> {
     let repo_filter = audit_log::AuditLogFilter {
         user_id: filter.user_id.clone(),
         entity_type: filter.entity_type.clone(),
