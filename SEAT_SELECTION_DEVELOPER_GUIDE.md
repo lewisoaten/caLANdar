@@ -533,6 +533,141 @@ All must pass with exit code 0.
 
 When modifying the SeatSelector:
 
+## Admin Seat Occupancy Component
+
+### Component: SeatOccupancyAdmin
+
+**Location**: `frontend/src/components/SeatOccupancyAdmin.tsx`
+
+**Purpose**: Provides an admin interface for viewing and managing seat reservations across the entire event.
+
+**Key Features**:
+
+- Real-time occupancy visualization across all rooms
+- Summary statistics dashboard
+- Seat-by-seat occupancy map
+- Comprehensive seat assignment table
+- Move/assign seats with conflict checking
+- Clear seat assignments
+- Separate section for unspecified seat attendees
+- Full keyboard/screen reader accessibility
+- Mobile-responsive design
+
+**Props**:
+
+```typescript
+interface SeatOccupancyAdminProps {
+  eventId: number;           // Event ID
+  refreshTrigger?: number;    // Optional trigger to force data refresh
+}
+```
+
+**Component State**:
+
+- `rooms`: Array of Room objects for the event
+- `seats`: Array of Seat objects across all rooms
+- `seatingConfig`: Event seating configuration
+- `reservations`: All seat reservations for the event
+- `invitations`: All invitations for attendee details
+- `dataLoaded`: Initial data fetch completed
+- `moveDialogOpen`: Whether the move/assign dialog is open
+- `selectedReservation`: Reservation being edited
+- `newSeatId`: New seat ID for move operation
+- `moveInProgress`: Loading state for move operation
+
+**Data Flow**:
+
+1. Component mounts and fetches:
+   - Seating configuration
+   - All rooms
+   - All seats
+   - All seat reservations (admin endpoint)
+   - All invitations (for user details)
+2. Enriches reservations with seat/room/user information
+3. Groups seats by occupancy status
+4. Admin selects action (move, clear)
+5. API call with conflict checking
+6. Refresh data on success
+7. Display error on conflict
+
+**Admin API Endpoints Used**:
+
+```typescript
+GET /api/events/{eventId}/seating-config?as_admin=true
+GET /api/events/{eventId}/rooms?as_admin=true
+GET /api/events/{eventId}/seats?as_admin=true
+GET /api/events/{eventId}/seat-reservations?as_admin=true  // All reservations
+GET /api/events/{eventId}/invitations?as_admin=true        // For user details
+PUT /api/events/{eventId}/seat-reservations/{email}?as_admin=true  // Move seat
+DELETE /api/events/{eventId}/seat-reservations/{email}?as_admin=true  // Clear
+```
+
+**Integration with EventManagement**:
+
+The SeatOccupancyAdmin is integrated into the EventManagement page as a full-width panel:
+
+```tsx
+<SeatOccupancyAdmin
+  eventId={event.id}
+  refreshTrigger={seatsRefreshKey}
+/>
+```
+
+The `refreshTrigger` prop allows the parent to force a data refresh when rooms/seats are modified.
+
+**Visual Components**:
+
+1. **Summary Statistics**: Four cards showing totals
+2. **Occupancy Map**: Room cards with seat chips
+3. **Seat Assignments Table**: Detailed table with actions
+4. **Unspecified Seats Table**: Separate table for unspecified reservations
+5. **Move/Assign Dialog**: Modal for selecting new seat
+
+**Accessibility Implementation**:
+
+- Semantic table structure with proper headers
+- ARIA labels on all interactive elements
+- Keyboard navigation (Tab, Enter, Space)
+- Screen reader announcements for actions
+- Tooltips with descriptive text
+- Visual and textual seat status indicators
+
+**Mobile Responsiveness**:
+
+- Grid layout with responsive breakpoints (xs/sm/md)
+- Tables scroll horizontally on small screens
+- Touch-friendly IconButton sizes (≥44px)
+- Dialogs adapt to screen width
+- No hover-dependent features
+
+**Error Handling**:
+
+- 401 Unauthorized: Triggers sign-out
+- 409 Conflict: Shows user-friendly conflict message
+- Network errors: Caught and displayed via snackbar
+- All API calls wrapped in try-catch
+
+**Conflict Detection**:
+
+When moving a seat, the component:
+1. Sends PUT request with new seat ID and existing attendance buckets
+2. Backend checks for overlapping reservations on target seat
+3. Returns 409 Conflict if seat is occupied during any of the time periods
+4. Component displays clear error message
+5. User can select different seat or cancel
+
+**Performance Considerations**:
+
+- Fetches all data on mount (5 API calls)
+- Data refreshed only on successful actions
+- No polling or real-time updates
+- Efficient React keys for stable lists
+- Memoization not needed due to small data sets
+
+## Contributing
+
+When modifying the SeatSelector or SeatOccupancyAdmin:
+
 1. **Maintain backward compatibility**: Don't break existing Event page integration
 2. **Update types**: Keep TypeScript types in sync with API
 3. **Test accessibility**: Verify keyboard nav and screen readers
@@ -548,4 +683,5 @@ For technical questions:
 - Check the API documentation (SEAT_RESERVATIONS.md)
 - Review the backend implementation (api/src/routes/seat_reservations.rs)
 - Consult the rooms/seats documentation (ROOMS_AND_SEATS.md)
-- Open an issue on GitHub with [Seat Selection] tag
+- Read the admin guide (ADMIN_SEAT_OCCUPANCY_GUIDE.md)
+- Open an issue on GitHub with [Seat Selection] or [Admin] tag
