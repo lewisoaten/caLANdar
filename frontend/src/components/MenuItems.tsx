@@ -18,7 +18,7 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
 import { Collapse } from "@mui/material";
-import { Event, SportsEsports } from "@mui/icons-material";
+import { Event, SportsEsports, EventSeat } from "@mui/icons-material";
 
 interface MenuItemsProps {
   updateButtonLoadingState: [
@@ -37,6 +37,7 @@ export default function MenuItems(props: MenuItemsProps) {
   const location = useLocation();
   const eventUrl = location.pathname.match(/^\/events\/[0-9]+/g)?.[0];
   const gamesUrl = eventUrl + "/games";
+  const seatMapUrl = eventUrl + "/seat-map";
 
   return (
     <List component="nav">
@@ -62,6 +63,12 @@ export default function MenuItems(props: MenuItemsProps) {
                     <SportsEsports />
                   </ListItemIcon>
                   <ListItemText primary="Games" />
+                </ListItemButton>
+                <ListItemButton sx={{ pl: 4 }} component={Link} to={seatMapUrl}>
+                  <ListItemIcon>
+                    <EventSeat />
+                  </ListItemIcon>
+                  <ListItemText primary="Seat Map" />
                 </ListItemButton>
               </List>
             </Collapse>
