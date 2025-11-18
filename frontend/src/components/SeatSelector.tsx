@@ -670,73 +670,78 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                           handleSeatSelect(seat.id);
                                         }
                                       }}
-                                      sx={{
-                                        position: "absolute",
-                                        left: `${seat.x * 100}%`,
-                                        top: `${seat.y * 100}%`,
-                                        transform: "translate(-50%, -50%)",
-                                        width: 44,
-                                        height: 44,
-                                        borderRadius: "50%",
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: "center",
-                                        cursor:
-                                          seat.isOccupied || disabled
-                                            ? "not-allowed"
-                                            : "pointer",
-                                        pointerEvents: "auto",
-                                        fontSize: "0.75rem",
-                                        fontWeight: "bold",
-                                        transition: "all 0.2s",
-                                        "&:hover": {
-                                          transform:
-                                            !seat.isOccupied && !disabled
-                                              ? "translate(-50%, -50%) scale(1.1)"
-                                              : "translate(-50%, -50%)",
-                                        },
-                                        // Ensure minimum tap target size for accessibility
-                                        minWidth: 44,
-                                        minHeight: 44,
-                                        zIndex: 1,
-                                        ...seatVisualStyle,
-                                      }}
-                                    role="button"
-                                    aria-label={`Seat ${seat.label}${seat.isOwnSeat ? " (your seat)" : seat.isOccupied ? " (occupied)" : " (available)"}`}
-                                    tabIndex={
-                                      seat.isOccupied || disabled ? -1 : 0
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (
-                                        (e.key === "Enter" || e.key === " ") &&
-                                        !seat.isOccupied &&
-                                        !disabled
-                                      ) {
-                                        e.preventDefault();
-                                        handleSeatSelect(seat.id);
+                                      sx={
+                                        {
+                                          position: "absolute",
+                                          left: `${seat.x * 100}%`,
+                                          top: `${seat.y * 100}%`,
+                                          transform: "translate(-50%, -50%)",
+                                          width: 44,
+                                          height: 44,
+                                          borderRadius: "50%",
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "center",
+                                          cursor:
+                                            seat.isOccupied || disabled
+                                              ? "not-allowed"
+                                              : "pointer",
+                                          pointerEvents: "auto",
+                                          fontSize: "0.75rem",
+                                          fontWeight: "bold",
+                                          transition: "all 0.2s",
+                                          "&:hover": {
+                                            transform:
+                                              !seat.isOccupied && !disabled
+                                                ? "translate(-50%, -50%) scale(1.1)"
+                                                : "translate(-50%, -50%)",
+                                          },
+                                          // Ensure minimum tap target size for accessibility
+                                          minWidth: 44,
+                                          minHeight: 44,
+                                          zIndex: 1,
+                                          ...(seatVisualStyle as React.CSSProperties),
+                                        } as React.CSSProperties
                                       }
-                                    }}
-                                  >
-                                    {seat.isOwnSeat ? (
-                                      <Avatar
-                                        src={
-                                          userAvatarUrl ||
-                                          "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+                                      role="button"
+                                      aria-label={`Seat ${seat.label}${seat.isOwnSeat ? " (your seat)" : seat.isOccupied ? " (occupied)" : " (available)"}`}
+                                      tabIndex={
+                                        seat.isOccupied || disabled ? -1 : 0
+                                      }
+                                      onKeyDown={(
+                                        e: React.KeyboardEvent<HTMLDivElement>,
+                                      ) => {
+                                        if (
+                                          (e.key === "Enter" ||
+                                            e.key === " ") &&
+                                          !seat.isOccupied &&
+                                          !disabled
+                                        ) {
+                                          e.preventDefault();
+                                          handleSeatSelect(seat.id);
                                         }
-                                        alt="Your seat"
-                                        sx={{
-                                          width: 36,
-                                          height: 36,
-                                          border: "3px solid",
-                                          borderColor: "secondary.main",
-                                        }}
-                                      >
-                                        <PersonIcon />
-                                      </Avatar>
-                                    ) : (
-                                      <EventSeatIcon fontSize="small" />
-                                    )}
-                                  </Box>
+                                      }}
+                                    >
+                                      {seat.isOwnSeat ? (
+                                        <Avatar
+                                          src={
+                                            userAvatarUrl ||
+                                            "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+                                          }
+                                          alt="Your seat"
+                                          sx={{
+                                            width: 36,
+                                            height: 36,
+                                            border: "3px solid",
+                                            borderColor: "secondary.main",
+                                          }}
+                                        >
+                                          <PersonIcon />
+                                        </Avatar>
+                                      ) : (
+                                        <EventSeatIcon fontSize="small" />
+                                      )}
+                                    </Box>
                                   </span>
                                 </Tooltip>
                               );
