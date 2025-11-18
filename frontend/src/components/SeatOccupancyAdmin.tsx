@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useEffect, useState, useContext, useCallback } from "react";
+import { useEffect, useState, useContext, useCallback, useMemo } from "react";
 import {
   Typography,
   Box,
@@ -84,6 +84,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   const [reservations, setReservations] = useState<SeatReservation[]>([]);
   const [invitations, setInvitations] = useState<InvitationData[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Move/Edit dialog state
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
@@ -92,11 +93,15 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   const [newSeatId, setNewSeatId] = useState<number | null>(null);
   const [moveInProgress, setMoveInProgress] = useState(false);
 
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [emailToDelete, setEmailToDelete] = useState<string | null>(null);
+
   // Fetch seating configuration
   const fetchSeatingConfig = useCallback(() => {
-    if (!eventId || !token) return;
+    if (!eventId || !token) return Promise.resolve();
 
-    fetch(`/api/events/${eventId}/seating-config?as_admin=true`, {
+    return fetch(`/api/events/${eventId}/seating-config?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -104,11 +109,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as EventSeatingConfig);
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch seating config");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as EventSeatingConfig);
       })
       .then((data) => {
         if (data) {
@@ -117,14 +127,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching seating config:", error);
+        setFetchError("Failed to load seating configuration");
+        throw error;
       });
   }, [eventId, token, signOut]);
 
   // Fetch rooms
   const fetchRooms = useCallback(() => {
-    if (!eventId || !token) return;
+    if (!eventId || !token) return Promise.resolve();
 
-    fetch(`/api/events/${eventId}/rooms?as_admin=true`, {
+    return fetch(`/api/events/${eventId}/rooms?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -132,11 +144,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as Room[]);
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch rooms");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as Room[]);
       })
       .then((data) => {
         if (data) {
@@ -145,14 +162,15 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching rooms:", error);
+        throw error;
       });
   }, [eventId, token, signOut]);
 
   // Fetch seats
   const fetchSeats = useCallback(() => {
-    if (!eventId || !token) return;
+    if (!eventId || !token) return Promise.resolve();
 
-    fetch(`/api/events/${eventId}/seats?as_admin=true`, {
+    return fetch(`/api/events/${eventId}/seats?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -160,11 +178,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as Seat[]);
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch seats");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as Seat[]);
       })
       .then((data) => {
         if (data) {
@@ -173,14 +196,15 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching seats:", error);
+        throw error;
       });
   }, [eventId, token, signOut]);
 
   // Fetch all seat reservations
   const fetchReservations = useCallback(() => {
-    if (!eventId || !token) return;
+    if (!eventId || !token) return Promise.resolve();
 
-    fetch(`/api/events/${eventId}/seat-reservations?as_admin=true`, {
+    return fetch(`/api/events/${eventId}/seat-reservations?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -188,11 +212,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as SeatReservation[]);
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch reservations");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as SeatReservation[]);
       })
       .then((data) => {
         if (data) {
@@ -201,14 +230,15 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching seat reservations:", error);
+        throw error;
       });
   }, [eventId, token, signOut]);
 
   // Fetch invitations to get user details
   const fetchInvitations = useCallback(() => {
-    if (!eventId || !token) return;
+    if (!eventId || !token) return Promise.resolve();
 
-    fetch(`/api/events/${eventId}/invitations?as_admin=true`, {
+    return fetch(`/api/events/${eventId}/invitations?as_admin=true`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -216,11 +246,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch invitations");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
       })
       .then((data) => {
         if (data) {
@@ -229,18 +264,32 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching invitations:", error);
+        throw error;
       });
   }, [eventId, token, signOut]);
 
   // Load all data
   useEffect(() => {
     setDataLoaded(false);
-    fetchSeatingConfig();
-    fetchRooms();
-    fetchSeats();
-    fetchReservations();
-    fetchInvitations();
-    setDataLoaded(true);
+    setFetchError(null);
+
+    Promise.all([
+      fetchSeatingConfig(),
+      fetchRooms(),
+      fetchSeats(),
+      fetchReservations(),
+      fetchInvitations(),
+    ])
+      .then(() => {
+        setDataLoaded(true);
+      })
+      .catch((error) => {
+        console.error("Error loading data:", error);
+        setFetchError(
+          "Failed to load seat occupancy data. Please try refreshing the page.",
+        );
+        setDataLoaded(true); // Set to true so we show the error message instead of loading
+      });
   }, [
     eventId,
     refreshTrigger,
@@ -252,38 +301,47 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   ]);
 
   // Build enriched reservation list with seat/room/user details
-  const enrichedReservations: ReservationWithDetails[] = reservations.map(
-    (reservation) => {
-      const seat = seats.find((s) => s.id === reservation.seatId);
-      const room = seat ? rooms.find((r) => r.id === seat.roomId) : null;
-      const invitation = invitations.find(
-        (i) => i.email === reservation.invitationEmail,
-      );
+  const enrichedReservations: ReservationWithDetails[] = useMemo(
+    () =>
+      reservations.map((reservation) => {
+        const seat = seats.find((s) => s.id === reservation.seatId);
+        const room = seat ? rooms.find((r) => r.id === seat.roomId) : null;
+        const invitation = invitations.find(
+          (i) => i.email === reservation.invitationEmail,
+        );
 
-      return {
-        ...reservation,
-        seatLabel: seat?.label || null,
-        roomName: room?.name || null,
-        invitationHandle: invitation?.handle || null,
-        invitationAvatarUrl: invitation?.avatarUrl || null,
-      };
-    },
+        return {
+          ...reservation,
+          seatLabel: seat?.label || null,
+          roomName: room?.name || null,
+          invitationHandle: invitation?.handle || null,
+          invitationAvatarUrl: invitation?.avatarUrl || null,
+        };
+      }),
+    [reservations, seats, rooms, invitations],
   );
 
   // Group reservations by seat
-  const seatsWithOccupancy: SeatWithOccupancy[] = seats.map((seat) => {
-    const seatReservations = reservations.filter((r) => r.seatId === seat.id);
-    return {
-      ...seat,
-      reservations: seatReservations,
-      isOccupied: seatReservations.length > 0,
-      occupantCount: seatReservations.length,
-    };
-  });
+  const seatsWithOccupancy: SeatWithOccupancy[] = useMemo(
+    () =>
+      seats.map((seat) => {
+        const seatReservations = reservations.filter(
+          (r) => r.seatId === seat.id,
+        );
+        return {
+          ...seat,
+          reservations: seatReservations,
+          isOccupied: seatReservations.length > 0,
+          occupantCount: seatReservations.length,
+        };
+      }),
+    [seats, reservations],
+  );
 
   // Unspecified seat reservations
-  const unspecifiedReservations = enrichedReservations.filter(
-    (r) => r.seatId === null,
+  const unspecifiedReservations = useMemo(
+    () => enrichedReservations.filter((r) => r.seatId === null),
+    [enrichedReservations],
   );
 
   // Handle opening move dialog
@@ -363,21 +421,25 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
     }
   };
 
-  // Handle clearing a reservation
-  const handleClearReservation = async (email: string) => {
-    if (!token) return;
+  // Handle opening delete dialog
+  const handleOpenDeleteDialog = (email: string) => {
+    setEmailToDelete(email);
+    setDeleteDialogOpen(true);
+  };
 
-    if (
-      !window.confirm(
-        `Are you sure you want to clear the seat assignment for ${email}?`,
-      )
-    ) {
-      return;
-    }
+  // Handle closing delete dialog
+  const handleCloseDeleteDialog = () => {
+    setDeleteDialogOpen(false);
+    setEmailToDelete(null);
+  };
+
+  // Handle clearing a reservation
+  const handleClearReservation = async () => {
+    if (!token || !emailToDelete) return;
 
     try {
       const response = await fetch(
-        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(email)}?as_admin=true`,
+        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(emailToDelete)}?as_admin=true`,
         {
           method: "DELETE",
           headers: {
@@ -400,6 +462,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       enqueueSnackbar("Seat assignment cleared successfully", {
         variant: "success",
       });
+      handleCloseDeleteDialog();
       fetchReservations(); // Refresh the list
     } catch (error) {
       console.error("Error clearing reservation:", error);
@@ -407,25 +470,44 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
     }
   };
 
+  // Helper to generate aria-label for attendance buckets
+  const getAttendanceAriaLabel = (buckets: number[]) => {
+    const pattern = buckets
+      .map(
+        (bucket, idx) =>
+          `Bucket ${idx + 1}: ${bucket === 1 ? "Attending" : "Not attending"}`,
+      )
+      .join(", ");
+    return `Attendance pattern: ${pattern}`;
+  };
+
   // Render attendance buckets as a visual indicator
   const renderAttendanceBuckets = (buckets: number[]) => {
     return (
-      <Box sx={{ display: "flex", gap: 0.5 }}>
+      <Box
+        sx={{ display: "flex", gap: 0.5 }}
+        role="img"
+        aria-label={getAttendanceAriaLabel(buckets)}
+      >
         {buckets.map((bucket, index) => (
-          <Box
+          <Tooltip
             key={index}
-            sx={{
-              width: 12,
-              height: 12,
-              backgroundColor:
-                bucket === 1
-                  ? theme.palette.success.main
-                  : theme.palette.action.disabledBackground,
-              border: `1px solid ${theme.palette.divider}`,
-              borderRadius: 0.5,
-            }}
             title={`Bucket ${index + 1}: ${bucket === 1 ? "Attending" : "Not attending"}`}
-          />
+            enterDelay={200}
+          >
+            <Box
+              sx={{
+                width: 12,
+                height: 12,
+                backgroundColor:
+                  bucket === 1
+                    ? theme.palette.success.main
+                    : theme.palette.action.disabledBackground,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: 0.5,
+              }}
+            />
+          </Tooltip>
         ))}
       </Box>
     );
@@ -448,6 +530,43 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
         <Typography variant="body2" sx={{ mt: 2 }}>
           Loading seat occupancy data...
         </Typography>
+      </Paper>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <Paper sx={{ p: 3 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {fetchError}
+        </Alert>
+        <Button
+          variant="contained"
+          onClick={() => {
+            setFetchError(null);
+            setDataLoaded(false);
+            // Trigger re-fetch by using the current dependencies
+            Promise.all([
+              fetchSeatingConfig(),
+              fetchRooms(),
+              fetchSeats(),
+              fetchReservations(),
+              fetchInvitations(),
+            ])
+              .then(() => {
+                setDataLoaded(true);
+              })
+              .catch((error) => {
+                console.error("Error loading data:", error);
+                setFetchError(
+                  "Failed to load seat occupancy data. Please try refreshing the page.",
+                );
+                setDataLoaded(true);
+              });
+          }}
+        >
+          Retry
+        </Button>
       </Paper>
     );
   }
@@ -682,7 +801,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                             <IconButton
                               size="small"
                               onClick={() =>
-                                handleClearReservation(
+                                handleOpenDeleteDialog(
                                   reservation.invitationEmail,
                                 )
                               }
@@ -778,7 +897,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                             <IconButton
                               size="small"
                               onClick={() =>
-                                handleClearReservation(
+                                handleOpenDeleteDialog(
                                   reservation.invitationEmail,
                                 )
                               }
@@ -850,7 +969,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                     <em>{seatingConfig.unspecifiedSeatLabel}</em>
                   </MenuItem>
                 )}
-                {rooms.map((room) => {
+                {rooms.flatMap((room) => {
                   const roomSeats = seats.filter((s) => s.roomId === room.id);
                   return [
                     <MenuItem key={`room-${room.id}`} disabled>
@@ -884,6 +1003,35 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
             }
           >
             {moveInProgress ? "Moving..." : "Confirm Move"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleCloseDeleteDialog}
+        maxWidth="sm"
+      >
+        <DialogTitle>Confirm Clear Assignment</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to clear the seat assignment for{" "}
+            <strong>{emailToDelete}</strong>?
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            This action will remove their seat reservation. They will need to
+            select a seat again if they want one.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
+          <Button
+            onClick={handleClearReservation}
+            variant="contained"
+            color="error"
+          >
+            Clear Assignment
           </Button>
         </DialogActions>
       </Dialog>
