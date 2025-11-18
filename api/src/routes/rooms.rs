@@ -1,5 +1,5 @@
 use crate::{
-    auth::AdminUser,
+    auth::{AdminUser, User},
     controllers::{room, Error},
 };
 use chrono::{prelude::Utc, DateTime};
@@ -83,6 +83,7 @@ impl SchemaExample for RoomSubmit {
 }
 
 custom_errors!(RoomGetAllError, Unauthorized, InternalServerError);
+custom_errors!(RoomGetAllUserError, Unauthorized, InternalServerError);
 
 /// Get all rooms for an event (admin only).
 #[openapi(tag = "Rooms")]
@@ -101,7 +102,34 @@ pub async fn get_all(
     }
 }
 
+/// Get all rooms for an event if the user has been invited.
+///
+/// Rank 2: Lower priority than the admin route (rank 1) for the same path.
+/// Rocket matches routes in order of rank, so admin users will match the rank 1 route first.
+#[openapi(tag = "Rooms")]
+#[get("/events/<event_id>/rooms", format = "json", rank = 2)]
+pub async fn get_all_user(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Vec<Room>>, RoomGetAllUserError> {
+    let email = user.email;
+    match room::get_all_for_invited_user(pool, event_id, &email).await {
+        Ok(rooms) => Ok(Json(rooms)),
+        Err(Error::NotPermitted(e)) => Err(RoomGetAllUserError::Unauthorized(e)),
+        Err(e) => Err(RoomGetAllUserError::InternalServerError(format!(
+            "Error getting rooms, due to: {e}"
+        ))),
+    }
+}
+
 custom_errors!(RoomGetError, Unauthorized, NotFound, InternalServerError);
+custom_errors!(
+    RoomGetUserError,
+    Unauthorized,
+    NotFound,
+    InternalServerError
+);
 
 /// Get a specific room (admin only).
 #[openapi(tag = "Rooms")]
@@ -117,6 +145,25 @@ pub async fn get(
         Ok(Some(room)) => Ok(Json(room)),
         Ok(None) => Err(RoomGetError::NotFound("Room not found".to_string())),
         Err(e) => Err(RoomGetError::InternalServerError(format!(
+            "Error getting room, due to: {e}"
+        ))),
+    }
+}
+
+/// Get a room if the current user has a reserved seat inside it.
+#[openapi(tag = "Rooms")]
+#[get("/events/<event_id>/rooms/<room_id>", format = "json", rank = 2)]
+pub async fn get_user(
+    event_id: i32,
+    room_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Room>, RoomGetUserError> {
+    match room::get_reserved_room_for_user(pool, event_id, room_id, &user.email).await {
+        Ok(room) => Ok(Json(room)),
+        Err(Error::NotPermitted(e)) => Err(RoomGetUserError::Unauthorized(e)),
+        Err(Error::NotFound(e)) => Err(RoomGetUserError::NotFound(e)),
+        Err(e) => Err(RoomGetUserError::InternalServerError(format!(
             "Error getting room, due to: {e}"
         ))),
     }

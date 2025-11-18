@@ -8,15 +8,10 @@ import { UserContext, UserDispatchContext } from "../UserProvider";
 import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
-import {
-  InvitationData,
-  defaultInvitationData,
-  RSVP,
-} from "../types/invitations";
-import InvitationResponse from "./InvitationResponse";
+import { InvitationData, defaultInvitationData } from "../types/invitations";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
-import SeatSelector from "./SeatSelector";
+import { RSVPWizard, RSVPSummary } from "./RSVPWizard";
 
 const Event = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -27,9 +22,18 @@ const Event = () => {
   const [loaded, setLoaded] = useState(false);
   const [responded, setResponded] = useState(0);
   const [invitation, setInvitation] = useState(defaultInvitationData);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const theme = useTheme();
 
   const { id } = useParams();
+
+  // Initialize responded state when invitation is loaded
+  useEffect(() => {
+    if (invitation.response) {
+      // If invitation has a response, set responded to 1 to show attendees/suggestions
+      setResponded(1);
+    }
+  }, [invitation.response]);
 
   useEffect(() => {
     fetch(`/api/events/${id}`, {
@@ -261,9 +265,10 @@ const Event = () => {
                 </Grid>
                 <Grid size={12}>
                   {loaded && (
-                    <InvitationResponse
+                    <RSVPSummary
+                      invitation={invitation}
                       event={event}
-                      setResponded={setResponded}
+                      onEdit={() => setWizardOpen(true)}
                       disabled={event.timeEnd.isSameOrBefore(moment())}
                     />
                   )}
@@ -309,29 +314,21 @@ const Event = () => {
               )}
             </Paper>
           </Grid>
-
-          {/* Seat Selection Panel */}
-          {loaded && invitation.response && invitation.response !== RSVP.no && (
-            <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-              <Paper
-                sx={{
-                  ...frostedGlassSx,
-                  p: 3,
-                  display: "flex",
-                  flexDirection: "column",
-                }}
-              >
-                <SeatSelector
-                  eventId={event.id}
-                  attendanceBuckets={invitation.attendance}
-                  disabled={event.timeEnd.isSameOrBefore(moment())}
-                  onReservationChange={() => setResponded((prev) => prev + 1)}
-                />
-              </Paper>
-            </Grid>
-          )}
         </Grid>
       </Container>
+
+      {/* RSVP Wizard */}
+      {loaded && (
+        <RSVPWizard
+          open={wizardOpen}
+          onClose={() => setWizardOpen(false)}
+          event={event}
+          initialData={invitation}
+          onSaved={() => {
+            setResponded((prev) => prev + 1);
+          }}
+        />
+      )}
     </>
   );
 };

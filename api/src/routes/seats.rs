@@ -1,5 +1,5 @@
 use crate::{
-    auth::AdminUser,
+    auth::{AdminUser, User},
     controllers::{seat, Error},
 };
 use chrono::{prelude::Utc, DateTime};
@@ -89,6 +89,13 @@ impl SchemaExample for SeatSubmit {
 }
 
 custom_errors!(SeatGetAllError, Unauthorized, InternalServerError);
+custom_errors!(
+    SeatGetUserError,
+    Unauthorized,
+    NotFound,
+    InternalServerError
+);
+custom_errors!(SeatGetAllUserError, Unauthorized, InternalServerError);
 
 /// Get all seats for an event (admin only).
 #[openapi(tag = "Seats")]
@@ -102,6 +109,45 @@ pub async fn get_all(
     match seat::get_all(pool, event_id).await {
         Ok(seats) => Ok(Json(seats)),
         Err(e) => Err(SeatGetAllError::InternalServerError(format!(
+            "Error getting seats, due to: {e}"
+        ))),
+    }
+}
+
+/// Get the requested seat if it has been reserved by the current user.
+#[openapi(tag = "Seats")]
+#[get("/events/<event_id>/seats/<seat_id>", format = "json", rank = 2)]
+pub async fn get_user(
+    event_id: i32,
+    seat_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Seat>, SeatGetUserError> {
+    match seat::get_reserved_seat_for_user(pool, event_id, seat_id, &user.email).await {
+        Ok(seat) => Ok(Json(seat)),
+        Err(Error::NotPermitted(e)) => Err(SeatGetUserError::Unauthorized(e)),
+        Err(Error::NotFound(e)) => Err(SeatGetUserError::NotFound(e)),
+        Err(e) => Err(SeatGetUserError::InternalServerError(format!(
+            "Error getting reserved seat, due to: {e}"
+        ))),
+    }
+}
+
+/// Get all seats for an event if the user has been invited.
+///
+/// Rank 2: Lower priority than the admin route (rank 1) for the same path.
+/// Rocket matches routes in order of rank, so admin users will match the rank 1 route first.
+#[openapi(tag = "Seats")]
+#[get("/events/<event_id>/seats", format = "json", rank = 2)]
+pub async fn get_all_user(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Vec<Seat>>, SeatGetAllUserError> {
+    match seat::get_all_for_invited_user(pool, event_id, &user.email).await {
+        Ok(seats) => Ok(Json(seats)),
+        Err(Error::NotPermitted(e)) => Err(SeatGetAllUserError::Unauthorized(e)),
+        Err(e) => Err(SeatGetAllUserError::InternalServerError(format!(
             "Error getting seats, due to: {e}"
         ))),
     }

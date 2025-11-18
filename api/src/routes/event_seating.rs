@@ -1,5 +1,5 @@
 use crate::{
-    auth::AdminUser,
+    auth::{AdminUser, User},
     controllers::{event_seating_config, Error},
 };
 use chrono::{prelude::Utc, DateTime};
@@ -77,6 +77,11 @@ custom_errors!(
     Unauthorized,
     InternalServerError
 );
+custom_errors!(
+    EventSeatingConfigGetUserError,
+    Unauthorized,
+    InternalServerError
+);
 
 /// Get seating configuration for an event (admin only).
 #[openapi(tag = "Event Seating")]
@@ -87,22 +92,28 @@ pub async fn get(
     _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<EventSeatingConfig>, EventSeatingConfigGetError> {
-    match event_seating_config::get(pool, event_id).await {
-        Ok(Some(config)) => Ok(Json(config)),
-        Ok(None) => {
-            // Return default configuration if none exists
-            Ok(Json(EventSeatingConfig {
-                event_id,
-                has_seating: false,
-                allow_unspecified_seat: false,
-                unspecified_seat_label: "Unspecified Seat".to_string(),
-                created_at: Utc::now(),
-                last_modified: Utc::now(),
-            }))
-        }
+    match event_seating_config::get_or_default(pool, event_id).await {
+        Ok(config) => Ok(Json(config)),
         Err(e) => Err(EventSeatingConfigGetError::InternalServerError(format!(
             "Error getting seating config, due to: {e}"
         ))),
+    }
+}
+
+/// Get seating configuration for an event when invited.
+#[openapi(tag = "Event Seating")]
+#[get("/events/<event_id>/seating-config", format = "json", rank = 2)]
+pub async fn get_user(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<EventSeatingConfig>, EventSeatingConfigGetUserError> {
+    match event_seating_config::get_or_default_for_invited_user(pool, event_id, &user.email).await {
+        Ok(config) => Ok(Json(config)),
+        Err(Error::NotPermitted(e)) => Err(EventSeatingConfigGetUserError::Unauthorized(e)),
+        Err(e) => Err(EventSeatingConfigGetUserError::InternalServerError(
+            format!("Error getting seating config, due to: {e}"),
+        )),
     }
 }
 
