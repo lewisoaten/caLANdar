@@ -41,11 +41,9 @@ export default function SignIn() {
       return;
     }
 
-    signIn(email)
-      // @ts-expect-error: Cannot possibly work out why this is complaining about type.
-      .then(() => {
-        setSubmitted(true);
-      });
+    signIn(email).then(() => {
+      setSubmitted(true);
+    });
   };
 
   useEffect(() => {
