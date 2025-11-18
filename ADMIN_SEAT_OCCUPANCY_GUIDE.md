@@ -75,6 +75,7 @@ If your event allows unspecified seat reservations, a separate section shows:
 3. Click **Confirm Move**
 
 **Important**: The system will check for conflicts:
+
 - If another attendee already has the seat during overlapping time periods, you'll see an error
 - The move will only succeed if the seat is available for all of the attendee's time buckets
 - Conflict errors show a user-friendly message explaining the issue
@@ -134,6 +135,7 @@ Attendance buckets represent time periods during the event:
 - Gray = Attendee will not be present
 
 **Example**: For a Friday 6 PM - Sunday 6 PM event:
+
 - Friday: 6 PM-12 AM (1 bucket)
 - Saturday: 6 AM-6 PM (4 buckets)
 - Sunday: 6 AM-12 PM, 12 PM-6 PM (2 buckets)
@@ -146,6 +148,7 @@ Seat conflicts occur when two attendees have overlapping green buckets for the s
 ### Understanding Conflicts
 
 A conflict occurs when:
+
 1. Two or more attendees want the same seat
 2. Their attendance times overlap (at least one matching green bucket)
 
@@ -197,6 +200,7 @@ A conflict occurs when:
 **Cause**: Another attendee has the seat during an overlapping time.
 
 **Solution**:
+
 1. Check the seat's current reservations in the occupancy map
 2. Choose a different seat, or
 3. Review the conflicting attendee's attendance pattern
@@ -205,6 +209,7 @@ A conflict occurs when:
 ### Attendee doesn't appear in the tables
 
 **Possible causes**:
+
 - They haven't RSVP'd "Yes" to the event
 - They haven't completed the RSVP wizard
 - They don't have a seat reservation (check unspecified seats)
@@ -215,6 +220,7 @@ A conflict occurs when:
 ### Changes aren't showing up
 
 **Solution**: The view refreshes automatically after each action. If it doesn't:
+
 1. Check your network connection
 2. Refresh the entire Event Management page
 3. Check the browser console for errors
@@ -222,6 +228,7 @@ A conflict occurs when:
 ### Dialog or buttons aren't working on mobile
 
 **Solution**:
+
 1. Ensure you're using a modern browser (Chrome, Safari, Firefox, Edge)
 2. Try rotating your device if in landscape mode
 3. Zoom out if the view is too large

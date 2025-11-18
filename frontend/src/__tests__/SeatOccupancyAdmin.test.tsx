@@ -1,24 +1,35 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import type { ContextType } from "react";
+import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import SeatOccupancyAdmin from "../components/SeatOccupancyAdmin";
-import { UserProvider } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import { SnackbarProvider } from "notistack";
 
 const mockUserDetails = {
   token: "mock-admin-token",
   email: "admin@example.com",
-  avatarUrl: null,
+  loggedIn: true,
+  isAdmin: true,
+};
+
+const mockUserDispatch: ContextType<typeof UserDispatchContext> = {
+  signIn: vi.fn(() => Promise.resolve({} as Response)),
+  verifyEmail: vi.fn(() => Promise.resolve({} as Response)),
+  signOut: vi.fn(),
+  isSignedIn: vi.fn(() => true),
 };
 
 const renderComponent = (eventId = 1) => {
   return render(
     <MemoryRouter>
-      <UserProvider value={mockUserDetails}>
-        <SnackbarProvider>
-          <SeatOccupancyAdmin eventId={eventId} />
-        </SnackbarProvider>
-      </UserProvider>
+      <UserContext.Provider value={mockUserDetails}>
+        <UserDispatchContext.Provider value={mockUserDispatch}>
+          <SnackbarProvider>
+            <SeatOccupancyAdmin eventId={eventId} />
+          </SnackbarProvider>
+        </UserDispatchContext.Provider>
+      </UserContext.Provider>
     </MemoryRouter>,
   );
 };
@@ -45,14 +56,15 @@ describe("SeatOccupancyAdmin", () => {
   it("accepts refreshTrigger prop", () => {
     render(
       <MemoryRouter>
-        <UserProvider value={mockUserDetails}>
-          <SnackbarProvider>
-            <SeatOccupancyAdmin eventId={1} refreshTrigger={42} />
-          </SnackbarProvider>
-        </UserProvider>
+        <UserContext.Provider value={mockUserDetails}>
+          <UserDispatchContext.Provider value={mockUserDispatch}>
+            <SnackbarProvider>
+              <SeatOccupancyAdmin eventId={1} refreshTrigger={42} />
+            </SnackbarProvider>
+          </UserDispatchContext.Provider>
+        </UserContext.Provider>
       </MemoryRouter>,
     );
     expect(document.body).toBeInTheDocument();
   });
 });
-

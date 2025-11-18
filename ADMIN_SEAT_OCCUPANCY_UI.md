@@ -82,6 +82,7 @@ Four cards displaying key metrics:
 - **Total Reservations**: Total number of seat reservations
 
 **Visual Design**:
+
 - White cards with subtle shadow
 - Large numbers (h4 typography)
 - Gray descriptive text
@@ -92,6 +93,7 @@ Four cards displaying key metrics:
 Room-based visualization showing all seats:
 
 **Features**:
+
 - One card per room
 - Room name and description in header
 - Occupancy ratio in chip (e.g., "35/40 occupied")
@@ -103,6 +105,7 @@ Room-based visualization showing all seats:
 - Responsive: wraps on smaller screens
 
 **Example Seat Chip**:
+
 ```
 [A1]  or  [A1]
 Blue      Gray
@@ -113,6 +116,7 @@ Blue      Gray
 Comprehensive table of all assigned seats:
 
 **Columns**:
+
 1. **Attendee**: Avatar + handle/email
 2. **Room**: Room name
 3. **Seat**: Seat label as blue chip
@@ -120,6 +124,7 @@ Comprehensive table of all assigned seats:
 5. **Actions**: Move and delete buttons
 
 **Attendance Bucket Visualization**:
+
 ```
 [■][■][□][□]
 Green squares = attending
@@ -127,10 +132,12 @@ Gray squares = not attending
 ```
 
 **Action Icons**:
+
 - ⇄ (Swap icon): Move to different seat
 - 🗑️ (Delete icon): Clear seat assignment
 
 **Accessibility**:
+
 - Semantic table structure
 - Column headers properly labeled
 - Row hover effect
@@ -141,11 +148,13 @@ Gray squares = not attending
 Separate table for attendees without specific seats:
 
 **Columns**:
+
 1. **Attendee**: Avatar + handle/email
 2. **Attendance**: Visual bucket indicators
 3. **Actions**: Assign and delete buttons
 
 **Action Icons**:
+
 - ✏️ (Edit icon): Assign to specific seat
 - 🗑️ (Delete icon): Clear reservation
 
@@ -188,6 +197,7 @@ Modal dialog for changing seat assignments:
 ```
 
 **Features**:
+
 - Shows current assignment
 - Dropdown organized by room
 - Unspecified seat option (if enabled)
@@ -197,17 +207,20 @@ Modal dialog for changing seat assignments:
 ## Color Scheme
 
 ### Seat Status Colors
+
 - **Occupied**: Blue (#1976d2 - MUI primary)
 - **Available**: Gray (#0003 - MUI action.disabled)
 - **Success**: Green (#2e7d32 - MUI success)
 - **Error**: Red (#d32f2f - MUI error)
 
 ### Attendance Buckets
+
 - **Attending**: Green (#2e7d32)
 - **Not Attending**: Light gray (#0001)
 - **Border**: Divider color
 
 ### UI Elements
+
 - **Cards**: White background with elevation shadow
 - **Tables**: Alternating row hover (rgba(0,0,0,0.04))
 - **Chips**: Material-UI default colors
@@ -216,16 +229,19 @@ Modal dialog for changing seat assignments:
 ## Responsive Breakpoints
 
 ### Desktop (≥900px)
+
 - Summary cards: 4 columns
 - Tables: Full width with all columns visible
 - Occupancy chips: Multiple columns
 
 ### Tablet (600-900px)
+
 - Summary cards: 2 columns
 - Tables: Horizontal scroll if needed
 - Occupancy chips: Wrap to multiple rows
 
 ### Mobile (<600px)
+
 - Summary cards: 1 column (stacked)
 - Tables: Horizontal scroll
 - Dialogs: Full width
@@ -234,6 +250,7 @@ Modal dialog for changing seat assignments:
 ## Keyboard Navigation
 
 ### Tab Order
+
 1. Summary statistics (not interactive)
 2. Occupancy map chips (not interactive, but focusable for tooltips)
 3. Seat assignments table:
@@ -246,6 +263,7 @@ Modal dialog for changing seat assignments:
    - Repeat for each row
 
 ### Keyboard Actions
+
 - **Tab**: Navigate to next element
 - **Shift+Tab**: Navigate to previous element
 - **Enter/Space**: Activate button
@@ -255,6 +273,7 @@ Modal dialog for changing seat assignments:
 ## Screen Reader Experience
 
 ### Table Announcements
+
 "Seat assignments table"
 "Table with 3 columns and 35 rows"
 "Column 1: Attendee"
@@ -264,14 +283,17 @@ Modal dialog for changing seat assignments:
 "Column 5: Actions"
 
 ### Row Announcements
+
 "Row 1: John Doe, john@email.com, Main Hall, Seat A1, Attendance 4 buckets, Actions: Move, Delete"
 
 ### Button Announcements
+
 "Move john@email.com to different seat"
 "Clear seat assignment for john@email.com"
 "Assign alice@email.com to specific seat"
 
 ### Status Announcements
+
 "Seat assignment updated successfully"
 "This seat is already reserved for the selected times"
 "Seat assignment cleared successfully"
@@ -279,17 +301,20 @@ Modal dialog for changing seat assignments:
 ## Mobile Experience
 
 ### Portrait Mode
+
 - Summary cards stack vertically
 - Tables scroll horizontally
 - Seat chips wrap to multiple rows
 - Dialog takes full width
 
 ### Landscape Mode
+
 - Similar to tablet layout
 - More horizontal space for tables
 - Dialogs slightly wider
 
 ### Touch Interactions
+
 - All buttons ≥44px tap target
 - No hover effects (replaced with :active states)
 - Smooth scrolling for tables
@@ -298,6 +323,7 @@ Modal dialog for changing seat assignments:
 ## Error States
 
 ### Conflict Error
+
 ```
 ┌─────────────────────────────────────┐
 │  ⚠️ Seat Conflict                   │
@@ -312,6 +338,7 @@ Modal dialog for changing seat assignments:
 ```
 
 ### Network Error
+
 ```
 Snackbar notification (bottom-left):
 ┌─────────────────────────────────┐
@@ -321,6 +348,7 @@ Snackbar notification (bottom-left):
 ```
 
 ### No Seating Enabled
+
 ```
 ┌─────────────────────────────────┐
 │  Seating is not enabled for     │
@@ -331,6 +359,7 @@ Snackbar notification (bottom-left):
 ## Loading States
 
 ### Initial Load
+
 ```
 ┌─────────────────────────────────┐
 │          [Spinner]              │
@@ -339,6 +368,7 @@ Snackbar notification (bottom-left):
 ```
 
 ### Moving Seat
+
 ```
 Dialog shows:
 [Cancel]  [Moving... ⏳]
@@ -348,6 +378,7 @@ Button is disabled during operation
 ## Empty States
 
 ### No Reservations
+
 ```
 ┌─────────────────────────────────┐
 │  ℹ️ No seat reservations found. │
@@ -355,6 +386,7 @@ Button is disabled during operation
 ```
 
 ### No Unspecified Seats
+
 ```
 ┌─────────────────────────────────┐
 │  ℹ️ No unspecified seat         │
@@ -363,6 +395,7 @@ Button is disabled during operation
 ```
 
 ### No Rooms Configured
+
 ```
 ┌─────────────────────────────────┐
 │  ℹ️ No rooms configured for     │

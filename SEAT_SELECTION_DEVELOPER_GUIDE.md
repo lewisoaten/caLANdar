@@ -557,8 +557,8 @@ When modifying the SeatSelector:
 
 ```typescript
 interface SeatOccupancyAdminProps {
-  eventId: number;           // Event ID
-  refreshTrigger?: number;    // Optional trigger to force data refresh
+  eventId: number; // Event ID
+  refreshTrigger?: number; // Optional trigger to force data refresh
 }
 ```
 
@@ -607,10 +607,7 @@ DELETE /api/events/{eventId}/seat-reservations/{email}?as_admin=true  // Clear
 The SeatOccupancyAdmin is integrated into the EventManagement page as a full-width panel:
 
 ```tsx
-<SeatOccupancyAdmin
-  eventId={event.id}
-  refreshTrigger={seatsRefreshKey}
-/>
+<SeatOccupancyAdmin eventId={event.id} refreshTrigger={seatsRefreshKey} />
 ```
 
 The `refreshTrigger` prop allows the parent to force a data refresh when rooms/seats are modified.
@@ -650,6 +647,7 @@ The `refreshTrigger` prop allows the parent to force a data refresh when rooms/s
 **Conflict Detection**:
 
 When moving a seat, the component:
+
 1. Sends PUT request with new seat ID and existing attendance buckets
 2. Backend checks for overlapping reservations on target seat
 3. Returns 409 Conflict if seat is occupied during any of the time periods

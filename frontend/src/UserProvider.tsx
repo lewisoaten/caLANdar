@@ -10,6 +10,13 @@ interface IUserContext {
   isAdmin: boolean;
 }
 
+interface IUserDispatchContext {
+  signIn: (email: string) => Promise<Response>;
+  verifyEmail: (token: string) => Promise<Response>;
+  signOut: () => void;
+  isSignedIn: () => boolean;
+}
+
 // Create two context:
 // UserContext: to query the context state
 // UserDispatchContext: to mutate the context state
@@ -20,12 +27,20 @@ const UserContext = createContext({
   isAdmin: false,
 } as IUserContext);
 
-const UserDispatchContext = createContext({
-  signIn: (_email: string) => Promise<Response>,
-  verifyEmail: (_token: string) => Promise<Response>,
+const defaultDispatchContext: IUserDispatchContext = {
+  signIn: () =>
+    Promise.reject(new Error("signIn not implemented")) as Promise<Response>,
+  verifyEmail: () =>
+    Promise.reject(
+      new Error("verifyEmail not implemented"),
+    ) as Promise<Response>,
   signOut: () => {},
-  isSignedIn: () => false as boolean,
-});
+  isSignedIn: () => false,
+};
+
+const UserDispatchContext = createContext<IUserDispatchContext>(
+  defaultDispatchContext,
+);
 
 interface Props {
   children?: ReactNode;
