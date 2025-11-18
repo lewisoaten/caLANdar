@@ -128,14 +128,31 @@ pub async fn respond(
     match invitation::edit(
         pool,
         event_id,
-        email,
-        invitation_response.handle,
-        invitation_response.response.into(),
-        invitation_response.attendance,
+        email.clone(),
+        invitation_response.handle.clone(),
+        invitation_response.response.clone().into(),
+        invitation_response.attendance.clone(),
     )
     .await
     {
-        Ok(_event) => Ok(()),
+        Ok(_event) => {
+            // Log audit entry for RSVP update
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "response": format!("{:?}", invitation_response.response),
+                "handle": invitation_response.handle,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "rsvp.update".to_string(),
+                "rsvp".to_string(),
+                Some(event_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+            Ok(())
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create event due to: {e}"
         ))),

@@ -28,7 +28,7 @@ pub struct InvitationsPostRequest {
     email: String,
 }
 
-#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[sqlx(type_name = "invitation_response", rename_all = "lowercase")]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub enum InvitationResponse {

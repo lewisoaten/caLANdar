@@ -129,7 +129,7 @@ pub async fn post(
     }
 }
 
-#[derive(sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, sqlx::Type, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[sqlx(type_name = "vote", rename_all = "lowercase")]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub enum GameVote {

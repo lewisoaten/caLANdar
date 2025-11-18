@@ -94,7 +94,23 @@ pub async fn edit(
     };
 
     match profile::update(pool, email.clone(), Some(new_steam_id), None).await {
-        Ok(profile) => Ok(Profile::from(profile)),
+        Ok(profile) => {
+            // Log audit entry for profile update
+            let metadata = rocket::serde::json::serde_json::json!({
+                "steam_id": new_steam_id,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "profile.update".to_string(),
+                "profile".to_string(),
+                Some(new_steam_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+            
+            Ok(Profile::from(profile))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to update profile due to: {e}"
         ))),
