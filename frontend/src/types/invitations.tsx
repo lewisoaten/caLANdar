@@ -24,6 +24,7 @@ export type InvitationLiteData = {
   handle: string | null;
   response: RSVP | null;
   attendance: number[] | null;
+  seatId: number | null;
   lastModified: moment.Moment;
 };
 
@@ -49,5 +50,6 @@ export const defaultInvitationLiteData: InvitationLiteData = {
   handle: null,
   response: null,
   attendance: null,
+  seatId: null,
   lastModified: moment(),
 };

@@ -20,22 +20,19 @@ import PersonIcon from "@mui/icons-material/Person";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { Room, Seat, EventSeatingConfig } from "../types/events";
-import { SeatReservation } from "../types/seat_reservations";
-import { InvitationData } from "../types/invitations";
+import { InvitationLiteData } from "../types/invitations";
 import { useParams } from "react-router-dom";
 import RoomFloorplanView, { SeatDisplayData } from "./RoomFloorplanView";
 
 interface SeatWithOccupancy extends Seat {
-  reservations: SeatReservation[];
+  invitations: InvitationLiteData[];
   isOccupied: boolean;
   occupantCount: number;
 }
 
-interface ReservationWithDetails extends SeatReservation {
+interface InvitationWithDetails extends InvitationLiteData {
   seatLabel: string | null;
   roomName: string | null;
-  invitationHandle: string | null;
-  invitationAvatarUrl: string | null;
 }
 
 const EventSeatMap: React.FC = () => {
@@ -50,8 +47,7 @@ const EventSeatMap: React.FC = () => {
   const [seatingConfig, setSeatingConfig] = useState<EventSeatingConfig | null>(
     null,
   );
-  const [reservations, setReservations] = useState<SeatReservation[]>([]);
-  const [invitations, setInvitations] = useState<InvitationData[]>([]);
+  const [invitations, setInvitations] = useState<InvitationLiteData[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -158,41 +154,7 @@ const EventSeatMap: React.FC = () => {
       });
   }, [eventId, token, signOut]);
 
-  // Fetch all seat reservations
-  const fetchReservations = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}/seat-reservations`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch reservations");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as SeatReservation[]);
-      })
-      .then((data) => {
-        if (data) {
-          setReservations(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching seat reservations:", error);
-        throw error;
-      });
-  }, [eventId, token, signOut]);
-
-  // Fetch invitations to get user details
+  // Fetch invitations with seat information (non-admin endpoint)
   const fetchInvitations = useCallback(() => {
     if (!eventId || !token) return Promise.resolve();
 
@@ -213,7 +175,7 @@ const EventSeatMap: React.FC = () => {
         }
         return response
           .text()
-          .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
+          .then((data) => JSON.parse(data, dateParser) as InvitationLiteData[]);
       })
       .then((data) => {
         if (data) {
@@ -235,7 +197,6 @@ const EventSeatMap: React.FC = () => {
       fetchSeatingConfig(),
       fetchRooms(),
       fetchSeats(),
-      fetchReservations(),
       fetchInvitations(),
     ])
       .then(() => {
@@ -248,57 +209,45 @@ const EventSeatMap: React.FC = () => {
         );
         setDataLoaded(true);
       });
-  }, [
-    eventId,
-    fetchSeatingConfig,
-    fetchRooms,
-    fetchSeats,
-    fetchReservations,
-    fetchInvitations,
-  ]);
+  }, [eventId, fetchSeatingConfig, fetchRooms, fetchSeats, fetchInvitations]);
 
-  // Build enriched reservation list with seat/room/user details
-  const enrichedReservations: ReservationWithDetails[] = useMemo(
+  // Build enriched invitation list with seat/room details
+  const enrichedInvitations: InvitationWithDetails[] = useMemo(
     () =>
-      reservations.map((reservation) => {
-        const seat = seats.find((s) => s.id === reservation.seatId);
+      invitations.map((invitation) => {
+        const seat = seats.find((s) => s.id === invitation.seatId);
         const room = seat ? rooms.find((r) => r.id === seat.roomId) : null;
-        const invitation = invitations.find(
-          (i) => i.email === reservation.invitationEmail,
-        );
 
         return {
-          ...reservation,
+          ...invitation,
           seatLabel: seat?.label || null,
           roomName: room?.name || null,
-          invitationHandle: invitation?.handle || null,
-          invitationAvatarUrl: invitation?.avatarUrl || null,
         };
       }),
-    [reservations, seats, rooms, invitations],
+    [invitations, seats, rooms],
   );
 
-  // Group reservations by seat
+  // Group invitations by seat
   const seatsWithOccupancy: SeatWithOccupancy[] = useMemo(
     () =>
       seats.map((seat) => {
-        const seatReservations = reservations.filter(
-          (r) => r.seatId === seat.id,
+        const seatInvitations = invitations.filter(
+          (inv) => inv.seatId === seat.id,
         );
         return {
           ...seat,
-          reservations: seatReservations,
-          isOccupied: seatReservations.length > 0,
-          occupantCount: seatReservations.length,
+          invitations: seatInvitations,
+          isOccupied: seatInvitations.length > 0,
+          occupantCount: seatInvitations.length,
         };
       }),
-    [seats, reservations],
+    [seats, invitations],
   );
 
-  // Unspecified seat reservations
-  const unspecifiedReservations = useMemo(
-    () => enrichedReservations.filter((r) => r.seatId === null),
-    [enrichedReservations],
+  // Unspecified seat invitations
+  const unspecifiedInvitations = useMemo(
+    () => enrichedInvitations.filter((inv) => inv.seatId === null),
+    [enrichedInvitations],
   );
 
   // Helper to get seats for a room
@@ -306,12 +255,12 @@ const EventSeatMap: React.FC = () => {
     return seatsWithOccupancy.filter((seat) => seat.roomId === roomId);
   };
 
-  // Get the first reservation for a seat (for display)
+  // Get the first invitation for a seat (for display)
   const getSeatOccupant = (
     seat: SeatWithOccupancy,
-  ): ReservationWithDetails | null => {
+  ): InvitationWithDetails | null => {
     if (!seat.isOccupied) return null;
-    return enrichedReservations.find((r) => r.seatId === seat.id) || null;
+    return enrichedInvitations.find((inv) => inv.seatId === seat.id) || null;
   };
 
   // Convert seats to SeatDisplayData for RoomFloorplanView
@@ -321,15 +270,15 @@ const EventSeatMap: React.FC = () => {
     const occupant = getSeatOccupant(seat);
     const isOccupied = seat.isOccupied;
 
-    const tooltip =
-      isOccupied && occupant
-        ? `${seat.label} - ${occupant.invitationHandle || occupant.invitationEmail}`
-        : `${seat.label}${seat.description ? ` - ${seat.description}` : ""} - Available`;
+    const occupantName = occupant?.handle || "Someone";
 
-    const ariaLabel =
-      isOccupied && occupant
-        ? `Seat ${seat.label} occupied by ${occupant.invitationHandle || occupant.invitationEmail}`
-        : `Seat ${seat.label} available`;
+    const tooltip = isOccupied && occupant
+      ? `${seat.label} - ${occupantName}`
+      : `${seat.label}${seat.description ? ` - ${seat.description}` : ""} - Available`;
+
+    const ariaLabel = isOccupied && occupant
+      ? `Seat ${seat.label} occupied by ${occupantName}`
+      : `Seat ${seat.label} available`;
 
     return {
       seat,
@@ -351,13 +300,10 @@ const EventSeatMap: React.FC = () => {
       icon: isOccupied && occupant ? "avatar" : "seat",
       avatarSrc:
         isOccupied && occupant
-          ? occupant.invitationAvatarUrl ||
+          ? occupant.avatarUrl ||
             "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
           : undefined,
-      avatarAlt:
-        isOccupied && occupant
-          ? occupant.invitationHandle || occupant.invitationEmail
-          : undefined,
+      avatarAlt: isOccupied && occupant ? occupantName : undefined,
     };
   };
 
@@ -480,7 +426,7 @@ const EventSeatMap: React.FC = () => {
                       Unspecified Seats
                     </Typography>
                     <Typography variant="h4">
-                      {unspecifiedReservations.length}
+                      {unspecifiedInvitations.length}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -568,13 +514,10 @@ const EventSeatMap: React.FC = () => {
                                     {isOccupied && occupant ? (
                                       <Avatar
                                         src={
-                                          occupant.invitationAvatarUrl ||
+                                          occupant.avatarUrl ||
                                           "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
                                         }
-                                        alt={
-                                          occupant.invitationHandle ||
-                                          occupant.invitationEmail
-                                        }
+                                        alt={occupant.handle || "Someone"}
                                         sx={{ width: 40, height: 40 }}
                                       >
                                         <PersonIcon />
@@ -609,8 +552,7 @@ const EventSeatMap: React.FC = () => {
                                           color="text.secondary"
                                           noWrap
                                         >
-                                          {occupant.invitationHandle ||
-                                            occupant.invitationEmail}
+                                          {occupant.handle || "Someone"}
                                         </Typography>
                                       ) : (
                                         <Typography
@@ -637,17 +579,17 @@ const EventSeatMap: React.FC = () => {
 
           {/* Unspecified Seat Attendees */}
           {seatingConfig.allowUnspecifiedSeat &&
-            unspecifiedReservations.length > 0 && (
+            unspecifiedInvitations.length > 0 && (
               <Card variant="outlined">
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
                     Attendees with Unspecified Seats
                   </Typography>
                   <Grid container spacing={1}>
-                    {unspecifiedReservations.map((reservation) => (
+                    {unspecifiedInvitations.map((invitation, index) => (
                       <Grid
                         size={{ xs: 12, sm: 6, md: 4 }}
-                        key={reservation.id}
+                        key={`unspecified-${index}`}
                       >
                         <Card
                           variant="outlined"
@@ -666,21 +608,17 @@ const EventSeatMap: React.FC = () => {
                             >
                               <Avatar
                                 src={
-                                  reservation.invitationAvatarUrl ||
+                                  invitation.avatarUrl ||
                                   "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
                                 }
-                                alt={
-                                  reservation.invitationHandle ||
-                                  reservation.invitationEmail
-                                }
+                                alt={invitation.handle || "Someone"}
                                 sx={{ width: 40, height: 40 }}
                               >
                                 <PersonIcon />
                               </Avatar>
                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                                 <Typography variant="body1" fontWeight="bold">
-                                  {reservation.invitationHandle ||
-                                    reservation.invitationEmail}
+                                  {invitation.handle || "Someone"}
                                 </Typography>
                                 <Typography
                                   variant="body2"

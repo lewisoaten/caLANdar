@@ -337,6 +337,7 @@ pub struct InvitationsResponseLite {
     pub handle: Option<String>,
     pub response: Option<InvitationResponse>,
     pub attendance: Option<Vec<u8>>,
+    pub seat_id: Option<i32>,
     pub last_modified: DateTime<Utc>,
 }
 
@@ -353,12 +354,20 @@ pub async fn get_all_user(
             "You can only see invitations for events you have RSVP'd to".to_string(),
         )),
         Ok(true) => {
-            // Return all invitations for this event
+            // Return all invitations for this event with their seat reservations
             let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
                 InvitationsResponseLite,
-                r#"SELECT event_id, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, response AS "response: _", attendance, last_modified
-                FROM invitation
-                WHERE event_id=$1 AND response IN ('yes', 'maybe')"#,
+                r#"SELECT 
+                    i.event_id, 
+                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url, 
+                    i.handle, 
+                    i.response AS "response: _", 
+                    i.attendance,
+                    sr.seat_id,
+                    i.last_modified
+                FROM invitation i
+                LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email
+                WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')"#,
                 event_id,
             )
             .fetch_all(pool.inner())
