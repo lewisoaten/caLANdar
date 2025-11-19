@@ -7,9 +7,11 @@ import {
   Chip,
   Alert,
   CircularProgress,
+  Tooltip,
   Grid,
   Card,
   CardContent,
+  CardMedia,
   Avatar,
   Container,
   Paper,
@@ -23,7 +25,6 @@ import { Room, Seat, EventSeatingConfig } from "../types/events";
 import { SeatReservation } from "../types/seat_reservations";
 import { InvitationData } from "../types/invitations";
 import { useParams } from "react-router-dom";
-import SeatMapView, { SeatDisplayInfo } from "./SeatMapView";
 
 interface SeatWithOccupancy extends Seat {
   reservations: SeatReservation[];
@@ -314,22 +315,6 @@ const EventSeatMap: React.FC = () => {
     return enrichedReservations.find((r) => r.seatId === seat.id) || null;
   };
 
-  // Convert seat data to SeatDisplayInfo format for SeatMapView
-  const getSeatDisplayInfo = (seat: SeatWithOccupancy): SeatDisplayInfo => {
-    const occupant = getSeatOccupant(seat);
-    return {
-      seat,
-      isOccupied: seat.isOccupied,
-      isOwnSeat: false, // This is a read-only view
-      isAvailable: !seat.isOccupied,
-      occupantName: occupant
-        ? occupant.invitationHandle || occupant.invitationEmail
-        : undefined,
-      occupantAvatar: occupant?.invitationAvatarUrl,
-      disabled: true, // Read-only, no interaction
-    };
-  };
-
   if (!seatingConfig?.hasSeating) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -503,12 +488,117 @@ const EventSeatMap: React.FC = () => {
                         </Typography>
                       )}
 
-                      {/* Floorplan visualization using SeatMapView */}
-                      <SeatMapView
-                        room={room}
-                        seats={roomSeats.map(getSeatDisplayInfo)}
-                        showFloorplan={!!room.image}
-                      />
+                      {/* Floorplan visualization if image exists */}
+                      {room.image && (
+                        <Box
+                          sx={{
+                            position: "relative",
+                            mb: 2,
+                            paddingTop: "75%",
+                          }}
+                        >
+                          <CardMedia
+                            component="img"
+                            image={room.image}
+                            alt={`${room.name} floorplan`}
+                            sx={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "contain",
+                              border: "1px solid",
+                              borderColor: "divider",
+                              borderRadius: 1,
+                            }}
+                          />
+                          {/* Overlay seats on floorplan */}
+                          <Box
+                            sx={{
+                              position: "absolute",
+                              top: 0,
+                              left: 0,
+                              width: "100%",
+                              height: "100%",
+                            }}
+                          >
+                            {roomSeats.map((seat) => {
+                              const occupant = getSeatOccupant(seat);
+                              const isOccupied = seat.isOccupied;
+
+                              return (
+                                <Tooltip
+                                  key={seat.id}
+                                  title={
+                                    isOccupied && occupant
+                                      ? `${seat.label} - ${occupant.invitationHandle || occupant.invitationEmail}`
+                                      : `${seat.label}${seat.description ? ` - ${seat.description}` : ""} - Available`
+                                  }
+                                  placement="top"
+                                >
+                                  <Box
+                                    sx={{
+                                      position: "absolute",
+                                      left: `${seat.x * 100}%`,
+                                      top: `${seat.y * 100}%`,
+                                      transform: "translate(-50%, -50%)",
+                                      width: 44,
+                                      height: 44,
+                                      borderRadius: "50%",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      pointerEvents: "auto",
+                                      minWidth: 44,
+                                      minHeight: 44,
+                                      zIndex: 1,
+                                      backgroundColor: isOccupied
+                                        ? "transparent"
+                                        : theme.palette.success.main,
+                                      border: isOccupied
+                                        ? "none"
+                                        : `2px solid ${alpha(theme.palette.success.dark, 0.35)}`,
+                                      color: isOccupied
+                                        ? theme.palette.primary.main
+                                        : theme.palette.common.white,
+                                    }}
+                                    role="img"
+                                    aria-label={
+                                      isOccupied && occupant
+                                        ? `Seat ${seat.label} occupied by ${occupant.invitationHandle || occupant.invitationEmail}`
+                                        : `Seat ${seat.label} available`
+                                    }
+                                  >
+                                    {isOccupied && occupant ? (
+                                      <Avatar
+                                        src={
+                                          occupant.invitationAvatarUrl ||
+                                          "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+                                        }
+                                        alt={
+                                          occupant.invitationHandle ||
+                                          occupant.invitationEmail
+                                        }
+                                        sx={{
+                                          width: 36,
+                                          height: 36,
+                                          border: "3px solid",
+                                          borderColor: "primary.main",
+                                        }}
+                                      >
+                                        <PersonIcon />
+                                      </Avatar>
+                                    ) : (
+                                      <EventSeatIcon fontSize="small" />
+                                    )}
+                                  </Box>
+                                </Tooltip>
+                              );
+                            })}
+                          </Box>
+                        </Box>
+                      )}
 
                       {/* List view of seats */}
                       <Grid container spacing={1}>
