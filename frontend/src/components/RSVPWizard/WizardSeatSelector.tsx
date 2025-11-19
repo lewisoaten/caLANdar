@@ -7,11 +7,9 @@ import {
   Button,
   Alert,
   CircularProgress,
-  Tooltip,
   Grid,
   Card,
   CardContent,
-  CardMedia,
   Chip,
 } from "@mui/material";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
@@ -19,6 +17,7 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
 import { Room, Seat } from "../../types/events";
 import { SeatAvailabilityResponse } from "../../types/seat_reservations";
+import RoomFloorplanView, { SeatDisplayData } from "../RoomFloorplanView";
 
 interface WizardSeatSelectorProps {
   eventId: number;
@@ -197,6 +196,49 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
     return seatsWithAvailability.filter((seat) => seat.roomId === roomId);
   };
 
+  // Convert seats to SeatDisplayData for RoomFloorplanView
+  const convertToSeatDisplayData = (
+    seat: SeatWithAvailability,
+  ): SeatDisplayData => {
+    const tooltip = `${seat.label}${seat.description ? ` - ${seat.description}` : ""}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`;
+    const ariaLabel = `Seat ${seat.label}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`;
+
+    return {
+      seat,
+      tooltip,
+      ariaLabel,
+      onClick:
+        seat.isAvailable && !disabled
+          ? () => handleSeatClick(seat.id)
+          : undefined,
+      styles: {
+        backgroundColor: seat.isSelected
+          ? "primary.main"
+          : !seat.isAvailable
+            ? "text.disabled"
+            : "success.main",
+        border: `2px solid ${seat.isSelected ? "primary.dark" : "transparent"}`,
+        color: "white",
+        cursor: !seat.isAvailable || disabled ? "not-allowed" : "pointer",
+      },
+      hoverTransform:
+        seat.isAvailable && !disabled
+          ? "translate(-50%, -50%) scale(1.1)"
+          : "translate(-50%, -50%)",
+      icon: seat.isSelected ? "checkmark" : "seat",
+      tabIndex: !seat.isAvailable || disabled ? -1 : 0,
+      onKeyDown:
+        seat.isAvailable && !disabled
+          ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleSeatClick(seat.id);
+              }
+            }
+          : undefined,
+    };
+  };
+
   return (
     <Stack spacing={3}>
       {allowUnspecifiedSeat && (
@@ -253,116 +295,11 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
                 </Typography>
               )}
 
-              {/* Floorplan visualization if image exists */}
-              {room.image && (
-                <Box
-                  sx={{
-                    position: "relative",
-                    mb: 2,
-                    paddingTop: "75%",
-                  }}
-                >
-                  <CardMedia
-                    component="img"
-                    image={room.image}
-                    alt={`${room.name} floorplan`}
-                    sx={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      border: "1px solid",
-                      borderColor: "divider",
-                      borderRadius: 1,
-                    }}
-                  />
-                  {/* Overlay seats on floorplan */}
-                  <Box
-                    sx={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                    }}
-                  >
-                    {roomSeats.map((seat) => (
-                      <Tooltip
-                        key={seat.id}
-                        title={`${seat.label}${seat.description ? ` - ${seat.description}` : ""}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`}
-                        placement="top"
-                      >
-                        <Box
-                          onClick={() => {
-                            if (seat.isAvailable && !disabled) {
-                              handleSeatClick(seat.id);
-                            }
-                          }}
-                          sx={{
-                            position: "absolute",
-                            left: `${seat.x * 100}%`,
-                            top: `${seat.y * 100}%`,
-                            transform: "translate(-50%, -50%)",
-                            width: 44,
-                            height: 44,
-                            borderRadius: "50%",
-                            backgroundColor: seat.isSelected
-                              ? "primary.main"
-                              : !seat.isAvailable
-                                ? "text.disabled"
-                                : "success.main",
-                            color: "white",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            cursor:
-                              !seat.isAvailable || disabled
-                                ? "not-allowed"
-                                : "pointer",
-                            pointerEvents: "auto",
-                            border: "2px solid",
-                            borderColor: seat.isSelected
-                              ? "primary.dark"
-                              : "transparent",
-                            fontSize: "0.75rem",
-                            fontWeight: "bold",
-                            transition: "all 0.2s",
-                            "&:hover": {
-                              transform:
-                                seat.isAvailable && !disabled
-                                  ? "translate(-50%, -50%) scale(1.1)"
-                                  : "translate(-50%, -50%)",
-                            },
-                            minWidth: 44,
-                            minHeight: 44,
-                          }}
-                          role="button"
-                          aria-label={`Seat ${seat.label}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`}
-                          tabIndex={!seat.isAvailable || disabled ? -1 : 0}
-                          onKeyDown={(e) => {
-                            if (
-                              (e.key === "Enter" || e.key === " ") &&
-                              seat.isAvailable &&
-                              !disabled
-                            ) {
-                              e.preventDefault();
-                              handleSeatClick(seat.id);
-                            }
-                          }}
-                        >
-                          {seat.isSelected ? (
-                            <CheckCircleIcon fontSize="small" />
-                          ) : (
-                            <EventSeatIcon fontSize="small" />
-                          )}
-                        </Box>
-                      </Tooltip>
-                    ))}
-                  </Box>
-                </Box>
-              )}
+              {/* Floorplan visualization using RoomFloorplanView */}
+              <RoomFloorplanView
+                room={room}
+                seats={roomSeats.map(convertToSeatDisplayData)}
+              />
 
               {/* List view of seats */}
               <Grid container spacing={1}>
