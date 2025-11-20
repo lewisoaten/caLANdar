@@ -12,13 +12,9 @@ import {
   Grid,
   Card,
   CardContent,
-  CardMedia,
-  Avatar,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import PersonIcon from "@mui/icons-material/Person";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { Room, Seat, EventSeatingConfig } from "../types/events";
@@ -27,7 +23,10 @@ import {
   SeatReservationSubmit,
   SeatAvailabilityResponse,
 } from "../types/seat_reservations";
+import { RSVP, InvitationLiteData } from "../types/invitations";
 import { useSnackbar } from "notistack";
+import RoomFloorplanView, { SeatDisplayData } from "./RoomFloorplanView";
+import moment from "moment";
 
 interface SeatSelectorProps {
   eventId: number;
@@ -42,6 +41,9 @@ interface SeatWithReservation extends Seat {
   isOccupied: boolean;
 }
 
+const DEFAULT_AVATAR_URL =
+  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
+
 const SeatSelector: React.FC<SeatSelectorProps> = ({
   eventId,
   attendanceBuckets,
@@ -52,7 +54,6 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const { enqueueSnackbar } = useSnackbar();
-  const theme = useTheme();
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -65,6 +66,7 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
   const [loading, setLoading] = useState(false);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null);
+  const [userRsvpStatus, setUserRsvpStatus] = useState<RSVP | null>(null);
 
   // Fetch seating configuration
   useEffect(() => {
@@ -226,7 +228,9 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
     if (!token || !userDetails?.email || !eventId) return;
 
     fetch(
-      `/api/events/${eventId}/invitations/${encodeURIComponent(userDetails.email)}`,
+      `/api/events/${eventId}/invitations/${encodeURIComponent(
+        userDetails.email,
+      )}`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -242,6 +246,9 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
       .then((data) => {
         if (data?.avatarUrl) {
           setUserAvatarUrl(data.avatarUrl);
+        }
+        if (data?.response) {
+          setUserRsvpStatus(data.response);
         }
       })
       .catch((error) => {
@@ -450,44 +457,48 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
     };
   };
 
-  const getSeatVisualStyle = useCallback(
-    (seat: SeatWithReservation) => {
-      if (seat.isOwnSeat) {
-        return {
-          backgroundColor: "transparent",
-          border: "none",
-          color: theme.palette.secondary.main,
-          opacity: 1,
-        };
-      }
-
-      if (seat.isOccupied) {
-        return {
-          backgroundColor: theme.palette.grey,
-          border: "2px solid",
-          borderColor: theme.palette.common.black,
-          color: theme.palette.grey,
-          boxShadow: `0 0 0 2px ${alpha(theme.palette.common.white, 0.35)}`,
-          opacity: 1,
-        };
-      }
-
-      return {
-        backgroundColor: theme.palette.success.main,
-        border: "2px solid",
-        borderColor: alpha(theme.palette.success.dark, 0.35),
-        color: theme.palette.common.white,
-        opacity: 1,
-      };
-    },
-    [theme],
-  );
-
   // Helper to get seats for a room
   const getSeatsForRoom = (roomId: number): SeatWithReservation[] => {
     return seats
       .filter((seat) => seat.roomId === roomId)
       .map((seat) => getSeatStatus(seat));
+  };
+
+  const convertSeatToDisplayData = (
+    seat: SeatWithReservation,
+  ): SeatDisplayData => {
+    const isInteractive = !seat.isOccupied && !disabled;
+
+    // Create occupants array based on whether it's the user's seat
+    const occupants: InvitationLiteData[] = seat.isOwnSeat
+      ? [
+          {
+            eventId,
+            avatarUrl: userAvatarUrl,
+            handle: null, // We don't have handle in SeatSelector context
+            response: userRsvpStatus,
+            attendance: attendanceBuckets,
+            seatId: seat.id,
+            lastModified: moment(),
+          },
+        ]
+      : [];
+
+    return {
+      seat,
+      occupants,
+      isOwnSeat: seat.isOwnSeat,
+      isAvailable: seat.isAvailable,
+      onClick: isInteractive ? () => handleSeatSelect(seat.id) : undefined,
+      onKeyDown: isInteractive
+        ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleSeatSelect(seat.id);
+            }
+          }
+        : undefined,
+    };
   };
 
   if (!seatingConfig || !seatingConfig.hasSeating) {
@@ -619,136 +630,11 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                         </Typography>
                       )}
 
-                      {/* Floorplan visualization if image exists */}
-                      {room.image && (
-                        <Box
-                          sx={{
-                            position: "relative",
-                            mb: 2,
-                            paddingTop: "75%",
-                          }}
-                        >
-                          <CardMedia
-                            component="img"
-                            image={room.image}
-                            alt={`${room.name} floorplan`}
-                            sx={{
-                              position: "absolute",
-                              top: 0,
-                              left: 0,
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "contain",
-                              border: "1px solid",
-                              borderColor: "divider",
-                              borderRadius: 1,
-                            }}
-                          />
-                          {/* Overlay seats on floorplan */}
-                          <Box
-                            sx={{
-                              position: "absolute",
-                              top: 0,
-                              left: 0,
-                              width: "100%",
-                              height: "100%",
-                              pointerEvents: "none",
-                            }}
-                          >
-                            {roomSeats.map((seat) => {
-                              const seatVisualStyle = getSeatVisualStyle(seat);
-                              return (
-                                <Tooltip
-                                  key={seat.id}
-                                  title={`${seat.label}${seat.description ? ` - ${seat.description}` : ""}`}
-                                  placement="top"
-                                >
-                                  <span>
-                                    <Box
-                                      onClick={() => {
-                                        if (!seat.isOccupied && !disabled) {
-                                          handleSeatSelect(seat.id);
-                                        }
-                                      }}
-                                      sx={
-                                        {
-                                          position: "absolute",
-                                          left: `${seat.x * 100}%`,
-                                          top: `${seat.y * 100}%`,
-                                          transform: "translate(-50%, -50%)",
-                                          width: 44,
-                                          height: 44,
-                                          borderRadius: "50%",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          cursor:
-                                            seat.isOccupied || disabled
-                                              ? "not-allowed"
-                                              : "pointer",
-                                          pointerEvents: "auto",
-                                          fontSize: "0.75rem",
-                                          fontWeight: "bold",
-                                          transition: "all 0.2s",
-                                          "&:hover": {
-                                            transform:
-                                              !seat.isOccupied && !disabled
-                                                ? "translate(-50%, -50%) scale(1.1)"
-                                                : "translate(-50%, -50%)",
-                                          },
-                                          // Ensure minimum tap target size for accessibility
-                                          minWidth: 44,
-                                          minHeight: 44,
-                                          zIndex: 1,
-                                          ...(seatVisualStyle as React.CSSProperties),
-                                        } as React.CSSProperties
-                                      }
-                                      role="button"
-                                      aria-label={`Seat ${seat.label}${seat.isOwnSeat ? " (your seat)" : seat.isOccupied ? " (occupied)" : " (available)"}`}
-                                      tabIndex={
-                                        seat.isOccupied || disabled ? -1 : 0
-                                      }
-                                      onKeyDown={(
-                                        e: React.KeyboardEvent<HTMLDivElement>,
-                                      ) => {
-                                        if (
-                                          (e.key === "Enter" ||
-                                            e.key === " ") &&
-                                          !seat.isOccupied &&
-                                          !disabled
-                                        ) {
-                                          e.preventDefault();
-                                          handleSeatSelect(seat.id);
-                                        }
-                                      }}
-                                    >
-                                      {seat.isOwnSeat ? (
-                                        <Avatar
-                                          src={
-                                            userAvatarUrl ||
-                                            "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                          }
-                                          alt="Your seat"
-                                          sx={{
-                                            width: 36,
-                                            height: 36,
-                                            border: "3px solid",
-                                            borderColor: "secondary.main",
-                                          }}
-                                        >
-                                          <PersonIcon />
-                                        </Avatar>
-                                      ) : (
-                                        <EventSeatIcon fontSize="small" />
-                                      )}
-                                    </Box>
-                                  </span>
-                                </Tooltip>
-                              );
-                            })}
-                          </Box>
-                        </Box>
-                      )}
+                      {/* Floorplan visualization using RoomFloorplanView */}
+                      <RoomFloorplanView
+                        room={room}
+                        seats={roomSeats.map(convertSeatToDisplayData)}
+                      />
 
                       {/* List view of seats */}
                       <Grid container spacing={1}>
@@ -760,7 +646,11 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                               }
                               color={
                                 seat.isOwnSeat
-                                  ? "primary"
+                                  ? userRsvpStatus === RSVP.yes
+                                    ? "primary"
+                                    : userRsvpStatus === RSVP.maybe
+                                      ? "warning"
+                                      : "primary"
                                   : seat.isAvailable
                                     ? "success"
                                     : "inherit"
@@ -779,9 +669,20 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                                 justifyContent: "flex-start",
                                 minHeight: 44, // Ensure minimum tap target
                               }}
-                              aria-label={`Seat ${seat.label}${seat.description ? `, ${seat.description}` : ""}${seat.isOwnSeat ? " (your seat)" : seat.isOccupied ? " (occupied)" : " (available)"}`}
+                              aria-label={`Seat ${seat.label}${
+                                seat.description ? `, ${seat.description}` : ""
+                              }${
+                                seat.isOwnSeat
+                                  ? " (your seat)"
+                                  : seat.isOccupied
+                                    ? " (occupied)"
+                                    : " (available)"
+                              }`}
                             >
                               {seat.label}
+                              {seat.isOwnSeat &&
+                                userRsvpStatus === RSVP.maybe &&
+                                " (Maybe)"}
                             </Button>
                           </Grid>
                         ))}

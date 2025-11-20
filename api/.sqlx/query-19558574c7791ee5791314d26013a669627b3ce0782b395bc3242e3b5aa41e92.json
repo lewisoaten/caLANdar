@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT * FROM profiles WHERE LOWER(email) = LOWER($1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "steam_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_refreshed",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "19558574c7791ee5791314d26013a669627b3ce0782b395bc3242e3b5aa41e92"
+}

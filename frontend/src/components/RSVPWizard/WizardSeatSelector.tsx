@@ -201,33 +201,15 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   const convertToSeatDisplayData = (
     seat: SeatWithAvailability,
   ): SeatDisplayData => {
-    const tooltip = `${seat.label}${seat.description ? ` - ${seat.description}` : ""}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`;
-    const ariaLabel = `Seat ${seat.label}${seat.isSelected ? " (selected)" : !seat.isAvailable ? " (occupied)" : " (available)"}`;
-
     return {
       seat,
-      tooltip,
-      ariaLabel,
+      occupants: [], // Wizard doesn't show other occupants, just availability
+      isOwnSeat: seat.isSelected,
+      isAvailable: seat.isAvailable,
       onClick:
         seat.isAvailable && !disabled
           ? () => handleSeatClick(seat.id)
           : undefined,
-      styles: {
-        backgroundColor: seat.isSelected
-          ? "primary.main"
-          : !seat.isAvailable
-            ? "text.disabled"
-            : "success.main",
-        border: `2px solid ${seat.isSelected ? "primary.dark" : "transparent"}`,
-        color: "white",
-        cursor: !seat.isAvailable || disabled ? "not-allowed" : "pointer",
-      },
-      hoverTransform:
-        seat.isAvailable && !disabled
-          ? "translate(-50%, -50%) scale(1.1)"
-          : "translate(-50%, -50%)",
-      icon: seat.isSelected ? "checkmark" : "seat",
-      tabIndex: !seat.isAvailable || disabled ? -1 : 0,
       onKeyDown:
         seat.isAvailable && !disabled
           ? (e: React.KeyboardEvent<HTMLDivElement>) => {

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO steam_game (appid, update_id, name, last_modified)\n        VALUES ($1, $2, $3, NOW())\n        ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "aefca54bb20505e41434e2ec7e69ab7368bfe78f90b188e15479087e8d4502be"
+}

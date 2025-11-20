@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n                    i.event_id, \n                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url, \n                    i.handle, \n                    i.response AS \"response: _\", \n                    i.attendance,\n                    sr.seat_id,\n                    i.last_modified\n                FROM invitation i\n                LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email\n                WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "handle",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "response: _",
+        "type_info": {
+          "Custom": {
+            "name": "invitation_response",
+            "kind": {
+              "Enum": [
+                "yes",
+                "no",
+                "maybe"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "attendance",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "seat_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1cde723362bb52420284e202a0991ddf126b0044a1e4ccf14c35d02be6f693d4"
+}

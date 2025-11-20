@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            id,\n            event_id,\n            seat_id,\n            invitation_email,\n            attendance_buckets,\n            created_at,\n            last_modified\n        FROM seat_reservation\n        WHERE event_id = $1 AND LOWER(invitation_email) = LOWER($2)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "seat_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "invitation_email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "attendance_buckets",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b0d22317622414154331eed9790f67573c98b00f7eac5015248e9c5dcd2fbe55"
+}

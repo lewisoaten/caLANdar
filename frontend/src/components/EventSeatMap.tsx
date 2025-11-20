@@ -13,16 +13,24 @@ import {
   Avatar,
   Container,
   Paper,
+  Tooltip,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import PersonIcon from "@mui/icons-material/Person";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { Room, Seat, EventSeatingConfig } from "../types/events";
-import { InvitationLiteData } from "../types/invitations";
+import { Room, Seat, EventSeatingConfig, EventData } from "../types/events";
+import { InvitationLiteData, RSVP } from "../types/invitations";
 import { useParams } from "react-router-dom";
 import RoomFloorplanView, { SeatDisplayData } from "./RoomFloorplanView";
+import { getAttendanceDescription } from "../utils/attendanceDescription";
 
 interface SeatWithOccupancy extends Seat {
   invitations: InvitationLiteData[];
@@ -42,6 +50,7 @@ const EventSeatMap: React.FC = () => {
   const theme = useTheme();
   const { id: eventId } = useParams<{ id: string }>();
 
+  const [event, setEvent] = useState<EventData | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [seatingConfig, setSeatingConfig] = useState<EventSeatingConfig | null>(
@@ -50,6 +59,40 @@ const EventSeatMap: React.FC = () => {
   const [invitations, setInvitations] = useState<InvitationLiteData[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // Fetch event data
+  const fetchEvent = useCallback(() => {
+    if (!eventId || !token) return Promise.resolve();
+
+    return fetch(`/api/events/${eventId}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Failed to fetch event");
+        }
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as EventData);
+      })
+      .then((data) => {
+        if (data) {
+          setEvent(data);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching event:", error);
+        throw error;
+      });
+  }, [eventId, token, signOut]);
 
   // Fetch seating configuration
   const fetchSeatingConfig = useCallback(() => {
@@ -194,6 +237,7 @@ const EventSeatMap: React.FC = () => {
     setFetchError(null);
 
     Promise.all([
+      fetchEvent(),
       fetchSeatingConfig(),
       fetchRooms(),
       fetchSeats(),
@@ -209,7 +253,14 @@ const EventSeatMap: React.FC = () => {
         );
         setDataLoaded(true);
       });
-  }, [eventId, fetchSeatingConfig, fetchRooms, fetchSeats, fetchInvitations]);
+  }, [
+    eventId,
+    fetchEvent,
+    fetchSeatingConfig,
+    fetchRooms,
+    fetchSeats,
+    fetchInvitations,
+  ]);
 
   // Build enriched invitation list with seat/room details
   const enrichedInvitations: InvitationWithDetails[] = useMemo(
@@ -263,47 +314,61 @@ const EventSeatMap: React.FC = () => {
     return enrichedInvitations.find((inv) => inv.seatId === seat.id) || null;
   };
 
+  // Render attendance pips for a user
+  const renderAttendancePips = (
+    attendance: number[] | null,
+    response: RSVP | null,
+  ) => {
+    if (!attendance || !event) return null;
+
+    const attendanceText = getAttendanceDescription(
+      attendance,
+      event.timeBegin,
+      event.timeEnd,
+    );
+
+    const pipColor =
+      response === RSVP.yes
+        ? theme.palette.success.main // Green for Yes
+        : response === RSVP.maybe
+          ? theme.palette.warning.main // Orange for Maybe
+          : theme.palette.success.main;
+
+    return (
+      <Tooltip title={attendanceText} enterDelay={200}>
+        <Box
+          sx={{ display: "flex", gap: 0.5 }}
+          role="img"
+          aria-label={attendanceText}
+        >
+          {attendance.map((bucket, index) => (
+            <Box
+              key={index}
+              sx={{
+                width: 8,
+                height: 8,
+                backgroundColor:
+                  bucket === 1
+                    ? pipColor
+                    : theme.palette.action.disabledBackground,
+                border: `1px solid ${theme.palette.divider}`,
+                borderRadius: "50%",
+              }}
+            />
+          ))}
+        </Box>
+      </Tooltip>
+    );
+  };
+
   // Convert seats to SeatDisplayData for RoomFloorplanView
   const convertToSeatDisplayData = (
     seat: SeatWithOccupancy,
   ): SeatDisplayData => {
-    const occupant = getSeatOccupant(seat);
-    const isOccupied = seat.isOccupied;
-
-    const occupantName = occupant?.handle || "Someone";
-
-    const tooltip = isOccupied && occupant
-      ? `${seat.label} - ${occupantName}`
-      : `${seat.label}${seat.description ? ` - ${seat.description}` : ""} - Available`;
-
-    const ariaLabel = isOccupied && occupant
-      ? `Seat ${seat.label} occupied by ${occupantName}`
-      : `Seat ${seat.label} available`;
-
     return {
       seat,
-      tooltip,
-      ariaLabel,
+      occupants: seat.invitations,
       onClick: undefined, // Read-only view, no interaction
-      styles: {
-        backgroundColor: isOccupied
-          ? "transparent"
-          : theme.palette.success.main,
-        border: isOccupied
-          ? "none"
-          : `2px solid ${alpha(theme.palette.success.dark, 0.35)}`,
-        color: isOccupied
-          ? theme.palette.primary.main
-          : theme.palette.common.white,
-        zIndex: 1,
-      },
-      icon: isOccupied && occupant ? "avatar" : "seat",
-      avatarSrc:
-        isOccupied && occupant
-          ? occupant.avatarUrl ||
-            "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-          : undefined,
-      avatarAlt: isOccupied && occupant ? occupantName : undefined,
     };
   };
 
@@ -434,13 +499,13 @@ const EventSeatMap: React.FC = () => {
             )}
           </Grid>
 
-          {/* Room Floorplans */}
+          {/* Room Floorplans - Side by side on wide screens */}
           {rooms.length === 0 ? (
             <Alert severity="info">
               No rooms or seats have been configured for this event yet.
             </Alert>
           ) : (
-            <Stack spacing={3}>
+            <Grid container spacing={3}>
               {rooms.map((room) => {
                 const roomSeats = getSeatsForRoom(room.id);
                 if (roomSeats.length === 0) return null;
@@ -451,130 +516,235 @@ const EventSeatMap: React.FC = () => {
                 const totalCount = roomSeats.length;
 
                 return (
-                  <Card key={room.id} variant="outlined">
-                    <CardContent>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
-                        }}
-                      >
-                        <Typography variant="h6">{room.name}</Typography>
-                        <Chip
-                          label={`${occupiedCount}/${totalCount} occupied`}
-                          color={
-                            occupiedCount === totalCount ? "error" : "default"
-                          }
-                          size="small"
-                        />
-                      </Box>
-                      {room.description && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 2 }}
+                  <Grid size={{ xs: 12, lg: 6 }} key={room.id}>
+                    <Card variant="outlined" sx={{ height: "100%" }}>
+                      <CardContent>
+                        <Box
+                          sx={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            mb: 2,
+                          }}
                         >
-                          {room.description}
-                        </Typography>
-                      )}
+                          <Typography variant="h6">{room.name}</Typography>
+                          <Chip
+                            label={`${occupiedCount}/${totalCount} occupied`}
+                            color={
+                              occupiedCount === totalCount ? "error" : "default"
+                            }
+                            size="small"
+                          />
+                        </Box>
+                        {room.description && (
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{ mb: 2 }}
+                          >
+                            {room.description}
+                          </Typography>
+                        )}
 
-                      {/* Floorplan visualization using RoomFloorplanView */}
-                      <RoomFloorplanView
-                        room={room}
-                        seats={roomSeats.map(convertToSeatDisplayData)}
-                      />
+                        {/* Floorplan visualization using RoomFloorplanView */}
+                        <RoomFloorplanView
+                          room={room}
+                          seats={roomSeats.map(convertToSeatDisplayData)}
+                        />
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+          )}
 
-                      {/* List view of seats */}
-                      <Grid container spacing={1}>
-                        {roomSeats.map((seat) => {
-                          const occupant = getSeatOccupant(seat);
-                          const isOccupied = seat.isOccupied;
+          {/* Seat Assignments Table - All seats from all rooms */}
+          {seatsWithOccupancy.filter((s) => s.isOccupied).length > 0 && (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Seat Assignments
+              </Typography>
+              <TableContainer component={Paper} variant="outlined">
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Room</TableCell>
+                      <TableCell>Seat</TableCell>
+                      <TableCell>Attendee(s)</TableCell>
+                      <TableCell>Attendance</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {seatsWithOccupancy
+                      .filter((s) => s.isOccupied)
+                      .map((seat) => {
+                        const room = rooms.find((r) => r.id === seat.roomId);
+                        const hasMultipleOccupants = seat.occupantCount > 1;
 
-                          return (
-                            <Grid size={{ xs: 12, sm: 6, md: 4 }} key={seat.id}>
-                              <Card
-                                variant="outlined"
-                                sx={{
-                                  backgroundColor: isOccupied
-                                    ? alpha(theme.palette.primary.main, 0.1)
-                                    : alpha(theme.palette.success.main, 0.1),
-                                  border: `1px solid ${isOccupied ? theme.palette.primary.main : theme.palette.success.main}`,
-                                }}
-                              >
-                                <CardContent
-                                  sx={{ p: 2, "&:last-child": { pb: 2 } }}
-                                >
-                                  <Stack
-                                    direction="row"
-                                    spacing={2}
-                                    alignItems="center"
-                                  >
-                                    {isOccupied && occupant ? (
+                        return (
+                          <TableRow
+                            key={seat.id}
+                            hover
+                            sx={{
+                              "&:last-child td, &:last-child th": { border: 0 },
+                            }}
+                          >
+                            <TableCell>{room?.name || "Unknown"}</TableCell>
+                            <TableCell>
+                              <Typography fontWeight="medium">
+                                {seat.label}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              {hasMultipleOccupants ? (
+                                // Multiple occupants
+                                <Stack spacing={1.5}>
+                                  {seat.invitations.map((inv, index) => (
+                                    <Box
+                                      key={index}
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 1.5,
+                                      }}
+                                    >
                                       <Avatar
                                         src={
-                                          occupant.avatarUrl ||
+                                          inv.avatarUrl ||
                                           "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
                                         }
-                                        alt={occupant.handle || "Someone"}
-                                        sx={{ width: 40, height: 40 }}
+                                        alt={inv.handle || "Someone"}
+                                        sx={{
+                                          width: 32,
+                                          height: 32,
+                                          border: "2px solid",
+                                          borderColor:
+                                            inv.response === RSVP.yes
+                                              ? "success.main"
+                                              : inv.response === RSVP.maybe
+                                                ? "warning.main"
+                                                : "primary.main",
+                                        }}
                                       >
                                         <PersonIcon />
                                       </Avatar>
-                                    ) : (
-                                      <Box
-                                        sx={{
-                                          width: 40,
-                                          height: 40,
-                                          borderRadius: "50%",
-                                          backgroundColor:
-                                            theme.palette.success.main,
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          color: theme.palette.common.white,
-                                        }}
+                                      <Tooltip
+                                        title={inv.handle || "Someone"}
+                                        enterDelay={500}
                                       >
-                                        <EventSeatIcon fontSize="small" />
-                                      </Box>
-                                    )}
-                                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                      <Typography
-                                        variant="body1"
-                                        fontWeight="bold"
-                                      >
-                                        {seat.label}
-                                      </Typography>
-                                      {isOccupied && occupant ? (
-                                        <Typography
-                                          variant="body2"
-                                          color="text.secondary"
-                                          noWrap
-                                        >
-                                          {occupant.handle || "Someone"}
+                                        <Typography variant="body2" noWrap>
+                                          {inv.handle || "Someone"}
                                         </Typography>
-                                      ) : (
-                                        <Typography
-                                          variant="body2"
-                                          color="success.main"
-                                        >
-                                          Available
-                                        </Typography>
+                                      </Tooltip>
+                                      {inv.response === RSVP.maybe && (
+                                        <Chip
+                                          label="Maybe"
+                                          size="small"
+                                          color="warning"
+                                          sx={{
+                                            height: 20,
+                                            fontSize: "0.7rem",
+                                          }}
+                                        />
                                       )}
                                     </Box>
-                                  </Stack>
-                                </CardContent>
-                              </Card>
-                            </Grid>
-                          );
-                        })}
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </Stack>
+                                  ))}
+                                </Stack>
+                              ) : (
+                                // Single occupant
+                                seat.invitations[0] && (
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 1.5,
+                                    }}
+                                  >
+                                    <Avatar
+                                      src={
+                                        seat.invitations[0].avatarUrl ||
+                                        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+                                      }
+                                      alt={
+                                        seat.invitations[0].handle || "Someone"
+                                      }
+                                      sx={{
+                                        width: 32,
+                                        height: 32,
+                                        border: "2px solid",
+                                        borderColor:
+                                          seat.invitations[0].response ===
+                                          RSVP.yes
+                                            ? "success.main"
+                                            : seat.invitations[0].response ===
+                                                RSVP.maybe
+                                              ? "warning.main"
+                                              : "primary.main",
+                                      }}
+                                    >
+                                      <PersonIcon />
+                                    </Avatar>
+                                    <Tooltip
+                                      title={
+                                        seat.invitations[0].handle || "Someone"
+                                      }
+                                      enterDelay={500}
+                                    >
+                                      <Typography variant="body2" noWrap>
+                                        {seat.invitations[0].handle ||
+                                          "Someone"}
+                                      </Typography>
+                                    </Tooltip>
+                                    {seat.invitations[0].response ===
+                                      RSVP.maybe && (
+                                      <Chip
+                                        label="Maybe"
+                                        size="small"
+                                        color="warning"
+                                        sx={{ height: 20, fontSize: "0.7rem" }}
+                                      />
+                                    )}
+                                  </Box>
+                                )
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {hasMultipleOccupants ? (
+                                // Multiple occupants - stack their attendance to align with attendees
+                                <Stack spacing={1.5}>
+                                  {seat.invitations.map((inv, index) => (
+                                    <Box
+                                      key={index}
+                                      sx={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        height: 32, // Match avatar height
+                                      }}
+                                    >
+                                      {renderAttendancePips(
+                                        inv.attendance,
+                                        inv.response,
+                                      )}
+                                    </Box>
+                                  ))}
+                                </Stack>
+                              ) : (
+                                // Single occupant
+                                seat.invitations[0] &&
+                                renderAttendancePips(
+                                  seat.invitations[0].attendance,
+                                  seat.invitations[0].response,
+                                )
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
           )}
 
           {/* Unspecified Seat Attendees */}
