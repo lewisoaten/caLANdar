@@ -357,11 +357,11 @@ pub async fn get_all_user(
             // Return all invitations for this event with their seat reservations
             let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
                 InvitationsResponseLite,
-                r#"SELECT 
-                    i.event_id, 
-                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url, 
-                    i.handle, 
-                    i.response AS "response: _", 
+                r#"SELECT
+                    i.event_id,
+                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url,
+                    i.handle,
+                    i.response AS "response: _",
                     i.attendance,
                     sr.seat_id,
                     i.last_modified

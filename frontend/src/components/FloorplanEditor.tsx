@@ -396,7 +396,9 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               }),
             }}
             title={seat.description || seat.label}
-            aria-label={`Seat ${seat.label}${seat.description ? `: ${seat.description}` : ""} - drag to move`}
+            aria-label={`Seat ${seat.label}${
+              seat.description ? `: ${seat.description}` : ""
+            } - drag to move`}
           >
             <span>{seat.label}</span>
             <Box

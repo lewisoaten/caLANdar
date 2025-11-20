@@ -406,20 +406,24 @@ Tests for bucket overlap detection:
 ### Integration Test Scenarios (To Be Implemented)
 
 1. **Happy Path:**
+
    - Create reservation for an available seat
    - Update reservation to different time
    - Delete reservation
 
 2. **Conflict Detection:**
+
    - Try to reserve a seat that's already taken for the same time
    - Verify conflict error
    - Reserve for a different time, succeeds
 
 3. **Unspecified Seat:**
+
    - Multiple users reserve unspecified seats
    - All succeed (no conflicts)
 
 4. **Validation:**
+
    - Try to reserve non-existent seat
    - Try with wrong bucket count
    - Try for event you're not invited to
