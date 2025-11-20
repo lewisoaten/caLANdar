@@ -306,14 +306,6 @@ const EventSeatMap: React.FC = () => {
     return seatsWithOccupancy.filter((seat) => seat.roomId === roomId);
   };
 
-  // Get the first invitation for a seat (for display)
-  const getSeatOccupant = (
-    seat: SeatWithOccupancy,
-  ): InvitationWithDetails | null => {
-    if (!seat.isOccupied) return null;
-    return enrichedInvitations.find((inv) => inv.seatId === seat.id) || null;
-  };
-
   // Render attendance pips for a user
   const renderAttendancePips = (
     attendance: number[] | null,

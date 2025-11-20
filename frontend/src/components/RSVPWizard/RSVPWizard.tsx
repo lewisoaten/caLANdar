@@ -86,7 +86,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       clearSeatSelection();
       setReservedSeatId(null);
     }
-  }, [props.open, props.initialData]);
+  }, [props.open, props.initialData, clearSeatSelection]);
 
   // Check if event has seating configured
   useEffect(() => {
@@ -355,7 +355,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           Authorization: "Bearer " + token,
         },
         body: JSON.stringify({
-          handle: handle ?? "",
+          handle: response === RSVP.no ? null : handle || "",
           response,
           attendance: finalAttendance,
         }),
@@ -377,9 +377,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           const deleteUrl = props.asAdmin
             ? `/api/events/${
                 props.event.id
-              }/seat-reservations/by-email/${encodeURIComponent(
-                email,
-              )}?as_admin=true`
+              }/seat-reservations/${encodeURIComponent(email)}?as_admin=true`
             : `/api/events/${props.event.id}/seat-reservations/me`;
 
           await fetch(deleteUrl, {

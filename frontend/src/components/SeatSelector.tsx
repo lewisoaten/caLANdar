@@ -41,9 +41,6 @@ interface SeatWithReservation extends Seat {
   isOccupied: boolean;
 }
 
-const DEFAULT_AVATAR_URL =
-  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y";
-
 const SeatSelector: React.FC<SeatSelectorProps> = ({
   eventId,
   attendanceBuckets,

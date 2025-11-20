@@ -35,11 +35,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import PersonIcon from "@mui/icons-material/Person";
 import EventSeatIcon from "@mui/icons-material/EventSeat";
 import SendIcon from "@mui/icons-material/Send";
-import {
-  InvitationData,
-  defaultInvitationData,
-  RSVP,
-} from "../types/invitations";
+import { InvitationData, RSVP } from "../types/invitations";
 import { SeatReservation } from "../types/seat_reservations";
 import { EventData, Room, Seat } from "../types/events";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -441,7 +437,7 @@ export default function InvitationSeatManagementTable(
     }
 
     try {
-      const results = await Promise.all(
+      await Promise.all(
         emails.map(async (email) => {
           const response = await fetch(
             `/api/events/${event_id}/invitations?as_admin=true`,
