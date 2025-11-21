@@ -56,7 +56,8 @@ const EventGames = () => {
             setLoading(false);
           });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Error loading event games:", error);
         setLoading(false);
       });
   };

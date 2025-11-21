@@ -397,12 +397,13 @@ async fn add_owners_to_game(
         .collect();
 
     // Batch query: Get all user games for this game_id and all attending emails in one query
+    // Use a large count to ensure we get all results without pagination limits
     let user_games = match user_games::filter(
         pool,
         user_games::Filter {
             appid: Some(game_suggestion.game_id),
             emails: Some(attending_emails.clone()),
-            count: attending_emails.len() as i64,
+            count: 1000, // Large enough to handle events with many attendees
             page: 0,
         },
     )

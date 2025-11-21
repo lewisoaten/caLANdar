@@ -115,7 +115,8 @@ const Account = () => {
             setLoading(false);
           });
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error("Error loading profile games:", error);
         setLoading(false);
       });
   };
