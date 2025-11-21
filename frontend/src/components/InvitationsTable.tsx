@@ -229,7 +229,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const handleDeleteInvitation = useCallback(
     (email: string) => () => {
       fetch(
-        `/api/events/${event_id}/invitations/${encodeURIComponent(email)}?as_admin=true`,
+        `/api/events/${event_id}/invitations/${encodeURIComponent(
+          email,
+        )}?as_admin=true`,
         {
           method: "DELETE",
           headers: {
@@ -274,7 +276,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const handleResendInvitation = useCallback(
     (email: string) => () => {
       fetch(
-        `/api/events/${event_id}/invitations/${encodeURIComponent(email)}/resend?as_admin=true`,
+        `/api/events/${event_id}/invitations/${encodeURIComponent(
+          email,
+        )}/resend?as_admin=true`,
         {
           method: "POST",
           headers: {
@@ -456,7 +460,9 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     }
 
     fetch(
-      `/api/events/${event_id}/invitations/${encodeURIComponent(editingInvitation.email)}?as_admin=true`,
+      `/api/events/${event_id}/invitations/${encodeURIComponent(
+        editingInvitation.email,
+      )}?as_admin=true`,
       {
         method: "PATCH",
         headers: {

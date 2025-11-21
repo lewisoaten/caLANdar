@@ -77,6 +77,31 @@ impl SchemaExample for SeatReservationSubmit {
     }
 }
 
+/// The request body for creating a seat reservation as admin (includes email).
+#[derive(Deserialize, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+#[schemars(example = "Self::example")]
+pub struct SeatReservationAdminSubmit {
+    /// The email of the user to create the reservation for.
+    pub invitation_email: String,
+
+    /// The seat ID to reserve (None for unspecified seat).
+    pub seat_id: Option<i32>,
+
+    /// Attendance buckets indicating which time periods the user will attend.
+    pub attendance_buckets: Vec<u8>,
+}
+
+impl SchemaExample for SeatReservationAdminSubmit {
+    fn example() -> Self {
+        Self {
+            invitation_email: "user@example.com".to_string(),
+            seat_id: Some(5),
+            attendance_buckets: vec![1, 1, 0, 1],
+        }
+    }
+}
+
 custom_errors!(
     SeatReservationGetAllError,
     Unauthorized,
@@ -158,6 +183,54 @@ pub async fn post_me(
         Err(Error::NotPermitted(e)) => Err(SeatReservationPostError::Unauthorized(e)),
         Err(Error::Conflict(e)) => Err(SeatReservationPostError::Conflict(e)),
         Err(e) => Err(SeatReservationPostError::InternalServerError(format!(
+            "Error creating seat reservation, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
+    SeatReservationPostAdminError,
+    Unauthorized,
+    BadRequest,
+    Conflict,
+    InternalServerError
+);
+
+/// Create a new seat reservation for a specific user (admin only).
+#[openapi(tag = "Seat Reservations")]
+#[post(
+    "/events/<event_id>/seat-reservations?<_as_admin>",
+    format = "json",
+    data = "<reservation_submit>",
+    rank = 1
+)]
+pub async fn post_admin(
+    event_id: i32,
+    reservation_submit: Json<SeatReservationAdminSubmit>,
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<Json<SeatReservation>, SeatReservationPostAdminError> {
+    let submit_data = reservation_submit.into_inner();
+    match seat_reservation::create(
+        pool,
+        event_id,
+        submit_data.invitation_email,
+        SeatReservationSubmit {
+            seat_id: submit_data.seat_id,
+            attendance_buckets: submit_data.attendance_buckets,
+        },
+        true,
+    )
+    .await
+    {
+        Ok(reservation) => Ok(Json(reservation)),
+        Err(Error::BadInput(e)) => Err(SeatReservationPostAdminError::BadRequest(format!(
+            "Invalid request: {e}"
+        ))),
+        Err(Error::NotPermitted(e)) => Err(SeatReservationPostAdminError::Unauthorized(e)),
+        Err(Error::Conflict(e)) => Err(SeatReservationPostAdminError::Conflict(e)),
+        Err(e) => Err(SeatReservationPostAdminError::InternalServerError(format!(
             "Error creating seat reservation, due to: {e}"
         ))),
     }

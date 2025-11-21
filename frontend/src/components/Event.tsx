@@ -62,28 +62,42 @@ const Event = () => {
   useEffect(() => {
     if (!id || !token || !email) return;
 
-    fetch(`/api/events/${id}/invitations/${encodeURIComponent(email)}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as InvitationData);
+    const fetchInvitation = () => {
+      fetch(`/api/events/${id}/invitations/${encodeURIComponent(email)}`, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
       })
-      .then((data) => {
-        if (data) {
-          setInvitation(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching invitation:", error);
-      });
+        .then((response) => {
+          if (response.status === 401) signOut();
+          else if (response.ok)
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as InvitationData);
+        })
+        .then((data) => {
+          if (data) {
+            setInvitation(data);
+          }
+        })
+        .catch((error) => {
+          console.error("Error fetching invitation:", error);
+        });
+    };
+
+    fetchInvitation();
+
+    // Also listen for RSVP updates to refresh immediately
+    const handleRsvpUpdate = () => {
+      fetchInvitation();
+    };
+
+    window.addEventListener("calandar:rsvp-updated", handleRsvpUpdate);
+    return () => {
+      window.removeEventListener("calandar:rsvp-updated", handleRsvpUpdate);
+    };
   }, [id, token, email, responded, signOut]);
 
   // Cleanup: Reset Dashboard background when component unmounts
@@ -184,7 +198,13 @@ const Event = () => {
               left: 0,
               right: 0,
               bottom: 0,
-              background: `linear-gradient(to bottom, ${alpha("#000", 0.5)} 0%, ${alpha("#000", 0.75)} 30%, ${alpha(theme.palette.background.default, 0.95)} 50%, ${theme.palette.background.default} 70%)`,
+              background: `linear-gradient(to bottom, ${alpha(
+                "#000",
+                0.5,
+              )} 0%, ${alpha("#000", 0.75)} 30%, ${alpha(
+                theme.palette.background.default,
+                0.95,
+              )} 50%, ${theme.palette.background.default} 70%)`,
               zIndex: -1,
             }}
             role="presentation"
@@ -231,8 +251,14 @@ const Event = () => {
                         0.3,
                       ),
                       backgroundImage: "none !important", // Override theme gradient
-                      border: `1px solid ${alpha(theme.palette.secondary.main, 0.4)}`,
-                      boxShadow: `0 0 16px -4px ${alpha(theme.palette.secondary.main, 0.2)}`,
+                      border: `1px solid ${alpha(
+                        theme.palette.secondary.main,
+                        0.4,
+                      )}`,
+                      boxShadow: `0 0 16px -4px ${alpha(
+                        theme.palette.secondary.main,
+                        0.2,
+                      )}`,
                     }}
                   >
                     <Typography

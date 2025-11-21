@@ -12,14 +12,13 @@ import { useParams, useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData, Room } from "../types/events";
-import InvitationsTable from "./InvitationsTable";
+import InvitationSeatManagementTable from "./InvitationSeatManagementTable";
 import EventsAdminDialog from "./EventsAdminDialog";
 import SendEmailDialog from "./SendEmailDialog";
 import EventSeatingConfig from "./EventSeatingConfig";
 import RoomManager from "./RoomManager";
 import FloorplanEditor from "./FloorplanEditor";
 import SeatList from "./SeatList";
-import SeatOccupancyAdmin from "./SeatOccupancyAdmin";
 
 const EventManagement = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -195,16 +194,6 @@ const EventManagement = () => {
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
           <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-            <SeatOccupancyAdmin
-              eventId={event.id}
-              refreshTrigger={seatsRefreshKey}
-            />
-          </Grid>
-        </Grid>
-      </Container>
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
             <Paper
               sx={{
                 p: 2,
@@ -212,7 +201,7 @@ const EventManagement = () => {
                 flexDirection: "column",
               }}
             >
-              <InvitationsTable event={event} as_admin={true} />
+              <InvitationSeatManagementTable event={event} as_admin={true} />
             </Paper>
           </Grid>
         </Grid>

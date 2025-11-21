@@ -49,8 +49,9 @@ repos:
             "-A",
             "clippy::use_self",
           ]
+  # Prettier version intentionally downgraded from v4.0.0-alpha.8 to v3.1.0 for stability
   - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
+    rev: v3.1.0
     hooks:
       - id: prettier
   - repo: https://github.com/pre-commit/mirrors-eslint

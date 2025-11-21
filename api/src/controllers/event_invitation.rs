@@ -115,6 +115,15 @@ pub async fn respond(
         }
     }
 
+    // Delete seat reservation if response is "No"
+    if invitation_response.response == InvitationResponse::No {
+        if let Err(e) = seat_reservation::delete_by_email(pool, event_id, &email).await {
+            // Log the error but don't fail the invitation update
+            // The seat reservation might not exist, which is fine
+            eprintln!("Note: Could not delete seat reservation for {email} (response=No): {e}");
+        }
+    }
+
     // Respond to invitation
     match invitation::edit(
         pool,

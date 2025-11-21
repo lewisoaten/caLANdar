@@ -371,7 +371,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       };
 
       const response = await fetch(
-        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(selectedReservation.invitationEmail)}?as_admin=true`,
+        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(
+          selectedReservation.invitationEmail,
+        )}?as_admin=true`,
         {
           method: "PUT",
           headers: {
@@ -439,7 +441,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
 
     try {
       const response = await fetch(
-        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(emailToDelete)}?as_admin=true`,
+        `/api/events/${eventId}/seat-reservations/${encodeURIComponent(
+          emailToDelete,
+        )}?as_admin=true`,
         {
           method: "DELETE",
           headers: {
@@ -492,7 +496,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
         {buckets.map((bucket, index) => (
           <Tooltip
             key={index}
-            title={`Bucket ${index + 1}: ${bucket === 1 ? "Attending" : "Not attending"}`}
+            title={`Bucket ${index + 1}: ${
+              bucket === 1 ? "Attending" : "Not attending"
+            }`}
             enterDelay={200}
           >
             <Box

@@ -281,6 +281,7 @@ async fn rocket(
                 routes::seat_reservations::get_all,
                 routes::seat_reservations::get_me,
                 routes::seat_reservations::post_me,
+                routes::seat_reservations::post_admin,
                 routes::seat_reservations::put_me,
                 routes::seat_reservations::delete_me,
                 routes::seat_reservations::put_admin,

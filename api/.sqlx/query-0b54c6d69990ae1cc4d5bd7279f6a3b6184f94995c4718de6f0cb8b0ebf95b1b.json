@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT event_id, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, response AS \"response: _\", attendance, last_modified\n                FROM invitation\n                WHERE event_id=$1 AND response IN ('yes', 'maybe')",
+  "query": "SELECT\n                    i.event_id,\n                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url,\n                    i.handle,\n                    i.response AS \"response: _\",\n                    i.attendance,\n                    sr.seat_id,\n                    i.last_modified\n                FROM invitation i\n                LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email\n                WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')",
   "describe": {
     "columns": [
       {
@@ -41,6 +41,11 @@
       },
       {
         "ordinal": 5,
+        "name": "seat_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
         "name": "last_modified",
         "type_info": "Timestamptz"
       }
@@ -56,8 +61,9 @@
       true,
       true,
       true,
+      true,
       false
     ]
   },
-  "hash": "e3424bf6404e590011f37f6fe37042bb58d0fdf35b00e86b8e3676aa314a1a6d"
+  "hash": "0b54c6d69990ae1cc4d5bd7279f6a3b6184f94995c4718de6f0cb8b0ebf95b1b"
 }

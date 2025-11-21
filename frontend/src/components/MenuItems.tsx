@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -12,13 +12,14 @@ import EventIcon from "@mui/icons-material/Event";
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import { Link } from "react-router-dom";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import ListItem from "@mui/material/ListItem";
 import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
-import { Collapse } from "@mui/material";
-import { Event, SportsEsports } from "@mui/icons-material";
+import { Collapse, Tooltip } from "@mui/material";
+import { Event, SportsEsports, EventSeat } from "@mui/icons-material";
+import { RSVP } from "../types/invitations";
 
 interface MenuItemsProps {
   updateButtonLoadingState: [
@@ -29,14 +30,108 @@ interface MenuItemsProps {
     boolean,
     React.Dispatch<React.SetStateAction<boolean>>,
   ];
+  rsvpRefreshTrigger?: number; // Optional trigger to force RSVP re-fetch
 }
 
 export default function MenuItems(props: MenuItemsProps) {
-  const { loggedIn, isAdmin } = useContext(UserContext);
+  const user = useContext(UserContext);
+  const { signOut } = useContext(UserDispatchContext);
+  const { loggedIn, isAdmin, token, email } = user;
 
   const location = useLocation();
-  const eventUrl = location.pathname.match(/^\/events\/[0-9]+/g)?.[0];
-  const gamesUrl = eventUrl + "/games";
+  const eventMatch = location.pathname.match(/^\/events\/(\d+)/);
+  const eventUrl = eventMatch?.[0];
+  const eventId = eventMatch?.[1];
+  const gamesUrl = eventUrl ? `${eventUrl}/games` : null;
+  const seatMapUrl = eventUrl ? `${eventUrl}/seat-map` : null;
+
+  const [eventAccess, setEventAccess] = useState({
+    loading: false,
+    attending: false,
+  });
+
+  useEffect(() => {
+    if (!eventId || !token || !email) {
+      setEventAccess({ loading: false, attending: false });
+      return;
+    }
+
+    let isActive = true;
+    const controller = new AbortController();
+    setEventAccess((prev) => ({ ...prev, loading: true }));
+
+    fetch(`/api/events/${eventId}/invitations/${encodeURIComponent(email)}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (response.status === 401) {
+          signOut();
+          throw new Error("Unauthorized");
+        }
+        if (!response.ok) {
+          throw new Error("Unable to load invitation");
+        }
+        return response.json() as Promise<{ response: RSVP | null }>;
+      })
+      .then((data) => {
+        if (!isActive) return;
+        const attending =
+          data.response === RSVP.yes || data.response === RSVP.maybe;
+        setEventAccess({ loading: false, attending });
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        if (error.name === "AbortError") {
+          return;
+        }
+        setEventAccess({ loading: false, attending: false });
+      });
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [email, eventId, signOut, token, props.rsvpRefreshTrigger]);
+
+  const tooltipTitle = eventAccess.loading
+    ? "Checking RSVP status…"
+    : 'RSVP "Yes" or "Maybe" to access this section.';
+
+  const renderRestrictedNavItem = (
+    to: string,
+    icon: React.ReactNode,
+    label: string,
+    disabled: boolean,
+  ) => {
+    const button = (
+      <ListItemButton
+        sx={{ pl: 4 }}
+        component={Link}
+        to={to}
+        disabled={disabled}
+      >
+        <ListItemIcon>{icon}</ListItemIcon>
+        <ListItemText primary={label} />
+      </ListItemButton>
+    );
+
+    if (!disabled) {
+      return button;
+    }
+
+    return (
+      <Tooltip title={tooltipTitle} placement="right" arrow>
+        <span style={{ display: "block" }}>{button}</span>
+      </Tooltip>
+    );
+  };
+
+  const restrictEventExtras = Boolean(eventUrl) && !eventAccess.attending;
 
   return (
     <List component="nav">
@@ -57,12 +152,20 @@ export default function MenuItems(props: MenuItemsProps) {
                   </ListItemIcon>
                   <ListItemText primary="Event" />
                 </ListItemButton>
-                <ListItemButton sx={{ pl: 4 }} component={Link} to={gamesUrl}>
-                  <ListItemIcon>
-                    <SportsEsports />
-                  </ListItemIcon>
-                  <ListItemText primary="Games" />
-                </ListItemButton>
+                {gamesUrl &&
+                  renderRestrictedNavItem(
+                    gamesUrl,
+                    <SportsEsports />,
+                    "Games",
+                    restrictEventExtras,
+                  )}
+                {seatMapUrl &&
+                  renderRestrictedNavItem(
+                    seatMapUrl,
+                    <EventSeat />,
+                    "Seat Map",
+                    restrictEventExtras,
+                  )}
               </List>
             </Collapse>
           )}

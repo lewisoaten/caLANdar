@@ -24,10 +24,23 @@ function ResponsiveDrawer(props: AppProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuUpdateButtonLoadingState = useState(false);
   const menuUpdateButtonDoneState = useState(false);
+  const [rsvpRefreshTrigger, setRsvpRefreshTrigger] = useState(0);
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
+
+  // Make RSVP refresh handler available globally
+  React.useEffect(() => {
+    const handleRsvpChange = () => {
+      setRsvpRefreshTrigger((prev) => prev + 1);
+    };
+
+    window.addEventListener("calandar:rsvp-updated", handleRsvpChange);
+    return () => {
+      window.removeEventListener("calandar:rsvp-updated", handleRsvpChange);
+    };
+  }, []);
 
   return (
     <Box sx={{ display: "flex" }}>
@@ -98,6 +111,7 @@ function ResponsiveDrawer(props: AppProps) {
           <MenuItems
             updateButtonLoadingState={menuUpdateButtonLoadingState}
             updateButtonDoneState={menuUpdateButtonDoneState}
+            rsvpRefreshTrigger={rsvpRefreshTrigger}
           />
         </Drawer>
         <Drawer
@@ -114,6 +128,7 @@ function ResponsiveDrawer(props: AppProps) {
           <MenuItems
             updateButtonLoadingState={menuUpdateButtonLoadingState}
             updateButtonDoneState={menuUpdateButtonDoneState}
+            rsvpRefreshTrigger={rsvpRefreshTrigger}
           />
         </Drawer>
       </Box>

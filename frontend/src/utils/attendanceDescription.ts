@@ -95,13 +95,19 @@ export const getAttendanceDescription = (
     if (start.day === end.day) {
       // Same day, multiple periods
       if (range.end - range.start === 1) {
-        return `${start.dayName} ${start.period.toLowerCase()} and ${end.period.toLowerCase()}`;
+        return `${
+          start.dayName
+        } ${start.period.toLowerCase()} and ${end.period.toLowerCase()}`;
       }
-      return `${start.dayName} ${start.period.toLowerCase()} to ${end.period.toLowerCase()}`;
+      return `${
+        start.dayName
+      } ${start.period.toLowerCase()} to ${end.period.toLowerCase()}`;
     }
 
     // Different days
-    return `${start.dayName} ${start.period.toLowerCase()} until ${end.dayName} ${end.period.toLowerCase()}`;
+    return `${start.dayName} ${start.period.toLowerCase()} until ${
+      end.dayName
+    } ${end.period.toLowerCase()}`;
   });
 
   // Join multiple ranges with commas and "and"

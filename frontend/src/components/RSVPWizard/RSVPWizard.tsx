@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -30,13 +30,17 @@ interface RSVPWizardProps {
   event: EventData;
   initialData?: InvitationData;
   onSaved: () => void;
+  asAdmin?: boolean;
 }
 
 export default function RSVPWizard(props: RSVPWizardProps) {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
-  const email = userDetails?.email;
+  const email =
+    props.asAdmin && props.initialData?.email
+      ? props.initialData.email
+      : userDetails?.email;
   const { enqueueSnackbar } = useSnackbar();
 
   // Wizard state
@@ -65,11 +69,24 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [selectedSeatRoomName, setSelectedSeatRoomName] = useState<
     string | null
   >(null);
-  const clearSeatSelection = () => {
+  const clearSeatSelection = useCallback(() => {
     setSelectedSeatId(null);
     setSelectedSeatLabel(null);
     setSelectedSeatRoomName(null);
-  };
+  }, []);
+
+  // Reset wizard state when opening with new data
+  useEffect(() => {
+    if (props.open) {
+      setActiveStep(0);
+      setResponse(props.initialData?.response || null);
+      setHandle(props.initialData?.handle || "");
+      setAttendance(props.initialData?.attendance || null);
+      setHandleValid(false);
+      clearSeatSelection();
+      setReservedSeatId(null);
+    }
+  }, [props.open, props.initialData, clearSeatSelection]);
 
   // Check if event has seating configured
   useEffect(() => {
@@ -281,7 +298,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       response !== props.initialData?.response ||
       handle !== (props.initialData?.handle || "") ||
       JSON.stringify(attendance) !==
-        JSON.stringify(props.initialData?.attendance);
+        JSON.stringify(props.initialData?.attendance) ||
+      selectedSeatId !== reservedSeatId;
 
     if (hasChanges && !saving) {
       setShowExitWarning(true);
@@ -310,7 +328,9 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const handleSave = async () => {
     setSaving(true);
 
-    // For "No" response, we don't need handle or attendance
+    // For "No" response, preserve existing handle but set attendance to null
+    const finalHandle =
+      response === RSVP.no ? props.initialData?.handle || null : handle || "";
     const finalAttendance =
       response === RSVP.no
         ? null
@@ -322,22 +342,27 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
     try {
       // Step 1: Save RSVP
-      const rsvpResponse = await fetch(
-        `/api/events/${props.event.id}/invitations/${encodeURIComponent(email)}`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-            Authorization: "Bearer " + token,
-          },
-          body: JSON.stringify({
-            handle: response === RSVP.no ? null : handle,
-            response: response,
-            attendance: finalAttendance,
-          }),
+      const rsvpUrl = props.asAdmin
+        ? `/api/events/${props.event.id}/invitations/${encodeURIComponent(
+            email,
+          )}?as_admin=true`
+        : `/api/events/${props.event.id}/invitations/${encodeURIComponent(
+            email,
+          )}`;
+
+      const rsvpResponse = await fetch(rsvpUrl, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
         },
-      );
+        body: JSON.stringify({
+          handle: finalHandle,
+          response,
+          attendance: finalAttendance,
+        }),
+      });
 
       if (rsvpResponse.status === 401) {
         signOut();
@@ -352,7 +377,13 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       if (hasSeating && response !== RSVP.no) {
         try {
           // Delete any existing reservation first
-          await fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
+          const deleteUrl = props.asAdmin
+            ? `/api/events/${
+                props.event.id
+              }/seat-reservations/${encodeURIComponent(email)}?as_admin=true`
+            : `/api/events/${props.event.id}/seat-reservations/me`;
+
+          await fetch(deleteUrl, {
             method: "DELETE",
             headers: {
               "Content-Type": "application/json",
@@ -362,21 +393,30 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           });
 
           // Create new reservation with selected seat (or null for unspecified)
-          const seatReservationResponse = await fetch(
-            `/api/events/${props.event.id}/seat-reservations/me`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-              body: JSON.stringify({
-                seatId: selectedSeatId, // null means unspecified seat
+          const createUrl = props.asAdmin
+            ? `/api/events/${props.event.id}/seat-reservations?as_admin=true`
+            : `/api/events/${props.event.id}/seat-reservations/me`;
+
+          const createBody = props.asAdmin
+            ? {
+                invitationEmail: email,
+                seatId: selectedSeatId,
                 attendanceBuckets: finalAttendance,
-              }),
+              }
+            : {
+                seatId: selectedSeatId,
+                attendanceBuckets: finalAttendance,
+              };
+
+          const seatReservationResponse = await fetch(createUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
             },
-          );
+            body: JSON.stringify(createBody),
+          });
 
           if (!seatReservationResponse.ok) {
             throw new Error("Unable to save seat reservation");
@@ -395,6 +435,10 @@ export default function RSVPWizard(props: RSVPWizardProps) {
 
       // Success!
       enqueueSnackbar("RSVP saved successfully", { variant: "success" });
+
+      // Notify the app that RSVP status has changed
+      window.dispatchEvent(new CustomEvent("calandar:rsvp-updated"));
+
       props.onSaved();
       props.onClose();
       resetWizard();
