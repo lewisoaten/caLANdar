@@ -417,7 +417,7 @@ pub async fn delete(
 #[serde(crate = "rocket::serde")]
 #[schemars(example = "Self::example")]
 pub struct InvitationsPatchRequest {
-    pub handle: String,
+    pub handle: Option<String>,
     pub response: InvitationResponse,
     pub attendance: Option<Vec<u8>>,
 }
@@ -425,7 +425,7 @@ pub struct InvitationsPatchRequest {
 impl SchemaExample for InvitationsPatchRequest {
     fn example() -> Self {
         Self {
-            handle: "FPS Doug".to_string(),
+            handle: Some("FPS Doug".to_string()),
             response: InvitationResponse::Yes,
             attendance: Some(vec![0, 1, 1, 0]),
         }

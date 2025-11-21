@@ -68,7 +68,7 @@ pub async fn edit(
     pool: &PgPool,
     event_id: i32,
     email: String,
-    handle: String,
+    handle: Option<String>,
     response: Response,
     attendance: Option<Vec<u8>>,
 ) -> Result<Invitation, sqlx::Error> {

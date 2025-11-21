@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -69,11 +69,11 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const [selectedSeatRoomName, setSelectedSeatRoomName] = useState<
     string | null
   >(null);
-  const clearSeatSelection = () => {
+  const clearSeatSelection = useCallback(() => {
     setSelectedSeatId(null);
     setSelectedSeatLabel(null);
     setSelectedSeatRoomName(null);
-  };
+  }, []);
 
   // Reset wizard state when opening with new data
   useEffect(() => {
@@ -298,7 +298,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       response !== props.initialData?.response ||
       handle !== (props.initialData?.handle || "") ||
       JSON.stringify(attendance) !==
-        JSON.stringify(props.initialData?.attendance);
+        JSON.stringify(props.initialData?.attendance) ||
+      selectedSeatId !== reservedSeatId;
 
     if (hasChanges && !saving) {
       setShowExitWarning(true);
@@ -327,7 +328,9 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   const handleSave = async () => {
     setSaving(true);
 
-    // For "No" response, we don't need handle or attendance
+    // For "No" response, preserve existing handle but set attendance to null
+    const finalHandle =
+      response === RSVP.no ? props.initialData?.handle || null : handle || "";
     const finalAttendance =
       response === RSVP.no
         ? null
@@ -355,7 +358,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           Authorization: "Bearer " + token,
         },
         body: JSON.stringify({
-          handle: response === RSVP.no ? null : handle || "",
+          handle: finalHandle,
           response,
           attendance: finalAttendance,
         }),

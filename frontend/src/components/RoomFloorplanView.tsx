@@ -146,7 +146,6 @@ const RoomFloorplanView: React.FC<RoomFloorplanViewProps> = ({
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  pointerEvents: onClick ? "auto" : "none",
                   minWidth: 44,
                   minHeight: 44,
                   fontSize: "0.75rem",
