@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeAll, afterEach, afterAll } from "vitest";
 import { render, screen, waitFor } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -20,12 +20,15 @@ const server = setupServer(
   }),
 );
 
-beforeEach(() => {
+beforeAll(() => {
   server.listen({ onUnhandledRequest: "bypass" });
 });
 
 afterEach(() => {
   server.resetHandlers();
+});
+
+afterAll(() => {
   server.close();
 });
 

@@ -48,16 +48,16 @@ const Account = () => {
     })
       .then((response) => {
         if (response.status === 200) {
-          setRefreshing(false);
           enqueueSnackbar("Games refreshed successfully", {
             variant: "success",
           });
         } else if (response.status === 401) {
-          setRefreshing(false);
           signOut();
         } else {
-          setRefreshing(false);
-          response.text().then((data) => console.log(data));
+          response
+            .text()
+            .then((data) => console.log(data))
+            .catch(() => {});
           enqueueSnackbar(
             `Failed to refresh games. Status: ${response.status}`,
             { variant: "error" },
@@ -65,9 +65,11 @@ const Account = () => {
         }
       })
       .catch((error) => {
-        setRefreshing(false);
         console.error("Error refreshing games:", error);
         enqueueSnackbar("Error refreshing games", { variant: "error" });
+      })
+      .finally(() => {
+        setRefreshing(false);
       });
   };
 
