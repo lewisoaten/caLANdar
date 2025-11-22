@@ -161,9 +161,12 @@ pub async fn get_all_user(
         _ => EventFilter::All,
     };
 
-    // For user events, we still need to filter by invitations
-    // For now, we'll get all user events and then apply pagination client-side
-    // A more optimal solution would be to do this in a single query
+    // NOTE: This implementation fetches all user events and then applies pagination client-side.
+    // This is a temporary solution that works well for users with a moderate number of events.
+    // For optimal performance with users having many events, this should be refactored to:
+    // 1. Join events with invitations in a single query
+    // 2. Apply filtering and pagination at the database level
+    // 3. Use indexes on the invitation table for the email column
     match event::get_all_user(pool, user.email).await {
         Ok(all_events) => {
             // Apply filter

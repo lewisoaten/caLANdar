@@ -302,23 +302,20 @@ export default function EventTable(props: EventTableProps) {
     )
       .then((response) => {
         if (response.status === 401) signOut();
-        else if (response.ok) return response.json();
+        else if (response.ok) return response.text();
       })
-      .then((data) => {
-        if (!data) {
+      .then((text) => {
+        if (!text) {
           setEvents([]);
           setRowCount(0);
           setLoading(false);
           return;
         }
 
-        // Parse the events from the paginated response
-        const parsedEvents = JSON.parse(
-          JSON.stringify(data.events),
-          dateParser,
-        ) as Array<EventData>;
+        // Parse the JSON with date conversion
+        const data = JSON.parse(text, dateParser);
 
-        setEvents(parsedEvents);
+        setEvents(data.events as Array<EventData>);
         setRowCount(data.total);
         setLoading(false);
       })
