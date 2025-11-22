@@ -147,11 +147,20 @@ pub async fn post_games_update(
     }
 }
 
-custom_errors!(AdminProfileUpdateError, NotFound, BadRequest, InternalServerError);
+custom_errors!(
+    AdminProfileUpdateError,
+    NotFound,
+    BadRequest,
+    InternalServerError
+);
 
 /// Update a user's profile as an administrator.
 #[openapi(tag = "Profile")]
-#[put("/profile/<email>?<_as_admin>", format = "json", data = "<profile_submit>")]
+#[put(
+    "/profile/<email>?<_as_admin>",
+    format = "json",
+    data = "<profile_submit>"
+)]
 pub async fn put_admin(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
