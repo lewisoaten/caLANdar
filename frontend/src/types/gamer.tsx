@@ -5,6 +5,7 @@ export type GamerData = {
   email: string;
   avatarUrl: string | null;
   handles: string[];
+  steamId: string | null;
   eventsInvited: EventData[];
   eventsAccepted: EventData[];
   eventsTentative: EventData[];
@@ -18,6 +19,7 @@ export const defaultGamerData: GamerData = {
   email: "",
   avatarUrl: "",
   handles: [],
+  steamId: null,
   eventsInvited: [],
   eventsAccepted: [],
   eventsTentative: [],
