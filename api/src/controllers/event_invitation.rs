@@ -76,6 +76,7 @@ pub async fn respond(
     email: String,
     invitation_response: InvitationsPatchRequest,
     is_admin: bool,
+    user_email: String,
 ) -> Result<(), Error> {
     let event = match is_event_active(pool, event_id).await {
         Err(e) => {
@@ -116,13 +117,13 @@ pub async fn respond(
     }
 
     // Delete seat reservation if response is "No"
-    if invitation_response.response == InvitationResponse::No {
-        if let Err(e) = seat_reservation::delete_by_email(pool, event_id, &email).await {
-            // Log the error but don't fail the invitation update
-            // The seat reservation might not exist, which is fine
-            eprintln!("Note: Could not delete seat reservation for {email} (response=No): {e}");
-        }
-    }
+    let seat_cleared = if invitation_response.response == InvitationResponse::No {
+        seat_reservation::delete_by_email(pool, event_id, &email)
+            .await
+            .is_ok()
+    } else {
+        false
+    };
 
     // Respond to invitation
     match invitation::edit(
@@ -137,14 +138,28 @@ pub async fn respond(
     {
         Ok(_event) => {
             // Log audit entry for RSVP update
-            let metadata = rocket::serde::json::serde_json::json!({
+            let attendance_desc = crate::util::format_attendance_description(
+                &invitation_response.attendance,
+                event.time_begin,
+                event.time_end,
+            );
+            let mut metadata = rocket::serde::json::serde_json::json!({
                 "event_id": event_id,
                 "response": format!("{:?}", invitation_response.response),
                 "handle": invitation_response.handle,
+                "attendance": attendance_desc,
+                "seat_cleared": seat_cleared,
             });
+
+            // Add additional metadata if admin is updating someone else's RSVP
+            if is_admin && user_email != email {
+                metadata["admin_update"] = rocket::serde::json::serde_json::json!(true);
+                metadata["target_email"] = rocket::serde::json::serde_json::json!(email.clone());
+            }
+
             crate::util::log_audit(
                 pool,
-                Some(email),
+                Some(user_email),
                 "rsvp.update".to_string(),
                 "rsvp".to_string(),
                 Some(event_id.to_string()),

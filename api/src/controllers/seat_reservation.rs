@@ -2,7 +2,7 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::{event_seating_config, invitation, seat, seat_reservation},
+    repositories::{event_seating_config, invitation, room, seat, seat_reservation},
     routes::seat_reservations::{SeatReservation, SeatReservationSubmit},
     util::is_event_active,
 };
@@ -276,12 +276,49 @@ pub async fn create(
         pool,
         event_id,
         submit.seat_id,
-        email,
-        submit.attendance_buckets,
+        email.clone(),
+        submit.attendance_buckets.clone(),
     )
     .await
     {
-        Ok(reservation) => Ok(SeatReservation::from(reservation)),
+        Ok(reservation) => {
+            // Get seat and room information for audit log
+            let seat_description = if let Some(seat_id) = submit.seat_id {
+                match seat::get(pool, seat_id).await {
+                    Ok(Some(seat)) => match room::get(pool, seat.room_id).await {
+                        Ok(Some(room)) => format!("{} - {}", room.name, seat.label),
+                        _ => format!("Seat {}", seat.label),
+                    },
+                    _ => "unknown seat".to_string(),
+                }
+            } else {
+                "unspecified seat".to_string()
+            };
+
+            let attendance_desc = crate::util::format_attendance_description(
+                &Some(submit.attendance_buckets),
+                event.time_begin,
+                event.time_end,
+            );
+
+            // Log audit entry for seat reservation creation
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "seat": seat_description,
+                "attendance": attendance_desc,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "seat_reservation.create".to_string(),
+                "seat_reservation".to_string(),
+                Some(event_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(SeatReservation::from(reservation))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create seat reservation due to: {e}"
         ))),
@@ -384,10 +421,52 @@ pub async fn update(
     }
 
     // Update the reservation
-    match seat_reservation::update(pool, existing.id, submit.seat_id, submit.attendance_buckets)
-        .await
+    match seat_reservation::update(
+        pool,
+        existing.id,
+        submit.seat_id,
+        submit.attendance_buckets.clone(),
+    )
+    .await
     {
-        Ok(reservation) => Ok(SeatReservation::from(reservation)),
+        Ok(reservation) => {
+            // Get seat and room information for audit log
+            let seat_description = if let Some(seat_id) = submit.seat_id {
+                match seat::get(pool, seat_id).await {
+                    Ok(Some(seat)) => match room::get(pool, seat.room_id).await {
+                        Ok(Some(room)) => format!("{} - {}", room.name, seat.label),
+                        _ => format!("Seat {}", seat.label),
+                    },
+                    _ => "unknown seat".to_string(),
+                }
+            } else {
+                "unspecified seat".to_string()
+            };
+
+            let attendance_desc = crate::util::format_attendance_description(
+                &Some(submit.attendance_buckets),
+                event.time_begin,
+                event.time_end,
+            );
+
+            // Log audit entry for seat reservation update
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "seat": seat_description,
+                "attendance": attendance_desc,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "seat_reservation.update".to_string(),
+                "seat_reservation".to_string(),
+                Some(event_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(SeatReservation::from(reservation))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to update seat reservation due to: {e}"
         ))),

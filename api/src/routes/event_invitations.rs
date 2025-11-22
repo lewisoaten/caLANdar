@@ -150,6 +150,21 @@ pub async fn post(
         }
     }
 
+    // Log audit entry
+    let metadata = rocket::serde::json::serde_json::json!({
+        "event_id": event_id,
+        "invited_email": invitation_request.email,
+    });
+    crate::util::log_audit(
+        pool.inner(),
+        Some(_user.email.clone()),
+        "invitation.create".to_string(),
+        "invitation".to_string(),
+        Some(format!("{}-{}", event_id, invitation_request.email)),
+        Some(metadata),
+    )
+    .await;
+
     Ok(
         status::Created::new("/events/".to_string() + &invitation.event_id.to_string())
             .body(Json(invitation)),
@@ -170,7 +185,7 @@ pub async fn resend(
     sender: &State<Resend>,
     tera: &State<Tera>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
     // Check that the invitation exists and hasn't been responded to
     let invitation: InvitationsResponse = match sqlx::query_as!(
@@ -254,7 +269,25 @@ pub async fn resend(
     )
     .await
     {
-        Ok(()) => Ok(rocket::response::status::NoContent),
+        Ok(()) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "recipient_email": email,
+                "email_type": "invitation_resend",
+            });
+            crate::util::log_audit(
+                pool.inner(),
+                Some(user.email),
+                "email.send".to_string(),
+                "email".to_string(),
+                Some(format!("{event_id}-{email}")),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(rocket::response::status::NoContent)
+        }
         Err(_) => Err(rocket::response::status::BadRequest(
             "Error sending invitation email".to_string(),
         )),
@@ -393,7 +426,7 @@ pub async fn delete(
     email: String,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, rocket::response::status::BadRequest<String>> {
     // Delete the event
     match sqlx::query!(
@@ -406,7 +439,24 @@ pub async fn delete(
     .execute(pool.inner())
     .await
     {
-        Ok(_) => Ok(rocket::response::status::NoContent),
+        Ok(_) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "deleted_email": email,
+            });
+            crate::util::log_audit(
+                pool.inner(),
+                Some(user.email),
+                "invitation.delete".to_string(),
+                "invitation".to_string(),
+                Some(format!("{event_id}-{email}")),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(rocket::response::status::NoContent)
+        }
         Err(_) => Err(rocket::response::status::BadRequest(
             "Error getting database ID".to_string(),
         )),
@@ -447,10 +497,17 @@ pub async fn patch_admin(
     invitation_request: Json<InvitationsPatchRequest>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>, // Required for route matching but unused - triggers AdminUser guard
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
-    match event_invitation::respond(pool, event_id, email, invitation_request.into_inner(), true)
-        .await
+    match event_invitation::respond(
+        pool,
+        event_id,
+        email,
+        invitation_request.into_inner(),
+        true,
+        user.email,
+    )
+    .await
     {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NotPermitted(e)) => Err(InvitationsPatchError::Unauthorized(e)),
@@ -486,6 +543,7 @@ pub async fn patch(
         email,
         invitation_request.into_inner(),
         false,
+        user.email,
     )
     .await
     {
@@ -545,7 +603,7 @@ pub async fn send_custom_email(
     sender: &State<Resend>,
     tera: &State<Tera>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, SendCustomEmailError> {
     // Get the event details
     let event = match event::filter(
@@ -644,13 +702,33 @@ pub async fn send_custom_email(
 
     match send_email_bcc(
         sender,
-        recipient_emails,
+        recipient_emails.clone(),
         email_request.subject.as_str(),
         body.as_str(),
     )
     .await
     {
-        Ok(()) => Ok(rocket::response::status::NoContent),
+        Ok(()) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "recipient_count": recipient_emails.len(),
+                "filter": format!("{:?}", email_request.filter),
+                "subject": email_request.subject,
+                "email_type": "custom",
+            });
+            crate::util::log_audit(
+                pool.inner(),
+                Some(user.email),
+                "email.send".to_string(),
+                "email".to_string(),
+                Some(format!("{event_id}")),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(rocket::response::status::NoContent)
+        }
         Err(e) => Err(SendCustomEmailError::InternalServerError(format!(
             "Error sending email: {e}"
         ))),

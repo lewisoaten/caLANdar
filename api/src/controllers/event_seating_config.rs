@@ -48,17 +48,37 @@ pub async fn upsert(
     pool: &PgPool,
     event_id: i32,
     config: EventSeatingConfigSubmit,
+    user_email: String,
 ) -> Result<EventSeatingConfig, Error> {
     match event_seating_config::upsert(
         pool,
         event_id,
         config.has_seating,
         config.allow_unspecified_seat,
-        config.unspecified_seat_label,
+        config.unspecified_seat_label.clone(),
     )
     .await
     {
-        Ok(config) => Ok(EventSeatingConfig::from(config)),
+        Ok(config_result) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "has_seating": config.has_seating,
+                "allow_unspecified_seat": config.allow_unspecified_seat,
+                "unspecified_seat_label": config.unspecified_seat_label,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "event_seating_config.update".to_string(),
+                "event_seating_config".to_string(),
+                Some(event_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(EventSeatingConfig::from(config_result))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to save seating config due to: {e}"
         ))),

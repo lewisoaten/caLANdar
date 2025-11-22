@@ -1,4 +1,4 @@
-use chrono::{prelude::Utc, Duration};
+use chrono::{prelude::Utc, Datelike, Duration};
 use resend_rs::{types::CreateEmailBaseOptions, Resend};
 use rocket_dyn_templates::tera::{Context, Tera};
 use rusty_paseto::prelude::*;
@@ -166,6 +166,89 @@ pub async fn is_event_active(pool: &PgPool, id: i32) -> Result<(bool, Event), St
 
 use crate::repositories::audit_log;
 use rocket::serde::json::serde_json::Value as JsonValue;
+
+/// Helper function to format attendance buckets as human-readable text
+pub fn format_attendance_description(
+    attendance: &Option<Vec<u8>>,
+    time_begin: chrono::DateTime<Utc>,
+    time_end: chrono::DateTime<Utc>,
+) -> String {
+    let Some(buckets) = attendance else {
+        return "none".to_string();
+    };
+
+    if buckets.is_empty() || buckets.iter().all(|&b| b == 0) {
+        return "none".to_string();
+    }
+
+    const TIME_PERIODS: [&str; 4] = ["morning", "afternoon", "evening", "overnight"];
+
+    // Build all possible buckets with their metadata
+    let mut all_buckets = Vec::new();
+    let mut current_day = time_begin.date_naive().and_hms_opt(6, 0, 0).unwrap();
+    let time_begin_naive = time_begin.naive_utc();
+    let time_end_naive = time_end.naive_utc();
+
+    while current_day < time_end_naive {
+        for bucket_num in 0..4 {
+            let bucket_start = current_day + Duration::hours(6 * (bucket_num + 1));
+            let bucket_end = bucket_start + Duration::hours(6);
+
+            if bucket_start <= time_end_naive && bucket_end > time_begin_naive {
+                all_buckets.push((
+                    current_day.weekday().to_string(),
+                    TIME_PERIODS[bucket_num as usize],
+                ));
+            }
+        }
+        current_day += Duration::days(1);
+    }
+
+    // Filter to selected buckets
+    let selected: Vec<_> = all_buckets
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| *idx < buckets.len() && buckets[*idx] == 1)
+        .map(|(_, bucket)| bucket)
+        .collect();
+
+    if selected.is_empty() {
+        return "none".to_string();
+    }
+
+    // All buckets selected - show range from first to last
+    if selected.len() == all_buckets.len() {
+        return format!(
+            "{} {} until {} {}",
+            all_buckets[0].0,
+            all_buckets[0].1,
+            all_buckets[all_buckets.len() - 1].0,
+            all_buckets[all_buckets.len() - 1].1
+        );
+    }
+
+    // Single bucket
+    if selected.len() == 1 {
+        return format!("{} {}", selected[0].0, selected[0].1);
+    }
+
+    // Two buckets
+    if selected.len() == 2 {
+        return format!(
+            "{} {} and {} {}",
+            selected[0].0, selected[0].1, selected[1].0, selected[1].1
+        );
+    }
+
+    // Three or more buckets - list them with commas
+    let mut parts: Vec<String> = selected
+        .iter()
+        .map(|(day, period)| format!("{day} {period}"))
+        .collect();
+
+    let last = parts.pop().unwrap();
+    format!("{}, and {}", parts.join(", "), last)
+}
 
 /// Helper function to log audit entries
 /// Fails softly - errors are logged but don't block the operation

@@ -183,9 +183,9 @@ pub async fn post(
     room_submit: Json<RoomSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<Room>, RoomPostError> {
-    match room::create(pool, event_id, room_submit.into_inner()).await {
+    match room::create(pool, event_id, room_submit.into_inner(), user.email).await {
         Ok(room) => Ok(Json(room)),
         Err(Error::BadInput(e)) => Err(RoomPostError::BadRequest(format!(
             "Invalid request, due to {e}"
@@ -217,9 +217,9 @@ pub async fn put(
     room_submit: Json<RoomSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<Room>, RoomPutError> {
-    match room::update(pool, room_id, room_submit.into_inner()).await {
+    match room::update(pool, room_id, room_submit.into_inner(), user.email).await {
         Ok(room) => Ok(Json(room)),
         Err(Error::BadInput(e)) => Err(RoomPutError::BadRequest(format!(
             "Invalid request, due to {e}"
@@ -240,9 +240,9 @@ pub async fn delete(
     room_id: i32,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, RoomDeleteError> {
-    match room::delete(pool, room_id).await {
+    match room::delete(pool, room_id, user.email).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(e) => Err(RoomDeleteError::InternalServerError(format!(
             "Error deleting room, due to: {e}"

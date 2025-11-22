@@ -91,7 +91,12 @@ pub async fn get(pool: &PgPool, seat_id: i32) -> Result<Option<Seat>, Error> {
     }
 }
 
-pub async fn create(pool: &PgPool, event_id: i32, seat_submit: SeatSubmit) -> Result<Seat, Error> {
+pub async fn create(
+    pool: &PgPool,
+    event_id: i32,
+    seat_submit: SeatSubmit,
+    user_email: String,
+) -> Result<Seat, Error> {
     if seat_submit.label.trim().is_empty() {
         return Err(Error::BadInput("Seat label cannot be empty".to_string()));
     }
@@ -106,21 +111,45 @@ pub async fn create(pool: &PgPool, event_id: i32, seat_submit: SeatSubmit) -> Re
         pool,
         event_id,
         seat_submit.room_id,
-        seat_submit.label,
-        seat_submit.description,
+        seat_submit.label.clone(),
+        seat_submit.description.clone(),
         seat_submit.x,
         seat_submit.y,
     )
     .await
     {
-        Ok(seat) => Ok(Seat::from(seat)),
+        Ok(seat) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "seat_id": seat.id,
+                "room_id": seat_submit.room_id,
+                "label": seat_submit.label,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "seat.create".to_string(),
+                "seat".to_string(),
+                Some(seat.id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Seat::from(seat))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create seat due to: {e}"
         ))),
     }
 }
 
-pub async fn update(pool: &PgPool, seat_id: i32, seat_submit: SeatSubmit) -> Result<Seat, Error> {
+pub async fn update(
+    pool: &PgPool,
+    seat_id: i32,
+    seat_submit: SeatSubmit,
+    user_email: String,
+) -> Result<Seat, Error> {
     if seat_submit.label.trim().is_empty() {
         return Err(Error::BadInput("Seat label cannot be empty".to_string()));
     }
@@ -134,23 +163,56 @@ pub async fn update(pool: &PgPool, seat_id: i32, seat_submit: SeatSubmit) -> Res
     match seat::update(
         pool,
         seat_id,
-        seat_submit.label,
-        seat_submit.description,
+        seat_submit.label.clone(),
+        seat_submit.description.clone(),
         seat_submit.x,
         seat_submit.y,
     )
     .await
     {
-        Ok(seat) => Ok(Seat::from(seat)),
+        Ok(seat) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "seat_id": seat_id,
+                "label": seat_submit.label,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "seat.update".to_string(),
+                "seat".to_string(),
+                Some(seat_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Seat::from(seat))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to update seat due to: {e}"
         ))),
     }
 }
 
-pub async fn delete(pool: &PgPool, seat_id: i32) -> Result<(), Error> {
+pub async fn delete(pool: &PgPool, seat_id: i32, user_email: String) -> Result<(), Error> {
     match seat::delete(pool, seat_id).await {
-        Ok(()) => Ok(()),
+        Ok(()) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "seat_id": seat_id,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "seat.delete".to_string(),
+                "seat".to_string(),
+                Some(seat_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(())
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to delete seat due to: {e}"
         ))),

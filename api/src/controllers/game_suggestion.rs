@@ -311,6 +311,7 @@ pub async fn create(
             let metadata = rocket::serde::json::serde_json::json!({
                 "event_id": event_id,
                 "game_id": new_event_game_suggestion.appid,
+                "game_name": game_suggestion.game_name,
                 "comment": new_event_game_suggestion.comment,
             });
             crate::util::log_audit(
@@ -386,12 +387,13 @@ pub async fn vote(
     // Insert game suggestion
     match game_suggestion::edit(pool, event_id, game_id, email.clone(), vote.clone().into()).await {
         Ok(game_suggestion) => {
-            let result = add_owners_to_game(pool, game_suggestion, &invitations).await?;
+            let result = add_owners_to_game(pool, game_suggestion.clone(), &invitations).await?;
 
             // Log audit entry for game vote
             let metadata = rocket::serde::json::serde_json::json!({
                 "event_id": event_id,
                 "game_id": game_id,
+                "game_name": game_suggestion.game_name,
                 "vote": format!("{:?}", vote),
             });
             crate::util::log_audit(

@@ -101,7 +101,12 @@ pub async fn get_reserved_room_for_user(
     Ok(room)
 }
 
-pub async fn create(pool: &PgPool, event_id: i32, room_submit: RoomSubmit) -> Result<Room, Error> {
+pub async fn create(
+    pool: &PgPool,
+    event_id: i32,
+    room_submit: RoomSubmit,
+    user_email: String,
+) -> Result<Room, Error> {
     if room_submit.name.trim().is_empty() {
         return Err(Error::BadInput("Room name cannot be empty".to_string()));
     }
@@ -109,21 +114,45 @@ pub async fn create(pool: &PgPool, event_id: i32, room_submit: RoomSubmit) -> Re
     match room::create(
         pool,
         event_id,
-        room_submit.name,
-        room_submit.description,
-        room_submit.image,
+        room_submit.name.clone(),
+        room_submit.description.clone(),
+        room_submit.image.clone(),
         room_submit.sort_order,
     )
     .await
     {
-        Ok(room) => Ok(Room::from(room)),
+        Ok(room) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "room_id": room.id,
+                "name": room_submit.name,
+                "sort_order": room_submit.sort_order,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "room.create".to_string(),
+                "room".to_string(),
+                Some(room.id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Room::from(room))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create room due to: {e}"
         ))),
     }
 }
 
-pub async fn update(pool: &PgPool, room_id: i32, room_submit: RoomSubmit) -> Result<Room, Error> {
+pub async fn update(
+    pool: &PgPool,
+    room_id: i32,
+    room_submit: RoomSubmit,
+    user_email: String,
+) -> Result<Room, Error> {
     if room_submit.name.trim().is_empty() {
         return Err(Error::BadInput("Room name cannot be empty".to_string()));
     }
@@ -131,23 +160,57 @@ pub async fn update(pool: &PgPool, room_id: i32, room_submit: RoomSubmit) -> Res
     match room::update(
         pool,
         room_id,
-        room_submit.name,
-        room_submit.description,
-        room_submit.image,
+        room_submit.name.clone(),
+        room_submit.description.clone(),
+        room_submit.image.clone(),
         room_submit.sort_order,
     )
     .await
     {
-        Ok(room) => Ok(Room::from(room)),
+        Ok(room) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "room_id": room_id,
+                "name": room_submit.name,
+                "sort_order": room_submit.sort_order,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "room.update".to_string(),
+                "room".to_string(),
+                Some(room_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Room::from(room))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to update room due to: {e}"
         ))),
     }
 }
 
-pub async fn delete(pool: &PgPool, room_id: i32) -> Result<(), Error> {
+pub async fn delete(pool: &PgPool, room_id: i32, user_email: String) -> Result<(), Error> {
     match room::delete(pool, room_id).await {
-        Ok(()) => Ok(()),
+        Ok(()) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "room_id": room_id,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "room.delete".to_string(),
+                "room".to_string(),
+                Some(room_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(())
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to delete room due to: {e}"
         ))),
