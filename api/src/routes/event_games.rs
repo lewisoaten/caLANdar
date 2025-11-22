@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
-    get, patch, post,
+    get, patch, post, put,
     response::status,
     serde::{json::Json, Deserialize, Serialize},
     State,
@@ -66,6 +66,7 @@ pub async fn get_all(
 pub struct EventGameSuggestionResponse {
     pub appid: i64,
     pub name: String,
+    pub user_email: String,
     pub comment: Option<String>,
     pub last_modified: DateTime<Utc>,
     pub requested_at: DateTime<Utc>,
@@ -171,5 +172,47 @@ pub async fn patch(
         Err(_) => Err(rocket::response::status::Unauthorized(
             "Error updating game vote in the database".to_string(),
         )),
+    }
+}
+
+custom_errors!(
+    EventGameCommentUpdateError,
+    Unauthorized,
+    InternalServerError
+);
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+pub struct EventGameCommentUpdate {
+    pub comment: Option<String>,
+}
+
+#[openapi(tag = "Event Games")]
+#[put(
+    "/events/<event_id>/suggested_games/<game_id>/comment",
+    format = "json",
+    data = "<comment_update>"
+)]
+pub async fn update_comment(
+    event_id: i32,
+    game_id: i64,
+    comment_update: Json<EventGameCommentUpdate>,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<EventGameSuggestionResponse>, EventGameCommentUpdateError> {
+    match game_suggestion::update_comment(
+        pool,
+        event_id,
+        game_id,
+        user.email,
+        comment_update.into_inner().comment,
+    )
+    .await
+    {
+        Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
+        Err(Error::NotPermitted(e)) => Err(EventGameCommentUpdateError::Unauthorized(e)),
+        Err(e) => Err(EventGameCommentUpdateError::InternalServerError(format!(
+            "Error updating comment: {e}"
+        ))),
     }
 }
