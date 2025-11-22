@@ -1,6 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event, Error},
+    repositories::event::EventFilter,
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
@@ -86,19 +87,51 @@ impl SchemaExample for EventSubmit {
     }
 }
 
+/// The response for paginated events
+#[derive(Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct PaginatedEventsResponse {
+    pub events: Vec<Event>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
+}
+
 custom_errors!(EventsGetError, Unauthorized, InternalServerError);
 
 /// Get all events as an administrator, even those which the user is not invited to.
-/// Will return an empty list if no events are found.
+/// Supports pagination and filtering via query parameters.
+/// - page: Page number (default: 1, must be >= 1)
+/// - limit: Items per page (default: 20, range: 1-100)
+/// - filter: Event filter - "all", "upcoming", or "past" (default: "all")
 #[openapi(tag = "Events")]
-#[get("/events?<_as_admin>", format = "json")]
+#[get("/events?<_as_admin>&<page>&<limit>&<filter>", format = "json")]
 pub async fn get_all(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
+    page: Option<i64>,
+    limit: Option<i64>,
+    filter: Option<String>,
     _user: AdminUser,
-) -> Result<Json<Vec<Event>>, EventsGetError> {
-    match event::get_all(pool).await {
-        Ok(events) => Ok(Json(events)),
+) -> Result<Json<PaginatedEventsResponse>, EventsGetError> {
+    let page = page.unwrap_or(1).max(1);
+    let limit = limit.unwrap_or(20).clamp(1, 100);
+    
+    let event_filter = match filter.as_deref() {
+        Some("upcoming") => EventFilter::Upcoming,
+        Some("past") => EventFilter::Past,
+        _ => EventFilter::All,
+    };
+
+    match event::get_all_paginated(pool, page, limit, event_filter).await {
+        Ok(response) => Ok(Json(PaginatedEventsResponse {
+            events: response.events,
+            total: response.total,
+            page: response.page,
+            limit: response.limit,
+            total_pages: response.total_pages,
+        })),
         Err(e) => Err(EventsGetError::InternalServerError(format!(
             "Error getting events, due to: {e}"
         ))),
@@ -106,15 +139,66 @@ pub async fn get_all(
 }
 
 /// Return all events the user is invited to.
-/// Will return an empty list if no events are found.
+/// Supports pagination via query parameters.
+/// - page: Page number (default: 1, must be >= 1)
+/// - limit: Items per page (default: 20, range: 1-100)
+/// - filter: Event filter - "all", "upcoming", or "past" (default: "all")
 #[openapi(tag = "Events")]
-#[get("/events", format = "json", rank = 2)]
+#[get("/events?<page>&<limit>&<filter>", format = "json", rank = 2)]
 pub async fn get_all_user(
     pool: &State<PgPool>,
+    page: Option<i64>,
+    limit: Option<i64>,
+    filter: Option<String>,
     user: User,
-) -> Result<Json<Vec<Event>>, EventsGetError> {
+) -> Result<Json<PaginatedEventsResponse>, EventsGetError> {
+    let page = page.unwrap_or(1).max(1);
+    let limit = limit.unwrap_or(20).clamp(1, 100);
+    
+    let event_filter = match filter.as_deref() {
+        Some("upcoming") => EventFilter::Upcoming,
+        Some("past") => EventFilter::Past,
+        _ => EventFilter::All,
+    };
+
+    // For user events, we still need to filter by invitations
+    // For now, we'll get all user events and then apply pagination client-side
+    // A more optimal solution would be to do this in a single query
     match event::get_all_user(pool, user.email).await {
-        Ok(events) => Ok(Json(events)),
+        Ok(all_events) => {
+            // Apply filter
+            let now = chrono::Utc::now();
+            let filtered_events: Vec<Event> = match event_filter {
+                EventFilter::Upcoming => all_events
+                    .into_iter()
+                    .filter(|e| e.time_end > now)
+                    .collect(),
+                EventFilter::Past => all_events
+                    .into_iter()
+                    .filter(|e| e.time_end <= now)
+                    .collect(),
+                EventFilter::All => all_events,
+            };
+
+            let total = filtered_events.len() as i64;
+            let total_pages = (total + limit - 1) / limit;
+            let start = ((page - 1) * limit) as usize;
+            let end = (start + limit as usize).min(filtered_events.len());
+
+            let events = if start < filtered_events.len() {
+                filtered_events[start..end].to_vec()
+            } else {
+                vec![]
+            };
+
+            Ok(Json(PaginatedEventsResponse {
+                events,
+                total,
+                page,
+                limit,
+                total_pages,
+            }))
+        }
         Err(e) => Err(EventsGetError::InternalServerError(format!(
             "Error getting events, due to: {e}"
         ))),

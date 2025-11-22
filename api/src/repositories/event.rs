@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgPool, FromRow};
 
-#[derive(Clone)]
+#[derive(Clone, FromRow)]
 pub struct Event {
     pub id: i32,
     pub created_at: DateTime<Utc>,
@@ -15,6 +15,27 @@ pub struct Event {
 
 pub struct Filter {
     pub ids: Option<Vec<i32>>,
+}
+
+#[derive(Clone, Debug)]
+pub enum EventFilter {
+    All,
+    Upcoming,
+    Past,
+}
+
+pub struct PaginationParams {
+    pub page: i64,
+    pub limit: i64,
+    pub filter: EventFilter,
+}
+
+pub struct PaginatedEvents {
+    pub events: Vec<Event>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
 }
 
 pub async fn create(
@@ -81,6 +102,72 @@ pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
     )
     .fetch_all(pool)
     .await
+}
+
+pub async fn index_paginated(
+    pool: &PgPool,
+    params: PaginationParams,
+) -> Result<PaginatedEvents, sqlx::Error> {
+    let offset = (params.page - 1) * params.limit;
+    let now = Utc::now();
+
+    // Build the WHERE clause based on filter
+    let (where_clause, time_param): (&str, Option<DateTime<Utc>>) = match params.filter {
+        EventFilter::Upcoming => ("WHERE time_end > $3", Some(now)),
+        EventFilter::Past => ("WHERE time_end <= $3", Some(now)),
+        EventFilter::All => ("", None),
+    };
+
+    // Get total count for pagination
+    let count_query = format!(
+        "SELECT COUNT(*) as count FROM event {}",
+        where_clause
+    );
+    
+    let total: i64 = if let Some(time) = time_param {
+        sqlx::query_scalar(&count_query)
+            .bind(time)
+            .fetch_one(pool)
+            .await?
+    } else {
+        sqlx::query_scalar(&count_query)
+            .fetch_one(pool)
+            .await?
+    };
+
+    // Get paginated events
+    let query = format!(
+        "SELECT id, created_at, last_modified, title, description, image, time_begin, time_end 
+         FROM event {} 
+         ORDER BY time_begin DESC 
+         LIMIT $1 OFFSET $2",
+        where_clause
+    );
+
+    let events: Vec<Event> = if let Some(time) = time_param {
+        sqlx::query_as(&query)
+            .bind(params.limit)
+            .bind(offset)
+            .bind(time)
+            .fetch_all(pool)
+            .await?
+    } else {
+        sqlx::query_as(&query)
+            .bind(params.limit)
+            .bind(offset)
+            .fetch_all(pool)
+            .await?
+    };
+
+    let total_pages = (total + params.limit - 1) / params.limit;
+
+    Ok(PaginatedEvents {
+        events,
+        total,
+        page: params.page,
+        limit: params.limit,
+        total_pages,
+    })
 }
 
 pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::Error> {
