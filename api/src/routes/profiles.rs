@@ -1,5 +1,5 @@
 use crate::{
-    auth::User,
+    auth::{AdminUser, User},
     controllers::{profile, Error},
 };
 use chrono::{DateTime, Utc};
@@ -143,6 +143,30 @@ pub async fn post_games_update(
         Ok(updated_profile) => Ok(Json(updated_profile)),
         Err(e) => Err(UpdateUserGameError::InternalServerError(format!(
             "Error updating games, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(AdminProfileUpdateError, NotFound, BadRequest, InternalServerError);
+
+/// Update a user's profile as an administrator.
+#[openapi(tag = "Profile")]
+#[put("/profile/<email>?<_as_admin>", format = "json", data = "<profile_submit>")]
+pub async fn put_admin(
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+    email: String,
+    profile_submit: Json<ProfileSubmit>,
+) -> Result<Json<Profile>, AdminProfileUpdateError> {
+    match profile::edit(pool, email.clone(), profile_submit.into_inner()).await {
+        Ok(updated_profile) => Ok(Json(updated_profile)),
+        Err(Error::NoData(_)) => Err(AdminProfileUpdateError::NotFound(format!(
+            "Profile for {email}"
+        ))),
+        Err(Error::BadInput(msg)) => Err(AdminProfileUpdateError::BadRequest(msg)),
+        Err(e) => Err(AdminProfileUpdateError::InternalServerError(format!(
+            "Error updating profile, due to: {e}"
         ))),
     }
 }

@@ -296,6 +296,7 @@ async fn rocket(
                 routes::event_games::patch,
                 routes::profiles::get,
                 routes::profiles::put,
+                routes::profiles::put_admin,
                 routes::profiles::post_games_update,
                 routes::gamers::get_all,
                 routes::audit_logs::get_audit_logs,
