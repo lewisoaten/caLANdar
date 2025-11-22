@@ -19,7 +19,12 @@ import Alert from "@mui/material/Alert";
 import AlertTitle from "@mui/material/AlertTitle";
 import RefreshGamesButton from "./RefreshGamesButton";
 import { Collapse, Tooltip } from "@mui/material";
-import { Event, SportsEsports, EventSeat } from "@mui/icons-material";
+import {
+  Event,
+  SportsEsports,
+  EventSeat,
+  CalendarToday,
+} from "@mui/icons-material";
 import { RSVP } from "../types/invitations";
 
 interface MenuItemsProps {
@@ -45,6 +50,7 @@ export default function MenuItems(props: MenuItemsProps) {
   const eventId = eventMatch?.[1];
   const gamesUrl = eventUrl ? `${eventUrl}/games` : null;
   const seatMapUrl = eventUrl ? `${eventUrl}/seat-map` : null;
+  const scheduleUrl = eventUrl ? `${eventUrl}/schedule` : null;
 
   const [eventAccess, setEventAccess] = useState({
     loading: false,
@@ -165,6 +171,13 @@ export default function MenuItems(props: MenuItemsProps) {
                     seatMapUrl,
                     <EventSeat />,
                     "Seat Map",
+                    restrictEventExtras,
+                  )}
+                {scheduleUrl &&
+                  renderRestrictedNavItem(
+                    scheduleUrl,
+                    <CalendarToday />,
+                    "Schedule",
                     restrictEventExtras,
                   )}
               </List>

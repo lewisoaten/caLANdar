@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH inserted AS (\n            INSERT INTO event_game_schedule (\n                event_id,\n                game_id,\n                start_time,\n                duration_minutes,\n                is_pinned\n            )\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING\n                id,\n                event_id,\n                game_id,\n                start_time,\n                duration_minutes,\n                is_pinned,\n                created_at,\n                last_modified\n        )\n        SELECT\n            inserted.id,\n            inserted.event_id,\n            inserted.game_id,\n            sg.name AS game_name,\n            inserted.start_time,\n            inserted.duration_minutes,\n            inserted.is_pinned,\n            inserted.created_at,\n            inserted.last_modified\n        FROM inserted\n        INNER JOIN steam_game sg ON inserted.game_id = sg.appid\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "game_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "game_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_minutes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_pinned",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8",
+        "Timestamptz",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d86f680f8ac47913c9a90e878de87da73d3094200d1d62768d9ee156cdedb3e8"
+}
