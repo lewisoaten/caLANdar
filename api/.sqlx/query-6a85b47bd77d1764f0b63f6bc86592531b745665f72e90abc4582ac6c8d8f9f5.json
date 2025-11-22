@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT EXISTS(\n            SELECT 1\n            FROM event_game_schedule\n            WHERE event_id = $1\n            AND is_pinned = true\n            AND id != $2\n            AND (\n                -- New game starts during existing game\n                (start_time <= $3 AND (start_time + (duration_minutes || ' minutes')::INTERVAL) > $3)\n                -- New game ends during existing game\n                OR (start_time < $4 AND (start_time + (duration_minutes || ' minutes')::INTERVAL) >= $4)\n                -- New game completely contains existing game\n                OR (start_time >= $3 AND (start_time + (duration_minutes || ' minutes')::INTERVAL) <= $4)\n            )\n        ) AS \"exists!\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int4",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6a85b47bd77d1764f0b63f6bc86592531b745665f72e90abc4582ac6c8d8f9f5"
+}
