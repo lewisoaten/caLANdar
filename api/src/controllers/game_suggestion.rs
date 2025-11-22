@@ -375,7 +375,7 @@ pub async fn vote(
 async fn add_owners_to_game(
     pool: &PgPool,
     game_suggestion: GameSuggestion,
-    invitations: &Vec<invitation::Invitation>,
+    invitations: &[invitation::Invitation],
 ) -> Result<EventGameSuggestionResponse, Error> {
     let mut gamer_owned = Vec::new();
     let mut gamer_unowned = Vec::new();

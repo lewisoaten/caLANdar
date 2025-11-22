@@ -1,41 +1,161 @@
-use rocket::serde::Deserialize;
+use rocket::serde::{json::serde_json, Deserialize};
+
+const MAX_RETRIES: u32 = 3;
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct SteamAPISteamGameV2 {
+pub struct SteamAPIApp {
     pub appid: i64,
     pub name: String,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct SteamAPISteamGameApplistV2 {
-    pub apps: Vec<SteamAPISteamGameV2>,
+pub struct SteamAPIAppListResponse {
+    pub apps: Vec<SteamAPIApp>,
+    pub have_more_results: bool,
+    pub last_appid: i64,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct SteamAPISteamGameApplistWrapperV2 {
-    pub applist: SteamAPISteamGameApplistV2,
+pub struct SteamAPIAppListWrapper {
+    pub response: SteamAPIAppListResponse,
 }
 
-pub async fn get_app_list_v2(
-    steam_api_key: &String,
-) -> Result<SteamAPISteamGameApplistWrapperV2, reqwest::Error> {
-    let request_url =
-        format!("https://api.steampowered.com/ISteamApps/GetAppList/v2/?key={steam_api_key}",);
+/// Fetch all apps from the Steam Store API using pagination
+/// Uses IStoreService/GetAppList/v1 endpoint which supports pagination
+#[allow(clippy::too_many_lines)]
+pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, String> {
+    let mut all_apps = Vec::new();
+    let mut last_appid = 0;
+    let max_results = 50000; // Maximum allowed by the API
 
-    log::info!("Requesting games from steam API v2 using url: {request_url}");
+    loop {
+        let request_url = format!(
+            "https://api.steampowered.com/IStoreService/GetAppList/v1/?key={steam_api_key}&max_results={max_results}&last_appid={last_appid}&include_games=true&include_dlc=true&include_software=true&include_videos=false&include_hardware=false"
+        );
 
-    let response = match reqwest::get(&request_url).await {
-        Ok(response) => response,
-        Err(e) => return Err(e),
-    };
+        log::info!(
+            "Requesting games from Steam API using IStoreService/GetAppList (last_appid: {last_appid})"
+        );
 
-    match response.json().await {
-        Ok(steam_games) => Ok(steam_games),
-        Err(e) => Err(e),
+        // Retry logic for transient failures
+        let mut attempts = 0;
+        let wrapper = loop {
+            attempts += 1;
+
+            match reqwest::get(&request_url).await {
+                Ok(response) => {
+                    let status = response.status();
+
+                    if !status.is_success() {
+                        let error_text = response
+                            .text()
+                            .await
+                            .unwrap_or_else(|_| "Unable to read error response".to_string());
+                        log::error!("Steam API returned status {status}: {error_text}");
+
+                        if attempts < MAX_RETRIES {
+                            log::warn!("Retrying request (attempt {attempts}/{MAX_RETRIES})");
+                            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                            continue;
+                        }
+                        return Err(format!(
+                            "Steam API error after {MAX_RETRIES} attempts (status {status}): {error_text}"
+                        ));
+                    }
+
+                    // Get the response body as text first for debugging
+                    let response_text = match response.text().await {
+                        Ok(text) => text,
+                        Err(e) => {
+                            log::error!("Failed to read response body: {e}");
+
+                            if attempts < MAX_RETRIES {
+                                log::warn!("Retrying request (attempt {attempts}/{MAX_RETRIES})");
+                                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                continue;
+                            }
+                            return Err(format!(
+                                "Failed to read response body after {MAX_RETRIES} attempts: {e}"
+                            ));
+                        }
+                    };
+
+                    // Try to parse the JSON response
+                    match serde_json::from_str::<SteamAPIAppListWrapper>(&response_text) {
+                        Ok(wrapper) => break wrapper,
+                        Err(e) => {
+                            log::error!("Failed to parse Steam API response: {e}");
+                            log::error!(
+                                "Response body (first 500 chars): {}",
+                                if response_text.len() > 500 {
+                                    &response_text[..500]
+                                } else {
+                                    &response_text
+                                }
+                            );
+
+                            if attempts < MAX_RETRIES {
+                                log::warn!("Retrying request (attempt {attempts}/{MAX_RETRIES})");
+                                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                                continue;
+                            }
+                            // If we've collected some apps, log a warning and continue with what we have
+                            if !all_apps.is_empty() {
+                                log::warn!(
+                                    "Failed to parse page after {} apps collected. Stopping pagination and returning {} apps.",
+                                    all_apps.len(), all_apps.len()
+                                );
+                                log::info!("Total apps retrieved (partial): {}", all_apps.len());
+                                return Ok(all_apps);
+                            }
+                            return Err(format!("Failed to parse Steam API response after {} attempts: {}. Response: {}",
+                                MAX_RETRIES, e,
+                                if response_text.len() > 200 {
+                                    &response_text[..200]
+                                } else {
+                                    &response_text
+                                }));
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Network error requesting Steam API: {e}");
+
+                    if attempts < MAX_RETRIES {
+                        log::warn!("Retrying request (attempt {attempts}/{MAX_RETRIES})");
+                        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                        continue;
+                    }
+                    return Err(format!("Network error after {MAX_RETRIES} attempts: {e}"));
+                }
+            }
+        };
+
+        let app_count = wrapper.response.apps.len();
+        log::info!(
+            "Retrieved {} apps from Steam API (page total: {})",
+            app_count,
+            all_apps.len() + app_count
+        );
+
+        all_apps.extend(wrapper.response.apps);
+
+        if !wrapper.response.have_more_results {
+            log::info!("No more results to fetch from Steam API");
+            break;
+        }
+
+        last_appid = wrapper.response.last_appid;
+
+        // Small delay between requests to avoid rate limiting
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
+
+    log::info!("Total apps retrieved: {}", all_apps.len());
+    Ok(all_apps)
 }
 
 #[derive(Clone, Deserialize)]

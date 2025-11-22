@@ -184,6 +184,7 @@ const EMAIL_TEMPLATES: [(&str, &str); 4] = [
     ),
 ];
 
+#[allow(clippy::too_many_lines)]
 #[shuttle_runtime::main]
 async fn rocket(
     #[shuttle_shared_db::Postgres] pool: PgPool,

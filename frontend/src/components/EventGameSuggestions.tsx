@@ -398,7 +398,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   <ListItemAvatar>
                     <Avatar
                       alt={gameSuggestion.name || "Game"}
-                      src={`https://steamcdn-a.akamaihd.net/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                      src={`https://cdn.akamai.steamstatic.com/steam/apps/${gameSuggestion.appid}/header.jpg`}
                     />
                   </ListItemAvatar>
                   <ListItemText

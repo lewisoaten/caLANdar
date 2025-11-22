@@ -1,4 +1,4 @@
-import React, { ChangeEvent } from "react";
+import React, { ChangeEvent, useEffect, useState } from "react";
 import {
   Container,
   Paper,
@@ -17,7 +17,6 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 
 import { EventGame } from "../types/game_suggestions";
 
-import { useState, useEffect } from "react";
 import moment from "moment";
 import GameOwners from "./GameOwners";
 
@@ -75,30 +74,44 @@ const GameCard = React.memo(({ game }: { game: EventGame }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
 
-  const imageUrl = `https://steamcdn-a.akamaihd.net/steam/apps/${game.appid}/header.jpg`;
+  const imageUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${game.appid}/header.jpg`;
+
+  const handleImageLoad = () => {
+    setImageLoaded(true);
+  };
+
+  const handleImageError = () => {
+    setImageError(true);
+  };
 
   return (
     <Card sx={{ maxWidth: 345 }} elevation={4}>
-      {!imageLoaded && !imageError && (
-        <Skeleton variant="rectangular" height={140} animation="wave" />
-      )}
-      {!imageError && (
+      <div style={{ position: "relative", height: 140 }}>
+        {!imageLoaded && !imageError && (
+          <Skeleton variant="rectangular" height={140} animation="wave" />
+        )}
+        {imageError && (
+          <Skeleton variant="rectangular" height={140} animation={false} />
+        )}
         <CardMedia
           sx={{
             height: 140,
-            display: imageLoaded ? "block" : "none",
+            position: imageLoaded ? "static" : "absolute",
+            top: 0,
+            left: 0,
+            width: "100%",
+            opacity: imageLoaded ? 1 : 0,
+            visibility: imageError ? "hidden" : "visible",
+            transition: "opacity 0.3s ease-in-out",
           }}
           component="img"
           image={imageUrl}
           title={game.name}
           loading="lazy"
-          onLoad={() => setImageLoaded(true)}
-          onError={() => setImageError(true)}
+          onLoad={handleImageLoad}
+          onError={handleImageError}
         />
-      )}
-      {imageError && (
-        <Skeleton variant="rectangular" height={140} animation={false} />
-      )}
+      </div>
       <CardContent>
         <Typography gutterBottom variant="h5" component="div">
           {game.name}

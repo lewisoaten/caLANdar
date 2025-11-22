@@ -30,10 +30,9 @@ pub async fn get(pool: &PgPool, event_id: i32) -> Result<Option<EventSeatingConf
 }
 
 pub async fn get_or_default(pool: &PgPool, event_id: i32) -> Result<EventSeatingConfig, Error> {
-    match get(pool, event_id).await? {
-        Some(config) => Ok(config),
-        None => Ok(default_config(event_id)),
-    }
+    get(pool, event_id)
+        .await?
+        .map_or_else(|| Ok(default_config(event_id)), Ok)
 }
 
 pub async fn get_or_default_for_invited_user(
