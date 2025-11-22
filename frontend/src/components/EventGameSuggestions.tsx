@@ -18,9 +18,11 @@ import {
   Stack,
   Grid,
   Button,
+  IconButton,
 } from "@mui/material";
 import ThumbUpOffAltIcon from "@mui/icons-material/ThumbUpOffAlt";
 import ThumbUpAltIcon from "@mui/icons-material/ThumbUpAlt";
+import EditIcon from "@mui/icons-material/Edit";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import {
@@ -53,6 +55,8 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [commentValue, setCommentValue] = useState("");
   const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [options, setOptions] = useState(defaultGames);
+  const [editingGameId, setEditingGameId] = useState<number | null>(null);
+  const [editCommentValue, setEditCommentValue] = useState("");
 
   const typingTimer = useRef<null | NodeJS.Timeout>(null);
   const doneTypingInterval = 1000;
@@ -241,6 +245,58 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       });
   };
 
+  const handleEditClick = (gameId: number, currentComment: string | null) => {
+    setEditingGameId(gameId);
+    setEditCommentValue(currentComment || "");
+  };
+
+  const handleEditCancel = () => {
+    setEditingGameId(null);
+    setEditCommentValue("");
+  };
+
+  const handleEditSave = (gameId: number) => {
+    const trimmedComment = editCommentValue.trim();
+
+    fetch(
+      `/api/events/${props.event_id}/suggested_games/${gameId}/comment`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
+        body: JSON.stringify({
+          comment: trimmedComment || null,
+        }),
+      },
+    )
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok) {
+          return response
+            .text()
+            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
+        } else {
+          alert("Unable to update comment");
+          throw new Error("Unable to update comment");
+        }
+      })
+      .then((data) => {
+        if (data) {
+          const gameSuggestionIndex = gameSuggestions.findIndex(
+            (game) => game.appid === gameId,
+          );
+          const newGameSuggestions = [...gameSuggestions];
+          newGameSuggestions[gameSuggestionIndex] = data;
+          sortAndAddGameSuggestions(newGameSuggestions);
+          setEditingGameId(null);
+          setEditCommentValue("");
+        }
+      });
+  };
+
   return (
     <Grid container spacing={2}>
       <Grid size={12}>
@@ -357,6 +413,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         <List>
           {gameSuggestions.map((gameSuggestion) => {
             const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
+            const isOwner = userDetails?.email?.toLowerCase() === gameSuggestion.userEmail.toLowerCase();
+            const isEditing = editingGameId === gameSuggestion.appid;
+            
             return (
               <ListItem
                 key={gameSuggestion.appid}
@@ -375,6 +434,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         gamerUnowned={gameSuggestion.gamerUnowned}
                         gamerUnknown={gameSuggestion.gamerUnknown}
                       />
+                      {isOwner && !isEditing && (
+                        <IconButton
+                          edge="end"
+                          aria-label="edit"
+                          onClick={() => handleEditClick(gameSuggestion.appid, gameSuggestion.comment)}
+                          disabled={props.disabled}
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      )}
                       <Checkbox
                         value={gameSuggestion.appid}
                         edge="end"
@@ -390,32 +459,64 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                 }
                 dense={true}
               >
-                <ListItemButton
-                  aria-label="steam link"
-                  href={`https://store.steampowered.com/app/${gameSuggestion.appid}/`}
-                  target="_blank"
-                >
-                  <ListItemAvatar>
-                    <Avatar
-                      alt={gameSuggestion.name || "Game"}
-                      src={`https://cdn.akamai.steamstatic.com/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                {!isEditing ? (
+                  <ListItemButton
+                    aria-label="steam link"
+                    href={`https://store.steampowered.com/app/${gameSuggestion.appid}/`}
+                    target="_blank"
+                  >
+                    <ListItemAvatar>
+                      <Avatar
+                        alt={gameSuggestion.name || "Game"}
+                        src={`https://cdn.akamai.steamstatic.com/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                      />
+                    </ListItemAvatar>
+                    <ListItemText
+                      primary={gameSuggestion.name}
+                      secondary={
+                        <>
+                          {`${gameSuggestion.votes} want to play!`}
+                          {gameSuggestion.comment && (
+                            <>
+                              <br />
+                              {gameSuggestion.comment}
+                            </>
+                          )}
+                        </>
+                      }
                     />
-                  </ListItemAvatar>
-                  <ListItemText
-                    primary={gameSuggestion.name}
-                    secondary={
-                      <>
-                        {`${gameSuggestion.votes} want to play!`}
-                        {gameSuggestion.comment && (
-                          <>
-                            <br />
-                            {gameSuggestion.comment}
-                          </>
-                        )}
-                      </>
-                    }
-                  />
-                </ListItemButton>
+                  </ListItemButton>
+                ) : (
+                  <Stack direction="column" spacing={2} sx={{ width: "100%", py: 1 }}>
+                    <Typography variant="h6">{gameSuggestion.name}</Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={2}
+                      label="Comment"
+                      value={editCommentValue}
+                      onChange={(e) => setEditCommentValue(e.target.value)}
+                      inputProps={{ maxLength: 500 }}
+                      disabled={props.disabled}
+                    />
+                    <Stack direction="row" spacing={2}>
+                      <Button
+                        variant="contained"
+                        onClick={() => handleEditSave(gameSuggestion.appid)}
+                        disabled={props.disabled}
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        onClick={handleEditCancel}
+                        disabled={props.disabled}
+                      >
+                        Cancel
+                      </Button>
+                    </Stack>
+                  </Stack>
+                )}
                 <ListItemButton></ListItemButton>
               </ListItem>
             );

@@ -43,6 +43,7 @@ impl From<game_suggestion::GameSuggestion> for EventGameSuggestionResponse {
         Self {
             appid: game_suggestion.game_id,
             name: game_suggestion.game_name,
+            user_email: game_suggestion.user_email,
             comment: game_suggestion.comment,
             last_modified: game_suggestion.last_modified,
             requested_at: game_suggestion.requested_at,
@@ -484,6 +485,7 @@ async fn add_owners_to_game(
     Ok(EventGameSuggestionResponse {
         appid: game_suggestion.game_id,
         name: game_suggestion.game_name,
+        user_email: game_suggestion.user_email,
         comment: game_suggestion.comment,
         last_modified: game_suggestion.last_modified,
         requested_at: game_suggestion.requested_at,
@@ -494,4 +496,88 @@ async fn add_owners_to_game(
         gamer_unowned,
         gamer_unknown,
     })
+}
+
+pub async fn update_comment(
+    pool: &PgPool,
+    event_id: i32,
+    game_id: i64,
+    email: String,
+    comment: Option<String>,
+) -> Result<EventGameSuggestionResponse, Error> {
+    match is_event_active(pool, event_id).await {
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to check if event is active, due to: {e}"
+            )))
+        }
+        Ok((false, _)) => {
+            return Err(Error::NotPermitted(
+                "You can only update game suggestions for active events".to_string(),
+            ))
+        }
+        Ok((true, _event)) => (),
+    }
+
+    match is_attending_event(pool, event_id, email.clone()).await {
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to check if attending event, due to: {e}"
+            )))
+        }
+        Ok(false) => {
+            return Err(Error::NotPermitted(
+                "You can only update game suggestions for events you are attending".to_string(),
+            ))
+        }
+        Ok(true) => (),
+    }
+
+    let invitations = match invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
+    )
+    .await
+    {
+        Ok(invitations) => invitations,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Unable to get event invitations due to: {e}"
+            )))
+        }
+    };
+
+    // Update the comment
+    match game_suggestion::update_comment(pool, event_id, game_id, email.clone(), comment.clone())
+        .await
+    {
+        Ok(game_suggestion) => {
+            let result = add_owners_to_game(pool, game_suggestion.clone(), &invitations).await?;
+
+            // Log audit entry for comment update
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "game_id": game_id,
+                "game_name": game_suggestion.game_name,
+                "comment": comment,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "game_suggestion.update_comment".to_string(),
+                "game_suggestion".to_string(),
+                Some(format!("{event_id}-{game_id}")),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(result)
+        }
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to update comment due to: {e}"
+        ))),
+    }
 }
