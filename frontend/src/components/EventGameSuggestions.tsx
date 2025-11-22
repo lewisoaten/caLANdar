@@ -258,20 +258,17 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const handleEditSave = (gameId: number) => {
     const trimmedComment = editCommentValue.trim();
 
-    fetch(
-      `/api/events/${props.event_id}/suggested_games/${gameId}/comment`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-        body: JSON.stringify({
-          comment: trimmedComment || null,
-        }),
+    fetch(`/api/events/${props.event_id}/suggested_games/${gameId}/comment`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
       },
-    )
+      body: JSON.stringify({
+        comment: trimmedComment || null,
+      }),
+    })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) {
@@ -413,9 +410,11 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         <List>
           {gameSuggestions.map((gameSuggestion) => {
             const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
-            const isOwner = userDetails?.email?.toLowerCase() === gameSuggestion.userEmail.toLowerCase();
+            const isOwner =
+              userDetails?.email?.toLowerCase() ===
+              gameSuggestion.userEmail.toLowerCase();
             const isEditing = editingGameId === gameSuggestion.appid;
-            
+
             return (
               <ListItem
                 key={gameSuggestion.appid}
@@ -438,7 +437,12 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         <IconButton
                           edge="end"
                           aria-label="edit"
-                          onClick={() => handleEditClick(gameSuggestion.appid, gameSuggestion.comment)}
+                          onClick={() =>
+                            handleEditClick(
+                              gameSuggestion.appid,
+                              gameSuggestion.comment,
+                            )
+                          }
                           disabled={props.disabled}
                         >
                           <EditIcon />
@@ -487,7 +491,11 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                     />
                   </ListItemButton>
                 ) : (
-                  <Stack direction="column" spacing={2} sx={{ width: "100%", py: 1 }}>
+                  <Stack
+                    direction="column"
+                    spacing={2}
+                    sx={{ width: "100%", py: 1 }}
+                  >
                     <Typography variant="h6">{gameSuggestion.name}</Typography>
                     <TextField
                       fullWidth
