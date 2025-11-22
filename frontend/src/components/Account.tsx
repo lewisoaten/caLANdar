@@ -10,6 +10,7 @@ import {
   FormHelperText,
   Link,
   Grid,
+  CircularProgress,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useContext } from "react";
@@ -21,6 +22,7 @@ import { EventGame } from "../types/game_suggestions";
 import { useState } from "react";
 import moment from "moment";
 import GamesList from "./GamesList";
+import { useSnackbar } from "notistack";
 
 const Account = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -30,8 +32,11 @@ const Account = () => {
   const [games, setGames] = useState(new Map<number, EventGame[]>());
   const [gamesCount, setGamesCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
 
   const refreshGames = () => {
+    setRefreshing(true);
     fetch(`/api/profile/games/update`, {
       method: "POST",
       headers: {
@@ -40,7 +45,32 @@ const Account = () => {
         Authorization: "Bearer " + token,
       },
       body: JSON.stringify({}),
-    });
+    })
+      .then((response) => {
+        if (response.status === 200) {
+          enqueueSnackbar("Games refreshed successfully", {
+            variant: "success",
+          });
+        } else if (response.status === 401) {
+          signOut();
+        } else {
+          response
+            .text()
+            .then((data) => console.log(data))
+            .catch(() => {});
+          enqueueSnackbar(
+            `Failed to refresh games. Status: ${response.status}`,
+            { variant: "error" },
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Error refreshing games:", error);
+        enqueueSnackbar("Error refreshing games", { variant: "error" });
+      })
+      .finally(() => {
+        setRefreshing(false);
+      });
   };
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -182,8 +212,15 @@ const Account = () => {
               <Grid size={4}>
                 <Button
                   variant="outlined"
-                  startIcon={<RefreshIcon />}
+                  startIcon={
+                    refreshing ? (
+                      <CircularProgress size={20} thickness={6} />
+                    ) : (
+                      <RefreshIcon />
+                    )
+                  }
                   onClick={refreshGames}
+                  disabled={refreshing}
                 >
                   Refresh Games
                 </Button>
