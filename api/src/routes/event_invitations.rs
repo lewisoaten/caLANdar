@@ -157,7 +157,7 @@ pub async fn post(
     });
     crate::util::log_audit(
         pool.inner(),
-        Some(_user.email.clone()),
+        Some(_user.email),
         "invitation.create".to_string(),
         "invitation".to_string(),
         Some(format!("{}-{}", event_id, invitation_request.email)),
@@ -700,9 +700,11 @@ pub async fn send_custom_email(
         .map(|inv| inv.email.as_str())
         .collect();
 
+    let recipient_count = recipient_emails.len();
+
     match send_email_bcc(
         sender,
-        recipient_emails.clone(),
+        recipient_emails,
         email_request.subject.as_str(),
         body.as_str(),
     )
@@ -712,7 +714,7 @@ pub async fn send_custom_email(
             // Log audit entry
             let metadata = rocket::serde::json::serde_json::json!({
                 "event_id": event_id,
-                "recipient_count": recipient_emails.len(),
+                "recipient_count": recipient_count,
                 "filter": format!("{:?}", email_request.filter),
                 "subject": email_request.subject,
                 "email_type": "custom",

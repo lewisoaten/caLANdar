@@ -185,7 +185,10 @@ pub fn format_attendance_description(
 
     // Build all possible buckets with their metadata
     let mut all_buckets = Vec::new();
-    let mut current_day = time_begin.date_naive().and_hms_opt(6, 0, 0).unwrap();
+    let mut current_day = time_begin
+        .date_naive()
+        .and_hms_opt(6, 0, 0)
+        .expect("6:00:00 is a valid time");
     let time_begin_naive = time_begin.naive_utc();
     let time_end_naive = time_end.naive_utc();
 
@@ -246,7 +249,9 @@ pub fn format_attendance_description(
         .map(|(day, period)| format!("{day} {period}"))
         .collect();
 
-    let last = parts.pop().unwrap();
+    let last = parts
+        .pop()
+        .expect("parts is non-empty when selected.len() >= 3");
     format!("{}, and {}", parts.join(", "), last)
 }
 
