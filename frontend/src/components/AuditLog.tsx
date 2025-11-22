@@ -303,7 +303,16 @@ const AuditLog = () => {
 
   useEffect(() => {
     fetchLogs();
-  }, [page, rowsPerPage, userId, entityType, fromTimestamp, toTimestamp, token, isAdmin]);
+  }, [
+    page,
+    rowsPerPage,
+    userId,
+    entityType,
+    fromTimestamp,
+    toTimestamp,
+    token,
+    isAdmin,
+  ]);
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
