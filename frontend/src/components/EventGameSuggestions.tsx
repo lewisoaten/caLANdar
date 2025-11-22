@@ -34,6 +34,8 @@ import {
 } from "../types/game_suggestions";
 import GameOwners from "./GameOwners";
 
+const COMMENT_MAX_LENGTH = 500;
+
 interface EventGameSuggestionsProps {
   event_id: number;
   responded: number;
@@ -270,13 +272,20 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       }),
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok) {
+        if (response.status === 401) {
+          signOut();
+        } else if (response.status === 403) {
+          alert("Permission denied: You can only edit your own suggestions");
+          throw new Error("Permission denied");
+        } else if (response.status === 404) {
+          alert("Game suggestion not found");
+          throw new Error("Game suggestion not found");
+        } else if (response.ok) {
           return response
             .text()
             .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
         } else {
-          alert("Unable to update comment");
+          alert("Unable to update comment. Please try again.");
           throw new Error("Unable to update comment");
         }
       })
@@ -367,7 +376,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   onChange={(e) => setCommentValue(e.target.value)}
                   disabled={props.disabled}
                   helperText="Explain why you're suggesting this game"
-                  inputProps={{ maxLength: 500 }}
+                  inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
                 />
               </Grid>
               <Grid size={12}>
@@ -504,7 +513,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                       label="Comment"
                       value={editCommentValue}
                       onChange={(e) => setEditCommentValue(e.target.value)}
-                      inputProps={{ maxLength: 500 }}
+                      inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
                       disabled={props.disabled}
                     />
                     <Stack direction="row" spacing={2}>

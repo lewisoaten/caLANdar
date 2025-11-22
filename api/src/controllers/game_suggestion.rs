@@ -551,9 +551,7 @@ pub async fn update_comment(
     };
 
     // Update the comment
-    match game_suggestion::update_comment(pool, event_id, game_id, email.clone(), comment.clone())
-        .await
-    {
+    match game_suggestion::update_comment(pool, event_id, game_id, email.clone(), comment).await {
         Ok(game_suggestion) => {
             let result = add_owners_to_game(pool, game_suggestion.clone(), &invitations).await?;
 
@@ -562,7 +560,7 @@ pub async fn update_comment(
                 "event_id": event_id,
                 "game_id": game_id,
                 "game_name": game_suggestion.game_name,
-                "comment": comment,
+                "comment": game_suggestion.comment,
             });
             crate::util::log_audit(
                 pool,
@@ -576,6 +574,9 @@ pub async fn update_comment(
 
             Ok(result)
         }
+        Err(sqlx::Error::RowNotFound) => Err(Error::NotPermitted(
+            "You can only edit your own game suggestions".to_string(),
+        )),
         Err(e) => Err(Error::Controller(format!(
             "Unable to update comment due to: {e}"
         ))),
