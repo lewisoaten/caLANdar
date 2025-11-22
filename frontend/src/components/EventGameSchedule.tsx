@@ -1,9 +1,13 @@
 import * as React from "react";
-import { useEffect, useState, useContext } from "react";
+import { useEffect, useState, useContext, useCallback } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { Calendar, momentLocalizer, View } from "react-big-calendar";
+import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
+import { useSnackbar } from "notistack";
 import moment from "moment";
+import "moment/locale/en-gb"; // British English locale
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import {
   Box,
   Typography,
@@ -12,7 +16,32 @@ import {
   Container,
   styled,
   alpha,
+  Fab,
+  Drawer,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Divider,
+  Chip,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  TextField,
+  MenuItem,
 } from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { TimePicker } from "@mui/x-date-pickers/TimePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
+import {
+  Add as AddIcon,
+  SportsEsports as GameIcon,
+  Close as CloseIcon,
+} from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
@@ -22,8 +51,59 @@ import {
   toCalendarEvents,
 } from "../types/game_schedule";
 import { EventData } from "../types/events";
+import { GameSuggestion } from "../types/game_suggestions";
+
+// Set moment to use British locale
+moment.locale("en-gb");
 
 const localizer = momentLocalizer(moment);
+// Type the DragAndDropCalendar with our CalendarEvent type
+const DragAndDropCalendar = withDragAndDrop<CalendarEvent, object>(Calendar);
+
+// Clickable game suggestion item
+interface GameSuggestionItemProps {
+  game: GameSuggestion;
+  onClick: (game: GameSuggestion) => void;
+}
+
+const GameSuggestionItem: React.FC<GameSuggestionItemProps> = ({
+  game,
+  onClick,
+}) => {
+  return (
+    <ListItemButton
+      onClick={() => onClick(game)}
+      sx={{
+        p: 1.5,
+        borderRadius: 1,
+        border: "1px solid",
+        borderColor: "divider",
+        mb: 1,
+        "&:hover": {
+          borderColor: "primary.main",
+        },
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+      }}
+    >
+      <GameIcon fontSize="small" color="primary" />
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2" noWrap>
+          {game.name}
+        </Typography>
+        {game.votes > 0 && (
+          <Chip
+            label={`${game.votes} vote${game.votes !== 1 ? "s" : ""}`}
+            size="small"
+            color="primary"
+            sx={{ mt: 0.5, height: 20, fontSize: "0.7rem" }}
+          />
+        )}
+      </Box>
+    </ListItemButton>
+  );
+};
 
 // Styled calendar wrapper to apply MUI theme
 const StyledCalendarWrapper = styled(Box)(({ theme }) => ({
@@ -139,12 +219,67 @@ const StyledCalendarWrapper = styled(Box)(({ theme }) => ({
   },
 }));
 
+// Custom event component with delete button
+interface CustomEventProps {
+  event: CalendarEvent;
+  isAdmin: boolean;
+  onDelete: (scheduleId: number) => void;
+}
+
+const CustomEvent: React.FC<CustomEventProps> = ({
+  event,
+  isAdmin,
+  onDelete,
+}) => {
+  const [showDelete, setShowDelete] = useState(false);
+
+  return (
+    <Box
+      onMouseEnter={() => setShowDelete(true)}
+      onMouseLeave={() => setShowDelete(false)}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: "100%",
+        px: 0.5,
+      }}
+    >
+      <Typography variant="caption" noWrap sx={{ flex: 1 }}>
+        {event.title}
+      </Typography>
+      {isAdmin && showDelete && (
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(event.resource.id);
+          }}
+          sx={{
+            p: 0.25,
+            ml: 0.5,
+            bgcolor: "error.main",
+            color: "white",
+            "&:hover": {
+              bgcolor: "error.dark",
+            },
+          }}
+        >
+          <CloseIcon sx={{ fontSize: 14 }} />
+        </IconButton>
+      )}
+    </Box>
+  );
+};
+
 export default function EventGameSchedule() {
   const { id } = useParams<{ id: string }>();
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
+  const isAdmin = userDetails?.isAdmin || false;
   const theme = useTheme();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Event state
   const [eventData, setEventData] = useState<EventData | null>(null);
@@ -154,6 +289,419 @@ export default function EventGameSchedule() {
   const [schedule, setSchedule] = useState<GameScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>("day");
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+
+  // Game suggestions state
+  const [gameSuggestions, setGameSuggestions] = useState<GameSuggestion[]>([]);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [fabOpen, setFabOpen] = useState(false);
+
+  // Add game dialog state
+  const [addGameDialogOpen, setAddGameDialogOpen] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<GameSuggestion | null>(null);
+  const [selectedDateTime, setSelectedDateTime] =
+    useState<moment.Moment | null>(null);
+  const [duration, setDuration] = useState<number>(120);
+
+  // Refresh function to reload schedule
+  const refreshSchedule = useCallback(() => {
+    if (!eventData || !token) return;
+
+    setLoading(true);
+    fetch(`/api/events/${eventData.id}/game_schedule`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        else if (response.ok)
+          return response
+            .text()
+            .then(
+              (data) =>
+                JSON.parse(data, dateParser) as Array<GameScheduleEntry>,
+            );
+      })
+      .then((data) => {
+        if (data) {
+          setSchedule(data);
+        }
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching game schedule:", error);
+        setLoading(false);
+      });
+  }, [eventData, token, signOut]);
+
+  // Handle event drop (drag to new time)
+  const handleEventDrop = useCallback(
+    async ({
+      event,
+      start,
+      end,
+    }: {
+      event: CalendarEvent;
+      start: string | Date;
+      end: string | Date;
+    }) => {
+      if (!isAdmin || !token || !eventData) return;
+
+      const scheduleEntry = event.resource;
+      const startDate = start instanceof Date ? start : new Date(start);
+      const endDate = end instanceof Date ? end : new Date(end);
+      const durationMinutes = Math.round(
+        (endDate.getTime() - startDate.getTime()) / 60000,
+      );
+
+      // Check if the game would end beyond the event end time
+      const startMoment = moment(startDate);
+      const endMoment = moment(endDate);
+
+      if (endMoment.isAfter(eventData.timeEnd)) {
+        enqueueSnackbar(
+          `Cannot move game: it would end at ${endMoment.format(
+            "DD/MM/YYYY HH:mm",
+          )} which is after the event ends`,
+          { variant: "error" },
+        );
+        refreshSchedule(); // Refresh to reset the visual position
+        return;
+      }
+
+      if (startMoment.isBefore(eventData.timeBegin)) {
+        enqueueSnackbar(
+          `Cannot move game: it would start before the event begins`,
+          { variant: "error" },
+        );
+        refreshSchedule(); // Refresh to reset the visual position
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/events/${eventData.id}/game_schedule/${scheduleEntry.id}?as_admin=true`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+            body: JSON.stringify({
+              gameId: scheduleEntry.gameId,
+              startTime: startDate.toISOString(),
+              durationMinutes,
+            }),
+          },
+        );
+
+        if (response.status === 401) {
+          signOut();
+          return;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Failed to update schedule:", errorText);
+          if (errorText.toLowerCase().includes("overlap")) {
+            enqueueSnackbar(
+              "Cannot move game: it would overlap with another scheduled game",
+              {
+                variant: "error",
+              },
+            );
+          } else {
+            enqueueSnackbar("Failed to update game schedule", {
+              variant: "error",
+            });
+          }
+          return;
+        }
+
+        // Refresh schedule after successful update
+        refreshSchedule();
+        enqueueSnackbar("Game schedule updated successfully", {
+          variant: "success",
+        });
+      } catch (error) {
+        console.error("Error updating game schedule:", error);
+        enqueueSnackbar("An error occurred while updating the schedule", {
+          variant: "error",
+        });
+      }
+    },
+    [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar],
+  );
+
+  // Handle event resize
+  const handleEventResize = useCallback(
+    async ({
+      event,
+      start,
+      end,
+    }: {
+      event: CalendarEvent;
+      start: string | Date;
+      end: string | Date;
+    }) => {
+      if (!isAdmin || !token || !eventData) return;
+
+      const scheduleEntry = event.resource;
+      const startDate = start instanceof Date ? start : new Date(start);
+      const endDate = end instanceof Date ? end : new Date(end);
+      const durationMinutes = Math.round(
+        (endDate.getTime() - startDate.getTime()) / 60000,
+      );
+
+      // Check if the game would end beyond the event end time
+      const startMoment = moment(startDate);
+      const endMoment = moment(endDate);
+
+      if (endMoment.isAfter(eventData.timeEnd)) {
+        enqueueSnackbar(
+          `Cannot resize game: it would end at ${endMoment.format(
+            "DD/MM/YYYY HH:mm",
+          )} which is after the event ends`,
+          { variant: "error" },
+        );
+        refreshSchedule(); // Refresh to reset the visual size
+        return;
+      }
+
+      if (startMoment.isBefore(eventData.timeBegin)) {
+        enqueueSnackbar(
+          `Cannot resize game: it would start before the event begins`,
+          { variant: "error" },
+        );
+        refreshSchedule(); // Refresh to reset the visual size
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/events/${eventData.id}/game_schedule/${scheduleEntry.id}?as_admin=true`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+            body: JSON.stringify({
+              gameId: scheduleEntry.gameId,
+              startTime: startDate.toISOString(),
+              durationMinutes,
+            }),
+          },
+        );
+
+        if (response.status === 401) {
+          signOut();
+          return;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Failed to resize schedule:", errorText);
+          if (errorText.toLowerCase().includes("overlap")) {
+            enqueueSnackbar(
+              "Cannot resize game: it would overlap with another scheduled game",
+              {
+                variant: "error",
+              },
+            );
+          } else {
+            enqueueSnackbar("Failed to resize game schedule", {
+              variant: "error",
+            });
+          }
+          return;
+        }
+
+        // Refresh schedule after successful update
+        refreshSchedule();
+        enqueueSnackbar("Game duration updated successfully", {
+          variant: "success",
+        });
+      } catch (error) {
+        console.error("Error resizing game schedule:", error);
+        enqueueSnackbar("An error occurred while resizing the schedule", {
+          variant: "error",
+        });
+      }
+    },
+    [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar],
+  );
+
+  // Handle clicking on a game suggestion
+  const handleGameClick = useCallback(
+    (game: GameSuggestion) => {
+      setSelectedGame(game);
+      // Set default datetime to event start date at 18:00
+      if (eventData) {
+        const defaultDateTime = eventData.timeBegin
+          .clone()
+          .hours(18)
+          .minutes(0);
+        setSelectedDateTime(defaultDateTime);
+      }
+      setAddGameDialogOpen(true);
+    },
+    [eventData],
+  );
+
+  // Handle adding a game from the dialog
+  const handleAddGame = useCallback(async () => {
+    if (!isAdmin || !token || !eventData || !selectedGame || !selectedDateTime)
+      return;
+
+    // Check if the game would end beyond the event end time
+    const gameEndTime = selectedDateTime.clone().add(duration, "minutes");
+    if (gameEndTime.isAfter(eventData.timeEnd)) {
+      enqueueSnackbar(
+        `Cannot add game: it would end at ${gameEndTime.format(
+          "DD/MM/YYYY HH:mm",
+        )} which is after the event ends at ${eventData.timeEnd.format(
+          "DD/MM/YYYY HH:mm",
+        )}`,
+        { variant: "error" },
+      );
+      return;
+    }
+
+    // Check if the game would start before the event start time
+    if (selectedDateTime.isBefore(eventData.timeBegin)) {
+      enqueueSnackbar(
+        `Cannot add game: it would start before the event begins at ${eventData.timeBegin.format(
+          "DD/MM/YYYY HH:mm",
+        )}`,
+        { variant: "error" },
+      );
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/events/${eventData.id}/game_schedule?as_admin=true`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({
+            gameId: selectedGame.appid,
+            startTime: selectedDateTime.toISOString(),
+            durationMinutes: duration,
+          }),
+        },
+      );
+
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to create schedule:", errorText);
+        if (errorText.toLowerCase().includes("overlap")) {
+          enqueueSnackbar(
+            "Cannot add game: it would overlap with another scheduled game",
+            {
+              variant: "error",
+            },
+          );
+        } else {
+          enqueueSnackbar("Failed to add game to schedule", {
+            variant: "error",
+          });
+        }
+        return;
+      }
+
+      // Refresh schedule after successful creation
+      refreshSchedule();
+      setAddGameDialogOpen(false);
+      setFabOpen(false);
+      enqueueSnackbar(`${selectedGame.name} added to schedule successfully`, {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error creating game schedule:", error);
+      enqueueSnackbar("An error occurred while adding the game", {
+        variant: "error",
+      });
+    }
+  }, [
+    isAdmin,
+    token,
+    eventData,
+    selectedGame,
+    selectedDateTime,
+    duration,
+    signOut,
+    refreshSchedule,
+    enqueueSnackbar,
+  ]);
+
+  // Handle deleting a schedule entry
+  const handleDelete = useCallback(
+    async (scheduleId: number) => {
+      if (!isAdmin || !token || !eventData) return;
+
+      if (
+        !window.confirm(
+          "Are you sure you want to remove this game from the schedule?",
+        )
+      ) {
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `/api/events/${eventData.id}/game_schedule/${scheduleId}?as_admin=true`,
+          {
+            method: "DELETE",
+            headers: {
+              Authorization: "Bearer " + token,
+            },
+          },
+        );
+
+        if (response.status === 401) {
+          signOut();
+          return;
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("Failed to delete schedule:", errorText);
+          enqueueSnackbar("Failed to remove game from schedule", {
+            variant: "error",
+          });
+          return;
+        }
+
+        // Refresh schedule after successful deletion
+        refreshSchedule();
+        enqueueSnackbar("Game removed from schedule successfully", {
+          variant: "success",
+        });
+      } catch (error) {
+        console.error("Error deleting game schedule:", error);
+        enqueueSnackbar("An error occurred while removing the game", {
+          variant: "error",
+        });
+      }
+    },
+    [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar],
+  );
 
   // Fetch event data
   useEffect(() => {
@@ -197,10 +745,46 @@ export default function EventGameSchedule() {
 
   // Fetch schedule data
   useEffect(() => {
-    if (!eventData || !token) return;
+    refreshSchedule();
+  }, [refreshSchedule]);
 
-    setLoading(true);
-    fetch(`/api/events/${eventData.id}/game_schedule`, {
+  // Set current date to event start when event loads
+  useEffect(() => {
+    if (eventData) {
+      setCurrentDate(eventData.timeBegin.toDate());
+    }
+  }, [eventData]);
+
+  // Calculate scroll position: use the later of current time or event start time
+  // This must be called unconditionally (before any returns) to follow Rules of Hooks
+  const scrollToTime = React.useMemo(() => {
+    if (!eventData) {
+      // Default to current time if no event data yet
+      const now = new Date();
+      const scrollTime = new Date();
+      scrollTime.setHours(now.getHours(), now.getMinutes(), 0, 0);
+      return scrollTime;
+    }
+
+    const now = new Date();
+    const eventStart = eventData.timeBegin.toDate();
+
+    // Use whichever is later
+    const targetTime = now > eventStart ? now : eventStart;
+
+    // Create a date object with just the time component for scrolling
+    const scrollTime = new Date();
+    scrollTime.setHours(targetTime.getHours(), targetTime.getMinutes(), 0, 0);
+
+    return scrollTime;
+  }, [eventData]);
+
+  // Fetch game suggestions for the event
+  useEffect(() => {
+    if (!eventData || !token || !isAdmin) return;
+
+    setSuggestionsLoading(true);
+    fetch(`/api/events/${eventData.id}/suggested_games`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -209,25 +793,27 @@ export default function EventGameSchedule() {
     })
       .then((response) => {
         if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then(
-              (data) =>
-                JSON.parse(data, dateParser) as Array<GameScheduleEntry>,
-            );
+        if (!response.ok) {
+          setSuggestionsLoading(false);
+          return;
+        }
+        return response
+          .text()
+          .then(
+            (data) => JSON.parse(data, dateParser) as Array<GameSuggestion>,
+          );
       })
       .then((data) => {
         if (data) {
-          setSchedule(data);
+          setGameSuggestions(data);
         }
-        setLoading(false);
+        setSuggestionsLoading(false);
       })
       .catch((error) => {
-        console.error("Error fetching game schedule:", error);
-        setLoading(false);
+        console.error("Error fetching game suggestions:", error);
+        setSuggestionsLoading(false);
       });
-  }, [eventData?.id, token, signOut]);
+  }, [eventData, token, isAdmin, signOut]);
 
   // Show loading state while event data is being fetched
   if (eventLoading || !eventData) {
@@ -238,9 +824,14 @@ export default function EventGameSchedule() {
     );
   }
 
-  // Calculate min and max times for the calendar based on event duration
-  const minTime = eventData.timeBegin.toDate();
-  const maxTime = eventData.timeEnd.toDate();
+  // Calculate min and max times for the calendar
+  // For react-big-calendar day/week views, min/max represent the time range to display each day
+  // We'll show a full 24-hour range, or restrict to reasonable gaming hours
+  const minTime = new Date();
+  minTime.setHours(0, 0, 0, 0); // Start at midnight
+
+  const maxTime = new Date();
+  maxTime.setHours(23, 59, 59, 999); // End at 11:59 PM
 
   // Convert schedule entries to calendar events
   const events: CalendarEvent[] = toCalendarEvents(schedule);
@@ -264,50 +855,237 @@ export default function EventGameSchedule() {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Game Schedule
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          View the schedule of games for this event
-        </Typography>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Game Schedule
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            {schedule.length === 0 && isAdmin
+              ? "Click games in the menu to add them to the schedule"
+              : "View the schedule of games for this event"}
+          </Typography>
 
-        {schedule.length === 0 ? (
           <Box
             sx={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              minHeight: "400px",
+              mb: 2,
+              p: 1.5,
+              borderRadius: 1,
+              bgcolor: alpha(theme.palette.primary.main, 0.08),
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
             }}
           >
-            <Typography variant="body1" color="text.secondary">
-              No games scheduled yet. Admins can add games to the schedule.
+            <Typography
+              variant="body2"
+              color="text.primary"
+              fontWeight="medium"
+            >
+              📅 Event Period:{" "}
+              {eventData.timeBegin.format("MMM D, YYYY h:mm A")} →{" "}
+              {eventData.timeEnd.format("MMM D, YYYY h:mm A")}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 0.5, display: "block" }}
+            >
+              Use the calendar navigation to view different days within this
+              period
             </Typography>
           </Box>
-        ) : (
-          <StyledCalendarWrapper>
-            <Calendar
-              localizer={localizer}
-              events={events}
-              startAccessor="start"
-              endAccessor="end"
-              style={{ height: 600 }}
-              view={view}
-              onView={(newView) => setView(newView)}
-              views={["day", "agenda"]}
-              min={minTime}
-              max={maxTime}
-              defaultDate={eventData.timeBegin.toDate()}
-              step={30} // 30-minute intervals
-              timeslots={2} // Show :00 and :30
-              eventPropGetter={eventStyleGetter}
-              tooltipAccessor={(event: CalendarEvent) =>
-                `${event.title} - ${event.resource.durationMinutes} minutes`
-              }
-            />
-          </StyledCalendarWrapper>
-        )}
+        </Box>
+
+        <StyledCalendarWrapper sx={{ height: 600 }}>
+          <DragAndDropCalendar
+            localizer={localizer}
+            events={events}
+            startAccessor="start"
+            endAccessor="end"
+            style={{ height: "100%" }}
+            view={view}
+            onView={(newView) => setView(newView)}
+            date={currentDate}
+            onNavigate={(date) => setCurrentDate(date)}
+            views={["day", "agenda"]}
+            min={minTime}
+            max={maxTime}
+            scrollToTime={scrollToTime}
+            step={30} // 30-minute intervals
+            timeslots={2} // Show :00 and :30
+            eventPropGetter={eventStyleGetter}
+            tooltipAccessor={(event: CalendarEvent) =>
+              `${event.title} - ${event.resource.durationMinutes} minutes`
+            }
+            // Drag-and-drop props (only enabled for admins)
+            draggableAccessor={() => isAdmin}
+            resizable={isAdmin}
+            onEventDrop={handleEventDrop}
+            onEventResize={handleEventResize}
+            // Custom event component with delete button
+            components={{
+              event: (props) => (
+                <CustomEvent
+                  event={props.event}
+                  isAdmin={isAdmin}
+                  onDelete={handleDelete}
+                />
+              ),
+            }}
+          />
+        </StyledCalendarWrapper>
       </Paper>
+
+      {/* FAB and drawer with game suggestions (admin only) */}
+      {isAdmin && (
+        <>
+          <Fab
+            color="primary"
+            aria-label="add game"
+            onClick={() => setFabOpen(true)}
+            sx={{
+              position: "fixed",
+              bottom: 16,
+              right: 16,
+            }}
+          >
+            <AddIcon />
+          </Fab>
+
+          <Drawer
+            anchor="right"
+            open={fabOpen}
+            onClose={() => setFabOpen(false)}
+            sx={{
+              "& .MuiDrawer-paper": {
+                width: 350,
+                p: 2,
+              },
+            }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mb: 2,
+              }}
+            >
+              <Typography variant="h6">Drag Games to Schedule</Typography>
+              <IconButton onClick={() => setFabOpen(false)} size="small">
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            <Divider sx={{ mb: 2 }} />
+
+            {suggestionsLoading ? (
+              <Box sx={{ p: 2 }}>
+                <Skeleton variant="rectangular" height={60} sx={{ mb: 1 }} />
+                <Skeleton variant="rectangular" height={60} sx={{ mb: 1 }} />
+                <Skeleton variant="rectangular" height={60} />
+              </Box>
+            ) : gameSuggestions.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+                No game suggestions available. Add games to the event first.
+              </Typography>
+            ) : (
+              <List sx={{ p: 0 }}>
+                {gameSuggestions
+                  .sort((a, b) => b.votes - a.votes) // Sort by votes descending
+                  .map((game) => (
+                    <GameSuggestionItem
+                      key={game.appid}
+                      game={game}
+                      onClick={handleGameClick}
+                    />
+                  ))}
+              </List>
+            )}
+
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="caption" color="text.secondary">
+              Click on a game to add it to the schedule.
+            </Typography>
+          </Drawer>
+
+          {/* Add game dialog */}
+          <Dialog
+            open={addGameDialogOpen}
+            onClose={() => setAddGameDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>Add {selectedGame?.name} to Schedule</DialogTitle>
+            <DialogContent>
+              <LocalizationProvider
+                dateAdapter={AdapterMoment}
+                adapterLocale="en-gb"
+              >
+                <Box
+                  sx={{
+                    pt: 2,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 2,
+                  }}
+                >
+                  <DatePicker
+                    label="Date"
+                    value={selectedDateTime}
+                    onChange={(newValue) => setSelectedDateTime(newValue)}
+                    minDate={eventData?.timeBegin}
+                    maxDate={eventData?.timeEnd}
+                    format="DD/MM/YYYY"
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        variant: "outlined",
+                      },
+                    }}
+                  />
+                  <TimePicker
+                    label="Start Time"
+                    value={selectedDateTime}
+                    onChange={(newValue) => setSelectedDateTime(newValue)}
+                    ampm={false}
+                    format="HH:mm"
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        variant: "outlined",
+                      },
+                    }}
+                  />
+                  <TextField
+                    label="Duration"
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                    select
+                    fullWidth
+                  >
+                    <MenuItem value={30}>30 minutes</MenuItem>
+                    <MenuItem value={60}>1 hour</MenuItem>
+                    <MenuItem value={90}>1.5 hours</MenuItem>
+                    <MenuItem value={120}>2 hours</MenuItem>
+                    <MenuItem value={180}>3 hours</MenuItem>
+                    <MenuItem value={240}>4 hours</MenuItem>
+                  </TextField>
+                </Box>
+              </LocalizationProvider>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setAddGameDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAddGame}
+                variant="contained"
+                color="primary"
+              >
+                Add to Schedule
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </>
+      )}
     </Container>
   );
 }
