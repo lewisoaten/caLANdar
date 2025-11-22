@@ -8,6 +8,15 @@ use crate::{
     routes::events::{Event, EventSubmit},
 };
 
+// Response struct for paginated events
+pub struct PaginatedEventsResponse {
+    pub events: Vec<Event>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
+}
+
 // Implement From for EventsGetResponse from Event
 impl From<crate::repositories::event::Event> for Event {
     fn from(event: crate::repositories::event::Event) -> Self {
@@ -33,6 +42,32 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
         }
         Err(e) => Err(Error::Controller(format!(
             "Unable to get list of events due to: {e}"
+        ))),
+    }
+}
+
+pub async fn get_all_paginated(
+    pool: &PgPool,
+    page: i64,
+    limit: i64,
+    filter: event::EventFilter,
+) -> Result<PaginatedEventsResponse, Error> {
+    let params = event::PaginationParams {
+        page,
+        limit,
+        filter,
+    };
+
+    match event::index_paginated(pool, params).await {
+        Ok(paginated) => Ok(PaginatedEventsResponse {
+            events: paginated.events.into_iter().map(Event::from).collect(),
+            total: paginated.total,
+            page: paginated.page,
+            limit: paginated.limit,
+            total_pages: paginated.total_pages,
+        }),
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to get paginated list of events due to: {e}"
         ))),
     }
 }
