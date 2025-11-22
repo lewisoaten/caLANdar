@@ -183,10 +183,7 @@ const GamersAdmin = () => {
     const gamerData = newRow as GamerData;
 
     // Validate Steam ID (17 digits)
-    if (
-      gamerData.steamId &&
-      (!/^\d{17}$/.test(gamerData.steamId) || gamerData.steamId.length !== 17)
-    ) {
+    if (gamerData.steamId && !/^\d{17}$/.test(gamerData.steamId)) {
       enqueueSnackbar("Steam ID must be exactly 17 digits", {
         variant: "error",
       });
