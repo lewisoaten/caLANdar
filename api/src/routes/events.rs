@@ -172,9 +172,9 @@ pub async fn put(
     event_submit: Json<EventSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<status::NoContent, EventPutError> {
-    match event::edit(pool, id, event_submit.into_inner()).await {
+    match event::edit(pool, id, event_submit.into_inner(), user.email).await {
         Ok(_) => Ok(status::NoContent),
         Err(Error::BadInput(e)) => Err(EventPutError::BadRequest(format!(
             "Invalid request, due to {e}"
@@ -202,9 +202,9 @@ pub async fn delete(
     id: i32,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, EventDeleteError> {
-    match event::delete(pool, id).await {
+    match event::delete(pool, id, user.email).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(Error::NoData(_)) => Err(EventDeleteError::NotFound(format!(
             "Event with ID {id} not found"
@@ -224,9 +224,9 @@ pub async fn post(
     event_submit: Json<EventSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<status::Created<Json<Event>>, EventPostError> {
-    match event::create(pool, event_submit.into_inner()).await {
+    match event::create(pool, event_submit.into_inner(), user.email).await {
         Ok(event) => Ok(
             status::Created::new("/events/".to_string() + &event.id.to_string()).body(Json(event)),
         ),

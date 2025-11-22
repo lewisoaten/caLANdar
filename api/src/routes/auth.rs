@@ -84,9 +84,10 @@ pub struct VerifyEmailResponse {
 #[allow(clippy::needless_pass_by_value)]
 #[openapi(tag = "Auth")]
 #[post("/verify-email", format = "json", data = "<verify_email_request>")]
-pub fn verify_email(
+pub async fn verify_email(
     verify_email_request: Json<VerifyEmailRequest>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
+    pool: &State<sqlx::PgPool>,
 ) -> Result<Json<VerifyEmailResponse>, rocket::response::status::BadRequest<String>> {
     // decode and verify token is a valid email verification token, and has not expired
 
@@ -134,6 +135,17 @@ pub fn verify_email(
     let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
 
     let is_admin = admins.contains(&typed_token.sub.to_lowercase().as_str());
+
+    // Log successful login
+    crate::util::log_audit(
+        pool,
+        Some(typed_token.sub.clone()),
+        "auth.login".to_string(),
+        "auth".to_string(),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(VerifyEmailResponse {
         token,

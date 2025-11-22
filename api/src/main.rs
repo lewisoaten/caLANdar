@@ -298,6 +298,7 @@ async fn rocket(
                 routes::profiles::put,
                 routes::profiles::post_games_update,
                 routes::gamers::get_all,
+                routes::audit_logs::get_audit_logs,
             ],
         )
         .mount(

@@ -1,3 +1,4 @@
+pub mod audit_log;
 pub mod event;
 pub mod event_seating_config;
 pub mod game;

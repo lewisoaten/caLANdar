@@ -94,7 +94,23 @@ pub async fn edit(
     };
 
     match profile::update(pool, email.clone(), Some(new_steam_id), None).await {
-        Ok(profile) => Ok(Profile::from(profile)),
+        Ok(profile) => {
+            // Log audit entry for profile update
+            let metadata = rocket::serde::json::serde_json::json!({
+                "steam_id": new_steam_id,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "profile.update".to_string(),
+                "profile".to_string(),
+                Some(new_steam_id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Profile::from(profile))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to update profile due to: {e}"
         ))),
@@ -110,6 +126,8 @@ pub async fn update_user_games(
 
     let user_games = steam_api::get_owned_games(steam_api_key, &profile.steam_id).await?;
 
+    let games_count = user_games.response.games.len();
+
     // Create each user game in the user_games.rs repository
     for game in user_games.response.games {
         match user_games::create(pool, email.clone(), game.appid, game.playtime_forever).await {
@@ -121,6 +139,21 @@ pub async fn update_user_games(
             }
         }
     }
+
+    // Log audit entry for games refresh
+    let metadata = rocket::serde::json::serde_json::json!({
+        "games_count": games_count,
+        "steam_id": &profile.steam_id,
+    });
+    crate::util::log_audit(
+        pool,
+        Some(email.clone()),
+        "profile.games_refresh".to_string(),
+        "profile".to_string(),
+        Some(email.clone()),
+        Some(metadata),
+    )
+    .await;
 
     // Return the updated profile
     match profile::read(pool, email.clone()).await {

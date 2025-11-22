@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 
-#[derive(sqlx::Type)]
+#[derive(Clone, sqlx::Type)]
 #[sqlx(type_name = "vote", rename_all = "lowercase")]
 pub enum GameVote {
     Yes,
@@ -10,6 +10,7 @@ pub enum GameVote {
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct GameSuggestion {
     pub event_id: i32,
     pub game_id: i64,

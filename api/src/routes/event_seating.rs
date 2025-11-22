@@ -136,9 +136,10 @@ pub async fn put(
     config_submit: Json<EventSeatingConfigSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<EventSeatingConfig>, EventSeatingConfigPutError> {
-    match event_seating_config::upsert(pool, event_id, config_submit.into_inner()).await {
+    match event_seating_config::upsert(pool, event_id, config_submit.into_inner(), user.email).await
+    {
         Ok(config) => Ok(Json(config)),
         Err(Error::BadInput(e)) => Err(EventSeatingConfigPutError::BadRequest(format!(
             "Invalid request, due to {e}"

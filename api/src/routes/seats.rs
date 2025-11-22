@@ -188,9 +188,9 @@ pub async fn post(
     seat_submit: Json<SeatSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<Seat>, SeatPostError> {
-    match seat::create(pool, event_id, seat_submit.into_inner()).await {
+    match seat::create(pool, event_id, seat_submit.into_inner(), user.email).await {
         Ok(seat) => Ok(Json(seat)),
         Err(Error::BadInput(e)) => Err(SeatPostError::BadRequest(format!(
             "Invalid request, due to {e}"
@@ -222,9 +222,9 @@ pub async fn put(
     seat_submit: Json<SeatSubmit>,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<Seat>, SeatPutError> {
-    match seat::update(pool, seat_id, seat_submit.into_inner()).await {
+    match seat::update(pool, seat_id, seat_submit.into_inner(), user.email).await {
         Ok(seat) => Ok(Json(seat)),
         Err(Error::BadInput(e)) => Err(SeatPutError::BadRequest(format!(
             "Invalid request, due to {e}"
@@ -245,9 +245,9 @@ pub async fn delete(
     seat_id: i32,
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<rocket::response::status::NoContent, SeatDeleteError> {
-    match seat::delete(pool, seat_id).await {
+    match seat::delete(pool, seat_id, user.email).await {
         Ok(()) => Ok(rocket::response::status::NoContent),
         Err(e) => Err(SeatDeleteError::InternalServerError(format!(
             "Error deleting seat, due to: {e}"

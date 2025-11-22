@@ -141,7 +141,7 @@ pub async fn get_user(pool: &PgPool, id: i32, user_email: String) -> Result<Even
     }
 }
 
-pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
+pub async fn delete(pool: &PgPool, id: i32, user_email: String) -> Result<(), Error> {
     // Build new EventFilter
     let event_filter_values = event::Filter {
         ids: Some(vec![id]),
@@ -149,14 +149,30 @@ pub async fn delete(pool: &PgPool, id: i32) -> Result<(), Error> {
 
     // Delete event
     match event::delete(pool, event_filter_values).await {
-        Ok(()) => Ok(()),
+        Ok(()) => {
+            // Log audit entry
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "event.delete".to_string(),
+                "event".to_string(),
+                Some(id.to_string()),
+                None,
+            )
+            .await;
+            Ok(())
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to delete event due to: {e}"
         ))),
     }
 }
 
-pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Error> {
+pub async fn create(
+    pool: &PgPool,
+    new_event: EventSubmit,
+    user_email: String,
+) -> Result<Event, Error> {
     let image: Option<Vec<u8>> = match image_string_to_bytes(new_event.image) {
         Ok(image) => image,
         Err(e) => return Err(e),
@@ -165,7 +181,7 @@ pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Erro
     // Create event
     match event::create(
         pool,
-        new_event.title,
+        new_event.title.clone(),
         new_event.description,
         image,
         new_event.time_begin,
@@ -173,14 +189,35 @@ pub async fn create(pool: &PgPool, new_event: EventSubmit) -> Result<Event, Erro
     )
     .await
     {
-        Ok(event) => Ok(Event::from(event)),
+        Ok(event) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "title": new_event.title,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "event.create".to_string(),
+                "event".to_string(),
+                Some(event.id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Event::from(event))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create event due to: {e}"
         ))),
     }
 }
 
-pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Event, Error> {
+pub async fn edit(
+    pool: &PgPool,
+    id: i32,
+    new_event: EventSubmit,
+    user_email: String,
+) -> Result<Event, Error> {
     // Check if time_end is after time_begin
     if new_event.time_end < new_event.time_begin {
         return Err(Error::BadInput(
@@ -197,7 +234,7 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
     match event::edit(
         pool,
         id,
-        new_event.title,
+        new_event.title.clone(),
         new_event.description,
         image,
         new_event.time_begin,
@@ -205,7 +242,23 @@ pub async fn edit(pool: &PgPool, id: i32, new_event: EventSubmit) -> Result<Even
     )
     .await
     {
-        Ok(event) => Ok(Event::from(event)),
+        Ok(event) => {
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "title": new_event.title,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(user_email),
+                "event.update".to_string(),
+                "event".to_string(),
+                Some(id.to_string()),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(Event::from(event))
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to create event due to: {e}"
         ))),

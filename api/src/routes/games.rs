@@ -23,10 +23,23 @@ pub async fn steam_game_update_v2(
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<Json<()>, UpdateGameError> {
     match game::update(pool, steam_api_key.inner()).await {
-        Ok(()) => Ok(Json(())),
+        Ok(()) => {
+            // Log audit entry
+            crate::util::log_audit(
+                pool.inner(),
+                Some(user.email),
+                "steam_games.update".to_string(),
+                "steam_games".to_string(),
+                None,
+                None,
+            )
+            .await;
+
+            Ok(Json(()))
+        }
         Err(e) => Err(UpdateGameError::InternalServerError(format!(
             "Error updating games, due to: {e}"
         ))),

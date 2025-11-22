@@ -299,12 +299,33 @@ pub async fn create(
         pool,
         event_id,
         new_event_game_suggestion.appid,
-        email,
-        new_event_game_suggestion.comment,
+        email.clone(),
+        new_event_game_suggestion.comment.clone(),
     )
     .await
     {
-        Ok(game_suggestion) => Ok(add_owners_to_game(pool, game_suggestion, &invitations).await?),
+        Ok(game_suggestion) => {
+            let result = add_owners_to_game(pool, game_suggestion.clone(), &invitations).await?;
+
+            // Log audit entry
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "game_id": new_event_game_suggestion.appid,
+                "game_name": game_suggestion.game_name,
+                "comment": new_event_game_suggestion.comment,
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "game_suggestion.create".to_string(),
+                "game_suggestion".to_string(),
+                Some(format!("{}-{}", event_id, new_event_game_suggestion.appid)),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(result)
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to get event due to: {e}"
         ))),
@@ -364,8 +385,29 @@ pub async fn vote(
     };
 
     // Insert game suggestion
-    match game_suggestion::edit(pool, event_id, game_id, email, vote.into()).await {
-        Ok(game_suggestion) => Ok(add_owners_to_game(pool, game_suggestion, &invitations).await?),
+    match game_suggestion::edit(pool, event_id, game_id, email.clone(), vote.clone().into()).await {
+        Ok(game_suggestion) => {
+            let result = add_owners_to_game(pool, game_suggestion.clone(), &invitations).await?;
+
+            // Log audit entry for game vote
+            let metadata = rocket::serde::json::serde_json::json!({
+                "event_id": event_id,
+                "game_id": game_id,
+                "game_name": game_suggestion.game_name,
+                "vote": format!("{:?}", vote),
+            });
+            crate::util::log_audit(
+                pool,
+                Some(email),
+                "game_vote.update".to_string(),
+                "game_vote".to_string(),
+                Some(format!("{event_id}-{game_id}")),
+                Some(metadata),
+            )
+            .await;
+
+            Ok(result)
+        }
         Err(e) => Err(Error::Controller(format!(
             "Unable to get event due to: {e}"
         ))),
