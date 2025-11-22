@@ -29,6 +29,7 @@ const Account = () => {
   const [profile, setProfile] = useState(defaultProfileData);
   const [games, setGames] = useState(new Map<number, EventGame[]>());
   const [gamesCount, setGamesCount] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const refreshGames = () => {
     fetch(`/api/profile/games/update`, {
@@ -63,50 +64,61 @@ const Account = () => {
   };
 
   const loadNewPage = (page: number) => {
+    setLoading(true);
     fetch(`/api/profile?page=${page}&count=12`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: "Bearer " + token,
       },
-    }).then((response) => {
-      if (response.status === 401) signOut();
-      if (response.status === 404) setProfile(defaultProfileData);
-      else if (response.ok)
-        return response.json().then((data) => {
-          setProfile(data);
-          // Sort Games
-          let games = data.games.sort(
-            (a: { playtimeForever: number }, b: { playtimeForever: number }) =>
-              b.playtimeForever - a.playtimeForever,
-          );
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        if (response.status === 404) {
+          setProfile(defaultProfileData);
+          setLoading(false);
+        } else if (response.ok)
+          return response.json().then((data) => {
+            setProfile(data);
+            // Sort Games
+            let games = data.games.sort(
+              (
+                a: { playtimeForever: number },
+                b: { playtimeForever: number },
+              ) => b.playtimeForever - a.playtimeForever,
+            );
 
-          // Map UserGame to EventGame
-          games = games.map(
-            (game: {
-              appid: number;
-              name: string;
-              playtimeForever: number;
-            }) => {
-              return {
-                appid: game.appid,
-                name: game.name,
-                gamerOwned: [],
-                playtimeForever: game.playtimeForever,
-                lastModified: moment(),
-              } as EventGame;
-            },
-          );
+            // Map UserGame to EventGame
+            games = games.map(
+              (game: {
+                appid: number;
+                name: string;
+                playtimeForever: number;
+              }) => {
+                return {
+                  appid: game.appid,
+                  name: game.name,
+                  gamerOwned: [],
+                  playtimeForever: game.playtimeForever,
+                  lastModified: moment(),
+                } as EventGame;
+              },
+            );
 
-          const gamesMap = new Map<number, EventGame[]>();
+            const gamesMap = new Map<number, EventGame[]>();
 
-          gamesMap.set(1, games);
+            gamesMap.set(1, games);
 
-          setGames(gamesMap);
+            setGames(gamesMap);
 
-          setGamesCount(data.gameCount);
-        });
-    });
+            setGamesCount(data.gameCount);
+            setLoading(false);
+          });
+      })
+      .catch((error) => {
+        console.error("Error loading profile games:", error);
+        setLoading(false);
+      });
   };
 
   return (
@@ -188,6 +200,7 @@ const Account = () => {
           loadNewPage={loadNewPage}
           games={games}
           gamesCount={gamesCount}
+          loading={loading}
         />
       </Grid>
     </Container>

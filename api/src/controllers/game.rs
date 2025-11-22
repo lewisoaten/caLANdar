@@ -43,19 +43,20 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> 
         ));
     };
 
-    let steam_games: steam_api::SteamAPISteamGameApplistWrapperV2 =
-        match steam_api::get_app_list_v2(steam_api_key).await {
-            Ok(steam_games) => steam_games,
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Error parsing steam game list: {e}"
-                )))
-            }
-        };
+    let steam_games = match steam_api::get_app_list(steam_api_key).await {
+        Ok(steam_games) => steam_games,
+        Err(e) => {
+            return Err(Error::Controller(format!(
+                "Error fetching steam game list: {e}"
+            )))
+        }
+    };
+
+    log::info!("Retrieved {} games from Steam API", steam_games.len());
 
     let chunk_size = 20;
 
-    for chunk in steam_games.applist.apps.chunks(chunk_size) {
+    for chunk in steam_games.chunks(chunk_size) {
         let mut insert_promises = vec![];
         for steam_game in chunk {
             insert_promises.push(game::create(
