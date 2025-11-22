@@ -1,10 +1,10 @@
 use crate::{
-    auth::User,
+    auth::{AdminUser, User},
     controllers::{game_schedule, Error},
 };
 use chrono::{DateTime, Utc};
 use rocket::{
-    get,
+    delete, get, patch, post,
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
@@ -106,6 +106,99 @@ pub async fn get_all(
         Err(Error::NotPermitted(e)) => Err(GameScheduleGetError::Unauthorized(e)),
         Err(e) => Err(GameScheduleGetError::InternalServerError(format!(
             "Error getting game schedule, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
+    GameScheduleCreateError,
+    BadRequest,
+    Unauthorized,
+    InternalServerError
+);
+
+/// Create a new scheduled game (admin only)
+#[openapi(tag = "Game Schedule")]
+#[post(
+    "/events/<event_id>/game_schedule",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn create(
+    event_id: i32,
+    request: Json<GameScheduleRequest>,
+    pool: &State<PgPool>,
+    admin_user: AdminUser,
+) -> Result<Json<GameScheduleEntry>, GameScheduleCreateError> {
+    match game_schedule::create(pool, event_id, request.into_inner(), &admin_user.email).await {
+        Ok(entry) => Ok(Json(entry)),
+        Err(Error::NotPermitted(e)) => Err(GameScheduleCreateError::Unauthorized(e)),
+        Err(Error::Controller(e)) if e.contains("overlap") => {
+            Err(GameScheduleCreateError::BadRequest(e))
+        }
+        Err(e) => Err(GameScheduleCreateError::InternalServerError(format!(
+            "Error creating game schedule, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
+    GameScheduleUpdateError,
+    BadRequest,
+    Unauthorized,
+    InternalServerError
+);
+
+/// Update an existing scheduled game (admin only)
+#[openapi(tag = "Game Schedule")]
+#[patch(
+    "/events/<_event_id>/game_schedule/<schedule_id>",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn update(
+    _event_id: i32,
+    schedule_id: i32,
+    request: Json<GameScheduleRequest>,
+    pool: &State<PgPool>,
+    admin_user: AdminUser,
+) -> Result<Json<GameScheduleEntry>, GameScheduleUpdateError> {
+    match game_schedule::update(pool, schedule_id, request.into_inner(), &admin_user.email).await {
+        Ok(entry) => Ok(Json(entry)),
+        Err(Error::NotPermitted(e)) => Err(GameScheduleUpdateError::Unauthorized(e)),
+        Err(Error::Controller(e)) if e.contains("overlap") || e.contains("not found") => {
+            Err(GameScheduleUpdateError::BadRequest(e))
+        }
+        Err(e) => Err(GameScheduleUpdateError::InternalServerError(format!(
+            "Error updating game schedule, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
+    GameScheduleDeleteError,
+    BadRequest,
+    Unauthorized,
+    InternalServerError
+);
+
+/// Delete a scheduled game (admin only)
+#[openapi(tag = "Game Schedule")]
+#[delete("/events/<_event_id>/game_schedule/<schedule_id>")]
+pub async fn delete(
+    _event_id: i32,
+    schedule_id: i32,
+    pool: &State<PgPool>,
+    admin_user: AdminUser,
+) -> Result<(), GameScheduleDeleteError> {
+    match game_schedule::delete(pool, schedule_id, &admin_user.email).await {
+        Ok(()) => Ok(()),
+        Err(Error::NotPermitted(e)) => Err(GameScheduleDeleteError::Unauthorized(e)),
+        Err(Error::Controller(e)) if e.contains("not found") => {
+            Err(GameScheduleDeleteError::BadRequest(e))
+        }
+        Err(e) => Err(GameScheduleDeleteError::InternalServerError(format!(
+            "Error deleting game schedule, due to: {e}"
         ))),
     }
 }

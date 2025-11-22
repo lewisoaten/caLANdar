@@ -50,20 +50,33 @@ pub async fn get_all(
     }
 }
 
-/// Create a new scheduled game (Slice 2 - will add validation)
-#[allow(dead_code)]
+/// Create a new scheduled game
 pub async fn create(
     pool: &PgPool,
     event_id: i32,
     request: GameScheduleRequest,
-    _email: &str,
+    email: &str,
 ) -> Result<GameScheduleEntry, Error> {
-    // Slice 2 will add:
-    // - Admin permission check
-    // - Overlap validation
-    // - Audit logging
+    // Note: Admin permission check is handled by AdminUser in routes layer
 
-    match game_schedule::create(
+    // Validate no overlap with existing pinned games
+    if game_schedule::has_overlap(
+        pool,
+        event_id,
+        request.start_time,
+        request.duration_minutes,
+        None, // No existing schedule_id for new entry
+    )
+    .await
+    .map_err(|e| Error::Controller(format!("Unable to check for overlaps due to: {e}")))?
+    {
+        return Err(Error::Controller(
+            "Cannot create game schedule: overlaps with existing pinned game".to_string(),
+        ));
+    }
+
+    // Create the schedule entry
+    let schedule = game_schedule::create(
         pool,
         event_id,
         request.game_id,
@@ -72,53 +85,122 @@ pub async fn create(
         true, // is_pinned = true for manually created games
     )
     .await
-    {
-        Ok(schedule) => Ok(GameScheduleEntry::from(schedule)),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to create game schedule due to: {e}"
-        ))),
-    }
+    .map_err(|e| Error::Controller(format!("Unable to create game schedule due to: {e}")))?;
+
+    // Audit log
+    crate::util::log_audit(
+        pool,
+        Some(email.to_string()),
+        "game_schedule.create".to_string(),
+        "game_schedule".to_string(),
+        Some(event_id.to_string()),
+        Some(rocket::serde::json::serde_json::json!({
+            "schedule_id": schedule.id,
+            "game_id": schedule.game_id,
+            "game_name": schedule.game_name,
+            "start_time": schedule.start_time,
+            "duration_minutes": schedule.duration_minutes,
+        })),
+    )
+    .await;
+
+    Ok(GameScheduleEntry::from(schedule))
 }
 
-/// Update an existing scheduled game (Slice 2 - will add validation)
-#[allow(dead_code)]
+/// Update an existing scheduled game
 pub async fn update(
     pool: &PgPool,
     schedule_id: i32,
     request: GameScheduleRequest,
-    _email: &str,
+    email: &str,
 ) -> Result<GameScheduleEntry, Error> {
-    // Slice 2 will add:
-    // - Admin permission check
-    // - Overlap validation
-    // - Audit logging
+    // Note: Admin permission check is handled by AdminUser in routes layer
 
-    match game_schedule::update(
+    // Get the existing schedule to find event_id
+    let existing = game_schedule::get(pool, schedule_id)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to get existing schedule due to: {e}")))?
+        .ok_or_else(|| Error::Controller("Schedule entry not found".to_string()))?;
+
+    // Validate no overlap with other pinned games (excluding this one)
+    if game_schedule::has_overlap(
+        pool,
+        existing.event_id,
+        request.start_time,
+        request.duration_minutes,
+        Some(schedule_id), // Exclude this schedule from overlap check
+    )
+    .await
+    .map_err(|e| Error::Controller(format!("Unable to check for overlaps due to: {e}")))?
+    {
+        return Err(Error::Controller(
+            "Cannot update game schedule: new time overlaps with existing pinned game".to_string(),
+        ));
+    }
+
+    // Update the schedule entry
+    let schedule = game_schedule::update(
         pool,
         schedule_id,
         request.start_time,
         request.duration_minutes,
     )
     .await
-    {
-        Ok(schedule) => Ok(GameScheduleEntry::from(schedule)),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to update game schedule due to: {e}"
-        ))),
-    }
+    .map_err(|e| Error::Controller(format!("Unable to update game schedule due to: {e}")))?;
+
+    // Audit log
+    crate::util::log_audit(
+        pool,
+        Some(email.to_string()),
+        "game_schedule.update".to_string(),
+        "game_schedule".to_string(),
+        Some(existing.event_id.to_string()),
+        Some(rocket::serde::json::serde_json::json!({
+            "schedule_id": schedule.id,
+            "game_id": schedule.game_id,
+            "game_name": schedule.game_name,
+            "start_time": schedule.start_time,
+            "duration_minutes": schedule.duration_minutes,
+            "previous_start_time": existing.start_time,
+            "previous_duration_minutes": existing.duration_minutes,
+        })),
+    )
+    .await;
+
+    Ok(GameScheduleEntry::from(schedule))
 }
 
-/// Delete a scheduled game (Slice 2 - will add validation)
-#[allow(dead_code)]
-pub async fn delete(pool: &PgPool, schedule_id: i32, _email: &str) -> Result<(), Error> {
-    // Slice 2 will add:
-    // - Admin permission check
-    // - Audit logging
+/// Delete a scheduled game
+pub async fn delete(pool: &PgPool, schedule_id: i32, email: &str) -> Result<(), Error> {
+    // Note: Admin permission check is handled by AdminUser in routes layer
 
-    match game_schedule::delete(pool, schedule_id).await {
-        Ok(()) => Ok(()),
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to delete game schedule due to: {e}"
-        ))),
-    }
+    // Get the existing schedule for audit log before deletion
+    let existing = game_schedule::get(pool, schedule_id)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to get existing schedule due to: {e}")))?
+        .ok_or_else(|| Error::Controller("Schedule entry not found".to_string()))?;
+
+    // Delete the schedule entry
+    game_schedule::delete(pool, schedule_id)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to delete game schedule due to: {e}")))?;
+
+    // Audit log
+    crate::util::log_audit(
+        pool,
+        Some(email.to_string()),
+        "game_schedule.delete".to_string(),
+        "game_schedule".to_string(),
+        Some(existing.event_id.to_string()),
+        Some(rocket::serde::json::serde_json::json!({
+            "schedule_id": existing.id,
+            "game_id": existing.game_id,
+            "game_name": existing.game_name,
+            "start_time": existing.start_time,
+            "duration_minutes": existing.duration_minutes,
+        })),
+    )
+    .await;
+
+    Ok(())
 }
