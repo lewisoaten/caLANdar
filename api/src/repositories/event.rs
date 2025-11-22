@@ -111,46 +111,85 @@ pub async fn index_paginated(
     let offset = (params.page - 1) * params.limit;
     let now = Utc::now();
 
-    // Build the WHERE clause based on filter
-    let (where_clause, time_param): (&str, Option<DateTime<Utc>>) = match params.filter {
-        EventFilter::Upcoming => ("WHERE time_end > $3", Some(now)),
-        EventFilter::Past => ("WHERE time_end <= $3", Some(now)),
-        EventFilter::All => ("", None),
-    };
-
-    // Get total count for pagination
-    let count_query = format!("SELECT COUNT(*) as count FROM event {where_clause}");
-
-    let total: i64 = if let Some(time) = time_param {
-        sqlx::query_scalar(&count_query)
-            .bind(time)
+    // Build query with proper parameterization based on filter
+    let (total, events): (i64, Vec<Event>) = match params.filter {
+        EventFilter::Upcoming => {
+            let count_result: Option<i64> = sqlx::query_scalar!(
+                "SELECT COUNT(*) as count FROM event WHERE time_end > $1",
+                now
+            )
             .fetch_one(pool)
-            .await?
-    } else {
-        sqlx::query_scalar(&count_query).fetch_one(pool).await?
-    };
+            .await?;
+            let total = count_result.unwrap_or(0);
 
-    // Get paginated events
-    let query = format!(
-        "SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
-         FROM event {where_clause}
-         ORDER BY time_begin DESC
-         LIMIT $1 OFFSET $2"
-    );
+            let events: Vec<Event> = sqlx::query_as!(
+                Event,
+                r#"
+                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
+                FROM event
+                WHERE time_end > $3
+                ORDER BY time_begin DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                params.limit,
+                offset,
+                now
+            )
+            .fetch_all(pool)
+            .await?;
 
-    let events: Vec<Event> = if let Some(time) = time_param {
-        sqlx::query_as(&query)
-            .bind(params.limit)
-            .bind(offset)
-            .bind(time)
+            (total, events)
+        }
+        EventFilter::Past => {
+            let count_result: Option<i64> = sqlx::query_scalar!(
+                "SELECT COUNT(*) as count FROM event WHERE time_end <= $1",
+                now
+            )
+            .fetch_one(pool)
+            .await?;
+            let total = count_result.unwrap_or(0);
+
+            let events: Vec<Event> = sqlx::query_as!(
+                Event,
+                r#"
+                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
+                FROM event
+                WHERE time_end <= $3
+                ORDER BY time_begin DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                params.limit,
+                offset,
+                now
+            )
             .fetch_all(pool)
-            .await?
-    } else {
-        sqlx::query_as(&query)
-            .bind(params.limit)
-            .bind(offset)
+            .await?;
+
+            (total, events)
+        }
+        EventFilter::All => {
+            let count_result: Option<i64> =
+                sqlx::query_scalar!("SELECT COUNT(*) as count FROM event")
+                    .fetch_one(pool)
+                    .await?;
+            let total = count_result.unwrap_or(0);
+
+            let events: Vec<Event> = sqlx::query_as!(
+                Event,
+                r#"
+                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
+                FROM event
+                ORDER BY time_begin DESC
+                LIMIT $1 OFFSET $2
+                "#,
+                params.limit,
+                offset
+            )
             .fetch_all(pool)
-            .await?
+            .await?;
+
+            (total, events)
+        }
     };
 
     let total_pages = (total + params.limit - 1) / params.limit;
