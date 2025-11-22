@@ -117,7 +117,7 @@ pub async fn get_all(
 ) -> Result<Json<PaginatedEventsResponse>, EventsGetError> {
     let page = page.unwrap_or(1).max(1);
     let limit = limit.unwrap_or(20).clamp(1, 100);
-    
+
     let event_filter = match filter.as_deref() {
         Some("upcoming") => EventFilter::Upcoming,
         Some("past") => EventFilter::Past,
@@ -154,7 +154,7 @@ pub async fn get_all_user(
 ) -> Result<Json<PaginatedEventsResponse>, EventsGetError> {
     let page = page.unwrap_or(1).max(1);
     let limit = limit.unwrap_or(20).clamp(1, 100);
-    
+
     let event_filter = match filter.as_deref() {
         Some("upcoming") => EventFilter::Upcoming,
         Some("past") => EventFilter::Past,
@@ -180,9 +180,14 @@ pub async fn get_all_user(
                 EventFilter::All => all_events,
             };
 
+            #[allow(clippy::cast_possible_wrap)]
             let total = filtered_events.len() as i64;
             let total_pages = (total + limit - 1) / limit;
+
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             let start = ((page - 1) * limit) as usize;
+
+            #[allow(clippy::cast_sign_loss)]
             let end = (start + limit as usize).min(filtered_events.len());
 
             let events = if start < filtered_events.len() {

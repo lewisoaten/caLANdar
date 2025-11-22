@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::{PgPool, FromRow};
+use sqlx::{FromRow, PgPool};
 
 #[derive(Clone, FromRow)]
 pub struct Event {
@@ -119,29 +119,23 @@ pub async fn index_paginated(
     };
 
     // Get total count for pagination
-    let count_query = format!(
-        "SELECT COUNT(*) as count FROM event {}",
-        where_clause
-    );
-    
+    let count_query = format!("SELECT COUNT(*) as count FROM event {where_clause}");
+
     let total: i64 = if let Some(time) = time_param {
         sqlx::query_scalar(&count_query)
             .bind(time)
             .fetch_one(pool)
             .await?
     } else {
-        sqlx::query_scalar(&count_query)
-            .fetch_one(pool)
-            .await?
+        sqlx::query_scalar(&count_query).fetch_one(pool).await?
     };
 
     // Get paginated events
     let query = format!(
-        "SELECT id, created_at, last_modified, title, description, image, time_begin, time_end 
-         FROM event {} 
-         ORDER BY time_begin DESC 
-         LIMIT $1 OFFSET $2",
-        where_clause
+        "SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
+         FROM event {where_clause}
+         ORDER BY time_begin DESC
+         LIMIT $1 OFFSET $2"
     );
 
     let events: Vec<Event> = if let Some(time) = time_param {
