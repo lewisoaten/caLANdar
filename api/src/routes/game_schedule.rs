@@ -92,8 +92,7 @@ impl SchemaExample for GameScheduleRequest {
 custom_errors!(GameScheduleGetError, Unauthorized, InternalServerError);
 
 /// Get all scheduled games for an event
-/// Slice 1: Returns only pinned (manually scheduled) games
-/// Slice 3: Will also return suggested games from the algorithm
+/// Returns both pinned (manually scheduled) games and suggested games from the algorithm
 #[openapi(tag = "Game Schedule")]
 #[get("/events/<event_id>/game_schedule", format = "json")]
 pub async fn get_all(
@@ -199,6 +198,36 @@ pub async fn delete(
         }
         Err(e) => Err(GameScheduleDeleteError::InternalServerError(format!(
             "Error deleting game schedule, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
+    GameScheduleRecalculateError,
+    Unauthorized,
+    InternalServerError
+);
+
+/// Force recalculation of suggested game schedule (admin only)
+#[openapi(tag = "Game Schedule")]
+#[post("/events/<event_id>/game_schedule/recalculate")]
+pub async fn recalculate_suggested_schedule(
+    event_id: i32,
+    pool: &State<PgPool>,
+    _admin_user: AdminUser,
+) -> Result<Json<Vec<GameScheduleEntry>>, GameScheduleRecalculateError> {
+    match game_schedule::schedule_suggested_games(pool, event_id).await {
+        Ok(suggested) => {
+            log::info!(
+                "Admin forced recalculation of {} suggested games for event {}",
+                suggested.len(),
+                event_id
+            );
+            Ok(Json(suggested))
+        }
+        Err(Error::NotPermitted(e)) => Err(GameScheduleRecalculateError::Unauthorized(e)),
+        Err(e) => Err(GameScheduleRecalculateError::InternalServerError(format!(
+            "Error recalculating suggested schedule, due to: {e}"
         ))),
     }
 }

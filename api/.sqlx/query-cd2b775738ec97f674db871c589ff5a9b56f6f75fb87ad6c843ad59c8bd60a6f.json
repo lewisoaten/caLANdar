@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            event_game.game_id,\n            steam_game.name AS game_name,\n            COUNT(event_game_vote.vote) FILTER (WHERE event_game_vote.vote = 'yes') AS vote_count\n        FROM event_game\n        INNER JOIN steam_game ON event_game.game_id = steam_game.appid\n        LEFT JOIN event_game_vote ON event_game.event_id = event_game_vote.event_id\n            AND event_game.game_id = event_game_vote.game_id\n        WHERE event_game.event_id = $1\n        GROUP BY event_game.game_id, steam_game.name\n        HAVING COUNT(event_game_vote.vote) FILTER (WHERE event_game_vote.vote = 'yes') > 0\n        ORDER BY vote_count DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "game_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "game_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "vote_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "cd2b775738ec97f674db871c589ff5a9b56f6f75fb87ad6c843ad59c8bd60a6f"
+}

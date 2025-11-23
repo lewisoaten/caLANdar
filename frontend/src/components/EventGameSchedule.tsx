@@ -41,6 +41,7 @@ import {
   Add as AddIcon,
   SportsEsports as GameIcon,
   Close as CloseIcon,
+  Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -295,6 +296,7 @@ export default function EventGameSchedule() {
   const [gameSuggestions, setGameSuggestions] = useState<GameSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   // Add game dialog state
   const [addGameDialogOpen, setAddGameDialogOpen] = useState(false);
@@ -703,6 +705,51 @@ export default function EventGameSchedule() {
     [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar],
   );
 
+  // Handle recalculating suggested schedule
+  const handleRecalculate = useCallback(async () => {
+    if (!isAdmin || !token || !eventData) return;
+
+    setIsRecalculating(true);
+    try {
+      const response = await fetch(
+        `/api/events/${eventData.id}/game_schedule/recalculate?as_admin=true`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + token,
+          },
+        },
+      );
+
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to recalculate schedule:", errorText);
+        enqueueSnackbar("Failed to recalculate suggested schedule", {
+          variant: "error",
+        });
+        return;
+      }
+
+      // Refresh schedule to show new suggestions
+      refreshSchedule();
+      enqueueSnackbar("Schedule recalculated successfully", {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error recalculating schedule:", error);
+      enqueueSnackbar("An error occurred while recalculating", {
+        variant: "error",
+      });
+    } finally {
+      setIsRecalculating(false);
+    }
+  }, [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar]);
+
   // Fetch event data
   useEffect(() => {
     if (!id || !token) return;
@@ -856,9 +903,27 @@ export default function EventGameSchedule() {
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper sx={{ p: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Game Schedule
-          </Typography>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 1,
+            }}
+          >
+            <Typography variant="h4">Game Schedule</Typography>
+            {isAdmin && (
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={handleRecalculate}
+                disabled={isRecalculating}
+                size="small"
+              >
+                {isRecalculating ? "Recalculating..." : "Recalculate Schedule"}
+              </Button>
+            )}
+          </Box>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             {schedule.length === 0 && isAdmin
               ? "Click games in the menu to add them to the schedule"

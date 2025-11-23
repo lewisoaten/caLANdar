@@ -298,6 +298,7 @@ async fn rocket(
                 routes::game_schedule::create,
                 routes::game_schedule::update,
                 routes::game_schedule::delete,
+                routes::game_schedule::recalculate_suggested_schedule,
                 routes::profiles::get,
                 routes::profiles::put,
                 routes::profiles::put_admin,
