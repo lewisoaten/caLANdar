@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     controllers::Error,
-    repositories::{event, invitation, user_games},
+    repositories::{event, invitation, profile, user_games},
     routes::{events::Event, gamers::Gamer},
 };
 use chrono::{prelude::Utc, DateTime};
@@ -14,6 +14,7 @@ struct GamerBuild {
     email: String,
     avatar_url: String,
     handles: HashSet<String>,
+    steam_id: Option<String>,
     events_invited: HashSet<Event>,
     events_accepted: HashSet<Event>,
     events_tentative: HashSet<Event>,
@@ -29,6 +30,7 @@ impl From<GamerBuild> for Gamer {
             email: gamer_build.email,
             avatar_url: gamer_build.avatar_url,
             handles: gamer_build.handles.into_iter().collect(),
+            steam_id: gamer_build.steam_id,
             events_invited: gamer_build.events_invited.into_iter().collect(),
             events_accepted: gamer_build.events_accepted.into_iter().collect(),
             events_tentative: gamer_build.events_tentative.into_iter().collect(),
@@ -72,6 +74,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                         email: invitation.email.clone(),
                         avatar_url: invitation.avatar_url.clone().expect("Avatar URL not found"),
                         handles: HashSet::new(),
+                        steam_id: None,
                         events_invited: HashSet::new(),
                         events_accepted: HashSet::new(),
                         events_tentative: HashSet::new(),
@@ -114,7 +117,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
             }
 
             let mut gamer_list: Vec<GamerBuild> = gamers.values().cloned().collect();
-            // Annotate gamer list wih games owned
+            // Annotate gamer list with games owned and steam_id
             for gamer in &mut gamer_list {
                 let filter = user_games::Filter {
                     emails: Some(vec![gamer.email.clone()]),
@@ -133,6 +136,21 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                     }
                     Err(e) => {
                         log::error!("Unable to get games owned by gamer: {e}");
+                    }
+                }
+
+                // Fetch Steam ID from profile
+                match profile::read(pool, gamer.email.clone()).await {
+                    Ok(Some(profile_data)) => {
+                        gamer.steam_id = Some(profile_data.steam_id.to_string());
+                    }
+                    Ok(None) => {
+                        // No profile exists for this gamer
+                        gamer.steam_id = None;
+                    }
+                    Err(e) => {
+                        log::error!("Unable to get profile for gamer: {e}");
+                        gamer.steam_id = None;
                     }
                 }
             }
