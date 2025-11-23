@@ -182,8 +182,8 @@ const GamersAdmin = () => {
   ) => {
     const gamerData = newRow as GamerData;
 
-    // Validate Steam ID (17 digits)
-    if (gamerData.steamId && !/^\d{17}$/.test(gamerData.steamId)) {
+    // Validate Steam ID (17 digits, required)
+    if (!gamerData.steamId || !/^\d{17}$/.test(gamerData.steamId)) {
       enqueueSnackbar("Steam ID must be exactly 17 digits", {
         variant: "error",
       });
@@ -200,7 +200,7 @@ const GamersAdmin = () => {
             Accept: "application/json",
             Authorization: "Bearer " + token,
           },
-          body: JSON.stringify({ steamId: gamerData.steamId || "0" }),
+          body: JSON.stringify({ steamId: gamerData.steamId ?? null }),
         },
       );
 

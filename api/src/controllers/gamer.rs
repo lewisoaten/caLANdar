@@ -117,7 +117,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
             }
 
             let mut gamer_list: Vec<GamerBuild> = gamers.values().cloned().collect();
-            // Annotate gamer list wih games owned and steam_id
+            // Annotate gamer list with games owned and steam_id
             for gamer in &mut gamer_list {
                 let filter = user_games::Filter {
                     emails: Some(vec![gamer.email.clone()]),
