@@ -9,6 +9,7 @@ pub mod event;
 pub mod event_invitation;
 pub mod event_seating_config;
 pub mod game;
+pub mod game_schedule;
 pub mod game_suggestion;
 pub mod gamer;
 pub mod profile;

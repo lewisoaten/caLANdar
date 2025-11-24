@@ -83,6 +83,7 @@ impl SchemaExample for AuditLogsResponse {
     }
 }
 
+#[allow(dead_code)] // Fields will be used when audit log filtering is implemented
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct AuditLogsQueryParams {

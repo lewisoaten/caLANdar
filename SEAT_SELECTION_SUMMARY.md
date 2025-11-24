@@ -15,29 +15,24 @@ A complete, production-ready seat selection UI for event attendees, fully integr
 #### New Files
 
 1. **`frontend/src/components/SeatSelector.tsx`** (615 lines)
-
    - Main seat selection component
    - Visual floorplan and list views
    - Real-time availability checking
    - Complete error handling
 
 2. **`frontend/src/types/seat_reservations.tsx`** (37 lines)
-
    - TypeScript type definitions for seat reservations
    - API request/response types
 
 3. **`frontend/src/__tests__/SeatSelector.test.tsx`** (397 lines)
-
    - Comprehensive unit tests (12 test cases)
    - MSW-based API mocking
 
 4. **`frontend/src/stories/SeatSelector.stories.tsx`** (286 lines)
-
    - Storybook stories for visual testing
    - 6 different component states
 
 5. **`SEAT_SELECTION_USER_GUIDE.md`** (237 lines)
-
    - End-user documentation
    - Step-by-step instructions
    - Troubleshooting guide

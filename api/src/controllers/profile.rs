@@ -88,9 +88,15 @@ pub async fn edit(
     pool: &PgPool,
     email: String,
     new_profile: ProfileSubmit,
+    admin_email: Option<String>,
 ) -> Result<Profile, Error> {
-    let Ok(new_steam_id) = new_profile.steam_id.parse::<i64>() else {
-        return Err(Error::BadInput("Unable to parse steam ID".to_string()));
+    let new_steam_id = match new_profile.steam_id {
+        Some(steam_id) if !steam_id.is_empty() => steam_id
+            .parse::<i64>()
+            .map_err(|_| Error::BadInput("Unable to parse steam ID".to_string()))?,
+        _ => {
+            return Err(Error::BadInput("Steam ID is required".to_string()));
+        }
     };
 
     match profile::update(pool, email.clone(), Some(new_steam_id), None).await {
@@ -98,10 +104,11 @@ pub async fn edit(
             // Log audit entry for profile update
             let metadata = rocket::serde::json::serde_json::json!({
                 "steam_id": new_steam_id,
+                "edited_user": email.clone(),
             });
             crate::util::log_audit(
                 pool,
-                Some(email),
+                admin_email.or(Some(email)),
                 "profile.update".to_string(),
                 "profile".to_string(),
                 Some(new_steam_id.to_string()),

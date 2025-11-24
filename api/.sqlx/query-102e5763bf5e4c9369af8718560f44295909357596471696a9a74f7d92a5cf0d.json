@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH updated AS (\n            UPDATE event_game_schedule\n            SET\n                start_time = $2,\n                duration_minutes = $3,\n                last_modified = NOW()\n            WHERE id = $1\n            RETURNING\n                id,\n                event_id,\n                game_id,\n                start_time,\n                duration_minutes,\n                is_pinned,\n                created_at,\n                last_modified\n        )\n        SELECT\n            updated.id,\n            updated.event_id,\n            updated.game_id,\n            sg.name AS game_name,\n            updated.start_time,\n            updated.duration_minutes,\n            updated.is_pinned,\n            updated.created_at,\n            updated.last_modified\n        FROM updated\n        INNER JOIN steam_game sg ON updated.game_id = sg.appid\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "game_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "game_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_minutes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_pinned",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "102e5763bf5e4c9369af8718560f44295909357596471696a9a74f7d92a5cf0d"
+}

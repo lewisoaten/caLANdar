@@ -170,6 +170,7 @@ pub async fn edit(
     .await
 }
 
+
 pub async fn update_comment(
     pool: &PgPool,
     event_id: i32,
@@ -234,5 +235,36 @@ pub async fn update_comment(
         comment,
     )
     .fetch_one(pool)
+  
+/// Get games with vote counts for an event (for scheduling)
+#[derive(Clone)]
+pub struct GameWithVotes {
+    pub game_id: i64,
+    pub game_name: String,
+    pub vote_count: Option<i32>,
+}
+
+pub async fn get_games_with_votes(
+    pool: &PgPool,
+    event_id: i32,
+) -> Result<Vec<GameWithVotes>, sqlx::Error> {
+    sqlx::query_as!(
+        GameWithVotes,
+        r#"
+        SELECT
+            eg.game_id,
+            sg.name AS game_name,
+            CAST(COUNT(egv.email) AS INT) as vote_count
+        FROM event_game eg
+        INNER JOIN steam_game sg ON eg.game_id = sg.appid
+        LEFT JOIN event_game_vote egv ON eg.event_id = egv.event_id AND eg.game_id = egv.game_id AND egv.vote = 'yes'
+        WHERE eg.event_id = $1
+        GROUP BY eg.game_id, sg.name
+        HAVING COUNT(egv.email) > 0
+        ORDER BY vote_count DESC
+        "#,
+        event_id
+    )
+    .fetch_all(pool)
     .await
 }

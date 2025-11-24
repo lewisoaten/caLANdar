@@ -17,9 +17,11 @@ import {
   GridColDef,
   GridColumnGroupingModel,
   GridRenderCellParams,
+  GridRowModel,
 } from "@mui/x-data-grid";
 import { GridApiCommunity } from "@mui/x-data-grid/internals";
 import moment from "moment";
+import { useSnackbar } from "notistack";
 
 import { dateParser } from "../utils";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -149,6 +151,7 @@ const GamersAdmin = () => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
+  const { enqueueSnackbar } = useSnackbar();
 
   const gamersState = useState([] as GamerData[]);
   const [gamers, setGamers] = gamersState;
@@ -172,6 +175,58 @@ const GamersAdmin = () => {
       ],
     },
   ];
+
+  const processRowUpdate = async (
+    newRow: GridRowModel,
+    oldRow: GridRowModel,
+  ) => {
+    const gamerData = newRow as GamerData;
+
+    // Validate Steam ID (17 digits, required)
+    if (!gamerData.steamId || !/^\d{17}$/.test(gamerData.steamId)) {
+      enqueueSnackbar("Steam ID must be exactly 17 digits", {
+        variant: "error",
+      });
+      return oldRow;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/profile/${encodeURIComponent(gamerData.email)}?as_admin=true`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({ steamId: gamerData.steamId ?? null }),
+        },
+      );
+
+      if (response.status === 401) {
+        signOut();
+        return oldRow;
+      }
+
+      if (response.ok) {
+        enqueueSnackbar("Steam ID updated successfully", {
+          variant: "success",
+        });
+        return newRow;
+      } else {
+        const errorText = await response.text();
+        enqueueSnackbar(`Failed to update Steam ID: ${errorText}`, {
+          variant: "error",
+        });
+        return oldRow;
+      }
+    } catch (error) {
+      console.error("Error updating Steam ID:", error);
+      enqueueSnackbar("Error updating Steam ID", { variant: "error" });
+      return oldRow;
+    }
+  };
 
   const columns: GridColDef[] = [
     {
@@ -206,6 +261,14 @@ const GamersAdmin = () => {
       type: "string",
       flex: 1,
       editable: false,
+      renderCell: renderCellExpand,
+    },
+    {
+      field: "steamId",
+      headerName: "Steam ID",
+      type: "string",
+      flex: 1,
+      editable: true,
       renderCell: renderCellExpand,
     },
     {
@@ -343,6 +406,7 @@ const GamersAdmin = () => {
                 getRowId={(row) => row.email}
                 columns={columns}
                 columnGroupingModel={columnGroupingModel}
+                processRowUpdate={processRowUpdate}
                 disableRowSelectionOnClick
                 initialState={{
                   sorting: {

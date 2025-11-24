@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            eg.game_id,\n            sg.name AS game_name,\n            CAST(COUNT(egv.email) AS INT) as vote_count\n        FROM event_game eg\n        INNER JOIN steam_game sg ON eg.game_id = sg.appid\n        LEFT JOIN event_game_vote egv ON eg.event_id = egv.event_id AND eg.game_id = egv.game_id AND egv.vote = 'yes'\n        WHERE eg.event_id = $1\n        GROUP BY eg.game_id, sg.name\n        HAVING COUNT(egv.email) > 0\n        ORDER BY vote_count DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "game_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "game_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "vote_count",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "8179f217ff70786da6c58768cf000b2878b121067a378061e9bd8858956a9b40"
+}
