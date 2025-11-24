@@ -1,8 +1,16 @@
 import * as React from "react";
 import { useEffect, useState, useContext, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { Calendar, momentLocalizer, View, Navigate } from "react-big-calendar";
+import {
+  Calendar,
+  momentLocalizer,
+  View,
+  Navigate as NavigateAction,
+  TitleOptions,
+  DateLocalizer,
+} from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
+// @ts-expect-error - TimeGrid is not exported in types but exists
 import TimeGrid from "react-big-calendar/lib/TimeGrid";
 import { useSnackbar } from "notistack";
 import moment from "moment";
@@ -320,32 +328,39 @@ export default function EventGameSchedule() {
   // Custom EventWeek view factory - creates view with eventData in closure
   const createEventWeekView = useCallback(() => {
     // Create a custom week class that defines the range
-    class CustomEventWeek extends React.Component<{ localizer: unknown }> {
-      static range(
-        date: Date,
-        {
-          localizer,
-        }: {
-          localizer: {
-            startOf: (date: Date, unit: string) => Date;
-            endOf: (date: Date, unit: string) => Date;
-          };
-        },
-      ) {
+    class CustomEventWeek extends React.Component<{
+      localizer: DateLocalizer;
+      date: Date;
+    }> {
+      static range(date: Date, { localizer }: { localizer: DateLocalizer }) {
         if (!eventData) {
-          // Fallback to default week behavior
-          const start = localizer.startOf(date, "week");
-          const end = localizer.endOf(date, "week");
-          return localizer.range(start, end);
+          // Fallback to default week behavior - get start and end of week
+          const start = moment(date).startOf("week").toDate();
+          const end = moment(date).endOf("week").toDate();
+          // Create array of dates from start to end
+          const dates: Date[] = [];
+          let current = start;
+          while (current <= end) {
+            dates.push(current);
+            current = localizer.add(current, 1, "day");
+          }
+          return dates;
         }
 
         // Use event's timeBegin and timeEnd to determine range
         const start = moment(eventData.timeBegin).startOf("day").toDate();
         const end = moment(eventData.timeEnd).startOf("day").toDate();
-        return localizer.range(start, end);
+        // Create array of dates from start to end
+        const dates: Date[] = [];
+        let current = start;
+        while (current <= end) {
+          dates.push(current);
+          current = localizer.add(current, 1, "day");
+        }
+        return dates;
       }
 
-      static navigate(date: Date, action: Navigate) {
+      static navigate(date: Date, action: string) {
         // Don't allow navigation outside event bounds
         if (!eventData) {
           return date;
@@ -356,23 +371,18 @@ export default function EventGameSchedule() {
         const _eventEnd = moment(eventData.timeEnd).startOf("day");
 
         switch (action) {
-          case Navigate.PREVIOUS:
+          case NavigateAction.PREVIOUS:
             return eventStart.toDate();
-          case Navigate.NEXT:
+          case NavigateAction.NEXT:
             return eventStart.toDate();
           default:
             return date;
         }
       }
 
-      static title(
-        date: Date,
-        {
-          localizer,
-        }: { localizer: { format: (date: Date, format: string) => string } },
-      ) {
+      static title(date: Date, options: TitleOptions) {
         if (!eventData) {
-          return localizer.format(date, "MMMM YYYY");
+          return options.localizer.format(date, "MMMM YYYY");
         }
         const start = moment(eventData.timeBegin);
         const end = moment(eventData.timeEnd);
@@ -394,7 +404,7 @@ export default function EventGameSchedule() {
       }
     }
 
-    return CustomEventWeek;
+    return CustomEventWeek as any;
   }, [eventData]);
 
   // Schedule state
