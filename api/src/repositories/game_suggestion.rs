@@ -235,7 +235,7 @@ pub async fn update_comment(
         comment,
     )
     .fetch_one(pool)
-  
+
 /// Get games with vote counts for an event (for scheduling)
 #[derive(Clone)]
 pub struct GameWithVotes {
