@@ -20,12 +20,10 @@ The Game Schedule feature allows event organizers to create a timetable of games
 ### Backend (Rust/Rocket/PostgreSQL)
 
 - **Repository Layer** (`api/src/repositories/game_schedule.rs`)
-
   - CRUD operations for `game_schedule_entry` table
   - Overlap detection queries
 
 - **Controller Layer** (`api/src/controllers/game_schedule.rs`)
-
   - Business logic and validation
   - Scheduling algorithm (Slice 3)
   - Audit logging
@@ -132,25 +130,21 @@ game_schedule_entry (
 **Algorithm Implementation:**
 
 - [x] `build_available_time_slots()` - Generates 30-minute time slots
-
   - Spans entire event period (multi-day support)
   - Excludes time ranges occupied by pinned games
   - Returns list of available slots
 
 - [x] `calculate_availability_score()` - Scores time slots
-
   - Decodes attendance byte arrays from `invitation.attendance`
   - Counts voters available for ALL 30-min buckets in the slot
   - Each bucket: 1 = attending, 0 = not attending
   - Returns integer count of available voters
 
 - [x] `is_time_range_available()` - Overlap helper
-
   - Checks if a time range conflicts with pinned games
   - Used during slot selection
 
 - [x] `schedule_suggested_games()` - Main greedy algorithm
-
   - Fetches game suggestions sorted by votes (descending)
   - For each game:
     1. Try each available slot as potential start time
@@ -178,7 +172,6 @@ game_schedule_entry (
 **Backend:**
 
 - [ ] Update SQLx query cache
-
   - Requires running database container
   - Command: `just update-sqlx`
   - Will cache 3 new queries (invitations, event, game_suggestions)
@@ -193,7 +186,6 @@ game_schedule_entry (
 **Frontend:**
 
 - [ ] Visual differentiation for suggested games
-
   - Add CSS class `.suggested` to StyledCalendarWrapper
   - Styling:
     ```css
@@ -206,7 +198,6 @@ game_schedule_entry (
   - Apply class via `eventPropGetter` return value
 
 - [ ] Click-to-pin functionality
-
   - Add click handler on suggested game events
   - Show confirmation dialog: "Pin this game to the schedule?"
   - POST to `/api/events/{id}/game_schedule/pin`
@@ -299,12 +290,10 @@ game_schedule_entry (
 Given a time slot from `start_time` to `start_time + duration`:
 
 1. Calculate which 30-minute buckets the slot spans
-
    - `start_bucket = (slot_start - event_start) / 30 minutes`
    - `end_bucket = (slot_start + duration - event_start) / 30 minutes`
 
 2. For each RSVP with `attendance` byte array:
-
    - Check if ALL buckets in range have value 1
    - If yes: increment available_count
    - If any bucket is 0: person not available
@@ -375,7 +364,6 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### Unit Tests (Backend)
 
 - [ ] `build_available_time_slots()`
-
   - Empty event period
   - Single day event
   - Multi-day event
@@ -383,7 +371,6 @@ Given a time slot from `start_time` to `start_time + duration`:
   - Partial occupation
 
 - [ ] `calculate_availability_score()`
-
   - No RSVPs
   - All available
   - None available
@@ -415,7 +402,6 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### End-to-End Scenarios
 
 1. **Happy Path:**
-
    - Create event (Friday 6pm - Sunday 6pm)
    - Add 3 RSVPs with different availability
    - Suggest 5 games with 10, 8, 5, 3, 2 votes
@@ -435,13 +421,11 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### Backend
 
 - **Query Optimization:**
-
   - Index on `game_schedule_entry(event_id, is_pinned)`
   - Index on `invitation(event_id, response)`
   - Fetch invitations once, reuse for all score calculations
 
 - **Algorithm Complexity:**
-
   - O(G × S) where G = games, S = slots
   - Typical: 10 games × 144 slots (3-day event) = 1,440 iterations
   - Each iteration: O(R) for R RSVPs
@@ -455,7 +439,6 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### Frontend
 
 - **Calendar Rendering:**
-
   - 600px fixed height prevents layout shift
   - Auto-scroll optimized with useMemo
   - Event filtering (show/hide) done client-side
@@ -468,13 +451,11 @@ Given a time slot from `start_time` to `start_time + duration`:
 ## Security Considerations
 
 - **Admin-Only Mutations:**
-
   - All POST/PATCH/DELETE require `AdminUser` guard
   - GET is read-only for all invited users
   - Pin endpoint will also require admin
 
 - **Input Validation:**
-
   - Event ID must exist
   - Game ID must be valid Steam appid
   - Times must be within event boundaries
@@ -512,39 +493,32 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### Slice 4+ Ideas
 
 - **Multi-room Support:**
-
   - Schedule games in parallel across different rooms/setups
   - Each room has separate conflict detection
 
 - **Game Duration Preferences:**
-
   - Allow admins to set custom durations per game
   - Store in `event_game` table
 
 - **Tournament Brackets:**
-
   - Schedule elimination/round-robin tournaments
   - Auto-generate matches based on sign-ups
 
 - **Breaks and Meals:**
-
   - Block out time for lunch/dinner/breaks
   - Algorithm respects these as "occupied" slots
 
 - **Notification System:**
-
   - Alert attendees when schedule published
   - Remind before their voted games start
   - SMS/Email/Discord integration
 
 - **Schedule Templates:**
-
   - Save successful schedules as templates
   - Apply to future similar events
   - Community-shared templates
 
 - **Optimizer Improvements:**
-
   - Use constraint satisfaction solver (e.g., OR-Tools)
   - Multi-objective optimization (fairness + availability)
   - Allow manual override of suggestions
@@ -600,13 +574,11 @@ Given a time slot from `start_time` to `start_time + duration`:
 ### Open Questions
 
 - **Should suggested games be cached?**
-
   - Pro: Faster responses, consistent results
   - Con: Complexity, cache invalidation
   - Decision: Start without caching, add if needed
 
 - **How to handle very long events (1+ week)?**
-
   - May generate 336+ time slots (7 days × 48 slots/day)
   - Could impact performance
   - Mitigation: Limit to first N slots, or increase slot duration
