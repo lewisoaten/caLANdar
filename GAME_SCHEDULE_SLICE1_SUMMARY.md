@@ -174,7 +174,6 @@ Added:
    ```
 
 4. **Test empty schedule**:
-
    - Navigate to any event
    - Scroll to "Game Schedule" section
    - Should see: "No games scheduled yet. Admins can add games to the schedule."
