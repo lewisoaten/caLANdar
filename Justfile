@@ -50,6 +50,9 @@ update-sqlx:
 bacon:
 	cd api && bacon
 
+api-test:
+	cd api && cargo test
+
 clippy:
 	pre-commit run clippy
 

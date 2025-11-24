@@ -34,6 +34,7 @@ mod auth;
 mod controllers;
 mod repositories;
 mod routes;
+mod scheduler;
 mod util;
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -298,6 +299,7 @@ async fn rocket(
                 routes::game_schedule::create,
                 routes::game_schedule::update,
                 routes::game_schedule::delete,
+                routes::game_schedule::pin,
                 routes::game_schedule::recalculate_suggested_schedule,
                 routes::profiles::get,
                 routes::profiles::put,

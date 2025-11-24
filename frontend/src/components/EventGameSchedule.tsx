@@ -1,8 +1,9 @@
 import * as React from "react";
 import { useEffect, useState, useContext, useCallback } from "react";
-import { useParams, useLocation } from "react-router-dom";
-import { Calendar, momentLocalizer, View } from "react-big-calendar";
+import { useParams } from "react-router-dom";
+import { Calendar, momentLocalizer, View, Navigate } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
+import TimeGrid from "react-big-calendar/lib/TimeGrid";
 import { useSnackbar } from "notistack";
 import moment from "moment";
 import "moment/locale/en-gb"; // British English locale
@@ -19,9 +20,7 @@ import {
   Fab,
   Drawer,
   List,
-  ListItem,
   ListItemButton,
-  ListItemText,
   Divider,
   Chip,
   IconButton,
@@ -32,6 +31,8 @@ import {
   Button,
   TextField,
   MenuItem,
+  Switch,
+  FormControlLabel,
 } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { TimePicker } from "@mui/x-date-pickers/TimePicker";
@@ -151,7 +152,6 @@ const StyledCalendarWrapper = styled(Box)(({ theme }) => ({
   },
   // Event styling - pinned games
   "& .rbc-event": {
-    backgroundColor: alpha(theme.palette.primary.main, 0.8),
     borderLeft: `3px solid ${theme.palette.primary.light}`,
     color: theme.palette.primary.contrastText,
     borderRadius: theme.shape.borderRadius,
@@ -159,16 +159,18 @@ const StyledCalendarWrapper = styled(Box)(({ theme }) => ({
     fontSize: "0.875rem",
     fontWeight: theme.typography.fontWeightMedium,
     boxShadow: `0px 2px 8px ${alpha(theme.palette.primary.main, 0.3)}`,
+    overflow: "hidden", // Ensure background image stays within border radius
     "&:hover": {
-      backgroundColor: alpha(theme.palette.primary.main, 0.9),
       boxShadow: `0px 4px 12px ${alpha(theme.palette.primary.main, 0.5)}`,
     },
   },
-  // Suggested games (will be styled differently in Slice 3)
+  // Suggested games - visually distinct from pinned games
   "& .rbc-event.suggested": {
-    opacity: 0.5,
-    backgroundColor: alpha(theme.palette.info.main, 0.6),
-    borderLeft: `3px dashed ${theme.palette.info.light}`,
+    opacity: 0.7,
+    borderLeft: `3px dashed ${theme.palette.grey[400]}`,
+    "&:hover": {
+      opacity: 0.85,
+    },
   },
   "& .rbc-event-label": {
     fontSize: "0.75rem",
@@ -240,13 +242,20 @@ const CustomEvent: React.FC<CustomEventProps> = ({
       onMouseLeave={() => setShowDelete(false)}
       sx={{
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "space-between",
         height: "100%",
         px: 0.5,
       }}
     >
-      <Typography variant="caption" noWrap sx={{ flex: 1 }}>
+      <Typography
+        variant="caption"
+        noWrap
+        sx={{
+          flex: 1,
+          fontWeight: 600,
+        }}
+      >
         {event.title}
       </Typography>
       {isAdmin && showDelete && (
@@ -273,6 +282,28 @@ const CustomEvent: React.FC<CustomEventProps> = ({
   );
 };
 
+// Type definition for React Big Calendar toolbar props
+interface ToolbarProps {
+  label: string;
+}
+
+// Custom toolbar that shows only the label (no navigation or view buttons)
+const CustomToolbar: React.FC<ToolbarProps> = ({ label }) => {
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        mb: 2,
+        p: 1,
+      }}
+    >
+      <Typography variant="h6">{label}</Typography>
+    </Box>
+  );
+};
+
 export default function EventGameSchedule() {
   const { id } = useParams<{ id: string }>();
   const { signOut } = useContext(UserDispatchContext);
@@ -286,11 +317,94 @@ export default function EventGameSchedule() {
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
 
+  // Custom EventWeek view factory - creates view with eventData in closure
+  const createEventWeekView = useCallback(() => {
+    // Create a custom week class that defines the range
+    class CustomEventWeek extends React.Component<{ localizer: unknown }> {
+      static range(
+        date: Date,
+        {
+          localizer,
+        }: {
+          localizer: {
+            startOf: (date: Date, unit: string) => Date;
+            endOf: (date: Date, unit: string) => Date;
+          };
+        },
+      ) {
+        if (!eventData) {
+          // Fallback to default week behavior
+          const start = localizer.startOf(date, "week");
+          const end = localizer.endOf(date, "week");
+          return localizer.range(start, end);
+        }
+
+        // Use event's timeBegin and timeEnd to determine range
+        const start = moment(eventData.timeBegin).startOf("day").toDate();
+        const end = moment(eventData.timeEnd).startOf("day").toDate();
+        return localizer.range(start, end);
+      }
+
+      static navigate(date: Date, action: Navigate) {
+        // Don't allow navigation outside event bounds
+        if (!eventData) {
+          return date;
+        }
+
+        const eventStart = moment(eventData.timeBegin).startOf("day");
+        // eventEnd is calculated but not used in this function
+        const _eventEnd = moment(eventData.timeEnd).startOf("day");
+
+        switch (action) {
+          case Navigate.PREVIOUS:
+            return eventStart.toDate();
+          case Navigate.NEXT:
+            return eventStart.toDate();
+          default:
+            return date;
+        }
+      }
+
+      static title(
+        date: Date,
+        {
+          localizer,
+        }: { localizer: { format: (date: Date, format: string) => string } },
+      ) {
+        if (!eventData) {
+          return localizer.format(date, "MMMM YYYY");
+        }
+        const start = moment(eventData.timeBegin);
+        const end = moment(eventData.timeEnd);
+        return `${start.format("MMM D")} - ${end.format("MMM D, YYYY")}`;
+      }
+
+      render() {
+        const { date, localizer, ...props } = this.props;
+        const range = CustomEventWeek.range(date, { localizer });
+
+        return (
+          <TimeGrid
+            {...props}
+            range={range}
+            eventOffset={15}
+            localizer={localizer}
+          />
+        );
+      }
+    }
+
+    return CustomEventWeek;
+  }, [eventData]);
+
   // Schedule state
   const [schedule, setSchedule] = useState<GameScheduleEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<View>("day");
+  const [view, setView] = useState<View>("week");
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+
+  // Ref for calendar container to handle manual scrolling
+  const calendarRef = React.useRef<HTMLDivElement>(null);
 
   // Game suggestions state
   const [gameSuggestions, setGameSuggestions] = useState<GameSuggestion[]>([]);
@@ -298,12 +412,19 @@ export default function EventGameSchedule() {
   const [fabOpen, setFabOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
 
+  // Show/hide suggested games toggle
+  const [showSuggestions, setShowSuggestions] = useState<boolean>(true);
+
   // Add game dialog state
   const [addGameDialogOpen, setAddGameDialogOpen] = useState(false);
   const [selectedGame, setSelectedGame] = useState<GameSuggestion | null>(null);
   const [selectedDateTime, setSelectedDateTime] =
     useState<moment.Moment | null>(null);
   const [duration, setDuration] = useState<number>(120);
+
+  // Pin suggestion dialog state
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [gameToPin, setGameToPin] = useState<CalendarEvent | null>(null);
 
   // Refresh function to reload schedule
   const refreshSchedule = useCallback(() => {
@@ -750,6 +871,99 @@ export default function EventGameSchedule() {
     }
   }, [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar]);
 
+  // Handle clicking on a suggested game to pin it
+  const handleSelectEvent = useCallback(
+    (event: CalendarEvent) => {
+      // Only allow pinning for admins and suggested games
+      if (!isAdmin || !event.resource.isSuggested) return;
+
+      setGameToPin(event);
+      setPinDialogOpen(true);
+    },
+    [isAdmin],
+  );
+
+  // Handle confirming the pin action
+  const handleConfirmPin = useCallback(async () => {
+    if (!gameToPin || !token || !eventData) return;
+
+    setPinDialogOpen(false);
+
+    try {
+      const response = await fetch(
+        `/api/events/${eventData.id}/game_schedule/pin?as_admin=true`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer " + token,
+          },
+          body: JSON.stringify({
+            gameId: gameToPin.resource.gameId,
+            startTime: gameToPin.start.toISOString(),
+            durationMinutes: gameToPin.resource.durationMinutes,
+          }),
+        },
+      );
+
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Failed to pin game:", errorText);
+        enqueueSnackbar("Failed to pin game to schedule", {
+          variant: "error",
+        });
+        return;
+      }
+
+      // Refresh schedule to show the pinned game
+      refreshSchedule();
+      enqueueSnackbar(`${gameToPin.title} has been pinned to the schedule`, {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error pinning game:", error);
+      enqueueSnackbar("An error occurred while pinning the game", {
+        variant: "error",
+      });
+    } finally {
+      setGameToPin(null);
+    }
+  }, [gameToPin, token, eventData, signOut, refreshSchedule, enqueueSnackbar]);
+
+  // Custom slot styling to highlight event duration
+  const slotPropGetter = useCallback(
+    (date: Date) => {
+      if (!eventData) return {};
+
+      const slotTime = moment(date);
+      const eventStart = moment(eventData.timeBegin);
+      const eventEnd = moment(eventData.timeEnd);
+
+      // Check if this slot is within the event period
+      // Slot must start within the event (>= start and < end)
+      const isWithinEvent =
+        slotTime.isSameOrAfter(eventStart) && slotTime.isBefore(eventEnd);
+
+      if (isWithinEvent) {
+        return {
+          style: {
+            backgroundColor: alpha(theme.palette.success.light, 0.12),
+            borderLeft: `3px solid ${theme.palette.success.main}`,
+            borderRight: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+          },
+        };
+      }
+
+      return {};
+    },
+    [eventData, theme],
+  );
+
   // Fetch event data
   useEffect(() => {
     if (!id || !token) return;
@@ -802,29 +1016,53 @@ export default function EventGameSchedule() {
     }
   }, [eventData]);
 
-  // Calculate scroll position: use the later of current time or event start time
-  // This must be called unconditionally (before any returns) to follow Rules of Hooks
-  const scrollToTime = React.useMemo(() => {
-    if (!eventData) {
-      // Default to current time if no event data yet
-      const now = new Date();
-      const scrollTime = new Date();
-      scrollTime.setHours(now.getHours(), now.getMinutes(), 0, 0);
-      return scrollTime;
+  // Custom week range: show only the days from event start to end
+  // We'll use a custom view component that gets eventData from closure
+  const customViews = React.useMemo(
+    () => ({
+      week: createEventWeekView(),
+    }),
+    [createEventWeekView],
+  );
+
+  // Manual scroll to time (workaround for scrollToTime not working with custom views)
+  useEffect(() => {
+    if (!calendarRef.current || !eventData || view !== "week") return;
+
+    const scrollContainer = calendarRef.current.querySelector(
+      ".rbc-time-content",
+    ) as HTMLElement;
+    if (!scrollContainer) return;
+
+    const now = moment();
+    const eventStart = moment(eventData.timeBegin);
+    const eventEnd = moment(eventData.timeEnd);
+
+    let targetTime: moment.Moment;
+
+    // Rule 1: If now is before event start, scroll to event start
+    if (now.isBefore(eventStart)) {
+      targetTime = eventStart;
+    }
+    // Rule 3: If now is after event end, scroll to event end
+    else if (now.isAfter(eventEnd)) {
+      targetTime = eventEnd;
+    }
+    // Rule 2: If now is during the event, scroll to current time
+    else {
+      targetTime = now;
     }
 
-    const now = new Date();
-    const eventStart = eventData.timeBegin.toDate();
+    // Calculate scroll position (1px per minute)
+    const targetHour = targetTime.hours();
+    const targetMinutes = targetTime.minutes();
+    const scrollPosition = (targetHour * 60 + targetMinutes) * 1;
 
-    // Use whichever is later
-    const targetTime = now > eventStart ? now : eventStart;
-
-    // Create a date object with just the time component for scrolling
-    const scrollTime = new Date();
-    scrollTime.setHours(targetTime.getHours(), targetTime.getMinutes(), 0, 0);
-
-    return scrollTime;
-  }, [eventData]);
+    // Small delay to ensure calendar is fully rendered
+    setTimeout(() => {
+      scrollContainer.scrollTop = scrollPosition;
+    }, 100);
+  }, [eventData, view, schedule]);
 
   // Fetch game suggestions for the event
   useEffect(() => {
@@ -881,13 +1119,44 @@ export default function EventGameSchedule() {
   maxTime.setHours(23, 59, 59, 999); // End at 11:59 PM
 
   // Convert schedule entries to calendar events
-  const events: CalendarEvent[] = toCalendarEvents(schedule);
+  const allEvents: CalendarEvent[] = toCalendarEvents(schedule);
+
+  // Filter events based on showSuggestions toggle
+  const events = showSuggestions
+    ? allEvents
+    : allEvents.filter((e) => !e.resource.isSuggested);
 
   // Custom event styling based on pinned/suggested status
   const eventStyleGetter = (event: CalendarEvent) => {
     const entry = event.resource;
+    const steamAppId = entry.gameId;
+    const steamBannerUrl = `https://cdn.akamai.steamstatic.com/steam/apps/${steamAppId}/header.jpg`;
+
+    // Create gradient overlay to theme color with fade from top to bottom
+    const gradientOverlay = entry.isSuggested
+      ? `linear-gradient(to bottom, ${alpha(
+          theme.palette.grey[500],
+          0.85,
+        )} 0%, ${alpha(theme.palette.grey[500], 0.6)} 50%, ${alpha(
+          theme.palette.grey[500],
+          0.95,
+        )} 100%)`
+      : `linear-gradient(to bottom, ${alpha(
+          theme.palette.primary.main,
+          0.95,
+        )} 0%, ${alpha(theme.palette.primary.main, 0.7)} 50%, ${alpha(
+          theme.palette.primary.main,
+          0.98,
+        )} 100%)`;
+
     return {
       className: entry.isSuggested ? "suggested" : "",
+      style: {
+        backgroundImage: `${gradientOverlay}, url(${steamBannerUrl})`,
+        backgroundSize: "100% auto",
+        backgroundPosition: "top center",
+        backgroundRepeat: "no-repeat",
+      },
     };
   };
 
@@ -912,54 +1181,44 @@ export default function EventGameSchedule() {
             }}
           >
             <Typography variant="h4">Game Schedule</Typography>
-            {isAdmin && (
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={handleRecalculate}
-                disabled={isRecalculating}
-                size="small"
-              >
-                {isRecalculating ? "Recalculating..." : "Recalculate Schedule"}
-              </Button>
-            )}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showSuggestions}
+                    onChange={(e) => setShowSuggestions(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label="Show suggested games"
+                sx={{ mr: 0 }}
+              />
+              {isAdmin && (
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={handleRecalculate}
+                  disabled={isRecalculating}
+                  size="small"
+                >
+                  {isRecalculating
+                    ? "Recalculating..."
+                    : "Recalculate Schedule"}
+                </Button>
+              )}
+            </Box>
           </Box>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             {schedule.length === 0 && isAdmin
               ? "Click games in the menu to add them to the schedule"
               : "View the schedule of games for this event"}
           </Typography>
-
-          <Box
-            sx={{
-              mb: 2,
-              p: 1.5,
-              borderRadius: 1,
-              bgcolor: alpha(theme.palette.primary.main, 0.08),
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
-            }}
-          >
-            <Typography
-              variant="body2"
-              color="text.primary"
-              fontWeight="medium"
-            >
-              📅 Event Period:{" "}
-              {eventData.timeBegin.format("MMM D, YYYY h:mm A")} →{" "}
-              {eventData.timeEnd.format("MMM D, YYYY h:mm A")}
-            </Typography>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ mt: 0.5, display: "block" }}
-            >
-              Use the calendar navigation to view different days within this
-              period
-            </Typography>
-          </Box>
         </Box>
 
-        <StyledCalendarWrapper sx={{ height: 600 }}>
+        <StyledCalendarWrapper
+          ref={calendarRef}
+          sx={{ height: "calc(100vh - 280px)", minHeight: 600 }}
+        >
           <DragAndDropCalendar
             localizer={localizer}
             events={events}
@@ -970,16 +1229,35 @@ export default function EventGameSchedule() {
             onView={(newView) => setView(newView)}
             date={currentDate}
             onNavigate={(date) => setCurrentDate(date)}
-            views={["day", "agenda"]}
+            views={customViews}
+            showMultiDayTimes={true}
+            formats={{
+              timeGutterFormat: "HH:mm",
+              eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
+                localizer?.format(start, "HH:mm", culture) +
+                " - " +
+                localizer?.format(end, "HH:mm", culture),
+              agendaTimeRangeFormat: ({ start, end }, culture, localizer) =>
+                localizer?.format(start, "HH:mm", culture) +
+                " - " +
+                localizer?.format(end, "HH:mm", culture),
+              dayHeaderFormat: "ddd DD/MM",
+              dayRangeHeaderFormat: ({ start, end }, culture, localizer) =>
+                localizer?.format(start, "DD MMM", culture) +
+                " - " +
+                localizer?.format(end, "DD MMM", culture),
+            }}
             min={minTime}
             max={maxTime}
-            scrollToTime={scrollToTime}
             step={30} // 30-minute intervals
             timeslots={2} // Show :00 and :30
             eventPropGetter={eventStyleGetter}
+            slotPropGetter={slotPropGetter}
             tooltipAccessor={(event: CalendarEvent) =>
               `${event.title} - ${event.resource.durationMinutes} minutes`
             }
+            // Click handler for suggested games (pinning)
+            onSelectEvent={handleSelectEvent}
             // Drag-and-drop props (only enabled for admins)
             draggableAccessor={() => isAdmin}
             resizable={isAdmin}
@@ -987,13 +1265,14 @@ export default function EventGameSchedule() {
             onEventResize={handleEventResize}
             // Custom event component with delete button
             components={{
-              event: (props) => (
+              event: (props: { event: CalendarEvent }) => (
                 <CustomEvent
                   event={props.event}
                   isAdmin={isAdmin}
                   onDelete={handleDelete}
                 />
               ),
+              toolbar: CustomToolbar,
             }}
           />
         </StyledCalendarWrapper>
@@ -1146,6 +1425,43 @@ export default function EventGameSchedule() {
                 color="primary"
               >
                 Add to Schedule
+              </Button>
+            </DialogActions>
+          </Dialog>
+
+          {/* Pin Suggestion Dialog */}
+          <Dialog
+            open={pinDialogOpen}
+            onClose={() => setPinDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>Pin Game to Schedule</DialogTitle>
+            <DialogContent>
+              <Typography>
+                Do you want to pin <strong>{gameToPin?.title}</strong> to the
+                schedule at{" "}
+                <strong>
+                  {gameToPin?.start
+                    ? moment(gameToPin.start).format("DD/MM/YYYY HH:mm")
+                    : ""}
+                </strong>
+                ?
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                This will convert the suggested game into a manually scheduled
+                (pinned) game that won&apos;t change when the schedule is
+                recalculated.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setPinDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={handleConfirmPin}
+                variant="contained"
+                color="primary"
+              >
+                Pin Game
               </Button>
             </DialogActions>
           </Dialog>

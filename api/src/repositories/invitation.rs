@@ -105,3 +105,34 @@ pub async fn edit(
     .fetch_one(pool)
     .await
 }
+
+/// Get voters (invitations) with attendance for a specific game
+#[derive(Clone)]
+pub struct VoterWithAttendance {
+    pub email: String,
+    pub attendance: Option<Vec<u8>>,
+}
+
+pub async fn get_voters_for_game(
+    pool: &PgPool,
+    event_id: i32,
+    game_id: i64,
+) -> Result<Vec<VoterWithAttendance>, sqlx::Error> {
+    sqlx::query_as!(
+        VoterWithAttendance,
+        r#"
+        SELECT i.email, i.attendance
+        FROM invitation i
+        INNER JOIN event_game_vote egv ON i.event_id = egv.event_id AND i.email = egv.email
+        WHERE i.event_id = $1
+            AND i.response IN ('yes', 'maybe')
+            AND i.attendance IS NOT NULL
+            AND egv.game_id = $2
+            AND egv.vote = 'yes'
+        "#,
+        event_id,
+        game_id
+    )
+    .fetch_all(pool)
+    .await
+}

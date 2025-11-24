@@ -203,6 +203,39 @@ pub async fn delete(
 }
 
 custom_errors!(
+    GameSchedulePinError,
+    BadRequest,
+    Unauthorized,
+    InternalServerError
+);
+
+/// Pin a suggested game to the schedule (admin only)
+/// Converts a suggested game into a pinned game
+#[openapi(tag = "Game Schedule")]
+#[post(
+    "/events/<event_id>/game_schedule/pin",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn pin(
+    event_id: i32,
+    request: Json<GameScheduleRequest>,
+    pool: &State<PgPool>,
+    admin_user: AdminUser,
+) -> Result<Json<GameScheduleEntry>, GameSchedulePinError> {
+    match game_schedule::pin(pool, event_id, request.into_inner(), &admin_user.email).await {
+        Ok(entry) => Ok(Json(entry)),
+        Err(Error::NotPermitted(e)) => Err(GameSchedulePinError::Unauthorized(e)),
+        Err(Error::Controller(e)) if e.contains("overlap") => {
+            Err(GameSchedulePinError::BadRequest(e))
+        }
+        Err(e) => Err(GameSchedulePinError::InternalServerError(format!(
+            "Error pinning game schedule, due to: {e}"
+        ))),
+    }
+}
+
+custom_errors!(
     GameScheduleRecalculateError,
     Unauthorized,
     InternalServerError

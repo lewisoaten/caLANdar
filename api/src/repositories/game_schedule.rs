@@ -58,6 +58,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<GameSchedule>, 
 }
 
 /// Get a specific scheduled game by ID
+#[allow(dead_code)]
 pub async fn get(pool: &PgPool, schedule_id: i32) -> Result<Option<GameSchedule>, sqlx::Error> {
     sqlx::query_as!(
         GameSchedule,
@@ -200,6 +201,7 @@ pub async fn delete(pool: &PgPool, schedule_id: i32) -> Result<(), sqlx::Error> 
 
 /// Check if a time slot overlaps with existing pinned games for an event
 /// Returns true if there IS an overlap (slot is not available)
+#[allow(dead_code)]
 pub async fn has_overlap(
     pool: &PgPool,
     event_id: i32,

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT i.email, i.attendance\n        FROM invitation i\n        INNER JOIN event_game_vote egv ON i.event_id = egv.event_id AND i.email = egv.email\n        WHERE i.event_id = $1\n            AND i.response IN ('yes', 'maybe')\n            AND i.attendance IS NOT NULL\n            AND egv.game_id = $2\n            AND egv.vote = 'yes'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "attendance",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "90ddb6f8ecdeb8d62f952b6510ee94a6186ce89b2e760d083950512913de9397"
+}
