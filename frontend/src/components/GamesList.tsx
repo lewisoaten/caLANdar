@@ -27,6 +27,7 @@ interface GamesListProps {
   games: Map<number, EventGame[]>;
   gamesCount: number;
   loading: boolean;
+  showOwnership?: boolean;
 }
 
 // Helper function to format duration - moved outside component to prevent recreations
@@ -172,6 +173,7 @@ const GameCardSkeleton = () => (
 
 const GamesList = (props: GamesListProps) => {
   const [page, setPage] = useState(1);
+  const { showOwnership = true } = props;
 
   useEffect(() => {
     props.loadNewPage(0);
@@ -213,11 +215,13 @@ const GamesList = (props: GamesListProps) => {
                 <Grid container spacing={3}>
                   {[...props.games.keys()].map((key) => (
                     <React.Fragment key={key}>
-                      <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-                        <Typography variant="h4">
-                          Owned by {key} Gamers
-                        </Typography>
-                      </Grid>
+                      {showOwnership && (
+                        <Grid size={{ xs: 12, md: 12, lg: 12 }}>
+                          <Typography variant="h4">
+                            Owned by {key} Gamers
+                          </Typography>
+                        </Grid>
+                      )}
                       {props.games.get(key)?.map((game) => (
                         <Grid size={{ xs: 12, md: 6, lg: 4 }} key={game.appid}>
                           <GameCard game={game} />
