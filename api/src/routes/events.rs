@@ -167,8 +167,17 @@ pub async fn get_all_user(
     // 1. Join events with invitations in a single query
     // 2. Apply filtering and pagination at the database level
     // 3. Use indexes on the invitation table for the email column
-    match event::get_all_user(pool, user.email).await {
+    match event::get_all_user(pool, user.email.clone()).await {
         Ok(all_events) => {
+            // Log a warning if user has an unusually large number of events
+            if all_events.len() > 1000 {
+                eprintln!(
+                    "WARN: User {} has {} events - consider optimizing user events query with server-side pagination",
+                    user.email,
+                    all_events.len()
+                );
+            }
+
             // Apply filter
             let now = chrono::Utc::now();
             let filtered_events: Vec<Event> = match event_filter {
