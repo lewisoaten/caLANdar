@@ -15,9 +15,9 @@ pub struct TickerEvent {
 
 /// Get activity ticker events for a specific event
 /// Only returns positive, user-facing events:
-/// - RSVP updates (rsvp.update)
-/// - Game suggestions (game_suggestion.create)
-/// - Game votes (game_vote.update)
+/// - RSVP updates (`rsvp.update`)
+/// - Game suggestions (`game_suggestion.create`)
+/// - Game votes (`game_vote.update`)
 pub async fn get_ticker_events(
     pool: &PgPool,
     event_id: i32,
@@ -37,7 +37,7 @@ pub async fn get_ticker_events(
         "
     )
     .bind(event_id.to_string())
-    .bind(format!("{}-%", event_id))
+    .bind(format!("{event_id}-%"))
     .bind(limit)
     .fetch_all(pool)
     .await?;

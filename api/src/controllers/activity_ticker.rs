@@ -38,7 +38,7 @@ pub async fn get_ticker_events(
 
     let mut ticker_events = Vec::new();
 
-    for event in events {
+    for event in &events {
         if let Some(formatted) = format_ticker_event(event) {
             ticker_events.push(formatted);
         }
@@ -48,7 +48,7 @@ pub async fn get_ticker_events(
 }
 
 /// Format a raw audit log event into a user-friendly ticker event
-fn format_ticker_event(event: activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+fn format_ticker_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
     match event.action.as_str() {
         "rsvp.update" => format_rsvp_event(event),
         "game_suggestion.create" => format_game_suggestion_event(event),
@@ -57,7 +57,7 @@ fn format_ticker_event(event: activity_ticker::TickerEvent) -> Option<ActivityTi
     }
 }
 
-fn format_rsvp_event(event: activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let response = metadata.get("response")?.as_str()?;
     let handle = metadata.get("handle").and_then(|v| v.as_str());
@@ -79,14 +79,12 @@ fn format_rsvp_event(event: activity_ticker::TickerEvent) -> Option<ActivityTick
         _ => "✓",
     };
 
-    let display_name = user_handle
-        .clone()
-        .unwrap_or_else(|| "Someone".to_string());
+    let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
     let message = match response {
-        "Yes" => format!("{} RSVPed Yes!", display_name),
-        "Maybe" => format!("{} RSVPed Maybe", display_name),
-        _ => format!("{} updated their RSVP", display_name),
+        "Yes" => format!("{display_name} RSVPed Yes!"),
+        "Maybe" => format!("{display_name} RSVPed Maybe"),
+        _ => format!("{display_name} updated their RSVP"),
     };
 
     Some(ActivityTickerEvent {
@@ -100,7 +98,9 @@ fn format_rsvp_event(event: activity_ticker::TickerEvent) -> Option<ActivityTick
     })
 }
 
-fn format_game_suggestion_event(event: activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+fn format_game_suggestion_event(
+    event: &activity_ticker::TickerEvent,
+) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let comment = metadata.get("comment").and_then(|v| v.as_str());
@@ -119,9 +119,7 @@ fn format_game_suggestion_event(event: activity_ticker::TickerEvent) -> Option<A
         format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
     });
 
-    let display_name = user_handle
-        .clone()
-        .unwrap_or_else(|| "Someone".to_string());
+    let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
     let truncated_comment = comment.and_then(|c| {
         if !c.is_empty() && c.len() > 50 {
@@ -133,11 +131,12 @@ fn format_game_suggestion_event(event: activity_ticker::TickerEvent) -> Option<A
         }
     });
 
-    let message = if let Some(comment_text) = truncated_comment {
-        format!("{} suggested 🎮 '{}': \"{}\"", display_name, game_name, comment_text)
-    } else {
-        format!("{} suggested 🎮 '{}'", display_name, game_name)
-    };
+    let message = truncated_comment.map_or_else(
+        || format!("{display_name} suggested 🎮 '{game_name}'"),
+        |comment_text| {
+            format!("{display_name} suggested 🎮 '{game_name}': \"{comment_text}\"")
+        },
+    );
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -150,7 +149,7 @@ fn format_game_suggestion_event(event: activity_ticker::TickerEvent) -> Option<A
     })
 }
 
-fn format_game_vote_event(event: activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let vote = metadata.get("vote")?.as_str()?;
@@ -160,7 +159,7 @@ fn format_game_vote_event(event: activity_ticker::TickerEvent) -> Option<Activit
         return None;
     }
 
-    let message = format!("'{}' got a vote! 🗳️", game_name);
+    let message = format!("'{game_name}' got a vote! 🗳️");
 
     Some(ActivityTickerEvent {
         id: event.id,
