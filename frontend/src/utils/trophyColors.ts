@@ -9,5 +9,5 @@ export const getTrophyColor = (rank: number | null | undefined): string => {
     2: "#C0C0C0", // Silver
     3: "#CD7F32", // Bronze
   };
-  return rank ? colors[rank] || "" : "";
+  return rank != null && rank > 0 ? colors[rank] || "" : "";
 };
