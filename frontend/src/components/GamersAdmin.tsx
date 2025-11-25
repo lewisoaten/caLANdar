@@ -10,14 +10,15 @@ import {
   Tooltip,
   Typography,
   Grid,
+  TextField,
 } from "@mui/material";
-import { GamerData } from "../types/gamer";
+import { GamerSummaryData, PaginatedGamersResponse } from "../types/gamer";
 import { DataGrid } from "@mui/x-data-grid/DataGrid";
 import {
   GridColDef,
-  GridColumnGroupingModel,
   GridRenderCellParams,
   GridRowModel,
+  GridPaginationModel,
 } from "@mui/x-data-grid";
 import { GridApiCommunity } from "@mui/x-data-grid/internals";
 import moment from "moment";
@@ -25,7 +26,6 @@ import { useSnackbar } from "notistack";
 
 import { dateParser } from "../utils";
 import { UserContext, UserDispatchContext } from "../UserProvider";
-import { EventData } from "../types/events";
 
 interface GridCellExpandProps {
   value: string;
@@ -153,34 +153,84 @@ const GamersAdmin = () => {
   const token = userDetails?.token;
   const { enqueueSnackbar } = useSnackbar();
 
-  const gamersState = useState([] as GamerData[]);
-  const [gamers, setGamers] = gamersState;
+  const [gamers, setGamers] = useState<GamerSummaryData[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [totalRows, setTotalRows] = useState(0);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 20,
+  });
+  const [searchText, setSearchText] = useState("");
+  const [searchDebounce, setSearchDebounce] = useState("");
 
-  const columnGroupingModel: GridColumnGroupingModel = [
-    {
-      groupId: "Events",
-      children: [
-        { field: "eventsInvited" },
-        { field: "eventsAccepted" },
-        { field: "eventsTentative" },
-        { field: "eventsDeclined" },
-        { field: "eventsLastResponse" },
-      ],
-    },
-    {
-      groupId: "Games",
-      children: [
-        { field: "gamesOwnedCount" },
-        { field: "gamesOwnedLastModified" },
-      ],
-    },
-  ];
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchDebounce(searchText);
+      setPaginationModel((prev) =>
+        prev.page === 0 ? prev : { ...prev, page: 0 },
+      ); // Reset to first page on search only if not already 0
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchText]);
+
+  // Fetch gamers when pagination or search changes
+  useEffect(() => {
+    const fetchGamers = async () => {
+      setLoading(true);
+      try {
+        const params = new URLSearchParams({
+          as_admin: "true",
+          page: String(paginationModel.page + 1), // API uses 1-based pagination
+          limit: String(paginationModel.pageSize),
+        });
+
+        if (searchDebounce) {
+          params.append("search", searchDebounce);
+        }
+
+        const response = await fetch(`/api/gamers?${params}`, {
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+        });
+
+        if (response.status === 401) {
+          signOut();
+          return;
+        }
+
+        if (response.ok) {
+          const data = JSON.parse(
+            await response.text(),
+            dateParser,
+          ) as PaginatedGamersResponse;
+          setGamers(data.gamers);
+          setTotalRows(data.total);
+        } else {
+          enqueueSnackbar("Failed to fetch gamers", { variant: "error" });
+        }
+      } catch (error) {
+        console.error("Error fetching gamers:", error);
+        enqueueSnackbar("Error fetching gamers", { variant: "error" });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (token) {
+      void fetchGamers();
+    }
+  }, [paginationModel, searchDebounce, token, signOut, enqueueSnackbar]);
 
   const processRowUpdate = async (
     newRow: GridRowModel,
     oldRow: GridRowModel,
   ) => {
-    const gamerData = newRow as GamerData;
+    const gamerData = newRow as GamerSummaryData;
 
     // Validate Steam ID (17 digits, required)
     if (!gamerData.steamId || !/^\d{17}$/.test(gamerData.steamId)) {
@@ -237,7 +287,7 @@ const GamersAdmin = () => {
       editable: false,
       valueGetter: (_value, row) => row,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      renderCell: (params: GridRenderCellParams<any, GamerData>) => (
+      renderCell: (params: GridRenderCellParams<any, GamerSummaryData>) => (
         <Tooltip title={params.value?.email || "Attendee"}>
           <Chip
             avatar={
@@ -272,44 +322,32 @@ const GamersAdmin = () => {
       renderCell: renderCellExpand,
     },
     {
-      field: "eventsInvited",
-      headerName: "Invinted",
-      type: "string",
-      flex: 1,
+      field: "eventsInvitedCount",
+      headerName: "Invited",
+      type: "number",
+      flex: 0.5,
       editable: false,
-      renderCell: renderCellExpand,
-      valueGetter: (_value, row) =>
-        row.eventsInvited.map((e: EventData) => e.title).join(", "),
     },
     {
-      field: "eventsAccepted",
+      field: "eventsAcceptedCount",
       headerName: "Accepted",
-      type: "string",
-      flex: 1,
+      type: "number",
+      flex: 0.5,
       editable: false,
-      renderCell: renderCellExpand,
-      valueGetter: (_value, row) =>
-        row.eventsAccepted.map((e: EventData) => e.title).join(", "),
     },
     {
-      field: "eventsTentative",
+      field: "eventsTentativeCount",
       headerName: "Tentative",
-      type: "string",
-      flex: 1,
+      type: "number",
+      flex: 0.5,
       editable: false,
-      renderCell: renderCellExpand,
-      valueGetter: (_value, row) =>
-        row.eventsTentative.map((e: EventData) => e.title).join(", "),
     },
     {
-      field: "eventsDeclined",
+      field: "eventsDeclinedCount",
       headerName: "Declined",
-      type: "string",
-      flex: 1,
+      type: "number",
+      flex: 0.5,
       editable: false,
-      renderCell: renderCellExpand,
-      valueGetter: (_value, row) =>
-        row.eventsDeclined.map((e: EventData) => e.title).join(", "),
     },
     {
       field: "eventsLastResponse",
@@ -334,14 +372,14 @@ const GamersAdmin = () => {
     },
     {
       field: "gamesOwnedCount",
-      headerName: "Owned",
+      headerName: "Games Owned",
       type: "number",
-      flex: 1,
+      flex: 0.5,
       editable: false,
     },
     {
       field: "gamesOwnedLastModified",
-      headerName: "Updated",
+      headerName: "Games Updated",
       type: "dateTime",
       flex: 1,
       editable: false,
@@ -362,30 +400,6 @@ const GamersAdmin = () => {
     },
   ];
 
-  useEffect(() => {
-    fetch(`/api/gamers?as_admin=true`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as Array<GamerData>);
-      })
-      .then((data) => {
-        if (!data) {
-          return [] as GamerData[];
-        }
-
-        setGamers(data);
-      });
-  }, []);
-
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Grid container spacing={3}>
@@ -400,17 +414,33 @@ const GamersAdmin = () => {
             >
               Gamers
             </Typography>
-            <Box sx={{ width: "100%" }}>
+            <Box sx={{ mb: 2 }}>
+              <TextField
+                fullWidth
+                label="Search by email or handle"
+                variant="outlined"
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                placeholder="Type to search..."
+                size="small"
+              />
+            </Box>
+            <Box sx={{ width: "100%", height: 600 }}>
               <DataGrid
                 rows={gamers}
                 getRowId={(row) => row.email}
                 columns={columns}
-                columnGroupingModel={columnGroupingModel}
+                rowCount={totalRows}
+                loading={loading}
+                pageSizeOptions={[10, 20, 50, 100]}
+                paginationModel={paginationModel}
+                paginationMode="server"
+                onPaginationModelChange={setPaginationModel}
                 processRowUpdate={processRowUpdate}
                 disableRowSelectionOnClick
                 initialState={{
                   sorting: {
-                    sortModel: [{ field: "email", sort: "desc" }],
+                    sortModel: [{ field: "email", sort: "asc" }],
                   },
                 }}
               />
