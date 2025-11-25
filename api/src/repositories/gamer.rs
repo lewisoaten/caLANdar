@@ -36,11 +36,15 @@ pub async fn index_paginated(
 ) -> Result<PaginatedGamers, sqlx::Error> {
     let offset = (params.page - 1) * params.limit;
 
-    // Build search pattern
-    let search_pattern = params
-        .search
-        .as_ref()
-        .map(|s| format!("%{}%", s.to_lowercase()));
+    // Build search pattern with escaped LIKE special characters
+    let search_pattern = params.search.as_ref().map(|s| {
+        let escaped = s
+            .to_lowercase()
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        format!("%{}%", escaped)
+    });
     let has_search = search_pattern.is_some();
     let search_pattern = search_pattern.unwrap_or_default();
 
@@ -83,7 +87,7 @@ pub async fn index_paginated(
         gamer_events AS (
             SELECT
                 LOWER(i.email) as email,
-                COUNT(*) FILTER (WHERE i.response IS NULL) as events_invited_count,
+                COUNT(*) as events_invited_count,
                 COUNT(*) FILTER (WHERE i.response = 'yes') as events_accepted_count,
                 COUNT(*) FILTER (WHERE i.response = 'maybe') as events_tentative_count,
                 COUNT(*) FILTER (WHERE i.response = 'no') as events_declined_count

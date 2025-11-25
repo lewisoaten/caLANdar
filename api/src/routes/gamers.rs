@@ -109,10 +109,10 @@ impl SchemaExample for PaginatedGamersResponse {
 
 custom_errors!(GamersGetError, NotFound, InternalServerError);
 
-/// Get all users across all events as an administrator
+/// Get all users across all events as an administrator (deprecated - use paginated endpoint)
 /// Will return an empty list if no users are found.
 #[openapi(tag = "Gamers")]
-#[get("/gamers?<_as_admin>", format = "json", rank = 2)]
+#[get("/gamers/all?<_as_admin>", format = "json")]
 pub async fn get_all(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
@@ -134,11 +134,7 @@ pub async fn get_all(
 /// - limit: Items per page (default: 20, range: 1-100)
 /// - search: Optional search string to filter by email or handle
 #[openapi(tag = "Gamers")]
-#[get(
-    "/gamers?<_as_admin>&<page>&<limit>&<search>",
-    format = "json",
-    rank = 1
-)]
+#[get("/gamers?<_as_admin>&<page>&<limit>&<search>", format = "json")]
 pub async fn get_all_paginated(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,

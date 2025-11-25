@@ -167,7 +167,9 @@ const GamersAdmin = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setSearchDebounce(searchText);
-      setPaginationModel((prev) => ({ ...prev, page: 0 })); // Reset to first page on search
+      setPaginationModel((prev) =>
+        prev.page === 0 ? prev : { ...prev, page: 0 },
+      ); // Reset to first page on search only if not already 0
     }, 500);
 
     return () => clearTimeout(timer);

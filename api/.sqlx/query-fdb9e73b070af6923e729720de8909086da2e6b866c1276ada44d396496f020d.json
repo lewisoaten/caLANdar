@@ -1,0 +1,85 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH gamer_base AS (\n            SELECT\n                LOWER(i.email) as email,\n                'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' as avatar_url,\n                ARRAY_AGG(DISTINCT i.handle) FILTER (WHERE i.handle IS NOT NULL) as handles,\n                MAX(i.responded_at) as events_last_response\n            FROM invitation i\n            WHERE ($1::text IS NULL OR $2 = false OR\n                   LOWER(i.email) LIKE $1 OR\n                   LOWER(i.handle) LIKE $1)\n            GROUP BY LOWER(i.email)\n            ORDER BY LOWER(i.email)\n            LIMIT $3 OFFSET $4\n        ),\n        gamer_events AS (\n            SELECT\n                LOWER(i.email) as email,\n                COUNT(*) as events_invited_count,\n                COUNT(*) FILTER (WHERE i.response = 'yes') as events_accepted_count,\n                COUNT(*) FILTER (WHERE i.response = 'maybe') as events_tentative_count,\n                COUNT(*) FILTER (WHERE i.response = 'no') as events_declined_count\n            FROM invitation i\n            WHERE LOWER(i.email) IN (SELECT email FROM gamer_base)\n            GROUP BY LOWER(i.email)\n        ),\n        gamer_games AS (\n            SELECT\n                LOWER(ug.email) as email,\n                COUNT(*) as games_owned_count,\n                MAX(ug.last_modified) as games_owned_last_modified\n            FROM user_game ug\n            WHERE LOWER(ug.email) IN (SELECT email FROM gamer_base)\n            GROUP BY LOWER(ug.email)\n        ),\n        gamer_profiles AS (\n            SELECT\n                LOWER(p.email) as email,\n                p.steam_id\n            FROM profiles p\n            WHERE LOWER(p.email) IN (SELECT email FROM gamer_base)\n        )\n        SELECT\n            gb.email,\n            gb.avatar_url,\n            gb.handles,\n            gp.steam_id as \"steam_id?\",\n            COALESCE(ge.events_invited_count, 0) as \"events_invited_count!\",\n            COALESCE(ge.events_accepted_count, 0) as \"events_accepted_count!\",\n            COALESCE(ge.events_tentative_count, 0) as \"events_tentative_count!\",\n            COALESCE(ge.events_declined_count, 0) as \"events_declined_count!\",\n            gb.events_last_response,\n            COALESCE(gg.games_owned_count, 0) as \"games_owned_count!\",\n            gg.games_owned_last_modified\n        FROM gamer_base gb\n        LEFT JOIN gamer_events ge ON gb.email = ge.email\n        LEFT JOIN gamer_games gg ON gb.email = gg.email\n        LEFT JOIN gamer_profiles gp ON gb.email = gp.email\n        ORDER BY gb.email\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "avatar_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "handles",
+        "type_info": "VarcharArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "steam_id?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "events_invited_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "events_accepted_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "events_tentative_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "events_declined_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "events_last_response",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "games_owned_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "games_owned_last_modified",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "fdb9e73b070af6923e729720de8909086da2e6b866c1276ada44d396496f020d"
+}
