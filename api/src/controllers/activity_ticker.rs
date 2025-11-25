@@ -169,3 +169,123 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
         user_avatar_url: None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use rocket::serde::json::serde_json::json;
+
+    #[test]
+    fn test_format_rsvp_event_yes() {
+        let event = activity_ticker::TickerEvent {
+            id: 1,
+            timestamp: Utc::now(),
+            user_id: Some("test@example.com".to_string()),
+            action: "rsvp.update".to_string(),
+            entity_type: "rsvp".to_string(),
+            entity_id: Some("42".to_string()),
+            metadata: Some(json!({
+                "response": "Yes",
+                "handle": "TestUser"
+            })),
+        };
+
+        let result = format_rsvp_event(&event);
+        assert!(result.is_some());
+        
+        let ticker_event = result.expect("Event should be formatted");
+        assert_eq!(ticker_event.message, "TestUser RSVPed Yes!");
+        assert_eq!(ticker_event.icon, "🎉");
+        assert_eq!(ticker_event.event_type, "rsvp");
+        assert_eq!(ticker_event.user_handle, Some("TestUser".to_string()));
+    }
+
+    #[test]
+    fn test_format_rsvp_event_no_is_filtered() {
+        let event = activity_ticker::TickerEvent {
+            id: 1,
+            timestamp: Utc::now(),
+            user_id: Some("test@example.com".to_string()),
+            action: "rsvp.update".to_string(),
+            entity_type: "rsvp".to_string(),
+            entity_id: Some("42".to_string()),
+            metadata: Some(json!({
+                "response": "No",
+                "handle": "TestUser"
+            })),
+        };
+
+        let result = format_rsvp_event(&event);
+        assert!(result.is_none(), "No responses should be filtered out");
+    }
+
+    #[test]
+    fn test_format_game_suggestion_event() {
+        let event = activity_ticker::TickerEvent {
+            id: 2,
+            timestamp: Utc::now(),
+            user_id: Some("test@example.com".to_string()),
+            action: "game_suggestion.create".to_string(),
+            entity_type: "game_suggestion".to_string(),
+            entity_id: Some("42-12345".to_string()),
+            metadata: Some(json!({
+                "game_name": "Portal 2",
+                "comment": "Great co-op game!"
+            })),
+        };
+
+        let result = format_game_suggestion_event(&event);
+        assert!(result.is_some());
+
+        let ticker_event = result.expect("Event should be formatted");
+        assert!(ticker_event.message.contains("Portal 2"));
+        assert!(ticker_event.message.contains("Great co-op game!"));
+        assert_eq!(ticker_event.icon, "🎮");
+        assert_eq!(ticker_event.event_type, "game_suggestion");
+    }
+
+    #[test]
+    fn test_format_game_vote_event_yes() {
+        let event = activity_ticker::TickerEvent {
+            id: 3,
+            timestamp: Utc::now(),
+            user_id: Some("voter@example.com".to_string()),
+            action: "game_vote.update".to_string(),
+            entity_type: "game_vote".to_string(),
+            entity_id: Some("42-12345".to_string()),
+            metadata: Some(json!({
+                "game_name": "Among Us",
+                "vote": "Yes"
+            })),
+        };
+
+        let result = format_game_vote_event(&event);
+        assert!(result.is_some());
+
+        let ticker_event = result.expect("Event should be formatted");
+        assert!(ticker_event.message.contains("Among Us"));
+        assert_eq!(ticker_event.icon, "👍");
+        assert_eq!(ticker_event.event_type, "game_vote");
+        assert!(ticker_event.user_handle.is_none(), "Voter identity should be hidden");
+    }
+
+    #[test]
+    fn test_format_game_vote_event_no_is_filtered() {
+        let event = activity_ticker::TickerEvent {
+            id: 3,
+            timestamp: Utc::now(),
+            user_id: Some("voter@example.com".to_string()),
+            action: "game_vote.update".to_string(),
+            entity_type: "game_vote".to_string(),
+            entity_id: Some("42-12345".to_string()),
+            metadata: Some(json!({
+                "game_name": "Among Us",
+                "vote": "No"
+            })),
+        };
+
+        let result = format_game_vote_event(&event);
+        assert!(result.is_none(), "No votes should be filtered out");
+    }
+}
