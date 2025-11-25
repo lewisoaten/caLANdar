@@ -235,6 +235,8 @@ pub async fn update_comment(
         comment,
     )
     .fetch_one(pool)
+    .await
+}
 
 /// Get games with vote counts for an event (for scheduling)
 #[derive(Clone)]
