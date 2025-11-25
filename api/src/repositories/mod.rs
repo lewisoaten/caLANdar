@@ -5,6 +5,7 @@ pub mod game;
 pub mod game_schedule;
 pub mod game_suggestion;
 pub mod game_update;
+pub mod gamer;
 pub mod invitation;
 pub mod profile;
 pub mod room;

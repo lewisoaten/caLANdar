@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     controllers::Error,
-    repositories::{event, invitation, profile, user_games},
+    repositories::{event, gamer as gamer_repo, invitation, profile, user_games},
     routes::{events::Event, gamers::Gamer},
 };
 use chrono::{prelude::Utc, DateTime};
@@ -159,6 +159,57 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
         }
         Err(e) => Err(Error::Controller(format!(
             "Unable to get list of events due to: {e}"
+        ))),
+    }
+}
+
+// Response struct for paginated gamers
+pub struct PaginatedGamerSummaryResponse {
+    pub gamers: Vec<crate::routes::gamers::GamerSummary>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
+}
+
+pub async fn get_all_paginated(
+    pool: &PgPool,
+    page: i64,
+    limit: i64,
+    search: Option<String>,
+) -> Result<PaginatedGamerSummaryResponse, Error> {
+    let params = gamer_repo::PaginationParams {
+        page,
+        limit,
+        search,
+    };
+
+    match gamer_repo::index_paginated(pool, params).await {
+        Ok(paginated) => Ok(PaginatedGamerSummaryResponse {
+            gamers: paginated
+                .gamers
+                .into_iter()
+                .map(|g| crate::routes::gamers::GamerSummary {
+                    email: g.email,
+                    avatar_url: g.avatar_url,
+                    handles: g.handles,
+                    steam_id: g.steam_id,
+                    events_invited_count: g.events_invited_count,
+                    events_accepted_count: g.events_accepted_count,
+                    events_tentative_count: g.events_tentative_count,
+                    events_declined_count: g.events_declined_count,
+                    events_last_response: g.events_last_response,
+                    games_owned_count: g.games_owned_count,
+                    games_owned_last_modified: g.games_owned_last_modified,
+                })
+                .collect(),
+            total: paginated.total,
+            page: paginated.page,
+            limit: paginated.limit,
+            total_pages: paginated.total_pages,
+        }),
+        Err(e) => Err(Error::Controller(format!(
+            "Unable to get paginated list of gamers due to: {e}"
         ))),
     }
 }
