@@ -100,17 +100,16 @@ pub async fn get(
     }
 }
 
-/// Get seating configuration for an event when invited.
+/// Get seating configuration for an event (authenticated users only).
 #[openapi(tag = "Event Seating")]
 #[get("/events/<event_id>/seating-config", format = "json", rank = 2)]
 pub async fn get_user(
     event_id: i32,
     pool: &State<PgPool>,
-    user: User,
+    _user: User,
 ) -> Result<Json<EventSeatingConfig>, EventSeatingConfigGetUserError> {
-    match event_seating_config::get_or_default_for_invited_user(pool, event_id, &user.email).await {
+    match event_seating_config::get_or_default(pool, event_id).await {
         Ok(config) => Ok(Json(config)),
-        Err(Error::NotPermitted(e)) => Err(EventSeatingConfigGetUserError::Unauthorized(e)),
         Err(e) => Err(EventSeatingConfigGetUserError::InternalServerError(
             format!("Error getting seating config, due to: {e}"),
         )),

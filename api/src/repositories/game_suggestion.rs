@@ -170,6 +170,73 @@ pub async fn edit(
     .await
 }
 
+pub async fn update_comment(
+    pool: &PgPool,
+    event_id: i32,
+    game_id: i64,
+    email: String,
+    comment: Option<String>,
+) -> Result<GameSuggestion, sqlx::Error> {
+    // Update comment on game suggestion
+    // First, check that the user is the owner of the game suggestion
+    let existing = sqlx::query!(
+        r#"
+        SELECT user_email
+        FROM event_game
+        WHERE event_id = $1 AND game_id = $2
+        "#,
+        event_id,
+        game_id,
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // Check if the user owns this suggestion
+    if existing.user_email.to_lowercase() != email.to_lowercase() {
+        return Err(sqlx::Error::RowNotFound);
+    }
+
+    // Update the comment
+    sqlx::query_as!(
+        GameSuggestion,
+        r#"
+        WITH event_game_update_response AS (
+            UPDATE event_game
+            SET comment = $4, last_modified = NOW()
+            WHERE event_id = $1 AND game_id = $2
+            RETURNING event_id, game_id, user_email, comment, requested_at, last_modified
+        ) SELECT
+            event_game_update_response.event_id AS event_id,
+            event_game_update_response.game_id AS game_id,
+            steam_game.name AS game_name,
+            event_game_update_response.user_email AS user_email,
+            event_game_update_response.comment AS comment,
+            self_vote.vote AS "self_vote: _",
+            count(all_votes.*) AS votes,
+            event_game_update_response.requested_at AS requested_at,
+            event_game_update_response.last_modified AS last_modified
+        FROM event_game_update_response
+        INNER JOIN steam_game
+            ON event_game_update_response.game_id = steam_game.appid
+        LEFT JOIN event_game_vote AS self_vote
+            ON event_game_update_response.event_id = self_vote.event_id
+            AND event_game_update_response.game_id = self_vote.game_id
+            AND LOWER(self_vote.email) = LOWER($3)
+        LEFT JOIN event_game_vote AS all_votes
+            ON event_game_update_response.event_id = all_votes.event_id
+            AND event_game_update_response.game_id = all_votes.game_id
+            AND all_votes.vote = 'yes'::vote
+        GROUP BY event_game_update_response.event_id, event_game_update_response.game_id, steam_game.name, event_game_update_response.user_email, event_game_update_response.comment, event_game_update_response.requested_at, event_game_update_response.last_modified, self_vote.vote
+        "#,
+        event_id,
+        game_id,
+        email,
+        comment,
+    )
+    .fetch_one(pool)
+    .await
+}
+
 /// Get games with vote counts for an event (for scheduling)
 #[derive(Clone)]
 pub struct GameWithVotes {
