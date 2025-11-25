@@ -1,7 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event_invitation, Error},
-    util::{is_attending_event, send_email_bcc, send_preauth_email, PreauthEmailDetails},
+    util::{send_email_bcc, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
 use resend_rs::Resend;
@@ -379,44 +379,36 @@ pub struct InvitationsResponseLite {
 pub async fn get_all_user(
     event_id: i32,
     pool: &State<PgPool>,
-    user: User,
+    _user: User,
 ) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
-    match is_attending_event(pool.inner(), event_id, user.email).await {
-        Err(e) => Err(rocket::response::status::BadRequest(e)),
-        Ok(false) => Err(rocket::response::status::BadRequest(
-            "You can only see invitations for events you have RSVP'd to".to_string(),
-        )),
-        Ok(true) => {
-            // Return all invitations for this event with their seat reservations
-            let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
-                InvitationsResponseLite,
-                r#"SELECT
-                    i.event_id,
-                    'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url,
-                    i.handle,
-                    i.response AS "response: _",
-                    i.attendance,
-                    sr.seat_id,
-                    i.last_modified
-                FROM invitation i
-                LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email
-                WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')"#,
-                event_id,
-            )
-            .fetch_all(pool.inner())
-            .await
-            {
-                Ok(invitations) => invitations,
-                Err(_) => {
-                    return Err(rocket::response::status::BadRequest(
-                        "Error getting database ID".to_string(),
-                    ))
-                }
-            };
-
-            Ok(Json(invitations))
+    // Return all invitations for this event with their seat reservations
+    let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
+        InvitationsResponseLite,
+        r#"SELECT
+            i.event_id,
+            'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' AS avatar_url,
+            i.handle,
+            i.response AS "response: _",
+            i.attendance,
+            sr.seat_id,
+            i.last_modified
+        FROM invitation i
+        LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email
+        WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')"#,
+        event_id,
+    )
+    .fetch_all(pool.inner())
+    .await
+    {
+        Ok(invitations) => invitations,
+        Err(_) => {
+            return Err(rocket::response::status::BadRequest(
+                "Error getting database ID".to_string(),
+            ))
         }
-    }
+    };
+
+    Ok(Json(invitations))
 }
 
 #[openapi(tag = "Event Invitations")]

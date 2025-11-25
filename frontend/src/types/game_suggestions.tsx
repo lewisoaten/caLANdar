@@ -26,6 +26,8 @@ export type GameSuggestion = {
   suggestionLastModified: moment.Moment;
   selfVote: GameVote;
   votes: number;
+  voters: Gamer[];
+  suggester: Gamer | null;
   gamerOwned: Gamer[];
   gamerUnowned: Gamer[];
   gamerUnknown: Gamer[];
@@ -43,6 +45,8 @@ export const defaultGameSuggestion: GameSuggestion = {
   suggestionLastModified: moment(),
   selfVote: GameVote.noVote,
   votes: 0,
+  voters: [],
+  suggester: null,
   gamerOwned: [],
   gamerUnowned: [],
   gamerUnknown: [],
