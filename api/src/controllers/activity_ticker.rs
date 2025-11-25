@@ -60,14 +60,21 @@ fn format_ticker_event(event: &activity_ticker::TickerEvent) -> Option<ActivityT
 fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let response = metadata.get("response")?.as_str()?;
-    let handle = metadata.get("handle").and_then(|v| v.as_str());
 
     // Skip "No" responses - we only want positive activity
     if response == "No" {
         return None;
     }
 
-    let user_handle = handle.map(String::from);
+    // Use handle from database join, or from metadata as fallback
+    let user_handle = event.user_handle.clone().or_else(|| {
+        metadata
+            .get("handle")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    });
+
+    // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
         let digest = md5::compute(email.to_lowercase().as_bytes());
         format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
@@ -105,15 +112,15 @@ fn format_game_suggestion_event(
     let game_name = metadata.get("game_name")?.as_str()?;
     let comment = metadata.get("comment").and_then(|v| v.as_str());
 
-    let user_handle = event.user_id.as_ref().map(|email| {
-        // Try to extract handle from metadata, otherwise use email
+    // Use handle from database join, or from metadata as fallback
+    let user_handle = event.user_handle.clone().or_else(|| {
         metadata
             .get("handle")
             .and_then(|v| v.as_str())
-            .unwrap_or(email)
-            .to_string()
+            .map(String::from)
     });
 
+    // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
         let digest = md5::compute(email.to_lowercase().as_bytes());
         format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
@@ -121,11 +128,15 @@ fn format_game_suggestion_event(
 
     let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
+    // UTF-8 safe truncation using character count instead of byte index
     let truncated_comment = comment.and_then(|c| {
-        if !c.is_empty() && c.len() > 50 {
-            Some(format!("{}...", &c[..50]))
-        } else if !c.is_empty() {
-            Some(c.to_string())
+        if !c.is_empty() {
+            let char_count = c.chars().count();
+            if char_count > 50 {
+                Some(format!("{}...", c.chars().take(50).collect::<String>()))
+            } else {
+                Some(c.to_string())
+            }
         } else {
             None
         }
@@ -157,15 +168,15 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
         return None;
     }
 
-    let user_handle = event.user_id.as_ref().map(|email| {
-        // Try to extract handle from metadata, otherwise use email
+    // Use handle from database join, or from metadata as fallback
+    let user_handle = event.user_handle.clone().or_else(|| {
         metadata
             .get("handle")
             .and_then(|v| v.as_str())
-            .unwrap_or(email)
-            .to_string()
+            .map(String::from)
     });
 
+    // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
         let digest = md5::compute(email.to_lowercase().as_bytes());
         format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
@@ -198,6 +209,7 @@ mod tests {
             id: 1,
             timestamp: Utc::now(),
             user_id: Some("test@example.com".to_string()),
+            user_handle: Some("TestUser".to_string()),
             action: "rsvp.update".to_string(),
             entity_type: "rsvp".to_string(),
             entity_id: Some("42".to_string()),
@@ -223,6 +235,7 @@ mod tests {
             id: 1,
             timestamp: Utc::now(),
             user_id: Some("test@example.com".to_string()),
+            user_handle: Some("TestUser".to_string()),
             action: "rsvp.update".to_string(),
             entity_type: "rsvp".to_string(),
             entity_id: Some("42".to_string()),
@@ -242,6 +255,7 @@ mod tests {
             id: 2,
             timestamp: Utc::now(),
             user_id: Some("test@example.com".to_string()),
+            user_handle: Some("GameMaster".to_string()),
             action: "game_suggestion.create".to_string(),
             entity_type: "game_suggestion".to_string(),
             entity_id: Some("42-12345".to_string()),
@@ -267,6 +281,7 @@ mod tests {
             id: 3,
             timestamp: Utc::now(),
             user_id: Some("voter@example.com".to_string()),
+            user_handle: Some("Voter123".to_string()),
             action: "game_vote.update".to_string(),
             entity_type: "game_vote".to_string(),
             entity_id: Some("42-12345".to_string()),
@@ -300,6 +315,7 @@ mod tests {
             id: 3,
             timestamp: Utc::now(),
             user_id: Some("voter@example.com".to_string()),
+            user_handle: Some("Voter123".to_string()),
             action: "game_vote.update".to_string(),
             entity_type: "game_vote".to_string(),
             entity_id: Some("42-12345".to_string()),

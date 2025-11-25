@@ -7,6 +7,7 @@ pub struct TickerEvent {
     pub id: i64,
     pub timestamp: DateTime<Utc>,
     pub user_id: Option<String>,
+    pub user_handle: Option<String>,
     pub action: String,
     pub entity_type: String,
     pub entity_id: Option<String>,
@@ -25,18 +26,27 @@ pub async fn get_ticker_events(
 ) -> Result<Vec<TickerEvent>, sqlx::Error> {
     let events = sqlx::query_as::<_, TickerEvent>(
         r"
-        SELECT id, timestamp, user_id, action, entity_type, entity_id, metadata
-        FROM audit_log
+        SELECT 
+            al.id, 
+            al.timestamp, 
+            al.user_id,
+            i.handle AS user_handle,
+            al.action, 
+            al.entity_type, 
+            al.entity_id, 
+            al.metadata
+        FROM audit_log al
+        LEFT JOIN invitation i ON LOWER(i.email) = LOWER(al.user_id) AND i.event_id = $1
         WHERE (
-            (action = 'rsvp.update' AND entity_type = 'rsvp' AND entity_id = $1)
-            OR (action = 'game_suggestion.create' AND entity_type = 'game_suggestion' AND entity_id LIKE $2)
-            OR (action = 'game_vote.update' AND entity_type = 'game_vote' AND entity_id LIKE $2)
+            (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
+            OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
+            OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
         )
-        ORDER BY timestamp DESC
+        ORDER BY al.timestamp DESC
         LIMIT $3
         "
     )
-    .bind(event_id.to_string())
+    .bind(event_id)
     .bind(format!("{event_id}-%"))
     .bind(limit)
     .fetch_all(pool)

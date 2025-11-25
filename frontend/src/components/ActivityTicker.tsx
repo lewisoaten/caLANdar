@@ -1,5 +1,6 @@
 import * as React from "react";
 import { useEffect, useState, useContext } from "react";
+import moment from "moment";
 import {
   Typography,
   List,
@@ -76,7 +77,7 @@ export default function ActivityTicker(props: ActivityTickerProps) {
     const interval = setInterval(fetchTickerEvents, 30000);
 
     return () => clearInterval(interval);
-  }, [props.event_id, props.responded, token]);
+  }, [props.event_id, props.responded]);
 
   if (!props.responded) {
     return null;
@@ -108,7 +109,11 @@ export default function ActivityTicker(props: ActivityTickerProps) {
         </Grid>
       ) : (
         <Grid size={12}>
-          <Paper elevation={1} sx={{ maxHeight: 400, overflow: "auto" }}>
+          <Paper
+            elevation={1}
+            sx={{ maxHeight: 400, overflow: "auto" }}
+            aria-label="Recent activity feed"
+          >
             <List>
               {events.map((event, index) => (
                 <Fade in={fadeIn} timeout={300 + index * 100} key={event.id}>
@@ -125,7 +130,7 @@ export default function ActivityTicker(props: ActivityTickerProps) {
                     </ListItemAvatar>
                     <ListItemText
                       primary={event.message}
-                      secondary={new Date(event.timestamp).toLocaleString()}
+                      secondary={moment(event.timestamp).fromNow()}
                     />
                   </ListItem>
                 </Fade>
