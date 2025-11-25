@@ -11,6 +11,7 @@ import { EventData, defaultEventData } from "../types/events";
 import { InvitationData, defaultInvitationData } from "../types/invitations";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
+import ActivityTicker from "./ActivityTicker";
 import { RSVPWizard, RSVPSummary } from "./RSVPWizard";
 
 const Event = () => {
@@ -337,6 +338,22 @@ const Event = () => {
                   responded={responded}
                   disabled={event.timeEnd.isSameOrBefore(moment())}
                 />
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Activity Ticker Panel */}
+          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
+            <Paper
+              sx={{
+                ...frostedGlassSx,
+                p: 3,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              {loaded && (
+                <ActivityTicker event_id={event.id} responded={responded} />
               )}
             </Paper>
           </Grid>
