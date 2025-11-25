@@ -161,6 +161,10 @@ export default function EventTable(props: EventTableProps) {
   const ownEventsState = useState([] as EventData[]);
 
   const [events, setEvents] = props.eventsState ?? ownEventsState;
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0); // MUI DataGrid uses 0-based page indexing
+  const [pageSize, setPageSize] = useState(20);
+  const [rowCount, setRowCount] = useState(0);
   const isAdmin = props.asAdmin ?? false;
 
   const liveEvents = props.liveEvents ?? true;
@@ -273,44 +277,62 @@ export default function EventTable(props: EventTableProps) {
   ];
 
   useEffect(() => {
-    fetch(`/api/events?as_admin=${isAdmin}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
+    setLoading(true);
+
+    // Determine filter based on liveEvents and pastEvents
+    let filter = "all";
+    if (liveEvents && !pastEvents) {
+      filter = "upcoming";
+    } else if (!liveEvents && pastEvents) {
+      filter = "past";
+    }
+
+    // API uses 1-based page indexing, MUI DataGrid uses 0-based
+    const apiPage = page + 1;
+
+    fetch(
+      `/api/events?as_admin=${isAdmin}&page=${apiPage}&limit=${pageSize}&filter=${filter}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
       },
-    })
+    )
       .then((response) => {
         if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as Array<EventData>);
+        else if (response.ok) return response.text();
       })
-      .then((data) => {
-        if (!data) {
-          return [] as EventData[];
+      .then((text) => {
+        if (!text) {
+          setEvents([]);
+          setRowCount(0);
+          setLoading(false);
+          return;
         }
 
-        const newEvents = [] as EventData[];
+        // Parse the JSON with date conversion
+        const data = JSON.parse(text, dateParser);
 
-        if (liveEvents) {
-          newEvents.push(
-            ...data.filter((event) => event.timeEnd.isAfter(moment())),
-          );
-        }
-
-        if (pastEvents) {
-          newEvents.push(
-            ...data.filter((event) => event.timeEnd.isSameOrBefore(moment())),
-          );
-        }
-
-        newEvents.sort((a, b) => a.timeBegin.unix() - b.timeBegin.unix());
-
-        setEvents(newEvents);
+        setEvents(data.events as Array<EventData>);
+        setRowCount(data.total);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error fetching events:", error);
+        setLoading(false);
       });
-  }, []);
+  }, [
+    page,
+    pageSize,
+    isAdmin,
+    liveEvents,
+    pastEvents,
+    token,
+    signOut,
+    setEvents,
+  ]);
 
   return (
     <React.Fragment>
@@ -323,6 +345,16 @@ export default function EventTable(props: EventTableProps) {
           columns={columns}
           autoHeight
           disableRowSelectionOnClick
+          loading={loading}
+          pagination
+          paginationMode="server"
+          rowCount={rowCount}
+          paginationModel={{ page, pageSize }}
+          onPaginationModelChange={(model) => {
+            setPage(model.page);
+            setPageSize(model.pageSize);
+          }}
+          pageSizeOptions={[10, 20, 50, 100]}
           initialState={{
             sorting: {
               sortModel: [{ field: "timeBegin", sort: "desc" }],
