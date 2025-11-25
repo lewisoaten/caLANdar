@@ -65,6 +65,7 @@ import { EventData } from "../types/events";
 import { GameSuggestion } from "../types/game_suggestions";
 import { InvitationLiteData } from "../types/invitations";
 import GameScheduleDetails from "./GameScheduleDetails";
+import { getTrophyColor } from "../utils/trophyColors";
 
 // Set moment to use British locale
 moment.locale("en-gb");
@@ -249,12 +250,7 @@ const CustomEvent: React.FC<CustomEventProps> = ({
 }) => {
   const [showDelete, setShowDelete] = useState(false);
 
-  let trophyColor = "";
-  if (rank === 1)
-    trophyColor = "#FFD700"; // Gold
-  else if (rank === 2)
-    trophyColor = "#C0C0C0"; // Silver
-  else if (rank === 3) trophyColor = "#CD7F32"; // Bronze
+  const trophyColor = getTrophyColor(rank);
 
   return (
     <Box
@@ -1159,7 +1155,7 @@ export default function EventGameSchedule() {
       .catch((error) => {
         console.error("Error fetching invitations:", error);
       });
-  }, [eventData, token, isAdmin, signOut]);
+  }, [eventData, token, signOut]);
 
   // Calculate top 3 games
   const topGames = React.useMemo(() => {
