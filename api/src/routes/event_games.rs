@@ -73,6 +73,8 @@ pub struct EventGameSuggestionResponse {
     pub suggestion_last_modified: DateTime<Utc>,
     pub self_vote: Option<GameVote>,
     pub votes: Option<i64>,
+    pub voters: Vec<Gamer>,
+    pub suggester: Option<Gamer>,
     pub gamer_owned: Vec<Gamer>,
     pub gamer_unowned: Vec<Gamer>,
     pub gamer_unknown: Vec<Gamer>,

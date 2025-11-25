@@ -50,6 +50,8 @@ impl From<game_suggestion::GameSuggestion> for EventGameSuggestionResponse {
             suggestion_last_modified: game_suggestion.last_modified,
             self_vote: game_suggestion.self_vote.map(Into::into),
             votes: game_suggestion.votes,
+            voters: Vec::new(),
+            suggester: None,
             gamer_owned: Vec::new(),
             gamer_unowned: Vec::new(),
             gamer_unknown: Vec::new(),
@@ -482,6 +484,35 @@ async fn add_owners_to_game(
         }
     }
 
+    // Get voters for this game
+    let voters_with_attendance =
+        invitation::get_voters_for_game(pool, game_suggestion.event_id, game_suggestion.game_id)
+            .await
+            .map_err(|e| Error::Controller(format!("Unable to get voters due to: {e}")))?;
+
+    let mut voters = Vec::new();
+    for voter in voters_with_attendance {
+        // Find voter details in invitations
+        if let Some(invitation) = invitations
+            .iter()
+            .find(|i| i.email.to_lowercase() == voter.email.to_lowercase())
+        {
+            voters.push(Gamer {
+                avatar_url: invitation.avatar_url.clone(),
+                handle: invitation.handle.clone(),
+            });
+        }
+    }
+
+    // Find suggester details
+    let suggester = invitations
+        .iter()
+        .find(|i| i.email.to_lowercase() == game_suggestion.user_email.to_lowercase())
+        .map(|i| Gamer {
+            avatar_url: i.avatar_url.clone(),
+            handle: i.handle.clone(),
+        });
+
     Ok(EventGameSuggestionResponse {
         appid: game_suggestion.game_id,
         name: game_suggestion.game_name,
@@ -492,6 +523,8 @@ async fn add_owners_to_game(
         suggestion_last_modified: game_suggestion.last_modified,
         self_vote: game_suggestion.self_vote.map(Into::into),
         votes: game_suggestion.votes,
+        voters,
+        suggester,
         gamer_owned,
         gamer_unowned,
         gamer_unknown,

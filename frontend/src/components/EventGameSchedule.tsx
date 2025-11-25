@@ -51,6 +51,7 @@ import {
   SportsEsports as GameIcon,
   Close as CloseIcon,
   Refresh as RefreshIcon,
+  EmojiEvents as TrophyIcon,
 } from "@mui/icons-material";
 import { useTheme } from "@mui/material/styles";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -62,6 +63,9 @@ import {
 } from "../types/game_schedule";
 import { EventData } from "../types/events";
 import { GameSuggestion } from "../types/game_suggestions";
+import { InvitationLiteData } from "../types/invitations";
+import GameScheduleDetails from "./GameScheduleDetails";
+import { getTrophyColor } from "../utils/trophyColors";
 
 // Set moment to use British locale
 moment.locale("en-gb");
@@ -235,14 +239,18 @@ interface CustomEventProps {
   event: CalendarEvent;
   isAdmin: boolean;
   onDelete: (scheduleId: number) => void;
+  rank?: number | null;
 }
 
 const CustomEvent: React.FC<CustomEventProps> = ({
   event,
   isAdmin,
   onDelete,
+  rank,
 }) => {
   const [showDelete, setShowDelete] = useState(false);
+
+  const trophyColor = getTrophyColor(rank);
 
   return (
     <Box
@@ -256,16 +264,28 @@ const CustomEvent: React.FC<CustomEventProps> = ({
         px: 0.5,
       }}
     >
-      <Typography
-        variant="caption"
-        noWrap
+      <Box
         sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.5,
           flex: 1,
-          fontWeight: 600,
+          overflow: "hidden",
         }}
       >
-        {event.title}
-      </Typography>
+        {rank && rank <= 3 && (
+          <TrophyIcon sx={{ fontSize: 16, color: trophyColor }} />
+        )}
+        <Typography
+          variant="caption"
+          noWrap
+          sx={{
+            fontWeight: 600,
+          }}
+        >
+          {event.title}
+        </Typography>
+      </Box>
       {isAdmin && showDelete && (
         <IconButton
           size="small"
@@ -324,6 +344,12 @@ export default function EventGameSchedule() {
   // Event state
   const [eventData, setEventData] = useState<EventData | null>(null);
   const [eventLoading, setEventLoading] = useState(true);
+
+  // Details drawer state
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(
+    null,
+  );
+  const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false);
 
   // Custom EventWeek view factory - creates view with eventData in closure
   const createEventWeekView = useCallback(() => {
@@ -419,6 +445,7 @@ export default function EventGameSchedule() {
   // Game suggestions state
   const [gameSuggestions, setGameSuggestions] = useState<GameSuggestion[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [invitations, setInvitations] = useState<InvitationLiteData[]>([]);
   const [fabOpen, setFabOpen] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
 
@@ -881,17 +908,11 @@ export default function EventGameSchedule() {
     }
   }, [isAdmin, token, eventData, signOut, refreshSchedule, enqueueSnackbar]);
 
-  // Handle clicking on a suggested game to pin it
-  const handleSelectEvent = useCallback(
-    (event: CalendarEvent) => {
-      // Only allow pinning for admins and suggested games
-      if (!isAdmin || !event.resource.isSuggested) return;
-
-      setGameToPin(event);
-      setPinDialogOpen(true);
-    },
-    [isAdmin],
-  );
+  // Handle clicking on a game to view details
+  const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    setSelectedEvent(event);
+    setDetailsDrawerOpen(true);
+  }, []);
 
   // Handle confirming the pin action
   const handleConfirmPin = useCallback(async () => {
@@ -1076,7 +1097,7 @@ export default function EventGameSchedule() {
 
   // Fetch game suggestions for the event
   useEffect(() => {
-    if (!eventData || !token || !isAdmin) return;
+    if (!eventData || !token) return;
 
     setSuggestionsLoading(true);
     fetch(`/api/events/${eventData.id}/suggested_games`, {
@@ -1108,7 +1129,57 @@ export default function EventGameSchedule() {
         console.error("Error fetching game suggestions:", error);
         setSuggestionsLoading(false);
       });
-  }, [eventData, token, isAdmin, signOut]);
+
+    // Fetch invitations for attendance data
+    fetch(`/api/events/${eventData.id}/invitations`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) => {
+        if (response.status === 401) signOut();
+        if (!response.ok) return;
+        return response
+          .text()
+          .then(
+            (data) => JSON.parse(data, dateParser) as Array<InvitationLiteData>,
+          );
+      })
+      .then((data) => {
+        if (data) {
+          setInvitations(data);
+        }
+      })
+      .catch((error) => {
+        console.error("Error fetching invitations:", error);
+      });
+  }, [eventData, token, signOut]);
+
+  // Calculate top 3 games
+  const topGames = React.useMemo(() => {
+    if (!gameSuggestions || gameSuggestions.length === 0) return [];
+
+    return [...gameSuggestions]
+      .sort((a, b) => {
+        // Sort by votes (descending)
+        if (b.votes !== a.votes) return b.votes - a.votes;
+        // Tie-breaker: suggested first (ascending requestedAt)
+        if (a.requestedAt && b.requestedAt) {
+          return a.requestedAt.diff(b.requestedAt);
+        }
+        return 0;
+      })
+      .slice(0, 3)
+      .map((g) => g.appid);
+  }, [gameSuggestions]);
+
+  // Helper to get rank
+  const getGameRank = (gameId: number) => {
+    const index = topGames.indexOf(gameId);
+    return index !== -1 ? index + 1 : null;
+  };
 
   // Show loading state while event data is being fetched
   if (eventLoading || !eventData) {
@@ -1266,7 +1337,7 @@ export default function EventGameSchedule() {
             tooltipAccessor={(event: CalendarEvent) =>
               `${event.title} - ${event.resource.durationMinutes} minutes`
             }
-            // Click handler for suggested games (pinning)
+            // Click handler for viewing game details
             onSelectEvent={handleSelectEvent}
             // Drag-and-drop props (only enabled for admins)
             draggableAccessor={() => isAdmin}
@@ -1280,6 +1351,7 @@ export default function EventGameSchedule() {
                   event={props.event}
                   isAdmin={isAdmin}
                   onDelete={handleDelete}
+                  rank={getGameRank(props.event.resource.gameId)}
                 />
               ),
               toolbar: CustomToolbar,
@@ -1477,6 +1549,37 @@ export default function EventGameSchedule() {
           </Dialog>
         </>
       )}
+
+      {/* Game Details Drawer */}
+      <Drawer
+        anchor="right"
+        open={detailsDrawerOpen}
+        onClose={() => setDetailsDrawerOpen(false)}
+      >
+        {selectedEvent && (
+          <GameScheduleDetails
+            scheduleEntry={selectedEvent.resource}
+            suggestion={gameSuggestions.find(
+              (g) => g.appid === selectedEvent.resource.gameId,
+            )}
+            invitations={invitations}
+            eventStart={eventData.timeBegin.toISOString()}
+            eventEnd={eventData.timeEnd.toISOString()}
+            onClose={() => setDetailsDrawerOpen(false)}
+            isAdmin={isAdmin}
+            onPin={() => {
+              setGameToPin(selectedEvent);
+              setPinDialogOpen(true);
+              setDetailsDrawerOpen(false);
+            }}
+            onUnpin={() => {
+              handleDelete(selectedEvent.resource.id);
+              setDetailsDrawerOpen(false);
+            }}
+            rank={getGameRank(selectedEvent.resource.gameId)}
+          />
+        )}
+      </Drawer>
     </Container>
   );
 }
