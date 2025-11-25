@@ -193,7 +193,7 @@ mod tests {
 
         let result = format_rsvp_event(&event);
         assert!(result.is_some());
-        
+
         let ticker_event = result.expect("Event should be formatted");
         assert_eq!(ticker_event.message, "TestUser RSVPed Yes!");
         assert_eq!(ticker_event.icon, "🎉");
