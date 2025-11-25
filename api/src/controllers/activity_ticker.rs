@@ -133,9 +133,7 @@ fn format_game_suggestion_event(
 
     let message = truncated_comment.map_or_else(
         || format!("{display_name} suggested 🎮 '{game_name}'"),
-        |comment_text| {
-            format!("{display_name} suggested 🎮 '{game_name}': \"{comment_text}\"")
-        },
+        |comment_text| format!("{display_name} suggested 🎮 '{game_name}': \"{comment_text}\""),
     );
 
     Some(ActivityTickerEvent {
