@@ -238,6 +238,7 @@ const Account = () => {
           games={games}
           gamesCount={gamesCount}
           loading={loading}
+          showOwnership={false}
         />
       </Grid>
     </Container>
