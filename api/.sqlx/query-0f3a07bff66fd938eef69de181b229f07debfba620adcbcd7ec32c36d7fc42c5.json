@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT COUNT(DISTINCT LOWER(i.email)) as \"count!\"\n        FROM invitation i\n        WHERE ($1::text IS NULL OR $2 = false OR\n               LOWER(i.email) LIKE $1 OR\n               LOWER(i.handle) LIKE $1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0f3a07bff66fd938eef69de181b229f07debfba620adcbcd7ec32c36d7fc42c5"
+}

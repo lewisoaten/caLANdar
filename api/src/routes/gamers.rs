@@ -134,7 +134,11 @@ pub async fn get_all(
 /// - limit: Items per page (default: 20, range: 1-100)
 /// - search: Optional search string to filter by email or handle
 #[openapi(tag = "Gamers")]
-#[get("/gamers?<_as_admin>&<page>&<limit>&<search>", format = "json", rank = 1)]
+#[get(
+    "/gamers?<_as_admin>&<page>&<limit>&<search>",
+    format = "json",
+    rank = 1
+)]
 pub async fn get_all_paginated(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,

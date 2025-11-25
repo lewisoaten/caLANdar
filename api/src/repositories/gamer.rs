@@ -35,9 +35,12 @@ pub async fn index_paginated(
     params: PaginationParams,
 ) -> Result<PaginatedGamers, sqlx::Error> {
     let offset = (params.page - 1) * params.limit;
-    
+
     // Build search pattern
-    let search_pattern = params.search.as_ref().map(|s| format!("%{}%", s.to_lowercase()));
+    let search_pattern = params
+        .search
+        .as_ref()
+        .map(|s| format!("%{}%", s.to_lowercase()));
     let has_search = search_pattern.is_some();
     let search_pattern = search_pattern.unwrap_or_default();
 
@@ -46,11 +49,15 @@ pub async fn index_paginated(
         r#"
         SELECT COUNT(DISTINCT LOWER(i.email)) as "count!"
         FROM invitation i
-        WHERE ($1::text IS NULL OR $2 = false OR 
-               LOWER(i.email) LIKE $1 OR 
+        WHERE ($1::text IS NULL OR $2 = false OR
+               LOWER(i.email) LIKE $1 OR
                LOWER(i.handle) LIKE $1)
         "#,
-        if has_search { Some(search_pattern.as_str()) } else { None },
+        if has_search {
+            Some(search_pattern.as_str())
+        } else {
+            None
+        },
         has_search
     )
     .fetch_one(pool)
@@ -60,21 +67,21 @@ pub async fn index_paginated(
     let gamers = sqlx::query!(
         r#"
         WITH gamer_base AS (
-            SELECT 
+            SELECT
                 LOWER(i.email) as email,
                 'https://www.gravatar.com/avatar/' || MD5(LOWER(i.email)) || '?d=robohash' as avatar_url,
                 ARRAY_AGG(DISTINCT i.handle) FILTER (WHERE i.handle IS NOT NULL) as handles,
                 MAX(i.responded_at) as events_last_response
             FROM invitation i
-            WHERE ($1::text IS NULL OR $2 = false OR 
-                   LOWER(i.email) LIKE $1 OR 
+            WHERE ($1::text IS NULL OR $2 = false OR
+                   LOWER(i.email) LIKE $1 OR
                    LOWER(i.handle) LIKE $1)
             GROUP BY LOWER(i.email)
             ORDER BY LOWER(i.email)
             LIMIT $3 OFFSET $4
         ),
         gamer_events AS (
-            SELECT 
+            SELECT
                 LOWER(i.email) as email,
                 COUNT(*) FILTER (WHERE i.response IS NULL) as events_invited_count,
                 COUNT(*) FILTER (WHERE i.response = 'yes') as events_accepted_count,
@@ -85,7 +92,7 @@ pub async fn index_paginated(
             GROUP BY LOWER(i.email)
         ),
         gamer_games AS (
-            SELECT 
+            SELECT
                 LOWER(ug.email) as email,
                 COUNT(*) as games_owned_count,
                 MAX(ug.last_modified) as games_owned_last_modified
@@ -94,13 +101,13 @@ pub async fn index_paginated(
             GROUP BY LOWER(ug.email)
         ),
         gamer_profiles AS (
-            SELECT 
+            SELECT
                 LOWER(p.email) as email,
                 p.steam_id
             FROM profiles p
             WHERE LOWER(p.email) IN (SELECT email FROM gamer_base)
         )
-        SELECT 
+        SELECT
             gb.email,
             gb.avatar_url,
             gb.handles,
