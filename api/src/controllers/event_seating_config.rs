@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 use crate::{
-    controllers::{ensure_user_invited, Error},
+    controllers::Error,
     repositories::event_seating_config,
     routes::event_seating::{EventSeatingConfig, EventSeatingConfigSubmit},
 };
@@ -33,15 +33,6 @@ pub async fn get_or_default(pool: &PgPool, event_id: i32) -> Result<EventSeating
     get(pool, event_id)
         .await?
         .map_or_else(|| Ok(default_config(event_id)), Ok)
-}
-
-pub async fn get_or_default_for_invited_user(
-    pool: &PgPool,
-    event_id: i32,
-    email: &str,
-) -> Result<EventSeatingConfig, Error> {
-    ensure_user_invited(pool, event_id, email).await?;
-    get_or_default(pool, event_id).await
 }
 
 pub async fn upsert(

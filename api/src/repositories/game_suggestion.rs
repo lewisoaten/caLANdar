@@ -170,7 +170,6 @@ pub async fn edit(
     .await
 }
 
-
 pub async fn update_comment(
     pool: &PgPool,
     event_id: i32,

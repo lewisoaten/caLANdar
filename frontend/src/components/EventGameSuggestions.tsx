@@ -404,7 +404,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       ) : (
         <React.Fragment>
           <Grid size={12}>
-            <Alert severity="info">RSVP to make game suggestions.</Alert>
+            <Alert severity="info">
+              RSVP to view and suggest games for this event.
+            </Alert>
           </Grid>
           <Grid size={12}>
             <Skeleton variant="rectangular" width="100%" animation="wave">
@@ -415,131 +417,135 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
           </Grid>
         </React.Fragment>
       )}
-      <Grid size={12}>
-        <List>
-          {gameSuggestions.map((gameSuggestion) => {
-            const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
-            const isOwner =
-              userDetails?.email?.toLowerCase() ===
-              gameSuggestion.userEmail.toLowerCase();
-            const isEditing = editingGameId === gameSuggestion.appid;
+      {!!props.responded && (
+        <Grid size={12}>
+          <List>
+            {gameSuggestions.map((gameSuggestion) => {
+              const labelId = `checkbox-list-secondary-label-${gameSuggestion.appid}`;
+              const isOwner =
+                userDetails?.email?.toLowerCase() ===
+                gameSuggestion.userEmail.toLowerCase();
+              const isEditing = editingGameId === gameSuggestion.appid;
 
-            return (
-              <ListItem
-                key={gameSuggestion.appid}
-                secondaryAction={
-                  props.responded && (
-                    <Stack
-                      direction="row"
-                      spacing={2}
-                      sx={{
-                        justifyContent: "center",
-                        alignItems: "center",
-                      }}
-                    >
-                      <GameOwners
-                        gamerOwned={gameSuggestion.gamerOwned}
-                        gamerUnowned={gameSuggestion.gamerUnowned}
-                        gamerUnknown={gameSuggestion.gamerUnknown}
-                      />
-                      {isOwner && !isEditing && (
-                        <IconButton
+              return (
+                <ListItem
+                  key={gameSuggestion.appid}
+                  secondaryAction={
+                    props.responded && (
+                      <Stack
+                        direction="row"
+                        spacing={2}
+                        sx={{
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        <GameOwners
+                          gamerOwned={gameSuggestion.gamerOwned}
+                          gamerUnowned={gameSuggestion.gamerUnowned}
+                          gamerUnknown={gameSuggestion.gamerUnknown}
+                        />
+                        {isOwner && !isEditing && (
+                          <IconButton
+                            edge="end"
+                            aria-label="edit"
+                            onClick={() =>
+                              handleEditClick(
+                                gameSuggestion.appid,
+                                gameSuggestion.comment,
+                              )
+                            }
+                            disabled={props.disabled}
+                          >
+                            <EditIcon />
+                          </IconButton>
+                        )}
+                        <Checkbox
+                          value={gameSuggestion.appid}
                           edge="end"
-                          aria-label="edit"
-                          onClick={() =>
-                            handleEditClick(
-                              gameSuggestion.appid,
-                              gameSuggestion.comment,
-                            )
-                          }
+                          icon={<ThumbUpOffAltIcon />}
+                          checkedIcon={<ThumbUpAltIcon />}
+                          onChange={handleVote}
+                          checked={gameSuggestion.selfVote === GameVote.yes}
+                          inputProps={{ "aria-labelledby": labelId }}
+                          disabled={props.disabled}
+                        />
+                      </Stack>
+                    )
+                  }
+                  dense={true}
+                >
+                  {!isEditing ? (
+                    <ListItemButton
+                      aria-label="steam link"
+                      href={`https://store.steampowered.com/app/${gameSuggestion.appid}/`}
+                      target="_blank"
+                    >
+                      <ListItemAvatar>
+                        <Avatar
+                          alt={gameSuggestion.name || "Game"}
+                          src={`https://cdn.akamai.steamstatic.com/steam/apps/${gameSuggestion.appid}/header.jpg`}
+                        />
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={gameSuggestion.name}
+                        secondary={
+                          <>
+                            {`${gameSuggestion.votes} want to play!`}
+                            {gameSuggestion.comment && (
+                              <>
+                                <br />
+                                {gameSuggestion.comment}
+                              </>
+                            )}
+                          </>
+                        }
+                      />
+                    </ListItemButton>
+                  ) : (
+                    <Stack
+                      direction="column"
+                      spacing={2}
+                      sx={{ width: "100%", py: 1 }}
+                    >
+                      <Typography variant="h6">
+                        {gameSuggestion.name}
+                      </Typography>
+                      <TextField
+                        fullWidth
+                        multiline
+                        rows={2}
+                        label="Comment"
+                        value={editCommentValue}
+                        onChange={(e) => setEditCommentValue(e.target.value)}
+                        inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
+                        disabled={props.disabled}
+                      />
+                      <Stack direction="row" spacing={2}>
+                        <Button
+                          variant="contained"
+                          onClick={() => handleEditSave(gameSuggestion.appid)}
                           disabled={props.disabled}
                         >
-                          <EditIcon />
-                        </IconButton>
-                      )}
-                      <Checkbox
-                        value={gameSuggestion.appid}
-                        edge="end"
-                        icon={<ThumbUpOffAltIcon />}
-                        checkedIcon={<ThumbUpAltIcon />}
-                        onChange={handleVote}
-                        checked={gameSuggestion.selfVote === GameVote.yes}
-                        inputProps={{ "aria-labelledby": labelId }}
-                        disabled={props.disabled}
-                      />
+                          Save
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          onClick={handleEditCancel}
+                          disabled={props.disabled}
+                        >
+                          Cancel
+                        </Button>
+                      </Stack>
                     </Stack>
-                  )
-                }
-                dense={true}
-              >
-                {!isEditing ? (
-                  <ListItemButton
-                    aria-label="steam link"
-                    href={`https://store.steampowered.com/app/${gameSuggestion.appid}/`}
-                    target="_blank"
-                  >
-                    <ListItemAvatar>
-                      <Avatar
-                        alt={gameSuggestion.name || "Game"}
-                        src={`https://cdn.akamai.steamstatic.com/steam/apps/${gameSuggestion.appid}/header.jpg`}
-                      />
-                    </ListItemAvatar>
-                    <ListItemText
-                      primary={gameSuggestion.name}
-                      secondary={
-                        <>
-                          {`${gameSuggestion.votes} want to play!`}
-                          {gameSuggestion.comment && (
-                            <>
-                              <br />
-                              {gameSuggestion.comment}
-                            </>
-                          )}
-                        </>
-                      }
-                    />
-                  </ListItemButton>
-                ) : (
-                  <Stack
-                    direction="column"
-                    spacing={2}
-                    sx={{ width: "100%", py: 1 }}
-                  >
-                    <Typography variant="h6">{gameSuggestion.name}</Typography>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={2}
-                      label="Comment"
-                      value={editCommentValue}
-                      onChange={(e) => setEditCommentValue(e.target.value)}
-                      inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
-                      disabled={props.disabled}
-                    />
-                    <Stack direction="row" spacing={2}>
-                      <Button
-                        variant="contained"
-                        onClick={() => handleEditSave(gameSuggestion.appid)}
-                        disabled={props.disabled}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        onClick={handleEditCancel}
-                        disabled={props.disabled}
-                      >
-                        Cancel
-                      </Button>
-                    </Stack>
-                  </Stack>
-                )}
-                <ListItemButton></ListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
-      </Grid>
+                  )}
+                  <ListItemButton></ListItemButton>
+                </ListItem>
+              );
+            })}
+          </List>
+        </Grid>
+      )}
     </Grid>
   );
 }
