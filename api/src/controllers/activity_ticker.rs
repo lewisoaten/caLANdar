@@ -152,12 +152,28 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
     let game_name = metadata.get("game_name")?.as_str()?;
     let vote = metadata.get("vote")?.as_str()?;
 
-    // Only show "Yes" votes - don't reveal who voted
+    // Only show "Yes" votes
     if vote != "Yes" {
         return None;
     }
 
-    let message = format!("'{game_name}' got a vote! 🗳️");
+    let user_handle = event.user_id.as_ref().map(|email| {
+        // Try to extract handle from metadata, otherwise use email
+        metadata
+            .get("handle")
+            .and_then(|v| v.as_str())
+            .unwrap_or(email)
+            .to_string()
+    });
+
+    let user_avatar_url = event.user_id.as_ref().map(|email| {
+        let digest = md5::compute(email.to_lowercase().as_bytes());
+        format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
+    });
+
+    let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
+
+    let message = format!("{display_name} voted for '{game_name}' 👍");
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -165,8 +181,8 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
         message,
         icon: "👍".to_string(),
         event_type: "game_vote".to_string(),
-        user_handle: None, // Don't reveal who voted
-        user_avatar_url: None,
+        user_handle,
+        user_avatar_url,
     })
 }
 
@@ -265,9 +281,17 @@ mod tests {
 
         let ticker_event = result.expect("Event should be formatted");
         assert!(ticker_event.message.contains("Among Us"));
+        assert!(ticker_event.message.contains("voted for"));
         assert_eq!(ticker_event.icon, "👍");
         assert_eq!(ticker_event.event_type, "game_vote");
-        assert!(ticker_event.user_handle.is_none(), "Voter identity should be hidden");
+        assert!(
+            ticker_event.user_handle.is_some(),
+            "Voter identity should be shown"
+        );
+        assert!(
+            ticker_event.user_avatar_url.is_some(),
+            "Voter avatar should be shown"
+        );
     }
 
     #[test]
