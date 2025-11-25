@@ -4,6 +4,7 @@ use sqlx::PgPool;
 
 use crate::repositories::invitation;
 
+pub mod activity_ticker;
 pub mod audit_log;
 pub mod event;
 pub mod event_invitation;

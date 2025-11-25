@@ -245,6 +245,7 @@ async fn rocket(
             "/api",
             openapi_get_routes![
                 healthz,
+                routes::activity_ticker::get_activity_ticker,
                 routes::auth::login,
                 routes::auth::verify_email,
                 routes::events::get_all,
