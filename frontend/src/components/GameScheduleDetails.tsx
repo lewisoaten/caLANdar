@@ -4,11 +4,8 @@ import {
   Typography,
   Button,
   Divider,
-  Chip,
   Stack,
   Avatar,
-  Link,
-  Grid,
   List,
   ListItem,
   ListItemAvatar,
@@ -17,7 +14,6 @@ import {
 } from "@mui/material";
 import {
   AccessTime as TimeIcon,
-  SportsEsports as GameIcon,
   OpenInNew as OpenInNewIcon,
   People as PeopleIcon,
   CheckCircle as ReadyIcon,
@@ -30,6 +26,14 @@ import moment from "moment";
 import { GameScheduleEntry } from "../types/game_schedule";
 import { GameSuggestion, Gamer } from "../types/game_suggestions";
 import { InvitationLiteData, RSVP } from "../types/invitations";
+import { getTrophyColor } from "../utils/trophyColors";
+
+// Constants for attendance calculation
+const MAX_EVENT_DURATION_DAYS = 14;
+const ATTENDANCE_BUCKET_START_HOUR = 6; // First bucket starts at 6 AM
+const ATTENDANCE_BUCKET_SIZE_HOURS = 6;
+const MAX_BUCKET_ITERATIONS =
+  MAX_EVENT_DURATION_DAYS * (24 / ATTENDANCE_BUCKET_SIZE_HOURS); // 56
 
 interface GameScheduleDetailsProps {
   scheduleEntry: GameScheduleEntry;
@@ -132,12 +136,7 @@ export default function GameScheduleDetails({
     .duration(scheduleEntry.durationMinutes, "minutes")
     .humanize();
 
-  let trophyColor = "";
-  if (rank === 1)
-    trophyColor = "#FFD700"; // Gold
-  else if (rank === 2)
-    trophyColor = "#C0C0C0"; // Silver
-  else if (rank === 3) trophyColor = "#CD7F32"; // Bronze
+  const trophyColor = getTrophyColor(rank);
 
   // Calculate attendees
   const attendees = React.useMemo(() => {
@@ -149,10 +148,16 @@ export default function GameScheduleDetails({
 
     // Find the first valid bucket index for the event
     let firstValidBucketIndex = -1;
-    // We assume a reasonable max number of days (e.g. 14) to avoid infinite loops if something is wrong
-    for (let i = 0; i < 14 * 4; i++) {
-      const bucketStart = moment(eventStartDay).add(6 + i * 6, "hours");
-      const bucketEnd = moment(bucketStart).add(6, "hours");
+    // We assume a reasonable max number of days to avoid infinite loops if something is wrong
+    for (let i = 0; i < MAX_BUCKET_ITERATIONS; i++) {
+      const bucketStart = moment(eventStartDay).add(
+        ATTENDANCE_BUCKET_START_HOUR + i * ATTENDANCE_BUCKET_SIZE_HOURS,
+        "hours",
+      );
+      const bucketEnd = moment(bucketStart).add(
+        ATTENDANCE_BUCKET_SIZE_HOURS,
+        "hours",
+      );
 
       // Check for overlap: start < bucketEnd && end >= bucketStart
       if (
@@ -168,7 +173,10 @@ export default function GameScheduleDetails({
 
     // Calculate the bucket index for the game start time
     const gameStartDiffHours = startTime.diff(eventStartDay, "hours");
-    const gameBucketIndex = Math.floor((gameStartDiffHours - 6) / 6);
+    const gameBucketIndex = Math.floor(
+      (gameStartDiffHours - ATTENDANCE_BUCKET_START_HOUR) /
+        ATTENDANCE_BUCKET_SIZE_HOURS,
+    );
 
     const attendanceIndex = gameBucketIndex - firstValidBucketIndex;
 

@@ -1,6 +1,6 @@
 use crate::{
     auth::{AdminUser, User},
-    controllers::{event_invitation, Error},
+    controllers::{ensure_user_invited, event_invitation, Error},
     util::{send_email_bcc, send_preauth_email, PreauthEmailDetails},
 };
 use chrono::{prelude::Utc, DateTime, Duration};
@@ -379,8 +379,15 @@ pub struct InvitationsResponseLite {
 pub async fn get_all_user(
     event_id: i32,
     pool: &State<PgPool>,
-    _user: User,
+    user: User,
 ) -> Result<Json<Vec<InvitationsResponseLite>>, rocket::response::status::BadRequest<String>> {
+    // Verify user is invited to this event
+    match ensure_user_invited(pool.inner(), event_id, &user.email).await {
+        Err(Error::NotPermitted(e)) => return Err(rocket::response::status::BadRequest(e)),
+        Err(e) => return Err(rocket::response::status::BadRequest(e.to_string())),
+        Ok(()) => {}
+    }
+
     // Return all invitations for this event with their seat reservations
     let invitations: Vec<InvitationsResponseLite> = match sqlx::query_as!(
         InvitationsResponseLite,
@@ -403,7 +410,7 @@ pub async fn get_all_user(
         Ok(invitations) => invitations,
         Err(_) => {
             return Err(rocket::response::status::BadRequest(
-                "Error getting database ID".to_string(),
+                format!("Failed to fetch invitations for event {event_id}"),
             ))
         }
     };
