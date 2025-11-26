@@ -350,11 +350,10 @@ const Event = () => {
           sx={{
             position: "fixed",
             bottom: 0,
-            left: { xs: 0, sm: 240 }, // Respect drawer width on desktop (240px drawer)
-            right: 0,
+            left: { xs: 50, sm: 290 }, // 50px from edge + 240px drawer on desktop
+            right: 50, // 50px from right edge
             zIndex: 1000,
             paddingBottom: "env(safe-area-inset-bottom)", // Respect safe areas
-            paddingRight: "8px", // Avoid overlapping scrollbar
           }}
         >
           <ActivityTicker event_id={event.id} responded={responded} />
