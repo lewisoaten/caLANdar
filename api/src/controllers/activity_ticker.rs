@@ -91,12 +91,12 @@ async fn get_events_for_period(
         sqlx::query_as::<_, audit_log::AuditLog>(
             r"
             SELECT
-                al.id, 
-                al.timestamp, 
+                al.id,
+                al.timestamp,
                 al.user_id,
-                al.action, 
-                al.entity_type, 
-                al.entity_id, 
+                al.action,
+                al.entity_type,
+                al.entity_id,
                 al.metadata,
                 al.ip_address,
                 al.user_agent
@@ -121,12 +121,12 @@ async fn get_events_for_period(
         sqlx::query_as::<_, audit_log::AuditLog>(
             r"
             SELECT
-                al.id, 
-                al.timestamp, 
+                al.id,
+                al.timestamp,
                 al.user_id,
-                al.action, 
-                al.entity_type, 
-                al.entity_id, 
+                al.action,
+                al.entity_type,
+                al.entity_id,
                 al.metadata,
                 al.ip_address,
                 al.user_agent

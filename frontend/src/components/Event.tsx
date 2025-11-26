@@ -341,19 +341,20 @@ const Event = () => {
               )}
             </Paper>
           </Grid>
-
         </Grid>
       </Container>
 
-      {/* Activity Ticker - Pinned to bottom */}
+      {/* Activity Ticker - Pinned to bottom of Event area */}
       {loaded && responded > 0 && (
         <Box
           sx={{
             position: "fixed",
             bottom: 0,
-            left: 0,
+            left: { xs: 0, sm: 240 }, // Respect drawer width on desktop (240px drawer)
             right: 0,
             zIndex: 1000,
+            paddingBottom: "env(safe-area-inset-bottom)", // Respect safe areas
+            paddingRight: "8px", // Avoid overlapping scrollbar
           }}
         >
           <ActivityTicker event_id={event.id} responded={responded} />

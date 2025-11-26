@@ -217,9 +217,7 @@ export default function ActivityTicker(props: ActivityTickerProps) {
                     fontSize: "0.75rem",
                   }}
                 />
-                <Typography
-                  sx={{ color: "rgba(255, 255, 255, 0.4)", px: 2 }}
-                >
+                <Typography sx={{ color: "rgba(255, 255, 255, 0.4)", px: 2 }}>
                   •
                 </Typography>
               </Box>
