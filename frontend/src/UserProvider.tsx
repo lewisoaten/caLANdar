@@ -69,7 +69,7 @@ function UserProvider({ children }: Props) {
       },
       body: JSON.stringify({
         email: email,
-        redirect: location.state?.from?.pathname,
+        redirect: location.state?.from.pathname,
       }),
     }).then((response) => {
       if (response.status === 200) {

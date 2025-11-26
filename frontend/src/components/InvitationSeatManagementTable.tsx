@@ -192,13 +192,13 @@ export default function InvitationSeatManagementTable(
       .then((response) => {
         if (response.status === 401) signOut();
         else
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as EventData[]);
+          return response.text().then((data) => JSON.parse(data, dateParser));
       })
       .then((data) => {
-        if (data) {
-          setAvailableEvents(data.filter((e) => e.id !== event_id));
+        if (data && data.events) {
+          setAvailableEvents(
+            (data.events as EventData[]).filter((e) => e.id !== event_id),
+          );
         }
       });
   }, [token, event_id, signOut]);

@@ -338,14 +338,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as EventData[]);
+          return response.text().then((data) => JSON.parse(data, dateParser));
       })
       .then((data) => {
-        if (data) {
+        if (data && data.events) {
           // Filter out the current event
-          const otherEvents = data.filter((evt) => evt.id !== event_id);
+          const otherEvents = (data.events as EventData[]).filter(
+            (evt) => evt.id !== event_id,
+          );
           setAvailableEvents(otherEvents);
         }
       })
