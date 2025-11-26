@@ -344,20 +344,9 @@ const Event = () => {
         </Grid>
       </Container>
 
-      {/* Activity Ticker - Pinned to bottom of Event area */}
-      {loaded && responded > 0 && (
-        <Box
-          sx={{
-            position: "fixed",
-            bottom: 0,
-            left: { xs: 50, sm: 290 }, // 50px from edge + 240px drawer on desktop
-            right: 50, // 50px from right edge
-            zIndex: 1000,
-            paddingBottom: "env(safe-area-inset-bottom)", // Respect safe areas
-          }}
-        >
-          <ActivityTicker event_id={event.id} responded={responded} />
-        </Box>
+      {/* Activity Ticker */}
+      {loaded && responded && (
+        <ActivityTicker event_id={event.id} responded={responded} />
       )}
 
       {/* RSVP Wizard */}

@@ -14,7 +14,7 @@ export default [
     files: ["**/*.{js,mjs,cjs,ts,jsx,tsx}"],
   },
   {
-    ignores: ["build/*"],
+    ignores: ["build/*", "public/mockServiceWorker.js"],
   },
   {
     languageOptions: {

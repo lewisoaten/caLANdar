@@ -33,6 +33,7 @@ impl From<crate::repositories::event::Event> for Event {
     }
 }
 
+#[allow(dead_code)]
 pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
     // Return all events
     match event::index(pool).await {

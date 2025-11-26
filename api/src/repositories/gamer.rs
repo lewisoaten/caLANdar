@@ -30,6 +30,7 @@ pub struct PaginatedGamers {
     pub total_pages: i64,
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn index_paginated(
     pool: &PgPool,
     params: PaginationParams,
@@ -43,7 +44,7 @@ pub async fn index_paginated(
             .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
-        format!("%{}%", escaped)
+        format!("%{escaped}%")
     });
     let has_search = search_pattern.is_some();
     let search_pattern = search_pattern.unwrap_or_default();

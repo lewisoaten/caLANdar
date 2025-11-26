@@ -430,6 +430,7 @@ export default function EventGameSchedule() {
       }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return CustomEventWeek as any;
   }, [eventData]);
 

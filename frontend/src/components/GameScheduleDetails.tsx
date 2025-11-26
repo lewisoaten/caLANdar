@@ -300,7 +300,7 @@ export default function GameScheduleDetails({
           {suggestion.comment && (
             <Box sx={{ p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
               <Typography variant="body2" fontStyle="italic">
-                "{suggestion.comment}"
+                &quot;{suggestion.comment}&quot;
               </Typography>
             </Box>
           )}

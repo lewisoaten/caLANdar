@@ -164,7 +164,7 @@ custom_errors!(
 pub async fn put_admin(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
     email: String,
     profile_submit: Json<ProfileSubmit>,
 ) -> Result<Json<Profile>, AdminProfileUpdateError> {
@@ -172,7 +172,7 @@ pub async fn put_admin(
         pool,
         email.clone(),
         profile_submit.into_inner(),
-        Some(_user.email),
+        Some(user.email),
     )
     .await
     {

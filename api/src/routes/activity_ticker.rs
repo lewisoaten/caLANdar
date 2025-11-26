@@ -22,6 +22,7 @@ pub struct ActivityTickerEventResponse {
     pub event_type: String,
     pub user_handle: Option<String>,
     pub user_avatar_url: Option<String>,
+    pub game_id: Option<i64>,
 }
 
 impl SchemaExample for ActivityTickerEventResponse {
@@ -34,6 +35,7 @@ impl SchemaExample for ActivityTickerEventResponse {
             event_type: "rsvp".to_string(),
             user_handle: Some("Alice".to_string()),
             user_avatar_url: Some("https://www.gravatar.com/avatar/example?d=robohash".to_string()),
+            game_id: None,
         }
     }
 }
@@ -48,6 +50,7 @@ impl From<activity_ticker::ActivityTickerEvent> for ActivityTickerEventResponse 
             event_type: event.event_type,
             user_handle: event.user_handle,
             user_avatar_url: event.user_avatar_url,
+            game_id: event.game_id,
         }
     }
 }

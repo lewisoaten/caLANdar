@@ -168,11 +168,14 @@ use crate::repositories::audit_log;
 use rocket::serde::json::serde_json::Value as JsonValue;
 
 /// Helper function to format attendance buckets as human-readable text
+#[allow(clippy::ref_option)]
 pub fn format_attendance_description(
     attendance: &Option<Vec<u8>>,
     time_begin: chrono::DateTime<Utc>,
     time_end: chrono::DateTime<Utc>,
 ) -> String {
+    const TIME_PERIODS: [&str; 4] = ["morning", "afternoon", "evening", "overnight"];
+
     let Some(buckets) = attendance else {
         return "none".to_string();
     };
@@ -180,8 +183,6 @@ pub fn format_attendance_description(
     if buckets.is_empty() || buckets.iter().all(|&b| b == 0) {
         return "none".to_string();
     }
-
-    const TIME_PERIODS: [&str; 4] = ["morning", "afternoon", "evening", "overnight"];
 
     // Build all possible buckets with their metadata
     let mut all_buckets = Vec::new();
@@ -200,7 +201,7 @@ pub fn format_attendance_description(
             if bucket_start <= time_end_naive && bucket_end > time_begin_naive {
                 all_buckets.push((
                     current_day.weekday().to_string(),
-                    TIME_PERIODS[bucket_num as usize],
+                    TIME_PERIODS[usize::try_from(bucket_num).unwrap_or(0)],
                 ));
             }
         }

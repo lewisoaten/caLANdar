@@ -66,7 +66,7 @@ pub async fn post(
     sender: &State<Resend>,
     tera: &State<Tera>,
     _as_admin: Option<bool>,
-    _user: AdminUser,
+    user: AdminUser,
 ) -> Result<status::Created<Json<InvitationsResponse>>, rocket::response::status::BadRequest<String>>
 {
     // Insert new event and return it
@@ -157,7 +157,7 @@ pub async fn post(
     });
     crate::util::log_audit(
         pool.inner(),
-        Some(_user.email),
+        Some(user.email),
         "invitation.create".to_string(),
         "invitation".to_string(),
         Some(format!("{}-{}", event_id, invitation_request.email)),
@@ -595,6 +595,7 @@ custom_errors!(
     format = "json",
     data = "<email_request>"
 )]
+#[allow(clippy::too_many_lines)]
 pub async fn send_custom_email(
     event_id: i32,
     email_request: Json<SendCustomEmailRequest>,

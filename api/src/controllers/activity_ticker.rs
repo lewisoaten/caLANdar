@@ -1,4 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
 use sqlx::PgPool;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -14,6 +17,7 @@ pub struct ActivityTickerEvent {
     pub event_type: String,
     pub user_handle: Option<String>,
     pub user_avatar_url: Option<String>,
+    pub game_id: Option<i64>,
 }
 
 #[derive(Debug)]
@@ -34,7 +38,7 @@ fn get_phrase<'a, T: Hash>(phrases: &'a [&str], seed: &T) -> &'a str {
     let mut hasher = DefaultHasher::new();
     seed.hash(&mut hasher);
     let hash = hasher.finish();
-    let index = (hash as usize) % phrases.len();
+    let index = usize::try_from(hash % (phrases.len() as u64)).unwrap_or(0);
     phrases[index]
 }
 
@@ -59,12 +63,9 @@ pub async fn get_ticker_events(
 
     // Randomly shuffle the events using a seeded RNG for thread safety
     let mut shuffled_events = events;
-    use rand::rngs::StdRng;
-    use rand::seq::SliceRandom;
-    use rand::SeedableRng;
 
     // Use a deterministic but varying seed based on current time
-    let seed = Utc::now().timestamp() as u64;
+    let seed = Utc::now().timestamp().unsigned_abs();
     let mut rng = StdRng::seed_from_u64(seed);
     shuffled_events.shuffle(&mut rng);
 
@@ -87,9 +88,39 @@ async fn get_events_for_period(
     limit: i64,
 ) -> Result<Vec<audit_log::AuditLog>, Error> {
     // Query audit logs with custom SQL
-    let query = if let Some(from_ts) = from_timestamp {
-        sqlx::query_as::<_, audit_log::AuditLog>(
-            r"
+    let query = from_timestamp.map_or_else(
+        || {
+            sqlx::query_as::<_, audit_log::AuditLog>(
+                r"
+            SELECT
+                al.id,
+                al.timestamp,
+                al.user_id,
+                al.action,
+                al.entity_type,
+                al.entity_id,
+                al.metadata,
+                al.ip_address,
+                al.user_agent
+            FROM audit_log al
+            WHERE (
+                (al.action = 'event.create' AND al.entity_type = 'event' AND al.entity_id = $1::text)
+                OR (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
+                OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
+                OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
+                OR (al.action = 'seat_reservation.create' AND al.entity_type = 'seat_reservation' AND al.entity_id = $1::text)
+            )
+            ORDER BY al.timestamp DESC
+            LIMIT $3
+            ",
+            )
+            .bind(event_id.to_string())
+            .bind(format!("{event_id}-%"))
+            .bind(limit)
+        },
+        |from_ts| {
+            sqlx::query_as::<_, audit_log::AuditLog>(
+                r"
             SELECT
                 al.id,
                 al.timestamp,
@@ -111,41 +142,14 @@ async fn get_events_for_period(
             AND al.timestamp >= $3
             ORDER BY al.timestamp DESC
             LIMIT $4
-            "
-        )
-        .bind(event_id.to_string())
-        .bind(format!("{event_id}-%"))
-        .bind(from_ts)
-        .bind(limit)
-    } else {
-        sqlx::query_as::<_, audit_log::AuditLog>(
-            r"
-            SELECT
-                al.id,
-                al.timestamp,
-                al.user_id,
-                al.action,
-                al.entity_type,
-                al.entity_id,
-                al.metadata,
-                al.ip_address,
-                al.user_agent
-            FROM audit_log al
-            WHERE (
-                (al.action = 'event.create' AND al.entity_type = 'event' AND al.entity_id = $1::text)
-                OR (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
-                OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
-                OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
-                OR (al.action = 'seat_reservation.create' AND al.entity_type = 'seat_reservation' AND al.entity_id = $1::text)
+            ",
             )
-            ORDER BY al.timestamp DESC
-            LIMIT $3
-            "
-        )
-        .bind(event_id.to_string())
-        .bind(format!("{event_id}-%"))
-        .bind(limit)
-    };
+            .bind(event_id.to_string())
+            .bind(format!("{event_id}-%"))
+            .bind(from_ts)
+            .bind(limit)
+        },
+    );
 
     let events = query
         .fetch_all(pool)
@@ -185,6 +189,10 @@ async fn format_ticker_event(
     }
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    clippy::option_if_let_else
+)]
 async fn format_event_create(
     pool: &PgPool,
     event_id: i32,
@@ -227,9 +235,14 @@ async fn format_event_create(
         event_type: "event_create".to_string(),
         user_handle,
         user_avatar_url,
+        game_id: None,
     })
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    clippy::option_if_let_else
+)]
 async fn format_rsvp_event(
     pool: &PgPool,
     event_id: i32,
@@ -244,17 +257,13 @@ async fn format_rsvp_event(
     }
 
     // Get handle from metadata first, then from database
-    let user_handle = metadata
-        .get("handle")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .or_else(|| {
-            if let Some(user_id) = &event.user_id {
-                futures::executor::block_on(get_user_handle(pool, event_id, user_id))
-            } else {
-                None
-            }
-        });
+    let user_handle = if let Some(handle) = metadata.get("handle").and_then(|v| v.as_str()) {
+        Some(handle.to_string())
+    } else if let Some(user_id) = &event.user_id {
+        get_user_handle(pool, event_id, user_id).await
+    } else {
+        None
+    };
 
     // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
@@ -302,9 +311,14 @@ async fn format_rsvp_event(
         event_type: "rsvp".to_string(),
         user_handle,
         user_avatar_url,
+        game_id: None,
     })
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    clippy::option_if_let_else
+)]
 async fn format_game_suggestion_event(
     pool: &PgPool,
     event_id: i32,
@@ -313,6 +327,7 @@ async fn format_game_suggestion_event(
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let comment = metadata.get("comment").and_then(|v| v.as_str());
+    let game_id = metadata.get("game_id").and_then(resend_rs::Value::as_i64);
 
     // Get user handle
     let user_handle = if let Some(user_id) = &event.user_id {
@@ -331,41 +346,44 @@ async fn format_game_suggestion_event(
 
     // UTF-8 safe truncation using character count instead of byte index
     let truncated_comment = comment.and_then(|c| {
-        if !c.is_empty() {
+        if c.is_empty() {
+            None
+        } else {
             let char_count = c.chars().count();
             if char_count > 50 {
                 Some(format!("{}...", c.chars().take(50).collect::<String>()))
             } else {
                 Some(c.to_string())
             }
-        } else {
-            None
         }
     });
 
     // Phrase variations for game suggestions
-    let message = if let Some(comment_text) = truncated_comment {
-        let phrases = [
-            "{name} wants to play 🎮 '{game}': \"{comment}\"",
-            "{name} suggested '{game}': \"{comment}\"",
-            "{name} thinks we should try '{game}': \"{comment}\"",
-        ];
-        let template = get_phrase(&phrases, &event.id);
-        template
-            .replace("{name}", &display_name)
-            .replace("{game}", game_name)
-            .replace("{comment}", &comment_text)
-    } else {
-        let phrases = [
-            "{name} suggested 🎮 '{game}'",
-            "{name} wants to play '{game}'!",
-            "{name} added '{game}' to the list",
-        ];
-        let template = get_phrase(&phrases, &event.id);
-        template
-            .replace("{name}", &display_name)
-            .replace("{game}", game_name)
-    };
+    let message = truncated_comment.map_or_else(
+        || {
+            let phrases = [
+                "{name} suggested 🎮 '{game}'",
+                "{name} wants to play '{game}'!",
+                "{name} added '{game}' to the list",
+            ];
+            let template = get_phrase(&phrases, &event.id);
+            template
+                .replace("{name}", &display_name)
+                .replace("{game}", game_name)
+        },
+        |comment_text| {
+            let phrases = [
+                "{name} wants to play 🎮 '{game}': \"{comment}\"",
+                "{name} suggested '{game}': \"{comment}\"",
+                "{name} thinks we should try '{game}': \"{comment}\"",
+            ];
+            let template = get_phrase(&phrases, &event.id);
+            template
+                .replace("{name}", &display_name)
+                .replace("{game}", game_name)
+                .replace("{comment}", &comment_text)
+        },
+    );
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -375,9 +393,14 @@ async fn format_game_suggestion_event(
         event_type: "game_suggestion".to_string(),
         user_handle,
         user_avatar_url,
+        game_id,
     })
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    clippy::option_if_let_else
+)]
 async fn format_game_vote_event(
     pool: &PgPool,
     event_id: i32,
@@ -386,6 +409,7 @@ async fn format_game_vote_event(
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let vote = metadata.get("vote")?.as_str()?;
+    let game_id = metadata.get("game_id").and_then(resend_rs::Value::as_i64);
 
     // Only show "Yes" votes
     if vote != "Yes" {
@@ -427,9 +451,14 @@ async fn format_game_vote_event(
         event_type: "game_vote".to_string(),
         user_handle,
         user_avatar_url,
+        game_id,
     })
 }
 
+#[allow(
+    clippy::literal_string_with_formatting_args,
+    clippy::option_if_let_else
+)]
 async fn format_seat_reservation_event(
     pool: &PgPool,
     event_id: i32,
@@ -473,5 +502,6 @@ async fn format_seat_reservation_event(
         event_type: "seat_reservation".to_string(),
         user_handle,
         user_avatar_url,
+        game_id: None,
     })
 }

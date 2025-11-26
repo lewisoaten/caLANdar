@@ -714,7 +714,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::similar_names)]
     fn test_overnight_event_with_pinned_slot() {
         // Test case: Reproduce specific scenario with overnight event
         // Event: 9pm (21:00) to 1pm (13:00) next day - 16 hours total
