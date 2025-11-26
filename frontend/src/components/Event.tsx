@@ -342,23 +342,23 @@ const Event = () => {
             </Paper>
           </Grid>
 
-          {/* Activity Ticker Panel */}
-          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-            <Paper
-              sx={{
-                ...frostedGlassSx,
-                p: 3,
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              {loaded && (
-                <ActivityTicker event_id={event.id} responded={responded} />
-              )}
-            </Paper>
-          </Grid>
         </Grid>
       </Container>
+
+      {/* Activity Ticker - Pinned to bottom */}
+      {loaded && responded > 0 && (
+        <Box
+          sx={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 1000,
+          }}
+        >
+          <ActivityTicker event_id={event.id} responded={responded} />
+        </Box>
+      )}
 
       {/* RSVP Wizard */}
       {loaded && (

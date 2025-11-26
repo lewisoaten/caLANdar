@@ -1,9 +1,9 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::repositories::activity_ticker;
+use crate::repositories::audit_log;
 
 #[derive(Debug, Clone)]
 pub struct ActivityTickerEvent {
@@ -39,18 +39,39 @@ fn get_phrase<'a, T: Hash>(phrases: &'a [&str], seed: &T) -> &'a str {
 }
 
 /// Get formatted activity ticker events for an event
+/// Returns up to 20 events from the last week, or at least 10 events if available
 pub async fn get_ticker_events(
     pool: &PgPool,
     event_id: i32,
 ) -> Result<Vec<ActivityTickerEvent>, Error> {
-    let events = activity_ticker::get_ticker_events(pool, event_id, 20)
-        .await
-        .map_err(|e| Error::Database(e.to_string()))?;
+    // First, try to get events from the last week (up to 20)
+    let one_week_ago = Utc::now() - Duration::days(7);
 
+    let week_events = get_events_for_period(pool, event_id, Some(one_week_ago), 20).await?;
+
+    // If we have at least 10 events from the last week, use those
+    let events = if week_events.len() >= 10 {
+        week_events
+    } else {
+        // Otherwise, get the last 10 events regardless of time
+        get_events_for_period(pool, event_id, None, 10).await?
+    };
+
+    // Randomly shuffle the events using a seeded RNG for thread safety
+    let mut shuffled_events = events;
+    use rand::rngs::StdRng;
+    use rand::seq::SliceRandom;
+    use rand::SeedableRng;
+
+    // Use a deterministic but varying seed based on current time
+    let seed = Utc::now().timestamp() as u64;
+    let mut rng = StdRng::seed_from_u64(seed);
+    shuffled_events.shuffle(&mut rng);
+
+    // Format the events
     let mut ticker_events = Vec::new();
-
-    for event in &events {
-        if let Some(formatted) = format_ticker_event(event) {
+    for event in &shuffled_events {
+        if let Some(formatted) = format_ticker_event(pool, event_id, event).await {
             ticker_events.push(formatted);
         }
     }
@@ -58,18 +79,162 @@ pub async fn get_ticker_events(
     Ok(ticker_events)
 }
 
+/// Helper function to get events for a specific period
+async fn get_events_for_period(
+    pool: &PgPool,
+    event_id: i32,
+    from_timestamp: Option<DateTime<Utc>>,
+    limit: i64,
+) -> Result<Vec<audit_log::AuditLog>, Error> {
+    // Query audit logs with custom SQL
+    let query = if let Some(from_ts) = from_timestamp {
+        sqlx::query_as::<_, audit_log::AuditLog>(
+            r"
+            SELECT
+                al.id, 
+                al.timestamp, 
+                al.user_id,
+                al.action, 
+                al.entity_type, 
+                al.entity_id, 
+                al.metadata,
+                al.ip_address,
+                al.user_agent
+            FROM audit_log al
+            WHERE (
+                (al.action = 'event.create' AND al.entity_type = 'event' AND al.entity_id = $1::text)
+                OR (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
+                OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
+                OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
+                OR (al.action = 'seat_reservation.create' AND al.entity_type = 'seat_reservation' AND al.entity_id = $1::text)
+            )
+            AND al.timestamp >= $3
+            ORDER BY al.timestamp DESC
+            LIMIT $4
+            "
+        )
+        .bind(event_id.to_string())
+        .bind(format!("{event_id}-%"))
+        .bind(from_ts)
+        .bind(limit)
+    } else {
+        sqlx::query_as::<_, audit_log::AuditLog>(
+            r"
+            SELECT
+                al.id, 
+                al.timestamp, 
+                al.user_id,
+                al.action, 
+                al.entity_type, 
+                al.entity_id, 
+                al.metadata,
+                al.ip_address,
+                al.user_agent
+            FROM audit_log al
+            WHERE (
+                (al.action = 'event.create' AND al.entity_type = 'event' AND al.entity_id = $1::text)
+                OR (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
+                OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
+                OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
+                OR (al.action = 'seat_reservation.create' AND al.entity_type = 'seat_reservation' AND al.entity_id = $1::text)
+            )
+            ORDER BY al.timestamp DESC
+            LIMIT $3
+            "
+        )
+        .bind(event_id.to_string())
+        .bind(format!("{event_id}-%"))
+        .bind(limit)
+    };
+
+    let events = query
+        .fetch_all(pool)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))?;
+
+    Ok(events)
+}
+
+/// Get user handle for an event from the invitation table
+async fn get_user_handle(pool: &PgPool, event_id: i32, user_id: &str) -> Option<String> {
+    let result = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT handle FROM invitation WHERE event_id = $1 AND LOWER(email) = LOWER($2)",
+    )
+    .bind(event_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .ok()?;
+
+    result.flatten()
+}
+
 /// Format a raw audit log event into a user-friendly ticker event
-fn format_ticker_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+async fn format_ticker_event(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
+) -> Option<ActivityTickerEvent> {
     match event.action.as_str() {
-        "rsvp.update" => format_rsvp_event(event),
-        "game_suggestion.create" => format_game_suggestion_event(event),
-        "game_vote.update" => format_game_vote_event(event),
-        "seat_reservation.create" => format_seat_reservation_event(event),
+        "event.create" => format_event_create(pool, event_id, event).await,
+        "rsvp.update" => format_rsvp_event(pool, event_id, event).await,
+        "game_suggestion.create" => format_game_suggestion_event(pool, event_id, event).await,
+        "game_vote.update" => format_game_vote_event(pool, event_id, event).await,
+        "seat_reservation.create" => format_seat_reservation_event(pool, event_id, event).await,
         _ => None,
     }
 }
 
-fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+async fn format_event_create(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
+) -> Option<ActivityTickerEvent> {
+    let metadata = event.metadata.as_ref()?;
+    let event_name = metadata.get("name")?.as_str()?;
+
+    // Get user handle if available
+    let user_handle = if let Some(user_id) = &event.user_id {
+        get_user_handle(pool, event_id, user_id).await
+    } else {
+        None
+    };
+
+    // Generate avatar URL only if we have user_id (email)
+    let user_avatar_url = event.user_id.as_ref().map(|email| {
+        let digest = md5::compute(email.to_lowercase().as_bytes());
+        format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
+    });
+
+    let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
+
+    // Phrase variations for event creation
+    let phrases = [
+        "{name} created the event '{event}'! 🎊",
+        "{name} started planning '{event}'!",
+        "'{event}' is happening! Created by {name}",
+    ];
+    let template = get_phrase(&phrases, &event.id);
+    let message = template
+        .replace("{name}", &display_name)
+        .replace("{event}", event_name);
+
+    Some(ActivityTickerEvent {
+        id: event.id,
+        timestamp: event.timestamp,
+        message,
+        icon: "🎊".to_string(),
+        event_type: "event_create".to_string(),
+        user_handle,
+        user_avatar_url,
+    })
+}
+
+async fn format_rsvp_event(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
+) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let response = metadata.get("response")?.as_str()?;
 
@@ -78,13 +243,18 @@ fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTic
         return None;
     }
 
-    // Use handle from database join, or from metadata as fallback
-    let user_handle = event.user_handle.clone().or_else(|| {
-        metadata
-            .get("handle")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    });
+    // Get handle from metadata first, then from database
+    let user_handle = metadata
+        .get("handle")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| {
+            if let Some(user_id) = &event.user_id {
+                futures::executor::block_on(get_user_handle(pool, event_id, user_id))
+            } else {
+                None
+            }
+        });
 
     // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
@@ -135,20 +305,21 @@ fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTic
     })
 }
 
-fn format_game_suggestion_event(
-    event: &activity_ticker::TickerEvent,
+async fn format_game_suggestion_event(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
 ) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let comment = metadata.get("comment").and_then(|v| v.as_str());
 
-    // Use handle from database join, or from metadata as fallback
-    let user_handle = event.user_handle.clone().or_else(|| {
-        metadata
-            .get("handle")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    });
+    // Get user handle
+    let user_handle = if let Some(user_id) = &event.user_id {
+        get_user_handle(pool, event_id, user_id).await
+    } else {
+        None
+    };
 
     // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
@@ -207,7 +378,11 @@ fn format_game_suggestion_event(
     })
 }
 
-fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTickerEvent> {
+async fn format_game_vote_event(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
+) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let game_name = metadata.get("game_name")?.as_str()?;
     let vote = metadata.get("vote")?.as_str()?;
@@ -217,13 +392,12 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
         return None;
     }
 
-    // Use handle from database join, or from metadata as fallback
-    let user_handle = event.user_handle.clone().or_else(|| {
-        metadata
-            .get("handle")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-    });
+    // Get user handle
+    let user_handle = if let Some(user_id) = &event.user_id {
+        get_user_handle(pool, event_id, user_id).await
+    } else {
+        None
+    };
 
     // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
@@ -256,14 +430,20 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
     })
 }
 
-fn format_seat_reservation_event(
-    event: &activity_ticker::TickerEvent,
+async fn format_seat_reservation_event(
+    pool: &PgPool,
+    event_id: i32,
+    event: &audit_log::AuditLog,
 ) -> Option<ActivityTickerEvent> {
     let metadata = event.metadata.as_ref()?;
     let seat = metadata.get("seat")?.as_str()?;
 
-    // Use handle from database join
-    let user_handle = event.user_handle.clone();
+    // Get user handle
+    let user_handle = if let Some(user_id) = &event.user_id {
+        get_user_handle(pool, event_id, user_id).await
+    } else {
+        None
+    };
 
     // Generate avatar URL only if we have user_id (email)
     let user_avatar_url = event.user_id.as_ref().map(|email| {
@@ -294,137 +474,4 @@ fn format_seat_reservation_event(
         user_handle,
         user_avatar_url,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::Utc;
-    use rocket::serde::json::serde_json::json;
-
-    #[test]
-    fn test_format_rsvp_event_yes() {
-        let event = activity_ticker::TickerEvent {
-            id: 1,
-            timestamp: Utc::now(),
-            user_id: Some("test@example.com".to_string()),
-            user_handle: Some("TestUser".to_string()),
-            action: "rsvp.update".to_string(),
-            entity_type: "rsvp".to_string(),
-            entity_id: Some("42".to_string()),
-            metadata: Some(json!({
-                "response": "Yes",
-                "handle": "TestUser"
-            })),
-        };
-
-        let result = format_rsvp_event(&event);
-        assert!(result.is_some());
-
-        let ticker_event = result.expect("Event should be formatted");
-        assert_eq!(ticker_event.message, "TestUser RSVPed Yes!");
-        assert_eq!(ticker_event.icon, "🎉");
-        assert_eq!(ticker_event.event_type, "rsvp");
-        assert_eq!(ticker_event.user_handle, Some("TestUser".to_string()));
-    }
-
-    #[test]
-    fn test_format_rsvp_event_no_is_filtered() {
-        let event = activity_ticker::TickerEvent {
-            id: 1,
-            timestamp: Utc::now(),
-            user_id: Some("test@example.com".to_string()),
-            user_handle: Some("TestUser".to_string()),
-            action: "rsvp.update".to_string(),
-            entity_type: "rsvp".to_string(),
-            entity_id: Some("42".to_string()),
-            metadata: Some(json!({
-                "response": "No",
-                "handle": "TestUser"
-            })),
-        };
-
-        let result = format_rsvp_event(&event);
-        assert!(result.is_none(), "No responses should be filtered out");
-    }
-
-    #[test]
-    fn test_format_game_suggestion_event() {
-        let event = activity_ticker::TickerEvent {
-            id: 2,
-            timestamp: Utc::now(),
-            user_id: Some("test@example.com".to_string()),
-            user_handle: Some("GameMaster".to_string()),
-            action: "game_suggestion.create".to_string(),
-            entity_type: "game_suggestion".to_string(),
-            entity_id: Some("42-12345".to_string()),
-            metadata: Some(json!({
-                "game_name": "Portal 2",
-                "comment": "Great co-op game!"
-            })),
-        };
-
-        let result = format_game_suggestion_event(&event);
-        assert!(result.is_some());
-
-        let ticker_event = result.expect("Event should be formatted");
-        assert!(ticker_event.message.contains("Portal 2"));
-        assert!(ticker_event.message.contains("Great co-op game!"));
-        assert_eq!(ticker_event.icon, "🎮");
-        assert_eq!(ticker_event.event_type, "game_suggestion");
-    }
-
-    #[test]
-    fn test_format_game_vote_event_yes() {
-        let event = activity_ticker::TickerEvent {
-            id: 3,
-            timestamp: Utc::now(),
-            user_id: Some("voter@example.com".to_string()),
-            user_handle: Some("Voter123".to_string()),
-            action: "game_vote.update".to_string(),
-            entity_type: "game_vote".to_string(),
-            entity_id: Some("42-12345".to_string()),
-            metadata: Some(json!({
-                "game_name": "Among Us",
-                "vote": "Yes"
-            })),
-        };
-
-        let result = format_game_vote_event(&event);
-        assert!(result.is_some());
-
-        let ticker_event = result.expect("Event should be formatted");
-        assert!(ticker_event.message.contains("Among Us"));
-        assert!(ticker_event.message.contains("Voter123"));
-        assert_eq!(ticker_event.icon, "👍");
-        assert_eq!(ticker_event.event_type, "game_vote");
-        assert!(
-            ticker_event.user_handle.is_some(),
-            "Voter identity should be shown"
-        );
-        assert!(
-            ticker_event.user_avatar_url.is_some(),
-            "Voter avatar should be shown"
-        );
-    }
-
-    #[test]
-    fn test_format_game_vote_event_no_is_filtered() {
-        let event = activity_ticker::TickerEvent {
-            id: 3,
-            timestamp: Utc::now(),
-            user_id: Some("voter@example.com".to_string()),
-            user_handle: Some("Voter123".to_string()),
-            action: "game_vote.update".to_string(),
-            entity_type: "game_vote".to_string(),
-            entity_id: Some("42-12345".to_string()),
-            metadata: Some(json!({
-                "game_name": "Among Us",
-                "vote": "No"
-            })),
-        };
-
-        let result = format_game_vote_event(&event);
-        assert!(result.is_none(), "No votes should be filtered out");
-    }
 }

@@ -203,6 +203,7 @@ dependencies = [
  "log",
  "md5",
  "okapi 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.8.5",
  "reqwest",
  "resend-rs",
  "rocket",
