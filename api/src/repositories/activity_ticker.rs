@@ -19,6 +19,7 @@ pub struct TickerEvent {
 /// - RSVP updates (`rsvp.update`)
 /// - Game suggestions (`game_suggestion.create`)
 /// - Game votes (`game_vote.update`)
+/// - Seat reservations (`seat_reservation.create`)
 pub async fn get_ticker_events(
     pool: &PgPool,
     event_id: i32,
@@ -41,6 +42,7 @@ pub async fn get_ticker_events(
             (al.action = 'rsvp.update' AND al.entity_type = 'rsvp' AND al.entity_id = $1::text)
             OR (al.action = 'game_suggestion.create' AND al.entity_type = 'game_suggestion' AND al.entity_id LIKE $2)
             OR (al.action = 'game_vote.update' AND al.entity_type = 'game_vote' AND al.entity_id LIKE $2)
+            OR (al.action = 'seat_reservation.create' AND al.entity_type = 'seat_reservation' AND al.entity_id = $1::text)
         )
         ORDER BY al.timestamp DESC
         LIMIT $3

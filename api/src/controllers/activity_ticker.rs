@@ -1,5 +1,7 @@
 use chrono::{DateTime, Utc};
 use sqlx::PgPool;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 
 use crate::repositories::activity_ticker;
 
@@ -25,6 +27,15 @@ impl std::fmt::Display for Error {
             Self::Database(msg) => write!(f, "Database error: {msg}"),
         }
     }
+}
+
+/// Get a consistent phrase from a list based on a hash of the event ID
+fn get_phrase<'a, T: Hash>(phrases: &'a [&str], seed: &T) -> &'a str {
+    let mut hasher = DefaultHasher::new();
+    seed.hash(&mut hasher);
+    let hash = hasher.finish();
+    let index = (hash as usize) % phrases.len();
+    phrases[index]
 }
 
 /// Get formatted activity ticker events for an event
@@ -53,6 +64,7 @@ fn format_ticker_event(event: &activity_ticker::TickerEvent) -> Option<ActivityT
         "rsvp.update" => format_rsvp_event(event),
         "game_suggestion.create" => format_game_suggestion_event(event),
         "game_vote.update" => format_game_vote_event(event),
+        "seat_reservation.create" => format_seat_reservation_event(event),
         _ => None,
     }
 }
@@ -88,9 +100,27 @@ fn format_rsvp_event(event: &activity_ticker::TickerEvent) -> Option<ActivityTic
 
     let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
+    // Phrase variations for RSVPs
     let message = match response {
-        "Yes" => format!("{display_name} RSVPed Yes!"),
-        "Maybe" => format!("{display_name} RSVPed Maybe"),
+        "Yes" => {
+            let phrases = [
+                "{name} is coming to the party! 🎉",
+                "{name} RSVPed Yes!",
+                "{name} confirmed their attendance!",
+                "{name} is joining the fun!",
+            ];
+            let template = get_phrase(&phrases, &event.id);
+            template.replace("{name}", &display_name)
+        }
+        "Maybe" => {
+            let phrases = [
+                "{name} might join us 🙋",
+                "{name} RSVPed Maybe",
+                "{name} is considering attending",
+            ];
+            let template = get_phrase(&phrases, &event.id);
+            template.replace("{name}", &display_name)
+        }
         _ => format!("{display_name} updated their RSVP"),
     };
 
@@ -142,10 +172,29 @@ fn format_game_suggestion_event(
         }
     });
 
-    let message = truncated_comment.map_or_else(
-        || format!("{display_name} suggested 🎮 '{game_name}'"),
-        |comment_text| format!("{display_name} suggested 🎮 '{game_name}': \"{comment_text}\""),
-    );
+    // Phrase variations for game suggestions
+    let message = if let Some(comment_text) = truncated_comment {
+        let phrases = [
+            "{name} wants to play 🎮 '{game}': \"{comment}\"",
+            "{name} suggested '{game}': \"{comment}\"",
+            "{name} thinks we should try '{game}': \"{comment}\"",
+        ];
+        let template = get_phrase(&phrases, &event.id);
+        template
+            .replace("{name}", &display_name)
+            .replace("{game}", game_name)
+            .replace("{comment}", &comment_text)
+    } else {
+        let phrases = [
+            "{name} suggested 🎮 '{game}'",
+            "{name} wants to play '{game}'!",
+            "{name} added '{game}' to the list",
+        ];
+        let template = get_phrase(&phrases, &event.id);
+        template
+            .replace("{name}", &display_name)
+            .replace("{game}", game_name)
+    };
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -184,7 +233,17 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
 
     let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
-    let message = format!("{display_name} voted for '{game_name}' 👍");
+    // Phrase variations for game votes
+    let phrases = [
+        "{name} voted for '{game}' 👍",
+        "{name} wants to play '{game}'!",
+        "{name} is excited about '{game}'!",
+        "{name} cast a vote for '{game}'",
+    ];
+    let template = get_phrase(&phrases, &event.id);
+    let message = template
+        .replace("{name}", &display_name)
+        .replace("{game}", game_name);
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -192,6 +251,46 @@ fn format_game_vote_event(event: &activity_ticker::TickerEvent) -> Option<Activi
         message,
         icon: "👍".to_string(),
         event_type: "game_vote".to_string(),
+        user_handle,
+        user_avatar_url,
+    })
+}
+
+fn format_seat_reservation_event(
+    event: &activity_ticker::TickerEvent,
+) -> Option<ActivityTickerEvent> {
+    let metadata = event.metadata.as_ref()?;
+    let seat = metadata.get("seat")?.as_str()?;
+
+    // Use handle from database join
+    let user_handle = event.user_handle.clone();
+
+    // Generate avatar URL only if we have user_id (email)
+    let user_avatar_url = event.user_id.as_ref().map(|email| {
+        let digest = md5::compute(email.to_lowercase().as_bytes());
+        format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
+    });
+
+    let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
+
+    // Phrase variations for seat reservations
+    let phrases = [
+        "{name} claimed {seat}! 🪑",
+        "{name} reserved {seat}",
+        "{name} grabbed {seat}!",
+        "{name} snagged {seat}",
+    ];
+    let template = get_phrase(&phrases, &event.id);
+    let message = template
+        .replace("{name}", &display_name)
+        .replace("{seat}", seat);
+
+    Some(ActivityTickerEvent {
+        id: event.id,
+        timestamp: event.timestamp,
+        message,
+        icon: "🪑".to_string(),
+        event_type: "seat_reservation".to_string(),
         user_handle,
         user_avatar_url,
     })
@@ -296,7 +395,7 @@ mod tests {
 
         let ticker_event = result.expect("Event should be formatted");
         assert!(ticker_event.message.contains("Among Us"));
-        assert!(ticker_event.message.contains("voted for"));
+        assert!(ticker_event.message.contains("Voter123"));
         assert_eq!(ticker_event.icon, "👍");
         assert_eq!(ticker_event.event_type, "game_vote");
         assert!(
