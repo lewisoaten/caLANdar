@@ -8,10 +8,12 @@ anyhow = "1.0.100"
 base64 = "0.22.1"
 chrono = { version = "0.4.42", features = ["serde"] }
 futures = "0.3.30"
+rand = "0.8.5"
 shuttle-rocket = "0.57.0"
 shuttle-runtime = "0.57.0"
 shuttle-shared-db = { version = "0.57.0", features = ["postgres", "sqlx"] }
 log = "0.4.28"
+md5 = "0.7.0"
 resend-rs = "0.19"
 rocket = { version = "0.5.0", features = [ "json" ] }
 rocket_dyn_templates = { version = "0.2.0", features = [ "tera" ] }

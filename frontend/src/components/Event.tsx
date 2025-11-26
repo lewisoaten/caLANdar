@@ -11,6 +11,7 @@ import { EventData, defaultEventData } from "../types/events";
 import { InvitationData, defaultInvitationData } from "../types/invitations";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
+import ActivityTicker from "./ActivityTicker";
 import { RSVPWizard, RSVPSummary } from "./RSVPWizard";
 
 const Event = () => {
@@ -342,6 +343,11 @@ const Event = () => {
           </Grid>
         </Grid>
       </Container>
+
+      {/* Activity Ticker */}
+      {loaded && responded && (
+        <ActivityTicker event_id={event.id} responded={responded} />
+      )}
 
       {/* RSVP Wizard */}
       {loaded && (

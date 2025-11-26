@@ -42,6 +42,7 @@ impl From<GamerBuild> for Gamer {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
     // Return all invitations across all events
     let invitation_filter_values = invitation::Filter {

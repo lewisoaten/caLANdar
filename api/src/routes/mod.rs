@@ -1,3 +1,4 @@
+pub mod activity_ticker;
 pub mod audit_logs;
 pub mod auth;
 pub mod event_games;

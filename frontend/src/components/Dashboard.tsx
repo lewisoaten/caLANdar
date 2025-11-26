@@ -139,10 +139,12 @@ function ResponsiveDrawer(props: AppProps) {
           flexGrow: 1,
           height: "100vh",
           overflow: "auto",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <Toolbar />
-        {props.children}
+        <Toolbar sx={{ flexShrink: 0 }} />
+        <Box sx={{ flexGrow: 1, overflow: "auto" }}>{props.children}</Box>
       </Box>
     </Box>
   );

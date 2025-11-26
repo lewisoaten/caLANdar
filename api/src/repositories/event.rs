@@ -84,6 +84,7 @@ pub async fn create(
     .await
 }
 
+#[allow(dead_code)]
 pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
     sqlx::query_as!(
         Event,
