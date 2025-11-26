@@ -45,6 +45,14 @@ export const defaultCreateEvent: CreateEvent = {
   timeEnd: roundUpHour(),
 };
 
+export type PaginatedEventsResponse = {
+  events: EventData[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
 export type EventSeatingConfig = {
   eventId: number;
   hasSeating: boolean;

@@ -37,7 +37,12 @@ import EventSeatIcon from "@mui/icons-material/EventSeat";
 import SendIcon from "@mui/icons-material/Send";
 import { InvitationData, RSVP } from "../types/invitations";
 import { SeatReservation } from "../types/seat_reservations";
-import { EventData, Room, Seat } from "../types/events";
+import {
+  EventData,
+  PaginatedEventsResponse,
+  Room,
+  Seat,
+} from "../types/events";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { getAttendanceDescription } from "../utils/attendanceDescription";
@@ -194,11 +199,13 @@ export default function InvitationSeatManagementTable(
         else
           return response
             .text()
-            .then((data) => JSON.parse(data, dateParser) as EventData[]);
+            .then(
+              (data) => JSON.parse(data, dateParser) as PaginatedEventsResponse,
+            );
       })
       .then((data) => {
-        if (data) {
-          setAvailableEvents(data.filter((e) => e.id !== event_id));
+        if (data && data.events) {
+          setAvailableEvents(data.events.filter((e) => e.id !== event_id));
         }
       });
   }, [token, event_id, signOut]);

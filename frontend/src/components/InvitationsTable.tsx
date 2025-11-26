@@ -50,7 +50,7 @@ import {
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import AttendanceSelector from "./AttendanceSelector";
-import { EventData } from "../types/events";
+import { EventData, PaginatedEventsResponse } from "../types/events";
 import { useSnackbar } from "notistack";
 
 interface GridCellExpandProps {
@@ -340,12 +340,14 @@ export default function InvitationsTable(props: InvitationsTableProps) {
         else if (response.ok)
           return response
             .text()
-            .then((data) => JSON.parse(data, dateParser) as EventData[]);
+            .then(
+              (data) => JSON.parse(data, dateParser) as PaginatedEventsResponse,
+            );
       })
       .then((data) => {
-        if (data) {
+        if (data && data.events) {
           // Filter out the current event
-          const otherEvents = data.filter((evt) => evt.id !== event_id);
+          const otherEvents = data.events.filter((evt) => evt.id !== event_id);
           setAvailableEvents(otherEvents);
         }
       })
