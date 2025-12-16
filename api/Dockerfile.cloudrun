@@ -1,0 +1,55 @@
+# Production-ready multistage Dockerfile for Cloud Run deployment
+# This builds a minimal Rocket API image without Shuttle dependencies
+
+# Build stage
+FROM rust:1.87.0-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy manifests
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs to build dependencies first (caching layer)
+RUN mkdir -p src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release --no-default-features && \
+    rm -rf src
+
+# Copy the actual source code
+COPY . .
+
+# Build the application without Shuttle feature
+RUN cargo build --release --no-default-features
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the binary from builder
+COPY --from=builder /app/target/release/calandar-api /app/calandar-api
+
+# Copy migrations directory for runtime migration support
+COPY --from=builder /app/migrations /app/migrations
+
+# Set environment variables
+ENV RUST_LOG=info
+ENV PORT=8080
+
+# Expose the port (Cloud Run expects this)
+EXPOSE 8080
+
+# Run the application
+CMD ["/app/calandar-api"]
