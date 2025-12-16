@@ -23,6 +23,9 @@ RUN apt-get update && apt-get install -y \
 # Copy cargo config if it exists (for git-fetch-with-cli)
 COPY .cargo .cargo
 
+# Copy .sqlx directory for offline compilation support
+COPY .sqlx .sqlx
+
 # Copy all source files
 COPY . .
 
