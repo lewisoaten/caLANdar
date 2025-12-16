@@ -4,4 +4,3 @@ Secrets.toml
 .shuttle*
 Secrets*.toml
 .env
-

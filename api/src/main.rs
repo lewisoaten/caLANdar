@@ -336,7 +336,13 @@ async fn rocket(
         Err(e) => log::error!("Error adding Tera templates: {e}"),
     }
 
-    let rocket = build_rocket(pool, paseto_symmetric_key, email_sender, steam_api_key, tera);
+    let rocket = build_rocket(
+        pool,
+        paseto_symmetric_key,
+        email_sender,
+        steam_api_key,
+        tera,
+    );
 
     Ok(rocket.into())
 }
@@ -353,11 +359,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
 
     // Get database URL from environment
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     log::info!("Connecting to database...");
-    
+
     // Create database pool
     let pool = PgPool::connect(&database_url)
         .await
@@ -376,8 +381,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Get secrets from environment variables
-    let paseto_secret_key = std::env::var("PASETO_SECRET_KEY")
-        .expect("PASETO_SECRET_KEY must be set");
+    let paseto_secret_key =
+        std::env::var("PASETO_SECRET_KEY").expect("PASETO_SECRET_KEY must be set");
 
     log::info!("PASETO_SECRET_KEY obtained.");
 
@@ -386,8 +391,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log::info!("Paseto key created.");
 
-    let resend_api_key = std::env::var("RESEND_API_KEY")
-        .expect("RESEND_API_KEY must be set");
+    let resend_api_key = std::env::var("RESEND_API_KEY").expect("RESEND_API_KEY must be set");
 
     log::info!("RESEND_API_KEY obtained.");
 
@@ -395,8 +399,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     log::info!("Resend sender created.");
 
-    let steam_api_key = std::env::var("STEAM_API_KEY")
-        .expect("STEAM_API_KEY must be set");
+    let steam_api_key = std::env::var("STEAM_API_KEY").expect("STEAM_API_KEY must be set");
 
     log::info!("STEAM_API_KEY obtained.");
 
@@ -408,7 +411,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure Rocket
     let mut config = rocket::Config::default();
-    
+
     // Get port from environment variable (Cloud Run uses PORT)
     if let Ok(port) = std::env::var("PORT") {
         config.port = port.parse().expect("PORT must be a valid number");
@@ -417,15 +420,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.port = 8080;
         log::info!("Using default PORT: 8080");
     }
-    
+
     config.address = "0.0.0.0".parse().expect("Failed to parse address");
-    
+
     // Store values before moving config
     let address = config.address;
     let port = config.port;
 
-    let rocket = build_rocket(pool, paseto_symmetric_key, email_sender, steam_api_key, tera)
-        .configure(config);
+    let rocket = build_rocket(
+        pool,
+        paseto_symmetric_key,
+        email_sender,
+        steam_api_key,
+        tera,
+    )
+    .configure(config);
 
     log::info!("Launching Rocket on {}:{}", address, port);
 

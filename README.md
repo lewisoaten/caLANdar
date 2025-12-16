@@ -46,6 +46,7 @@ Or using Just:
 ### Shuttle Deployment
 
 The default deployment uses Shuttle:
+
 ```sh
 cargo shuttle deploy --working-directory api
 ```
@@ -63,6 +64,7 @@ just docker-build-cloudrun
 ```
 
 Or manually:
+
 ```sh
 docker build -f api/Dockerfile.cloudrun -t calandar-api:latest api/
 ```
@@ -100,11 +102,14 @@ gcloud run deploy calandar-api \
 ```
 
 The Cloud Run image:
+
 - Uses multistage builds for minimal image size
 - Runs without Shuttle dependencies
 - Configures port via `$PORT` environment variable (defaults to 8080)
 - Runs database migrations on startup
 - Uses environment variables for all configuration
+
+**Note**: Due to SSL certificate verification issues in some Docker build environments, you may need to build using Cloud Build or a CI/CD environment with proper certificate configuration. For local development and testing, the standalone mode (above) works without Docker.
 
 ### SQLx Database Operations
 

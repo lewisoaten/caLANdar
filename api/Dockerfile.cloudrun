@@ -1,30 +1,35 @@
 # Production-ready multistage Dockerfile for Cloud Run deployment
 # This builds a minimal Rocket API image without Shuttle dependencies
+#
+# NOTE: Due to SSL certificate verification issues in some Docker build environments,
+# this Dockerfile is best used with Cloud Build or CI/CD systems that have proper
+# certificate configuration. For local development, use the standalone mode instead:
+# `cargo run --no-default-features` after setting required environment variables.
 
 # Build stage
 FROM rust:1.87.0-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies including ca-certificates and git
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
 
-# Copy manifests
-COPY Cargo.toml Cargo.lock ./
+# Copy cargo config if it exists (for git-fetch-with-cli)
+COPY .cargo .cargo
 
-# Create a dummy main.rs to build dependencies first (caching layer)
-RUN mkdir -p src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release --no-default-features && \
-    rm -rf src
-
-# Copy the actual source code
+# Copy all source files
 COPY . .
 
 # Build the application without Shuttle feature
+# Set CARGO_HTTP_CAINFO and GIT_SSL_CAINFO to use system CA certificates
+ENV CARGO_HTTP_CAINFO=/etc/ssl/certs/ca-certificates.crt
+ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
 RUN cargo build --release --no-default-features
 
 # Runtime stage
