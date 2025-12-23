@@ -108,6 +108,252 @@ docker-run-cloudrun:
 		-e RUST_LOG=info \
 		calandar-api:latest
 
+# Cloud Run staging deployment commands
+# These commands implement the full deployment pipeline for Cloud Run staging
+
+# Build and push Docker image to Google Artifact Registry
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), IMAGE_TAG (default: latest)
+cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	IMAGE_NAME="${IMAGE_NAME:-calandar-api}"
+	IMAGE_TAG="{{ image_tag }}"
+	IMAGE_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/calandar/${IMAGE_NAME}:${IMAGE_TAG}"
+	LATEST_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/calandar/${IMAGE_NAME}:latest"
+
+	echo "Building and pushing Docker image..."
+	echo "Image URL: ${IMAGE_URL}"
+
+	# Build the Docker image
+	docker build \
+		-f api/Dockerfile.cloudrun \
+		-t "${IMAGE_URL}" \
+		-t "${LATEST_URL}" \
+		api/
+
+	# Configure Docker for Artifact Registry
+	gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+	# Push both tags
+	docker push "${IMAGE_URL}"
+	docker push "${LATEST_URL}"
+
+	# Get and display image digest
+	DIGEST=$(docker inspect --format='{{{{index .RepoDigests 0}}}}' "${IMAGE_URL}" | cut -d'@' -f2)
+	if [ -z "${DIGEST}" ]; then
+		echo "Failed to retrieve image digest for ${IMAGE_URL}" >&2
+		exit 1
+	fi
+	echo "Image digest: ${DIGEST}"
+	echo "IMAGE_URL=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "IMAGE_DIGEST=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
+
+# Upsert secrets to Google Cloud Secret Manager
+# Required env vars: GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY
+cloudrun-upsert-secrets:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	echo "Upserting secrets to Google Cloud Secret Manager..."
+
+	# Function to create or update a secret
+	upsert_secret() {
+		local secret_name=$1
+		local secret_value=$2
+
+		if gcloud secrets describe "${secret_name}" --project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+			echo "Updating existing secret: ${secret_name}"
+			echo -n "${secret_value}" | gcloud secrets versions add "${secret_name}" \
+				--project="${GCP_PROJECT_ID}" \
+				--data-file=-
+		else
+			echo "Creating new secret: ${secret_name}"
+			echo -n "${secret_value}" | gcloud secrets create "${secret_name}" \
+				--project="${GCP_PROJECT_ID}" \
+				--data-file=-
+		fi
+	}
+
+	upsert_secret "DATABASE_URL" "${DATABASE_URL}"
+	upsert_secret "PASETO_SECRET_KEY" "${PASETO_SECRET_KEY}"
+	upsert_secret "RESEND_API_KEY" "${RESEND_API_KEY}"
+	upsert_secret "STEAM_API_KEY" "${STEAM_API_KEY}"
+
+	echo "✅ Secrets upserted successfully"
+
+# Deploy to Cloud Run staging
+# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), IMAGE_URL
+cloudrun-deploy image_url:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
+	IMAGE_URL="{{ image_url }}"
+
+	echo "Deploying to Cloud Run staging..."
+	echo "Service: ${SERVICE_NAME}"
+	echo "Region: ${GCP_REGION}"
+	echo "Image: ${IMAGE_URL}"
+
+	# Get current revision for potential rollback
+	CURRENT_REVISION=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.latestReadyRevisionName)' 2>/dev/null || echo "none")
+	echo "Current revision: ${CURRENT_REVISION}"
+
+	# Deploy to Cloud Run with no traffic
+	gcloud run deploy "${SERVICE_NAME}" \
+		--image "${IMAGE_URL}" \
+		--region "${GCP_REGION}" \
+		--platform managed \
+		--allow-unauthenticated \
+		--port 8080 \
+		--set-env-vars "RUST_LOG=info,PORT=8080" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--min-instances 0 \
+		--max-instances 10 \
+		--memory 512Mi \
+		--cpu 1 \
+		--timeout 60s \
+		--no-traffic
+
+	# Get the new revision name
+	NEW_REVISION=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.latestCreatedRevisionName)')
+
+	# Get service URL
+	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.url)')
+
+	echo "✅ Deployed revision: ${NEW_REVISION}"
+	echo "Service URL: ${SERVICE_URL}"
+	echo "REVISION=${NEW_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "PREVIOUS_REVISION=${CURRENT_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "SERVICE_URL=${SERVICE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+
+# Run health check on a specific revision
+# Required env vars: GCP_REGION (default: us-central1), REVISION_NAME
+cloudrun-health-check revision_name:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	REVISION_NAME="{{ revision_name }}"
+
+	echo "Running health check on revision: ${REVISION_NAME}"
+	sleep 10
+
+	# Get revision-specific URL
+	REVISION_URL=$(gcloud run revisions describe "${REVISION_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.url)')
+
+	if [ -z "${REVISION_URL}" ]; then
+		echo "Failed to obtain URL for revision: ${REVISION_NAME}" >&2
+		exit 1
+	fi
+
+	echo "Testing revision at: ${REVISION_URL}"
+
+	# Health check with retries
+	MAX_RETRIES=10
+	RETRY_COUNT=0
+	HEALTH_CHECK_PASSED=false
+
+	while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+		HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${REVISION_URL}/api/healthz" || echo "000")
+		echo "Attempt $((RETRY_COUNT + 1)): Health check returned HTTP ${HTTP_CODE}"
+
+		if [ "${HTTP_CODE}" = "204" ]; then
+			echo "✅ Health check passed!"
+			HEALTH_CHECK_PASSED=true
+			break
+		fi
+
+		RETRY_COUNT=$((RETRY_COUNT + 1))
+		if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+			echo "Retrying in 5 seconds..."
+			sleep 5
+		fi
+	done
+
+	if [ "${HEALTH_CHECK_PASSED}" = "false" ]; then
+		echo "❌ Health check failed after ${MAX_RETRIES} attempts" >&2
+		exit 1
+	fi
+
+# Migrate traffic to a specific revision
+# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), REVISION_NAME
+cloudrun-migrate-traffic revision_name:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
+	REVISION_NAME="{{ revision_name }}"
+
+	echo "Migrating 100% traffic to revision: ${REVISION_NAME}"
+	gcloud run services update-traffic "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--to-revisions "${REVISION_NAME}=100"
+
+	echo "✅ Traffic migration complete"
+
+# Verify service health after traffic migration
+# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging)
+cloudrun-verify-service:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
+
+	echo "Running final verification..."
+	sleep 5
+
+	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.url)')
+
+	HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
+
+	if [ "${HTTP_CODE}" = "204" ]; then
+		echo "✅ Service is healthy at ${SERVICE_URL}"
+	else
+		echo "❌ Service verification failed with HTTP ${HTTP_CODE}" >&2
+		exit 1
+	fi
+
+# Rollback to a previous revision
+# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), PREVIOUS_REVISION
+cloudrun-rollback previous_revision:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
+	PREVIOUS_REVISION="{{ previous_revision }}"
+
+	echo "⚠️ Rolling back to previous revision: ${PREVIOUS_REVISION}"
+
+	gcloud run services update-traffic "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--to-revisions "${PREVIOUS_REVISION}=100"
+
+	echo "✅ Rollback complete"
+
+	# Verify rollback
+	sleep 5
+	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--format 'value(status.url)')
+
+	HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
+
+	if [ "${HTTP_CODE}" = "204" ]; then
+		echo "✅ Rollback successful! Service is healthy"
+	else
+		echo "⚠️ Warning: Service may still be unhealthy after rollback (HTTP ${HTTP_CODE})"
+	fi
+
 # Build and run API in standalone mode (without Shuttle)
 dev-api-standalone:
 	#!/usr/bin/env bash

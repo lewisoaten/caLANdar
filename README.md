@@ -84,24 +84,53 @@ The workflow performs these steps:
 
 #### Required GitHub Secrets
 
-To enable Cloud Run staging deployments, configure these authentication secrets in your GitHub repository:
+To enable Cloud Run staging deployments, configure these secrets in your GitHub repository:
+
+**GCP Authentication Secrets:**
 
 - `GCP_PROJECT_ID`: Your Google Cloud project ID
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity Provider for GitHub Actions
 - `GCP_SERVICE_ACCOUNT`: Service account email for deployments
 
-Runtime configuration values (database URL, API keys, etc.) are provided to Cloud Run from Google Cloud Secret Manager, not from GitHub repository secrets.
+**Application Runtime Secrets:**
 
-#### Required Google Cloud Secret Manager Secrets
-
-Create the following secrets in Google Cloud Secret Manager (the workflow references them via the `--set-secrets` flag):
+These secrets are stored in GitHub and automatically upserted to Google Cloud Secret Manager during deployment:
 
 - `DATABASE_URL`: PostgreSQL connection string (Supabase database)
 - `PASETO_SECRET_KEY`: Secret key for PASETO token signing
 - `RESEND_API_KEY`: API key for Resend email service
 - `STEAM_API_KEY`: Steam API key for game data
 
-**Note**: These secrets are stored in Google Cloud Secret Manager and injected into the Cloud Run service at deploy time. The database is hosted on Supabase, not Cloud SQL.
+**Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The database is hosted on Supabase, not Cloud SQL.
+
+#### Using Just Commands Locally
+
+Developers can run the same deployment commands locally using Just:
+
+```sh
+# Set required environment variables
+export GCP_PROJECT_ID="your-project-id"
+export GCP_REGION="us-central1"
+export SERVICE_NAME="calandar-api-staging"
+export DATABASE_URL="postgres://..."
+export PASETO_SECRET_KEY="your-secret-key"
+export RESEND_API_KEY="your-resend-key"
+export STEAM_API_KEY="your-steam-key"
+
+# Authenticate with GCP (one-time setup)
+gcloud auth login
+gcloud auth application-default login
+
+# Deploy using Just commands (same as CI)
+just cloudrun-upsert-secrets          # Upload secrets to Secret Manager
+just cloudrun-build-push              # Build and push Docker image
+just cloudrun-deploy IMAGE_URL        # Deploy to Cloud Run
+just cloudrun-health-check REVISION   # Run health check
+just cloudrun-migrate-traffic REVISION # Migrate traffic
+just cloudrun-verify-service          # Verify deployment
+```
+
+This ensures parity between local development and CI/CD deployment workflows.
 
 #### Testing the Staging Environment
 
@@ -131,14 +160,15 @@ The workflow includes automatic rollback protection:
 
 #### Cloud Run vs. Shuttle
 
-| Aspect                   | Shuttle (Production)    | Cloud Run (Staging)         |
-| ------------------------ | ----------------------- | --------------------------- |
-| **Purpose**              | Production traffic      | Testing and staging         |
-| **Deployment Trigger**   | Push to `main`          | Push to `main`/`staging`    |
-| **Database**             | Shuttle PostgreSQL      | Supabase PostgreSQL         |
-| **Configuration**        | `Secrets.toml`          | GitHub Secrets & Secret Mgr |
-| **URL**                  | Shuttle-provided domain | Cloud Run domain            |
-| **Impact on Production** | Direct                  | None (isolated environment) |
+| Aspect                   | Shuttle (Production)    | Cloud Run (Staging)                              |
+| ------------------------ | ----------------------- | ------------------------------------------------ |
+| **Purpose**              | Production traffic      | Testing and staging                              |
+| **Deployment Trigger**   | Push to `main`          | Push to `main`/`staging`                         |
+| **Database**             | Shuttle PostgreSQL      | Supabase PostgreSQL                              |
+| **Configuration**        | `Secrets.toml`          | GitHub Secrets (auto-upserted to GCP Secret Mgr) |
+| **Deployment Method**    | Shuttle CLI             | Just commands                                    |
+| **URL**                  | Shuttle-provided domain | Cloud Run domain                                 |
+| **Impact on Production** | Direct                  | None (isolated environment)                      |
 
 ### Manual Cloud Run Deployment
 
