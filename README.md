@@ -84,17 +84,24 @@ The workflow performs these steps:
 
 #### Required GitHub Secrets
 
-To enable Cloud Run staging deployments, configure these secrets in your GitHub repository:
+To enable Cloud Run staging deployments, configure these authentication secrets in your GitHub repository:
 
 - `GCP_PROJECT_ID`: Your Google Cloud project ID
 - `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity Provider for GitHub Actions
 - `GCP_SERVICE_ACCOUNT`: Service account email for deployments
+
+Runtime configuration values (database URL, API keys, etc.) are provided to Cloud Run from Google Cloud Secret Manager, not from GitHub repository secrets.
+
+#### Required Google Cloud Secret Manager Secrets
+
+Create the following secrets in Google Cloud Secret Manager (the workflow references them via the `--set-secrets` flag):
+
 - `DATABASE_URL`: PostgreSQL connection string (Supabase database)
 - `PASETO_SECRET_KEY`: Secret key for PASETO token signing
 - `RESEND_API_KEY`: API key for Resend email service
 - `STEAM_API_KEY`: Steam API key for game data
 
-**Note**: These secrets should be stored as Google Cloud Secret Manager secrets and referenced in the workflow. The database is hosted on Supabase, not Cloud SQL.
+**Note**: These secrets are stored in Google Cloud Secret Manager and injected into the Cloud Run service at deploy time. The database is hosted on Supabase, not Cloud SQL.
 
 #### Testing the Staging Environment
 
@@ -124,14 +131,14 @@ The workflow includes automatic rollback protection:
 
 #### Cloud Run vs. Shuttle
 
-| Aspect                   | Shuttle (Production)       | Cloud Run (Staging)         |
-| ------------------------ | -------------------------- | --------------------------- |
-| **Purpose**              | Production traffic         | Testing and staging         |
-| **Deployment Trigger**   | Push to `main`             | Push to `main`/`staging`    |
-| **Database**             | Shuttle-managed PostgreSQL | Supabase PostgreSQL         |
-| **Configuration**        | `Secrets.toml`             | GitHub Secrets & Secret Mgr |
-| **URL**                  | Shuttle-provided domain    | Cloud Run domain            |
-| **Impact on Production** | Direct                     | None (isolated environment) |
+| Aspect                   | Shuttle (Production)    | Cloud Run (Staging)         |
+| ------------------------ | ----------------------- | --------------------------- |
+| **Purpose**              | Production traffic      | Testing and staging         |
+| **Deployment Trigger**   | Push to `main`          | Push to `main`/`staging`    |
+| **Database**             | Shuttle PostgreSQL      | Supabase PostgreSQL         |
+| **Configuration**        | `Secrets.toml`          | GitHub Secrets & Secret Mgr |
+| **URL**                  | Shuttle-provided domain | Cloud Run domain            |
+| **Impact on Production** | Direct                  | None (isolated environment) |
 
 ### Manual Cloud Run Deployment
 

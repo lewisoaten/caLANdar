@@ -13,6 +13,10 @@ on:
       - ".github/workflows/cloudrun-staging.yml"
   workflow_dispatch:
 
+concurrency:
+  group: cloudrun-staging-deployment
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   GCP_REGION: us-central1
@@ -100,6 +104,10 @@ jobs:
 
           # Get image digest
           DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE_URL}" | cut -d'@' -f2)
+          if [ -z "${DIGEST}" ]; then
+            echo "Failed to retrieve image digest for ${IMAGE_URL}" >&2
+            exit 1
+          fi
           echo "image-digest=${DIGEST}" >> $GITHUB_OUTPUT
 
   deploy-to-staging:
@@ -191,14 +199,15 @@ jobs:
           echo "Waiting for revision to be ready..."
           sleep 10
 
-          # Get revision URL for testing (before traffic migration)
-          REVISION_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+          # Get revision-specific URL for testing (before traffic migration)
+          REVISION_URL=$(gcloud run revisions describe ${{ needs.deploy-to-staging.outputs.revision }} \
             --region ${{ env.GCP_REGION }} \
-            --format 'value(status.traffic[0].url)')
+            --format 'value(status.url)')
 
-          # If no specific revision URL, use the main service URL with revision tag
+          # Fail fast if we cannot determine the revision URL
           if [ -z "${REVISION_URL}" ]; then
-            REVISION_URL="${{ needs.deploy-to-staging.outputs.service-url }}"
+            echo "Failed to obtain URL for revision: ${{ needs.deploy-to-staging.outputs.revision }}"
+            exit 1
           fi
 
           echo "Testing revision at: ${REVISION_URL}"
@@ -245,7 +254,7 @@ jobs:
           sleep 5
 
           SERVICE_URL="${{ needs.deploy-to-staging.outputs.service-url }}"
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz")
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
 
           if [ "${HTTP_CODE}" = "204" ]; then
             echo "✅ Deployment successful! Service is healthy at ${SERVICE_URL}"
@@ -258,7 +267,7 @@ jobs:
     name: Rollback on Failure
     runs-on: ubuntu-latest
     needs: [deploy-to-staging, health-check]
-    if: failure() && needs.deploy-to-staging.outputs.previous-revision != 'none'
+    if: failure() && needs.health-check.result == 'failure' && needs.deploy-to-staging.outputs.previous-revision != 'none'
     permissions:
       contents: read
       id-token: write
@@ -290,7 +299,7 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --format 'value(status.url)')
 
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz")
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
 
           if [ "${HTTP_CODE}" = "204" ]; then
             echo "✅ Rollback successful! Service is healthy"
