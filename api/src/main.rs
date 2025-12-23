@@ -5,6 +5,7 @@
 
 extern crate rocket;
 
+#[cfg(feature = "shuttle")]
 use anyhow::anyhow;
 use resend_rs::Resend;
 use rocket::{
@@ -23,9 +24,12 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
-use shuttle_rocket::ShuttleRocket;
-use shuttle_runtime::SecretStore;
 use sqlx::PgPool;
+
+#[cfg(feature = "shuttle")]
+use shuttle_rocket::ShuttleRocket;
+#[cfg(feature = "shuttle")]
+use shuttle_runtime::SecretStore;
 
 #[macro_use]
 mod error;
@@ -185,44 +189,23 @@ const EMAIL_TEMPLATES: [(&str, &str); 4] = [
     ),
 ];
 
-#[allow(clippy::too_many_lines)]
-#[shuttle_runtime::main]
-async fn rocket(
-    #[shuttle_shared_db::Postgres] pool: PgPool,
-    #[shuttle_runtime::Secrets] secret_store: SecretStore,
-) -> ShuttleRocket {
-    log::info!("Launching application!");
-    match sqlx::migrate!().run(&pool).await {
-        Ok(()) => log::info!("Migrations ran successfully"),
-        Err(e) => log::error!("Error running migrations: {e}"),
-    }
-
-    // Get the discord token set in `Secrets.toml` from the AWS RDS Postgres database
-    let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") else {
-        return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
-    };
-
+// Helper function to load secrets and create configuration objects
+fn load_secrets_and_config(
+    paseto_secret_key: String,
+    resend_api_key: String,
+    steam_api_key: String,
+) -> Result<(PasetoSymmetricKey<V4, Local>, Resend, String, Tera), Box<dyn std::error::Error>> {
     log::info!("PASETO_SECRET_KEY obtained.");
 
     let paseto_symmetric_key =
         PasetoSymmetricKey::<V4, Local>::from(Key::from(paseto_secret_key.as_bytes()));
 
     log::info!("Paseto key created.");
-
-    let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") else {
-        return Err(anyhow!("failed to get RESEND_API_KEY from secrets store").into());
-    };
-
     log::info!("RESEND_API_KEY obtained.");
 
     let email_sender = Resend::new(&resend_api_key);
 
     log::info!("Resend sender created.");
-
-    let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") else {
-        return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
-    };
-
     log::info!("STEAM_API_KEY obtained.");
 
     let mut tera = Tera::default();
@@ -231,6 +214,17 @@ async fn rocket(
         Err(e) => log::error!("Error adding Tera templates: {e}"),
     }
 
+    Ok((paseto_symmetric_key, email_sender, steam_api_key, tera))
+}
+
+// Build the Rocket instance with all configuration
+fn build_rocket(
+    pool: PgPool,
+    paseto_symmetric_key: PasetoSymmetricKey<V4, Local>,
+    email_sender: Resend,
+    steam_api_key: String,
+    tera: Tera,
+) -> rocket::Rocket<rocket::Build> {
     log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]
     let rocket = rocket::build()
@@ -320,5 +314,133 @@ async fn rocket(
             }),
         );
 
+    rocket
+}
+
+#[cfg(feature = "shuttle")]
+#[allow(clippy::too_many_lines)]
+#[shuttle_runtime::main]
+async fn rocket(
+    #[shuttle_shared_db::Postgres] pool: PgPool,
+    #[shuttle_runtime::Secrets] secret_store: SecretStore,
+) -> ShuttleRocket {
+    log::info!("Launching application!");
+    match sqlx::migrate!().run(&pool).await {
+        Ok(()) => log::info!("Migrations ran successfully"),
+        Err(e) => log::error!("Error running migrations: {e}"),
+    }
+
+    // Get the PASETO secret key from `Secrets.toml` using the secrets store
+    let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") else {
+        return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
+    };
+
+    let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") else {
+        return Err(anyhow!("failed to get RESEND_API_KEY from secrets store").into());
+    };
+
+    let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") else {
+        return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
+    };
+
+    let (paseto_symmetric_key, email_sender, steam_api_key, tera) =
+        load_secrets_and_config(paseto_secret_key, resend_api_key, steam_api_key)
+            .map_err(|e| anyhow!("Failed to load configuration: {e}"))?;
+
+    let rocket = build_rocket(
+        pool,
+        paseto_symmetric_key,
+        email_sender,
+        steam_api_key,
+        tera,
+    );
+
     Ok(rocket.into())
+}
+
+#[cfg(not(feature = "shuttle"))]
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    env_logger::init();
+
+    log::info!("Starting CaLANdar API in standalone mode");
+
+    // Load environment variables from .env file if present
+    dotenvy::dotenv().ok();
+
+    // Get database URL from environment
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| "DATABASE_URL environment variable must be set")?;
+
+    log::info!("Connecting to database...");
+
+    // Create database pool
+    let pool = PgPool::connect(&database_url).await?;
+
+    log::info!("Database connected successfully");
+
+    // Run migrations
+    log::info!("Running database migrations...");
+    match sqlx::migrate!().run(&pool).await {
+        Ok(()) => log::info!("Migrations ran successfully"),
+        Err(e) => {
+            log::error!("Error running migrations: {e}");
+            return Err(e.into());
+        }
+    }
+
+    // Get secrets from environment variables
+    let paseto_secret_key = std::env::var("PASETO_SECRET_KEY")
+        .map_err(|_| "PASETO_SECRET_KEY environment variable must be set")?;
+
+    let resend_api_key = std::env::var("RESEND_API_KEY")
+        .map_err(|_| "RESEND_API_KEY environment variable must be set")?;
+
+    let steam_api_key = std::env::var("STEAM_API_KEY")
+        .map_err(|_| "STEAM_API_KEY environment variable must be set")?;
+
+    let (paseto_symmetric_key, email_sender, steam_api_key, tera) =
+        load_secrets_and_config(paseto_secret_key, resend_api_key, steam_api_key)?;
+
+    // Configure Rocket
+    let mut config = rocket::Config::default();
+
+    // Get port from environment variable (Cloud Run uses PORT)
+    if let Ok(port_str) = std::env::var("PORT") {
+        config.port = port_str
+            .parse()
+            .map_err(|_| "PORT environment variable must be a valid number")?;
+        log::info!("Using PORT from environment: {}", config.port);
+    } else {
+        config.port = 8080;
+        log::info!("Using default PORT: 8080");
+    }
+
+    // Get bind address from environment variable (default: 0.0.0.0)
+    let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+    config.address = bind_address
+        .parse()
+        .map_err(|_| "BIND_ADDRESS must be a valid IP address")?;
+    log::info!("Using BIND_ADDRESS: {}", config.address);
+
+    // Store values before moving config
+    let address = config.address;
+    let port = config.port;
+
+    let rocket = build_rocket(
+        pool,
+        paseto_symmetric_key,
+        email_sender,
+        steam_api_key,
+        tera,
+    )
+    .configure(config);
+
+    log::info!("Launching Rocket on {}:{}", address, port);
+
+    // Launch Rocket
+    let _rocket = rocket.launch().await?;
+
+    Ok(())
 }

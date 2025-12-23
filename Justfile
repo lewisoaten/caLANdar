@@ -90,3 +90,27 @@ pact-api:
 
 pact-frontend:
 	cd frontend && npm install && npm run test:pact
+
+# Cloud Run Docker commands
+docker-build-cloudrun:
+	docker build -f api/Dockerfile.cloudrun -t calandar-api:latest api/
+
+docker-run-cloudrun:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	echo "Running Cloud Run compatible image locally..."
+	echo "Make sure to set DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, and STEAM_API_KEY environment variables"
+	docker run -p 8080:8080 \
+		-e DATABASE_URL="${DATABASE_URL}" \
+		-e PASETO_SECRET_KEY="${PASETO_SECRET_KEY}" \
+		-e RESEND_API_KEY="${RESEND_API_KEY}" \
+		-e STEAM_API_KEY="${STEAM_API_KEY}" \
+		-e RUST_LOG=info \
+		calandar-api:latest
+
+# Build and run API in standalone mode (without Shuttle)
+dev-api-standalone:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	echo "Running API in standalone mode (no Shuttle)..."
+	cd api && cargo run --no-default-features

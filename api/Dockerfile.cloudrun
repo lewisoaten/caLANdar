@@ -1,0 +1,63 @@
+# Production-ready multistage Dockerfile for Cloud Run deployment
+# This builds a minimal Rocket API image without Shuttle dependencies
+#
+# NOTE: Due to SSL certificate verification issues in some Docker build environments,
+# this Dockerfile is best used with Cloud Build or CI/CD systems that have proper
+# certificate configuration. For local development, use the standalone mode instead:
+# `cargo run --no-default-features` after setting required environment variables.
+
+# Build stage
+FROM rust:1.87.0-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies including ca-certificates and git
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/* \
+    && update-ca-certificates
+
+# Copy cargo config if it exists (for git-fetch-with-cli)
+COPY .cargo .cargo
+
+# Copy .sqlx directory for offline compilation support
+COPY .sqlx .sqlx
+
+# Copy all source files
+COPY . .
+
+# Build the application without Shuttle feature
+# Set CARGO_HTTP_CAINFO and GIT_SSL_CAINFO to use system CA certificates
+ENV CARGO_HTTP_CAINFO=/etc/ssl/certs/ca-certificates.crt
+ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
+RUN cargo build --release --no-default-features
+
+# Runtime stage
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy the binary from builder
+COPY --from=builder /app/target/release/calandar-api /app/calandar-api
+
+# Copy migrations directory for runtime migration support
+COPY --from=builder /app/migrations /app/migrations
+
+# Set environment variables
+ENV RUST_LOG=info
+ENV PORT=8080
+
+# Expose the port (Cloud Run expects this)
+EXPOSE 8080
+
+# Run the application
+CMD ["/app/calandar-api"]
