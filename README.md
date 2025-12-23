@@ -43,9 +43,14 @@ Or using Just:
 
 ## Deployment
 
-### Shuttle Deployment
+CaLANdar supports two deployment platforms:
 
-The default deployment uses Shuttle:
+1. **Shuttle** (production) - The default and primary production deployment
+2. **Google Cloud Run** (staging) - Automated staging environment for testing
+
+### Shuttle Deployment (Production)
+
+The default production deployment uses Shuttle:
 
 ```sh
 cargo shuttle deploy --working-directory api
@@ -53,9 +58,84 @@ cargo shuttle deploy --working-directory api
 
 Secrets should be configured in `api/Secrets.toml` (see `api/Secrets.toml.template`).
 
-### Cloud Run Deployment
+**Production deployments are automatic**: Every push to the `main` branch triggers a Shuttle deployment via GitHub Actions (`.github/workflows/shuttle-deploy.yml`).
 
-For deploying to Google Cloud Run or other container platforms:
+### Cloud Run Staging Deployment
+
+**Automated staging deployments**: The repository includes a GitHub Actions workflow (`.github/workflows/cloudrun-staging.yml`) that automatically builds, tests, and deploys the backend to a Google Cloud Run staging environment.
+
+#### How the Staging Workflow Works
+
+The workflow triggers on:
+
+- **Push to `main` or `staging` branches** (when API files change)
+- **Pull requests to `main`** (build and test only, no deployment)
+- **Manual trigger** via GitHub Actions UI
+
+The workflow performs these steps:
+
+1. **Build & Test**: Compiles the Rust backend and runs all tests
+2. **Docker Build**: Creates a production Docker image using `api/Dockerfile.cloudrun`
+3. **Push to Artifact Registry**: Uploads the image to Google Artifact Registry
+4. **Deploy to Staging**: Deploys to a Cloud Run service named `calandar-api-staging`
+5. **Health Check**: Verifies the `/api/healthz` endpoint responds correctly
+6. **Traffic Migration**: Routes 100% traffic to the new revision only after health checks pass
+7. **Rollback**: Automatically rolls back to the previous revision if health checks fail
+
+#### Required GitHub Secrets
+
+To enable Cloud Run staging deployments, configure these secrets in your GitHub repository:
+
+- `GCP_PROJECT_ID`: Your Google Cloud project ID
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: Workload Identity Provider for GitHub Actions
+- `GCP_SERVICE_ACCOUNT`: Service account email for deployments
+- `DATABASE_URL`: PostgreSQL connection string (Supabase database)
+- `PASETO_SECRET_KEY`: Secret key for PASETO token signing
+- `RESEND_API_KEY`: API key for Resend email service
+- `STEAM_API_KEY`: Steam API key for game data
+
+**Note**: These secrets should be stored as Google Cloud Secret Manager secrets and referenced in the workflow. The database is hosted on Supabase, not Cloud SQL.
+
+#### Testing the Staging Environment
+
+After a successful deployment, you can test the staging API:
+
+```sh
+# Get the staging URL from the workflow logs or Cloud Run console
+STAGING_URL="https://calandar-api-staging-<hash>-uc.a.run.app"
+
+# Test the health endpoint
+curl "${STAGING_URL}/api/healthz"
+# Should return HTTP 204 (No Content)
+
+# Test other API endpoints (example)
+curl "${STAGING_URL}/api/events" \
+  -H "Authorization: Bearer <your-token>"
+```
+
+#### Rollback Mechanism
+
+The workflow includes automatic rollback protection:
+
+- If the new revision fails health checks, traffic remains on the previous revision
+- The workflow automatically reverts to the last known good revision
+- The failed revision remains available for debugging but receives no traffic
+- Rollback verification ensures the previous revision is healthy
+
+#### Cloud Run vs. Shuttle
+
+| Aspect                   | Shuttle (Production)       | Cloud Run (Staging)         |
+| ------------------------ | -------------------------- | --------------------------- |
+| **Purpose**              | Production traffic         | Testing and staging         |
+| **Deployment Trigger**   | Push to `main`             | Push to `main`/`staging`    |
+| **Database**             | Shuttle-managed PostgreSQL | Supabase PostgreSQL         |
+| **Configuration**        | `Secrets.toml`             | GitHub Secrets & Secret Mgr |
+| **URL**                  | Shuttle-provided domain    | Cloud Run domain            |
+| **Impact on Production** | Direct                     | None (isolated environment) |
+
+### Manual Cloud Run Deployment
+
+For deploying to Google Cloud Run manually or to other container platforms:
 
 #### Build the Docker image
 
