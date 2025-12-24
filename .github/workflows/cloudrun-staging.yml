@@ -83,8 +83,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v2
 
       - name: Build and push Docker image
         id: build-push
@@ -117,8 +116,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v2
 
       - name: Upsert secrets to Secret Manager
         env:
@@ -155,8 +153,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v2
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -189,8 +186,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v2
 
       - name: Run health check on new revision
         env:
@@ -239,8 +235,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        uses: extractions/setup-just@v2
 
       - name: Rollback to previous revision
         env:
