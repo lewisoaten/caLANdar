@@ -166,16 +166,8 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 		exit 1
 	fi
 	echo "Image digest: ${DIGEST}"
-
-	# Output image URL components separately to avoid secret masking in GitHub Actions
-	# GitHub Actions masks outputs that contain secret values (like GCP_PROJECT_ID)
-	# By outputting components separately, the deploy step can reconstruct the URL
 	echo "image-url=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "image-digest=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "image-region=${GCP_REGION}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "image-repository=${REPOSITORY_NAME}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "image-name=${IMAGE_NAME}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "image-tag=${IMAGE_TAG}" >> ${GITHUB_OUTPUT:-/dev/null}
 
 # Upsert secrets to Google Cloud Secret Manager
 # Required env vars: GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY
