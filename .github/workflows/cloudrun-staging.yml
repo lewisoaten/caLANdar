@@ -23,7 +23,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  GCP_REGION: us-central1
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: ${{ vars.GCP_REGION }}
   SERVICE_NAME: calandar-api-staging
   IMAGE_NAME: calandar-api
   DEPLOY_TAG: candidate
@@ -88,7 +89,7 @@ jobs:
       - name: Build and push Docker image
         id: build-push
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
           GCP_REGION: ${{ env.GCP_REGION }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
         run: just cloudrun-build-push ${{ github.sha }}
@@ -120,7 +121,7 @@ jobs:
 
       - name: Upsert secrets to Secret Manager
         env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PASETO_SECRET_KEY: ${{ secrets.PASETO_SECRET_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -161,7 +162,7 @@ jobs:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
           DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-deploy ${{ needs.build-and-push-image.outputs.image-url }}
 
   health-check:
@@ -193,7 +194,7 @@ jobs:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
           DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-health-check ${{ needs.deploy-to-staging.outputs.revision }}
 
       - name: Migrate traffic to new revision
@@ -201,7 +202,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-migrate-traffic ${{ needs.deploy-to-staging.outputs.revision }}
 
       - name: Verify service health
@@ -209,7 +210,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-verify-service
 
   rollback:
@@ -241,5 +242,5 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-rollback ${{ needs.deploy-to-staging.outputs.previous-revision }}
