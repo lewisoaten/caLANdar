@@ -166,8 +166,8 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 		exit 1
 	fi
 	echo "Image digest: ${DIGEST}"
-	echo "IMAGE_URL=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "IMAGE_DIGEST=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "image-url=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "image-digest=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
 
 # Upsert secrets to Google Cloud Secret Manager
 # Required env vars: GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY

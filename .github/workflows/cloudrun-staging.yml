@@ -66,8 +66,8 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      image-url: ${{ steps.build-push.outputs.IMAGE_URL }}
-      image-digest: ${{ steps.build-push.outputs.IMAGE_DIGEST }}
+      image-url: ${{ steps.build-push.outputs.image-url }}
+      image-digest: ${{ steps.build-push.outputs.image-digest }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
