@@ -135,9 +135,9 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      service-url: ${{ steps.deploy.outputs.SERVICE_URL }}
-      revision: ${{ steps.deploy.outputs.REVISION }}
-      previous-revision: ${{ steps.deploy.outputs.PREVIOUS_REVISION }}
+      service-url: ${{ steps.deploy.outputs.service-url }}
+      revision: ${{ steps.deploy.outputs.revision }}
+      previous-revision: ${{ steps.deploy.outputs.previous-revision }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
