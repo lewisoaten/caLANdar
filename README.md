@@ -103,25 +103,28 @@ These secrets are stored in GitHub and automatically upserted to Google Cloud Se
 
 **Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The database is hosted on Supabase, not Cloud SQL.
 
+**For local development**: Copy `.env.example` to `.env` and fill in your values. The `.env` file is loaded automatically by Just commands and is excluded from git to keep secrets safe.
+
 #### Using Just Commands Locally
 
 Developers can run the same deployment commands locally using Just:
 
 ```sh
-# Set required environment variables
-export GCP_PROJECT_ID="your-project-id"
-export GCP_REGION="us-central1"
-export SERVICE_NAME="calandar-api-staging"
-export DATABASE_URL="postgres://..."
-export PASETO_SECRET_KEY="your-secret-key"
-export RESEND_API_KEY="your-resend-key"
-export STEAM_API_KEY="your-steam-key"
+# Create .env file from example (one-time setup)
+cp .env.example .env
+
+# Edit .env file with your actual values
+# Required variables:
+#   GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY,
+#   RESEND_API_KEY, STEAM_API_KEY
+# Optional: GCP_REGION, SERVICE_NAME, IMAGE_NAME
 
 # Authenticate with GCP (one-time setup)
 gcloud auth login
 gcloud auth application-default login
 
 # Deploy using Just commands (same as CI)
+# The .env file is loaded automatically by Just
 just cloudrun-upsert-secrets          # Upload secrets to Secret Manager
 just cloudrun-build-push              # Build and push Docker image
 just cloudrun-deploy IMAGE_URL        # Deploy to Cloud Run
@@ -129,6 +132,8 @@ just cloudrun-health-check REVISION   # Run health check
 just cloudrun-migrate-traffic REVISION # Migrate traffic
 just cloudrun-verify-service          # Verify deployment
 ```
+
+**Note**: The `.env` file is automatically loaded by Just commands, so you don't need to export environment variables manually. This keeps secrets out of your command history.
 
 This ensures parity between local development and CI/CD deployment workflows.
 

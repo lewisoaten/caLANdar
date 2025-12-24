@@ -1,3 +1,6 @@
+# Load environment variables from .env file if it exists (for local development)
+set dotenv-load := true
+
 default:
   just --list
 
