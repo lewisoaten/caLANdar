@@ -146,6 +146,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-deploy ${{ needs.build-and-push-image.outputs.image-url }}
 
   health-check:
@@ -172,6 +173,7 @@ jobs:
       - name: Run health check on new revision
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-health-check ${{ needs.deploy-to-staging.outputs.revision }}
 
       - name: Migrate traffic to new revision
@@ -179,6 +181,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-migrate-traffic ${{ needs.deploy-to-staging.outputs.revision }}
 
       - name: Verify service health
@@ -186,6 +189,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-verify-service
 
   rollback:
@@ -214,4 +218,5 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-rollback ${{ needs.deploy-to-staging.outputs.previous-revision }}

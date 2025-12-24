@@ -115,7 +115,7 @@ docker-run-cloudrun:
 # These commands implement the full deployment pipeline for Cloud Run staging
 
 # Build and push Docker image to Google Artifact Registry
-# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), IMAGE_TAG (default: latest)
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), IMAGE_TAG (default: git short hash)
 cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -173,7 +173,7 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 # Required env vars: GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY
 cloudrun-upsert-secrets:
 	#!/usr/bin/env bash
-	set -euxo pipefail
+	set -euo pipefail
 	echo "Upserting secrets to Google Cloud Secret Manager..."
 
 	# Function to create or update a secret
@@ -202,7 +202,7 @@ cloudrun-upsert-secrets:
 	echo "✅ Secrets upserted successfully"
 
 # Deploy to Cloud Run staging
-# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), IMAGE_URL
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), IMAGE_URL
 cloudrun-deploy image_url:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -215,16 +215,31 @@ cloudrun-deploy image_url:
 	echo "Region: ${GCP_REGION}"
 	echo "Image: ${IMAGE_URL}"
 
-	# Get current revision for potential rollback
-	CURRENT_REVISION=$(gcloud run services describe "${SERVICE_NAME}" \
+	# Check if service exists
+	SERVICE_EXISTS=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
-		--format 'value(status.latestReadyRevisionName)' 2>/dev/null || echo "none")
-	echo "Current revision: ${CURRENT_REVISION}"
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(metadata.name)' 2>/dev/null || echo "")
 
-	# Deploy to Cloud Run with no traffic
+	# Get current revision for potential rollback (only if service exists)
+	if [ -n "${SERVICE_EXISTS}" ]; then
+		CURRENT_REVISION=$(gcloud run services describe "${SERVICE_NAME}" \
+			--region "${GCP_REGION}" \
+			--project "${GCP_PROJECT_ID}" \
+			--format 'value(status.latestReadyRevisionName)' 2>/dev/null || echo "none")
+		echo "Current revision: ${CURRENT_REVISION}"
+		NO_TRAFFIC_FLAG="--no-traffic"
+	else
+		echo "Service does not exist yet, creating new service"
+		CURRENT_REVISION="none"
+		NO_TRAFFIC_FLAG=""
+	fi
+
+	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--platform managed \
 		--allow-unauthenticated \
 		--port 8080 \
@@ -235,16 +250,18 @@ cloudrun-deploy image_url:
 		--memory 512Mi \
 		--cpu 1 \
 		--timeout 60s \
-		--no-traffic
+		${NO_TRAFFIC_FLAG}
 
 	# Get the new revision name
 	NEW_REVISION=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.latestCreatedRevisionName)')
 
 	# Get service URL
 	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
 	echo "✅ Deployed revision: ${NEW_REVISION}"
@@ -254,7 +271,7 @@ cloudrun-deploy image_url:
 	echo "SERVICE_URL=${SERVICE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
 
 # Run health check on a specific revision
-# Required env vars: GCP_REGION (default: us-central1), REVISION_NAME
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), REVISION_NAME
 cloudrun-health-check revision_name:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -267,6 +284,7 @@ cloudrun-health-check revision_name:
 	# Get revision-specific URL
 	REVISION_URL=$(gcloud run revisions describe "${REVISION_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
 	if [ -z "${REVISION_URL}" ]; then
@@ -304,7 +322,7 @@ cloudrun-health-check revision_name:
 	fi
 
 # Migrate traffic to a specific revision
-# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), REVISION_NAME
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), REVISION_NAME
 cloudrun-migrate-traffic revision_name:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -315,12 +333,13 @@ cloudrun-migrate-traffic revision_name:
 	echo "Migrating 100% traffic to revision: ${REVISION_NAME}"
 	gcloud run services update-traffic "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--to-revisions "${REVISION_NAME}=100"
 
 	echo "✅ Traffic migration complete"
 
 # Verify service health after traffic migration
-# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging)
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging)
 cloudrun-verify-service:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -332,6 +351,7 @@ cloudrun-verify-service:
 
 	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
 	HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
@@ -344,7 +364,7 @@ cloudrun-verify-service:
 	fi
 
 # Rollback to a previous revision
-# Required env vars: GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), PREVIOUS_REVISION
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), PREVIOUS_REVISION
 cloudrun-rollback previous_revision:
 	#!/usr/bin/env bash
 	set -euxo pipefail
@@ -356,6 +376,7 @@ cloudrun-rollback previous_revision:
 
 	gcloud run services update-traffic "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--to-revisions "${PREVIOUS_REVISION}=100"
 
 	echo "✅ Rollback complete"
@@ -364,6 +385,7 @@ cloudrun-rollback previous_revision:
 	sleep 5
 	SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
 	HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${SERVICE_URL}/api/healthz" || echo "000")
@@ -373,6 +395,60 @@ cloudrun-rollback previous_revision:
 	else
 		echo "⚠️ Warning: Service may still be unhealthy after rollback (HTTP ${HTTP_CODE})"
 	fi
+
+# Shorthand: Deploy current commit to Cloud Run staging (builds, pushes, deploys, health checks, migrates traffic)
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY
+cloudrun-deploy-current:
+	#!/usr/bin/env bash
+	set -euxo pipefail
+	GCP_REGION="${GCP_REGION:-us-central1}"
+	IMAGE_NAME="${IMAGE_NAME:-calandar-api}"
+	IMAGE_TAG=$(git rev-parse --short HEAD)
+	REPOSITORY_NAME="calandar"
+	IMAGE_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY_NAME}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+	echo "🚀 Deploying current commit to Cloud Run staging..."
+	echo "Image tag: ${IMAGE_TAG}"
+
+	# Build and push
+	just cloudrun-build-push "${IMAGE_TAG}"
+
+	# Upsert secrets
+	just cloudrun-upsert-secrets
+
+	# Deploy
+	just cloudrun-deploy "${IMAGE_URL}"
+
+	# Extract revision name from output (stored in GITHUB_OUTPUT or temp file)
+	REVISION=$(gcloud run services describe "${SERVICE_NAME:-calandar-api-staging}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(status.latestCreatedRevisionName)')
+
+	echo "New revision: ${REVISION}"
+
+	# Check if service was just created (first deployment)
+	SERVICE_REVISIONS=$(gcloud run revisions list \
+		--service "${SERVICE_NAME:-calandar-api-staging}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(metadata.name)' | wc -l)
+
+	if [ "${SERVICE_REVISIONS}" -eq 1 ]; then
+		echo "First deployment detected - service already has 100% traffic"
+		just cloudrun-verify-service
+	else
+		# Health check
+		just cloudrun-health-check "${REVISION}"
+
+		# Migrate traffic
+		just cloudrun-migrate-traffic "${REVISION}"
+
+		# Verify
+		just cloudrun-verify-service
+	fi
+
+	echo "✅ Deployment complete!"
 
 # Build and run API in standalone mode (without Shuttle)
 dev-api-standalone:
