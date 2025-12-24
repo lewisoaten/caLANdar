@@ -82,6 +82,9 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Build and push Docker image
         id: build-push
         env:
@@ -111,6 +114,9 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Upsert secrets to Secret Manager
         env:
@@ -146,6 +152,9 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Install just
+        uses: extractions/setup-just@v2
+
       - name: Deploy to Cloud Run
         id: deploy
         env:
@@ -175,6 +184,9 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Run health check on new revision
         env:
@@ -221,6 +233,9 @@ jobs:
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
+
+      - name: Install just
+        uses: extractions/setup-just@v2
 
       - name: Rollback to previous revision
         env:
