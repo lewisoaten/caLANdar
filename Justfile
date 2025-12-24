@@ -209,6 +209,8 @@ cloudrun-deploy image_url:
 	GCP_REGION="${GCP_REGION:-us-central1}"
 	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
 	IMAGE_URL="{{ image_url }}"
+	# Tag used to route traffic to the newly created revision for health checks
+	DEPLOY_TAG="${DEPLOY_TAG:-candidate}"
 
 	echo "Deploying to Cloud Run staging..."
 	echo "Service: ${SERVICE_NAME}"
@@ -264,35 +266,73 @@ cloudrun-deploy image_url:
 		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
+	# Create/Update a traffic tag that points at the new revision.
+	# This gives us a stable, direct URL to the new revision for health checks.
+	gcloud run services update-traffic "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--update-tags "${DEPLOY_TAG}=${NEW_REVISION}"
+
+	TAG_URL=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format="value(status.traffic[?tag='${DEPLOY_TAG}'].url)")
+
+	# Fallback: if the formatter fails, construct tag URL from the service URL.
+	# Tag URLs are of the form: https://<tag>---<service-host>
+	if [ -z "${TAG_URL}" ]; then
+		SERVICE_HOST="${SERVICE_URL#https://}"
+		SERVICE_HOST="${SERVICE_HOST%/}"
+		TAG_URL="https://${DEPLOY_TAG}---${SERVICE_HOST}"
+	fi
+
 	echo "✅ Deployed revision: ${NEW_REVISION}"
 	echo "Service URL: ${SERVICE_URL}"
+	echo "Tag (${DEPLOY_TAG}) URL: ${TAG_URL}"
 	echo "REVISION=${NEW_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "PREVIOUS_REVISION=${CURRENT_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "SERVICE_URL=${SERVICE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "TAG_URL=${TAG_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "DEPLOY_TAG=${DEPLOY_TAG}" >> ${GITHUB_OUTPUT:-/dev/null}
 
-# Run health check on a specific revision
-# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), REVISION_NAME
+# Run health check on a specific revision (via its traffic tag URL)
+# Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), REVISION_NAME
 cloudrun-health-check revision_name:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	GCP_REGION="${GCP_REGION:-us-central1}"
+	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
 	REVISION_NAME="{{ revision_name }}"
+	DEPLOY_TAG="${DEPLOY_TAG:-candidate}"
 
 	echo "Running health check on revision: ${REVISION_NAME}"
 	sleep 10
 
-	# Get revision-specific URL
-	REVISION_URL=$(gcloud run revisions describe "${REVISION_NAME}" \
+	# Health check the candidate revision via its traffic tag URL.
+	CHECK_URL=$(gcloud run services describe "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
 		--project "${GCP_PROJECT_ID}" \
-		--format 'value(status.url)')
+		--format="value(status.traffic[?tag='${DEPLOY_TAG}'].url)")
 
-	if [ -z "${REVISION_URL}" ]; then
-		echo "Failed to obtain URL for revision: ${REVISION_NAME}" >&2
+	# Fallback: construct tag URL from the service URL if needed.
+	if [ -z "${CHECK_URL}" ]; then
+		SERVICE_URL=$(gcloud run services describe "${SERVICE_NAME}" \
+			--region "${GCP_REGION}" \
+			--project "${GCP_PROJECT_ID}" \
+			--format='value(status.url)')
+		SERVICE_HOST="${SERVICE_URL#https://}"
+		SERVICE_HOST="${SERVICE_HOST%/}"
+		CHECK_URL="https://${DEPLOY_TAG}---${SERVICE_HOST}"
+	fi
+
+	if [ -z "${CHECK_URL}" ]; then
+		echo "Failed to obtain tag URL for revision ${REVISION_NAME} (tag: ${DEPLOY_TAG})" >&2
+		echo "--- Service traffic status ---" >&2
+		gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" --format=json >&2 || true
 		exit 1
 	fi
 
-	echo "Testing revision at: ${REVISION_URL}"
+	echo "Testing revision via tag URL: ${CHECK_URL}"
 
 	# Health check with retries
 	MAX_RETRIES=10
@@ -300,7 +340,7 @@ cloudrun-health-check revision_name:
 	HEALTH_CHECK_PASSED=false
 
 	while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-		HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${REVISION_URL}/api/healthz" || echo "000")
+		HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CHECK_URL}/api/healthz" || echo "000")
 		echo "Attempt $((RETRY_COUNT + 1)): Health check returned HTTP ${HTTP_CODE}"
 
 		if [ "${HTTP_CODE}" = "204" ]; then
@@ -318,6 +358,9 @@ cloudrun-health-check revision_name:
 
 	if [ "${HEALTH_CHECK_PASSED}" = "false" ]; then
 		echo "❌ Health check failed after ${MAX_RETRIES} attempts" >&2
+		echo "--- Cloud Run diagnostics ---" >&2
+		gcloud run revisions describe "${REVISION_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" >&2 || true
+		gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" >&2 || true
 		exit 1
 	fi
 
@@ -329,12 +372,20 @@ cloudrun-migrate-traffic revision_name:
 	GCP_REGION="${GCP_REGION:-us-central1}"
 	SERVICE_NAME="${SERVICE_NAME:-calandar-api-staging}"
 	REVISION_NAME="{{ revision_name }}"
+	DEPLOY_TAG="${DEPLOY_TAG:-candidate}"
 
 	echo "Migrating 100% traffic to revision: ${REVISION_NAME}"
 	gcloud run services update-traffic "${SERVICE_NAME}" \
 		--region "${GCP_REGION}" \
 		--project "${GCP_PROJECT_ID}" \
 		--to-revisions "${REVISION_NAME}=100"
+
+	# Cleanup: remove the candidate tag once the revision is promoted.
+	# This prevents a lingering tag URL from continuing to route to an old revision.
+	gcloud run services update-traffic "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--remove-tags "${DEPLOY_TAG}" || true
 
 	echo "✅ Traffic migration complete"
 

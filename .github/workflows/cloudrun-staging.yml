@@ -22,6 +22,7 @@ env:
   GCP_REGION: us-central1
   SERVICE_NAME: calandar-api-staging
   IMAGE_NAME: calandar-api
+  DEPLOY_TAG: candidate
 
 jobs:
   build-and-test:
@@ -146,6 +147,7 @@ jobs:
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
           SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-deploy ${{ needs.build-and-push-image.outputs.image-url }}
 
@@ -173,6 +175,8 @@ jobs:
       - name: Run health check on new revision
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
         run: just cloudrun-health-check ${{ needs.deploy-to-staging.outputs.revision }}
 
