@@ -1,0 +1,230 @@
+name: Cloud Run Staging Deployment
+
+on:
+  push:
+    branches: [main, staging]
+    paths:
+      - "api/**"
+      - ".github/workflows/cloudrun-staging.yml"
+      - "Justfile"
+      - ".env.example"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "api/**"
+      - ".github/workflows/cloudrun-staging.yml"
+      - "Justfile"
+      - ".env.example"
+  workflow_dispatch:
+
+concurrency:
+  group: cloudrun-staging-deployment
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  GCP_REGION: us-central1
+  SERVICE_NAME: calandar-api-staging
+  IMAGE_NAME: calandar-api
+  DEPLOY_TAG: candidate
+
+jobs:
+  build-and-test:
+    name: Build and Test Backend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up cargo cache
+        uses: actions/cache@v4
+        continue-on-error: false
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            api/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build backend
+        run: cargo build --verbose --release --no-default-features
+        working-directory: ./api
+
+      - name: Run backend tests
+        run: cargo test --verbose --no-default-features
+        working-directory: ./api
+
+  build-and-push-image:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image-url: ${{ steps.build-push.outputs.IMAGE_URL }}
+      image-digest: ${{ steps.build-push.outputs.IMAGE_DIGEST }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build and push Docker image
+        id: build-push
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ env.GCP_REGION }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: just cloudrun-build-push ${{ github.sha }}
+
+  upsert-secrets:
+    name: Upsert Secrets to GCP Secret Manager
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Upsert secrets to Secret Manager
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PASETO_SECRET_KEY: ${{ secrets.PASETO_SECRET_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
+        run: just cloudrun-upsert-secrets
+
+  deploy-to-staging:
+    name: Deploy to Cloud Run Staging
+    runs-on: ubuntu-latest
+    needs: [build-and-push-image, upsert-secrets]
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      service-url: ${{ steps.deploy.outputs.SERVICE_URL }}
+      revision: ${{ steps.deploy.outputs.REVISION }}
+      previous-revision: ${{ steps.deploy.outputs.PREVIOUS_REVISION }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        env:
+          GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: just cloudrun-deploy ${{ needs.build-and-push-image.outputs.image-url }}
+
+  health-check:
+    name: Health Check and Traffic Migration
+    runs-on: ubuntu-latest
+    needs: deploy-to-staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run health check on new revision
+        env:
+          GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: just cloudrun-health-check ${{ needs.deploy-to-staging.outputs.revision }}
+
+      - name: Migrate traffic to new revision
+        if: success()
+        env:
+          GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: just cloudrun-migrate-traffic ${{ needs.deploy-to-staging.outputs.revision }}
+
+      - name: Verify service health
+        if: success()
+        env:
+          GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: just cloudrun-verify-service
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: [deploy-to-staging, health-check]
+    if: failure() && needs.health-check.result == 'failure' && needs.deploy-to-staging.outputs.previous-revision != 'none'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Rollback to previous revision
+        env:
+          GCP_REGION: ${{ env.GCP_REGION }}
+          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: just cloudrun-rollback ${{ needs.deploy-to-staging.outputs.previous-revision }}
