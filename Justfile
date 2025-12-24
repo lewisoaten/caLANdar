@@ -173,7 +173,7 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 	echo "image-url=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "image-digest=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "image-region=${GCP_REGION}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "image-repository=calandar" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "image-repository=${REPOSITORY_NAME}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "image-name=${IMAGE_NAME}" >> ${GITHUB_OUTPUT:-/dev/null}
 	echo "image-tag=${IMAGE_TAG}" >> ${GITHUB_OUTPUT:-/dev/null}
 
