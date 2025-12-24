@@ -122,8 +122,9 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 	GCP_REGION="${GCP_REGION:-us-central1}"
 	IMAGE_NAME="${IMAGE_NAME:-calandar-api}"
 	IMAGE_TAG="{{ image_tag }}"
-	IMAGE_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/calandar/${IMAGE_NAME}:${IMAGE_TAG}"
-	LATEST_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/calandar/${IMAGE_NAME}:latest"
+	REPOSITORY_NAME="calandar"
+	IMAGE_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY_NAME}/${IMAGE_NAME}:${IMAGE_TAG}"
+	LATEST_URL="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY_NAME}/${IMAGE_NAME}:latest"
 
 	echo "Building and pushing Docker image..."
 	echo "Image URL: ${IMAGE_URL}"
@@ -134,6 +135,22 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 		-t "${IMAGE_URL}" \
 		-t "${LATEST_URL}" \
 		api/
+
+	# Ensure Artifact Registry repository exists
+	echo "Checking if Artifact Registry repository exists..."
+	if ! gcloud artifacts repositories describe "${REPOSITORY_NAME}" \
+		--location="${GCP_REGION}" \
+		--project="${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+		echo "Repository ${REPOSITORY_NAME} does not exist. Creating..."
+		gcloud artifacts repositories create "${REPOSITORY_NAME}" \
+			--repository-format=docker \
+			--location="${GCP_REGION}" \
+			--project="${GCP_PROJECT_ID}" \
+			--description="Docker repository for CaLANdar application"
+		echo "✅ Repository ${REPOSITORY_NAME} created successfully"
+	else
+		echo "✅ Repository ${REPOSITORY_NAME} already exists"
+	fi
 
 	# Configure Docker for Artifact Registry
 	gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
