@@ -166,8 +166,8 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 		exit 1
 	fi
 	echo "Image digest: ${DIGEST}"
-	echo "IMAGE_URL=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "IMAGE_DIGEST=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "image-url=${IMAGE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "image-digest=${DIGEST}" >> ${GITHUB_OUTPUT:-/dev/null}
 
 # Upsert secrets to Google Cloud Secret Manager
 # Required env vars: GCP_PROJECT_ID, DATABASE_URL, PASETO_SECRET_KEY, RESEND_API_KEY, STEAM_API_KEY
@@ -289,11 +289,11 @@ cloudrun-deploy image_url:
 	echo "✅ Deployed revision: ${NEW_REVISION}"
 	echo "Service URL: ${SERVICE_URL}"
 	echo "Tag (${DEPLOY_TAG}) URL: ${TAG_URL}"
-	echo "REVISION=${NEW_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "PREVIOUS_REVISION=${CURRENT_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "SERVICE_URL=${SERVICE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "TAG_URL=${TAG_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
-	echo "DEPLOY_TAG=${DEPLOY_TAG}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "revision=${NEW_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "previous-revision=${CURRENT_REVISION}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "service-url=${SERVICE_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "tag-url=${TAG_URL}" >> ${GITHUB_OUTPUT:-/dev/null}
+	echo "deploy-tag=${DEPLOY_TAG}" >> ${GITHUB_OUTPUT:-/dev/null}
 
 # Run health check on a specific revision (via its traffic tag URL)
 # Required env vars: GCP_PROJECT_ID, GCP_REGION (default: us-central1), SERVICE_NAME (default: calandar-api-staging), REVISION_NAME
