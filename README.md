@@ -170,12 +170,13 @@ curl "${STAGING_URL}/api/events" \
 The Netlify frontend (`frontend/netlify.toml`) contains redirect rules that proxy `/api/*` requests to the backend. To update it to use the Cloud Run staging backend:
 
 1. **Get the Cloud Run service URL:**
+
    ```sh
    # Using gcloud CLI:
    gcloud run services describe calandar-api-staging \
      --region us-central1 \
      --format 'value(status.url)'
-   
+
    # Or check the GitHub Actions workflow logs for "Deploy to Cloud Run Staging"
    ```
 
