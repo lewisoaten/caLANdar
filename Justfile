@@ -320,8 +320,24 @@ cloudrun-health-check revision_name:
 			--region "${GCP_REGION}" \
 			--project "${GCP_PROJECT_ID}" \
 			--format='value(status.url)')
+
+		if [ -z "${SERVICE_URL}" ]; then
+			echo "Failed to obtain service URL for ${SERVICE_NAME} while constructing fallback tag URL (tag: ${DEPLOY_TAG})" >&2
+			echo "--- Service description ---" >&2
+			gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" --format=json >&2 || true
+			exit 1
+		fi
+
 		SERVICE_HOST="${SERVICE_URL#https://}"
 		SERVICE_HOST="${SERVICE_HOST%/}"
+
+		if [ -z "${SERVICE_HOST}" ]; then
+			echo "Derived empty service host from SERVICE_URL='${SERVICE_URL}' while constructing fallback tag URL (tag: ${DEPLOY_TAG})" >&2
+			echo "--- Service description ---" >&2
+			gcloud run services describe "${SERVICE_NAME}" --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" --format=json >&2 || true
+			exit 1
+		fi
+
 		CHECK_URL="https://${DEPLOY_TAG}---${SERVICE_HOST}"
 	fi
 
@@ -485,8 +501,14 @@ cloudrun-deploy-current:
 		--project "${GCP_PROJECT_ID}" \
 		--format 'value(metadata.name)' | wc -l)
 
-	if [ "${SERVICE_REVISIONS}" -eq 1 ]; then
-		echo "First deployment detected - service already has 100% traffic"
+	# Also check if any revision currently has traffic
+	TRAFFIC_REVISIONS=$(gcloud run services describe "${SERVICE_NAME:-calandar-api-staging}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(status.traffic[].revisionName)' | wc -l)
+
+	if [ "${SERVICE_REVISIONS}" -eq 1 ] || [ "${TRAFFIC_REVISIONS}" -eq 0 ]; then
+		echo "First deployment detected (revisions: ${SERVICE_REVISIONS}, with traffic: ${TRAFFIC_REVISIONS}) - service already has 100% traffic"
 		just cloudrun-verify-service
 	else
 		# Health check

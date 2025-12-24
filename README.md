@@ -101,7 +101,7 @@ These secrets are stored in GitHub and automatically upserted to Google Cloud Se
 - `RESEND_API_KEY`: API key for Resend email service
 - `STEAM_API_KEY`: Steam API key for game data
 
-**Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The database is hosted on Supabase, not Cloud SQL.
+**Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The service account referenced by `GCP_SERVICE_ACCOUNT` must have either the `roles/secretmanager.admin` role, or at minimum both `roles/secretmanager.secretAccessor` (to read) and `roles/secretmanager.secretVersionAdder` (to create/update) so that these operations succeed. Additionally, the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` to access these secrets at runtime. The database is hosted on Supabase, not Cloud SQL.
 
 **For local development**: Copy `.env.example` to `.env` and fill in your values. The `.env` file is loaded automatically by Just commands and is excluded from git to keep secrets safe.
 
@@ -121,6 +121,17 @@ cp .env.example .env
 
 # Authenticate with GCP (one-time setup)
 gcloud auth login
+
+# Option 1 (recommended): impersonate the same service account used in CI/CD
+# This keeps local permissions aligned with GitHub Actions (WIF) configuration.
+# Replace with your actual CI/CD service account email from GCP_SERVICE_ACCOUNT secret
+# gcloud auth application-default login --impersonate-service-account="ci-cd-sa@PROJECT_ID.iam.gserviceaccount.com"
+
+# Option 2: use your own account for Application Default Credentials (ADC)
+# If you use this option, ensure your account has at least:
+#   - Secret Manager Admin (or secretAccessor + secretVersionAdder)
+#   - Artifact Registry Writer
+#   - Cloud Run Admin
 gcloud auth application-default login
 
 # Deploy using Just commands (same as CI)
