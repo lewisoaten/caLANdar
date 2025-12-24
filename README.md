@@ -165,6 +165,33 @@ curl "${STAGING_URL}/api/events" \
   -H "Authorization: Bearer <your-token>"
 ```
 
+#### Updating Netlify to Use Cloud Run Backend
+
+The Netlify frontend (`frontend/netlify.toml`) contains redirect rules that proxy `/api/*` requests to the backend. To update it to use the Cloud Run staging backend:
+
+1. **Get the Cloud Run service URL:**
+   ```sh
+   # Using gcloud CLI:
+   gcloud run services describe calandar-api-staging \
+     --region us-central1 \
+     --format 'value(status.url)'
+   
+   # Or check the GitHub Actions workflow logs for "Deploy to Cloud Run Staging"
+   ```
+
+2. **Update `frontend/netlify.toml`:**
+   - Replace `CLOUD_RUN_HASH_PLACEHOLDER` in the redirect URL with the actual hash from step 1
+   - The URL format is: `https://calandar-api-staging-<hash>-uc.a.run.app`
+
+3. **Commit and deploy:**
+   ```sh
+   git add frontend/netlify.toml
+   git commit -m "Update Netlify to use Cloud Run backend"
+   git push
+   ```
+
+**Note**: The Cloud Run URL hash is auto-generated during first deployment and remains stable for the service.
+
 #### Rollback Mechanism
 
 The workflow includes automatic rollback protection:
