@@ -243,7 +243,7 @@ cloudrun-deploy image_url:
 		--platform managed \
 		--allow-unauthenticated \
 		--port 8080 \
-		--set-env-vars "RUST_LOG=info,PORT=8080" \
+		--set-env-vars "RUST_LOG=info" \
 		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
 		--min-instances 0 \
 		--max-instances 10 \
