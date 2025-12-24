@@ -166,7 +166,7 @@ cloudrun-build-push image_tag=`git rev-parse --short HEAD`:
 		exit 1
 	fi
 	echo "Image digest: ${DIGEST}"
-	
+
 	# Output image URL components separately to avoid secret masking in GitHub Actions
 	# GitHub Actions masks outputs that contain secret values (like GCP_PROJECT_ID)
 	# By outputting components separately, the deploy step can reconstruct the URL
