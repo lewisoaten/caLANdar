@@ -1,10 +1,6 @@
 [[redirects]]
   from = "/api/*"
-  # Changed from Shuttle (https://calandar-api-1gtj.shuttle.app) to Cloud Run staging
-  # TODO: Replace CLOUD_RUN_HASH_PLACEHOLDER with actual Cloud Run service hash
-  # To get the URL, run: gcloud run services describe calandar-api-staging --region us-central1 --format 'value(status.url)'
-  # Or check GitHub Actions logs for "Cloud Run Staging Deployment" workflow
-  to = "https://calandar-api-staging-CLOUD_RUN_HASH_PLACEHOLDER-uc.a.run.app/api/:splat"
+  to = "https://calandar-api-staging-tw2haqzuzq-nw.a.run.app/api/:splat"
   status = 200
   force = true
 
