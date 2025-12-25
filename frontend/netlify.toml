@@ -1,6 +1,6 @@
 [[redirects]]
   from = "/api/*"
-  to = "https://calandar-api-1gtj.shuttle.app/api/:splat"
+  to = "https://calandar-api-staging-tw2haqzuzq-nw.a.run.app/api/:splat"
   status = 200
   force = true
 
