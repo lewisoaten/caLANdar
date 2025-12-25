@@ -17,6 +17,7 @@ Rust api can be launched with:
 `just dev-api`
 
 This will:
+
 1. Start a PostgreSQL database using docker-compose
 2. Run database migrations
 3. Start the API with auto-reload on code changes

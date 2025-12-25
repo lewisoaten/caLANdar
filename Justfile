@@ -18,22 +18,22 @@ dev-api:
     set -euxo pipefail
     echo "Starting local PostgreSQL with docker-compose..."
     docker-compose up -d db
-    
+
     # Wait for database to be ready
     echo "Waiting for PostgreSQL to be ready..."
     until docker-compose exec -T db pg_isready -U postgres > /dev/null 2>&1; do
         echo "Waiting for database..."
         sleep 1
     done
-    
+
     export DATABASE_URL="${LOCAL_DB_URL}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
-    
+
     echo "Running migrations..."
     cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
-    
+
     echo "Starting API with cargo watch..."
     cargo watch --workdir api --quiet --clear --exec 'run'
 
@@ -103,12 +103,12 @@ pact-api:
 	set -euxo pipefail
 	# Ensure database is running
 	docker-compose up -d db
-	
+
 	export DATABASE_URL="{{LOCAL_DB_URL}}"
 	export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
 	export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
 	export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
-	
+
 	cd api && cargo run &
 	PID=$!
 	trap "kill ${PID}" EXIT
