@@ -9,28 +9,32 @@ Web application for helping organising LAN parties.
 
 ### Running
 
-#### With Shuttle (default)
+#### Local Development
+
+The API runs in standalone mode and uses a local PostgreSQL database via docker-compose.
 
 Rust api can be launched with:
-`cargo shuttle run --working-directory api`
-
-Or using Just:
 `just dev-api`
 
-#### Standalone Mode (without Shuttle)
+This will:
+1. Start a PostgreSQL database using docker-compose
+2. Run database migrations
+3. Start the API with auto-reload on code changes
 
-The API can also run in standalone mode without Shuttle, useful for local development or cloud deployments (e.g., Cloud Run):
+You can also run the API directly (after starting the database):
 
 ```sh
-# Set required environment variables
-export DATABASE_URL="postgres://user:password@localhost:5432/calandar"
-export PASETO_SECRET_KEY="your-secret-key"
-export RESEND_API_KEY="your-resend-key"
-export STEAM_API_KEY="your-steam-key"
-export PORT=8080  # Optional, defaults to 8080
+# Start database
+docker-compose up -d db
 
-# Run in standalone mode
-just dev-api-standalone
+# Set required environment variables
+export DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
+export PASETO_SECRET_KEY="wubbalubbadubdubwubbalubbadubdub"
+export RESEND_API_KEY="re_test_key"
+export STEAM_API_KEY="test_steam_key"
+
+# Run the API
+cd api && cargo run
 ```
 
 #### Frontend
@@ -43,48 +47,28 @@ Or using Just:
 
 ## Deployment
 
-CaLANdar supports two deployment platforms:
+CaLANdar is deployed to Google Cloud Run for both production and staging environments:
 
-1. **Shuttle** (production) - The default and primary production deployment
-2. **Google Cloud Run** (staging) - Automated staging environment for testing
+1. **Production** - Deployed from the `main` branch to `calandar-api-production`
+2. **Staging** - Deployed from `main` or `staging` branches to `calandar-api-staging`
 
-### Shuttle Deployment (Production)
+### Cloud Run Production Deployment
 
-The default production deployment uses Shuttle:
-
-```sh
-cargo shuttle deploy --working-directory api
-```
-
-Secrets should be configured in `api/Secrets.toml` (see `api/Secrets.toml.template`).
-
-**Production deployments are automatic**: Every push to the `main` branch triggers a Shuttle deployment via GitHub Actions (`.github/workflows/shuttle-deploy.yml`).
-
-### Cloud Run Staging Deployment
-
-**Automated staging deployments**: The repository includes a GitHub Actions workflow (`.github/workflows/cloudrun-staging.yml`) that automatically builds, tests, and deploys the backend to a Google Cloud Run staging environment.
-
-#### How the Staging Workflow Works
-
-The workflow triggers on:
-
-- **Push to `main` or `staging` branches** (when API files change)
-- **Pull requests to `main`** (build and test only, no deployment)
-- **Manual trigger** via GitHub Actions UI
+**Production deployments are automatic**: Every push to the `main` branch triggers a Cloud Run production deployment via GitHub Actions (`.github/workflows/cloudrun-production.yml`).
 
 The workflow performs these steps:
 
 1. **Build & Test**: Compiles the Rust backend and runs all tests
 2. **Docker Build**: Creates a production Docker image using `api/Dockerfile.cloudrun`
 3. **Push to Artifact Registry**: Uploads the image to Google Artifact Registry
-4. **Deploy to Staging**: Deploys to a Cloud Run service named `calandar-api-staging`
+4. **Deploy to Production**: Deploys to a Cloud Run service named `calandar-api-production`
 5. **Health Check**: Verifies the `/api/healthz` endpoint responds correctly
 6. **Traffic Migration**: Routes 100% traffic to the new revision only after health checks pass
 7. **Rollback**: Automatically rolls back to the previous revision if health checks fail
 
 #### Required GitHub Secrets
 
-To enable Cloud Run staging deployments, configure these secrets in your GitHub repository:
+To enable Cloud Run production deployments, configure these secrets in your GitHub repository:
 
 **GCP Authentication Secrets:**
 
@@ -96,7 +80,7 @@ To enable Cloud Run staging deployments, configure these secrets in your GitHub 
 
 These secrets are stored in GitHub and automatically upserted to Google Cloud Secret Manager during deployment:
 
-- `DATABASE_URL`: PostgreSQL connection string (Supabase database)
+- `DATABASE_URL_PRODUCTION`: PostgreSQL connection string for production (Supabase database)
 - `PASETO_SECRET_KEY`: Secret key for PASETO token signing
 - `RESEND_API_KEY`: API key for Resend email service
 - `STEAM_API_KEY`: Steam API key for game data
@@ -104,6 +88,10 @@ These secrets are stored in GitHub and automatically upserted to Google Cloud Se
 **Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The service account referenced by `GCP_SERVICE_ACCOUNT` must have either the `roles/secretmanager.admin` role, or at minimum both `roles/secretmanager.secretAccessor` (to read) and `roles/secretmanager.secretVersionAdder` (to create/update) so that these operations succeed. Additionally, the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` to access these secrets at runtime. The database is hosted on Supabase, not Cloud SQL.
 
 **For local development**: Copy `.env.example` to `.env` and fill in your values. The `.env` file is loaded automatically by Just commands and is excluded from git to keep secrets safe.
+
+### Cloud Run Staging Deployment
+
+**Automated staging deployments**: The repository includes a GitHub Actions workflow (`.github/workflows/cloudrun-staging.yml`) that automatically builds, tests, and deploys the backend to a Google Cloud Run staging environment.
 
 #### Using Just Commands Locally
 
@@ -148,6 +136,14 @@ just cloudrun-verify-service          # Verify deployment
 
 This ensures parity between local development and CI/CD deployment workflows.
 
+### Cloud Run Staging Deployment
+
+The staging environment works similarly to production but deploys to `calandar-api-staging`. The workflow (`.github/workflows/cloudrun-staging.yml`) triggers on:
+
+- **Push to `main` or `staging` branches** (when API files change)
+- **Pull requests to `main`** (build and test only, no deployment)
+- **Manual trigger** via GitHub Actions UI
+
 #### Testing the Staging Environment
 
 After a successful deployment, you can test the staging API:
@@ -167,24 +163,12 @@ curl "${STAGING_URL}/api/events" \
 
 #### Rollback Mechanism
 
-The workflow includes automatic rollback protection:
+Both production and staging workflows include automatic rollback protection:
 
 - If the new revision fails health checks, traffic remains on the previous revision
 - The workflow automatically reverts to the last known good revision
 - The failed revision remains available for debugging but receives no traffic
 - Rollback verification ensures the previous revision is healthy
-
-#### Cloud Run vs. Shuttle
-
-| Aspect                   | Shuttle (Production)    | Cloud Run (Staging)                              |
-| ------------------------ | ----------------------- | ------------------------------------------------ |
-| **Purpose**              | Production traffic      | Testing and staging                              |
-| **Deployment Trigger**   | Push to `main`          | Push to `main`/`staging`                         |
-| **Database**             | Shuttle PostgreSQL      | Supabase PostgreSQL                              |
-| **Configuration**        | `Secrets.toml`          | GitHub Secrets (auto-upserted to GCP Secret Mgr) |
-| **Deployment Method**    | Shuttle CLI             | Just commands                                    |
-| **URL**                  | Shuttle-provided domain | Cloud Run domain                                 |
-| **Impact on Production** | Direct                  | None (isolated environment)                      |
 
 ### Manual Cloud Run Deployment
 
@@ -252,9 +236,12 @@ To modify the database, prepare a migration script with:
 When a query or database schema is modified, you will need to prepare the `sqlx-data.json` file. This can be performed after launching the application from within the `api/` directory with:
 
 ```sh
-export DATABASE_URL="postgres://postgres:postgres@127.0.0.1:$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')/postgres"
+# Ensure database is running
+docker-compose up -d db
 
-cargo sqlx prepare --merged -- --all-targets --all-features
+export DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
+
+cargo sqlx prepare --merged
 ```
 
 If you have modified the migration scripts during development, you can rollback, and then reapply them with the following commands:
