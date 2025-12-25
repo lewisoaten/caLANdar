@@ -10,7 +10,7 @@ This document provides comprehensive guidelines for GitHub Copilot agents workin
 **Type**: Full-stack web application
 **Languages & Frameworks**:
 
-- **Backend**: Rust 1.87.0, Rocket web framework, Shuttle deployment platform
+- **Backend**: Rust 1.87.0, Rocket web framework, Google Cloud Run deployment platform
 - **Frontend**: React 19, TypeScript 5.8, Vite 6, Material-UI 7
 - **Database**: PostgreSQL via SQLx with migrations
 - **Contract Testing**: Pact for API contract verification
@@ -57,12 +57,11 @@ just bacon
 # Generic commands (use when Just commands don't exist):
 cd api && cargo build    # Build only
 cd api && cargo test     # Run tests
-cargo shuttle run --working-directory api  # Run with Shuttle
 ```
 
 **Important**: The API uses SQLx with compile-time query checking. The `.sqlx/` directory contains cached query metadata. If you modify database queries or schema:
 
-1. Ensure the database is running (run `just dev-api` first)
+1. Ensure the database is running (run `just dev-api` first or `docker-compose up -d db`)
 2. Run `just update-sqlx` to regenerate the metadata
 
 ### Frontend (React/TypeScript)
@@ -91,7 +90,7 @@ just frontend-test
 just frontend-build
 
 # Generic commands (use when Just commands don't exist):
-cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server (already covered by just dev-frontend)
+cd frontend && REACT_APP_API_PROXY=http://localhost:8080 npm start  # Dev server (already covered by just dev-frontend)
 ```
 
 **Frontend builds output to**: `frontend/build/`
@@ -240,7 +239,7 @@ just clippy            # Run clippy only via pre-commit
 just bacon             # Run bacon (Rust background compiler)
 ```
 
-**Database commands note**: Migration commands expect a running PostgreSQL container named `shuttle_calandar-api_shared_postgres`. This is created automatically when you run the API with Shuttle.
+**Database commands note**: Migration commands expect a running PostgreSQL container. This is created automatically when you run `just dev-api` or can be started with `docker-compose up -d db`.
 
 ## Project Architecture
 
@@ -252,10 +251,10 @@ just bacon             # Run bacon (Rust background compiler)
 │   └── workflows/          # CI/CD workflows
 │       ├── rust.yml        # Backend CI (build + test)
 │       ├── frontend.yml    # Frontend CI (test + build)
-│       └── shuttle-deploy.yml  # Deploy to Shuttle
+│       └── cloudrun-deploy.yml # Deploy to Cloud Run (production/staging)
 ├── api/                    # Rust backend
 │   ├── src/
-│   │   ├── main.rs        # Entry point, Shuttle config
+│   │   ├── main.rs        # Entry point, Rocket config
 │   │   ├── auth.rs        # PASETO token authentication
 │   │   ├── error.rs       # Error handling
 │   │   ├── util.rs        # Utilities
@@ -266,6 +265,7 @@ just bacon             # Run bacon (Rust background compiler)
 │   ├── .sqlx/             # SQLx query metadata (cached)
 │   ├── Cargo.toml         # Rust dependencies
 │   ├── Rocket.toml        # Rocket configuration
+│   ├── Dockerfile.cloudrun # Docker config for Cloud Run
 │   └── rust-toolchain.toml  # Rust version (1.87.0)
 ├── frontend/              # React frontend
 │   ├── src/
@@ -292,7 +292,7 @@ just bacon             # Run bacon (Rust background compiler)
 ### Backend Architecture
 
 - **Framework**: Rocket (async web framework)
-- **Deployment**: Shuttle (serverless Rust platform)
+- **Deployment**: Google Cloud Run (production and staging)
 - **Database**: PostgreSQL via SQLx (compile-time checked queries)
 - **Authentication**: PASETO tokens (in `auth.rs`)
 - **API Documentation**: OpenAPI via `rocket_okapi`
@@ -301,7 +301,7 @@ just bacon             # Run bacon (Rust background compiler)
 
 **Key files**:
 
-- `api/src/main.rs`: Shuttle setup, route mounting
+- `api/src/main.rs`: Rocket setup, route mounting
 - `api/src/auth.rs`: PASETO authentication logic
 - `api/src/controllers/`: Business logic for each resource
 - `api/src/repositories/`: Database queries
@@ -361,10 +361,14 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
   5. `npm run build-storybook` to build Storybook
   6. Upload Storybook artifact
 
-**3. Shuttle Deploy (`.github/workflows/shuttle-deploy.yml`)**
+**3. Cloud Run Deploy (`.github/workflows/cloudrun-deploy.yml`)**
 
-- Triggers: Push to main only
-- Deploys API to Shuttle with secrets
+- Triggers:
+  - Push to main → production deployment
+  - Push to staging or PRs → staging deployment
+  - Manual trigger with environment selection
+- Unified workflow that deploys to production or staging based on trigger
+- Includes health checks and automatic rollback for both environments
 
 ### Pre-commit CI
 
@@ -387,10 +391,10 @@ The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your c
 1. Ensure database is running with `just dev-api`
 2. Run `just update-sqlx`
 
-### Issue: "shuttle_calandar-api_shared_postgres" container not found
+### Issue: PostgreSQL container not found
 
-**Cause**: Database migration commands expect a running PostgreSQL container created by Shuttle.
-**Fix**: Run the API first with `just dev-api` to create the container.
+**Cause**: Database migration commands expect a running PostgreSQL container.
+**Fix**: Run `just dev-api` (starts database automatically) or manually start it with `docker-compose up -d db`.
 
 ### Issue: npm install taking forever
 
@@ -489,7 +493,7 @@ nix develop --impure
 just dev
 
 # This runs both API and frontend with auto-reload
-# API: http://localhost:8000
+# API: http://localhost:8080
 # Frontend: http://localhost:3000
 ```
 
@@ -498,7 +502,6 @@ just dev
 **Backend (Rust)**:
 
 - rocket 0.5.0 - Web framework
-- shuttle-\* 0.57.0 - Deployment platform
 - sqlx 0.8.6 - Database access
 - rusty_paseto 0.8.0 - Authentication
 - rocket_okapi - OpenAPI documentation

@@ -1,33 +1,44 @@
-name: Cloud Run Staging Deployment
+name: Cloud Run Deployment
 
 on:
   push:
     branches: [main, staging]
     paths:
       - "api/**"
-      - ".github/workflows/cloudrun-staging.yml"
+      - ".github/workflows/cloudrun-deploy.yml"
       - "Justfile"
       - ".env.example"
   pull_request:
-    branches: ["main"]
     paths:
       - "api/**"
-      - ".github/workflows/cloudrun-staging.yml"
+      - ".github/workflows/cloudrun-deploy.yml"
       - "Justfile"
       - ".env.example"
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
 
 concurrency:
-  group: cloudrun-staging-deployment
+  group: cloudrun-${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || 'staging' }}-deployment
   cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GCP_REGION: ${{ vars.GCP_REGION }}
-  SERVICE_NAME: calandar-api-staging
   IMAGE_NAME: calandar-api
   DEPLOY_TAG: candidate
+  # Determine target environment based on trigger
+  # Production: push to main branch only
+  # Staging: PRs, push to staging, or push to main (for testing)
+  TARGET_ENV: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'production' || (github.event_name == 'workflow_dispatch' && inputs.environment) || 'staging' }}
 
 jobs:
   build-and-test:
@@ -62,26 +73,38 @@ jobs:
     name: Build and Push Docker Image
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     permissions:
       contents: read
       id-token: write
     outputs:
       image-url: ${{ steps.build-push.outputs.image-url }}
       image-digest: ${{ steps.build-push.outputs.image-digest }}
+      target-env: ${{ steps.set-env.outputs.target-env }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set target environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target-env=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "target-env=production" >> $GITHUB_OUTPUT
+          else
+            echo "target-env=staging" >> $GITHUB_OUTPUT
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
         uses: extractions/setup-just@v2
@@ -98,7 +121,7 @@ jobs:
     name: Upsert Secrets to GCP Secret Manager
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     permissions:
       contents: read
       id-token: write
@@ -106,15 +129,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set target environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "target-env=${{ inputs.environment }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "target-env=production" >> $GITHUB_OUTPUT
+          else
+            echo "target-env=staging" >> $GITHUB_OUTPUT
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
         uses: extractions/setup-just@v2
@@ -122,14 +156,14 @@ jobs:
       - name: Upsert secrets to Secret Manager
         env:
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ steps.set-env.outputs.target-env == 'production' && secrets.DATABASE_URL_PRODUCTION || secrets.DATABASE_URL }}
           PASETO_SECRET_KEY: ${{ secrets.PASETO_SECRET_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           STEAM_API_KEY: ${{ secrets.STEAM_API_KEY }}
         run: just cloudrun-upsert-secrets
 
-  deploy-to-staging:
-    name: Deploy to Cloud Run Staging
+  deploy:
+    name: Deploy to Cloud Run
     runs-on: ubuntu-latest
     needs: [build-and-push-image, upsert-secrets]
     permissions:
@@ -143,15 +177,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set deployment configuration
+        id: config
+        run: |
+          TARGET_ENV="${{ needs.build-and-push-image.outputs.target-env }}"
+          if [ "$TARGET_ENV" = "production" ]; then
+            echo "service-name=calandar-api-production" >> $GITHUB_OUTPUT
+          else
+            echo "service-name=calandar-api-staging" >> $GITHUB_OUTPUT
+          fi
+          echo "target-env=$TARGET_ENV" >> $GITHUB_OUTPUT
+
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
         uses: extractions/setup-just@v2
@@ -160,7 +205,7 @@ jobs:
         id: deploy
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SERVICE_NAME: ${{ steps.config.outputs.service-name }}
           DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-deploy ${{ needs.build-and-push-image.outputs.image-url }}
@@ -168,7 +213,7 @@ jobs:
   health-check:
     name: Health Check and Traffic Migration
     runs-on: ubuntu-latest
-    needs: deploy-to-staging
+    needs: deploy
     permissions:
       contents: read
       id-token: write
@@ -176,15 +221,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set deployment configuration
+        id: config
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "service-name=calandar-api-production" >> $GITHUB_OUTPUT
+          else
+            echo "service-name=calandar-api-staging" >> $GITHUB_OUTPUT
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
         uses: extractions/setup-just@v2
@@ -192,32 +246,32 @@ jobs:
       - name: Run health check on new revision
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SERVICE_NAME: ${{ steps.config.outputs.service-name }}
           DEPLOY_TAG: ${{ env.DEPLOY_TAG }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-        run: just cloudrun-health-check ${{ needs.deploy-to-staging.outputs.revision }}
+        run: just cloudrun-health-check ${{ needs.deploy.outputs.revision }}
 
       - name: Migrate traffic to new revision
         if: success()
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SERVICE_NAME: ${{ steps.config.outputs.service-name }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-        run: just cloudrun-migrate-traffic ${{ needs.deploy-to-staging.outputs.revision }}
+        run: just cloudrun-migrate-traffic ${{ needs.deploy.outputs.revision }}
 
       - name: Verify service health
         if: success()
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SERVICE_NAME: ${{ steps.config.outputs.service-name }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
         run: just cloudrun-verify-service
 
   rollback:
     name: Rollback on Failure
     runs-on: ubuntu-latest
-    needs: [deploy-to-staging, health-check]
-    if: failure() && needs.health-check.result == 'failure' && needs.deploy-to-staging.outputs.previous-revision != 'none'
+    needs: [deploy, health-check]
+    if: failure() && needs.health-check.result == 'failure' && needs.deploy.outputs.previous-revision != 'none'
     permissions:
       contents: read
       id-token: write
@@ -225,15 +279,24 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Set deployment configuration
+        id: config
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "service-name=calandar-api-production" >> $GITHUB_OUTPUT
+          else
+            echo "service-name=calandar-api-staging" >> $GITHUB_OUTPUT
+          fi
+
       - name: Authenticate to Google Cloud
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@v2
 
       - name: Install just
         uses: extractions/setup-just@v2
@@ -241,6 +304,6 @@ jobs:
       - name: Rollback to previous revision
         env:
           GCP_REGION: ${{ env.GCP_REGION }}
-          SERVICE_NAME: ${{ env.SERVICE_NAME }}
+          SERVICE_NAME: ${{ steps.config.outputs.service-name }}
           GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
-        run: just cloudrun-rollback ${{ needs.deploy-to-staging.outputs.previous-revision }}
+        run: just cloudrun-rollback ${{ needs.deploy.outputs.previous-revision }}

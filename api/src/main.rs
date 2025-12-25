@@ -5,8 +5,6 @@
 
 extern crate rocket;
 
-#[cfg(feature = "shuttle")]
-use anyhow::anyhow;
 use resend_rs::Resend;
 use rocket::{
     fairing::{Fairing, Info, Kind},
@@ -25,11 +23,6 @@ use rocket_okapi::{
 };
 use rusty_paseto::prelude::*;
 use sqlx::PgPool;
-
-#[cfg(feature = "shuttle")]
-use shuttle_rocket::ShuttleRocket;
-#[cfg(feature = "shuttle")]
-use shuttle_runtime::SecretStore;
 
 #[macro_use]
 mod error;
@@ -317,54 +310,12 @@ fn build_rocket(
     rocket
 }
 
-#[cfg(feature = "shuttle")]
-#[allow(clippy::too_many_lines)]
-#[shuttle_runtime::main]
-async fn rocket(
-    #[shuttle_shared_db::Postgres] pool: PgPool,
-    #[shuttle_runtime::Secrets] secret_store: SecretStore,
-) -> ShuttleRocket {
-    log::info!("Launching application!");
-    match sqlx::migrate!().run(&pool).await {
-        Ok(()) => log::info!("Migrations ran successfully"),
-        Err(e) => log::error!("Error running migrations: {e}"),
-    }
-
-    // Get the PASETO secret key from `Secrets.toml` using the secrets store
-    let Some(paseto_secret_key) = secret_store.get("PASETO_SECRET_KEY") else {
-        return Err(anyhow!("failed to get PASETO_SECRET_KEY from secrets store").into());
-    };
-
-    let Some(resend_api_key) = secret_store.get("RESEND_API_KEY") else {
-        return Err(anyhow!("failed to get RESEND_API_KEY from secrets store").into());
-    };
-
-    let Some(steam_api_key) = secret_store.get("STEAM_API_KEY") else {
-        return Err(anyhow!("failed to get STEAM_API_KEY from secrets store").into());
-    };
-
-    let (paseto_symmetric_key, email_sender, steam_api_key, tera) =
-        load_secrets_and_config(paseto_secret_key, resend_api_key, steam_api_key)
-            .map_err(|e| anyhow!("Failed to load configuration: {e}"))?;
-
-    let rocket = build_rocket(
-        pool,
-        paseto_symmetric_key,
-        email_sender,
-        steam_api_key,
-        tera,
-    );
-
-    Ok(rocket.into())
-}
-
-#[cfg(not(feature = "shuttle"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
     env_logger::init();
 
-    log::info!("Starting CaLANdar API in standalone mode");
+    log::info!("Starting CaLANdar API");
 
     // Load environment variables from .env file if present
     dotenvy::dotenv().ok();

@@ -1,6 +1,7 @@
+# Production backend (Cloud Run)
 [[redirects]]
   from = "/api/*"
-  to = "https://calandar-api-staging-tw2haqzuzq-nw.a.run.app/api/:splat"
+  to = "https://calandar-api-production-tw2haqzuzq-nw.a.run.app/api/:splat"
   status = 200
   force = true
 
@@ -8,6 +9,22 @@
   from = "/*"
   to = "/"
   status = 200
+
+# Deploy Preview contexts - use staging backend
+[context.deploy-preview]
+  [[context.deploy-preview.redirects]]
+    from = "/api/*"
+    to = "https://calandar-api-staging-tw2haqzuzq-nw.a.run.app/api/:splat"
+    status = 200
+    force = true
+
+# Branch deploys - use staging backend
+[context.branch-deploy]
+  [[context.branch-deploy.redirects]]
+    from = "/api/*"
+    to = "https://calandar-api-staging-tw2haqzuzq-nw.a.run.app/api/:splat"
+    status = 200
+    force = true
 
 [[headers]]
 for = "/*"
