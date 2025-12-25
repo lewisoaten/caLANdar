@@ -55,7 +55,7 @@ CaLANdar is deployed to Google Cloud Run for both production and staging environ
 
 ### Cloud Run Production Deployment
 
-**Production deployments are automatic**: Every push to the `main` branch triggers a Cloud Run production deployment via GitHub Actions (`.github/workflows/cloudrun-production.yml`).
+**Production deployments are automatic**: Every push to the `main` branch triggers a Cloud Run production deployment via GitHub Actions (`.github/workflows/cloudrun-deploy.yml`).
 
 The workflow performs these steps:
 
@@ -92,7 +92,7 @@ These secrets are stored in GitHub and automatically upserted to Google Cloud Se
 
 ### Cloud Run Staging Deployment
 
-**Automated staging deployments**: The repository includes a GitHub Actions workflow (`.github/workflows/cloudrun-staging.yml`) that automatically builds, tests, and deploys the backend to a Google Cloud Run staging environment.
+The staging environment works similarly to production but deploys to `calandar-api-staging`. A unified GitHub Actions workflow (`.github/workflows/cloudrun-deploy.yml`) automatically determines the target environment based on the trigger.
 
 #### Using Just Commands Locally
 
@@ -139,7 +139,7 @@ This ensures parity between local development and CI/CD deployment workflows.
 
 ### Cloud Run Staging Deployment
 
-The staging environment works similarly to production but deploys to `calandar-api-staging`. The workflow (`.github/workflows/cloudrun-staging.yml`) triggers on:
+The staging environment works similarly to production but deploys to `calandar-api-staging`. The unified workflow (`.github/workflows/cloudrun-deploy.yml`) automatically determines the target environment:
 
 - **Push to `main` or `staging` branches** (when API files change)
 - **Pull requests to `main`** (build and test only, no deployment)

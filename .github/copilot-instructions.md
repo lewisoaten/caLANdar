@@ -251,8 +251,7 @@ just bacon             # Run bacon (Rust background compiler)
 │   └── workflows/          # CI/CD workflows
 │       ├── rust.yml        # Backend CI (build + test)
 │       ├── frontend.yml    # Frontend CI (test + build)
-│       ├── cloudrun-staging.yml    # Deploy to Cloud Run staging
-│       └── cloudrun-production.yml # Deploy to Cloud Run production
+│       └── cloudrun-deploy.yml # Deploy to Cloud Run (production/staging)
 ├── api/                    # Rust backend
 │   ├── src/
 │   │   ├── main.rs        # Entry point, Rocket config
@@ -362,17 +361,14 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
   5. `npm run build-storybook` to build Storybook
   6. Upload Storybook artifact
 
-**3. Cloud Run Production Deploy (`.github/workflows/cloudrun-production.yml`)**
+**3. Cloud Run Deploy (`.github/workflows/cloudrun-deploy.yml`)**
 
-- Triggers: Push to main only
-- Deploys API to Google Cloud Run production (`calandar-api-production`)
-- Includes health checks and automatic rollback
-
-**4. Cloud Run Staging Deploy (`.github/workflows/cloudrun-staging.yml`)**
-
-- Triggers: Push to main/staging, PRs to main
-- Deploys API to Google Cloud Run staging (`calandar-api-staging`)
-- Includes health checks and automatic rollback
+- Triggers: 
+  - Push to main → production deployment
+  - Push to staging or PRs → staging deployment
+  - Manual trigger with environment selection
+- Unified workflow that deploys to production or staging based on trigger
+- Includes health checks and automatic rollback for both environments
 
 ### Pre-commit CI
 
