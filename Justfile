@@ -1,6 +1,9 @@
 # Load environment variables from .env file if it exists (for local development)
 set dotenv-load := true
 
+# Local development database URL
+LOCAL_DB_URL := "postgres://postgres:password@localhost:5432/calandar"
+
 default:
   just --list
 
@@ -23,7 +26,7 @@ dev-api:
         sleep 1
     done
     
-    export DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
+    export DATABASE_URL="${LOCAL_DB_URL}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
@@ -45,8 +48,7 @@ migrate-info:
 	set -euxo pipefail
 	# Ensure database is running
 	docker-compose up -d db
-	DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
-	cd api && cargo sqlx migrate info --database-url "${DATABASE_URL}"
+	cd api && cargo sqlx migrate info --database-url "{{LOCAL_DB_URL}}"
 
 migrate-add name:
 	cd api && cargo sqlx migrate add -r {{name}}
@@ -56,24 +58,21 @@ migrate-run:
 	set -euxo pipefail
 	# Ensure database is running
 	docker-compose up -d db
-	DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
-	cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
+	cd api && cargo sqlx migrate run --database-url "{{LOCAL_DB_URL}}"
 
 migrate-revert:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	# Ensure database is running
 	docker-compose up -d db
-	DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
-	cd api && cargo sqlx migrate revert --database-url "${DATABASE_URL}"
+	cd api && cargo sqlx migrate revert --database-url "{{LOCAL_DB_URL}}"
 
 update-sqlx:
 	#!/usr/bin/env bash
 	set -euxo pipefail
 	# Ensure database is running
 	docker-compose up -d db
-	DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
-	cd api && cargo sqlx prepare --database-url "${DATABASE_URL}" -- --all-targets
+	cd api && cargo sqlx prepare --database-url "{{LOCAL_DB_URL}}" -- --all-targets
 
 bacon:
 	cd api && bacon
@@ -105,7 +104,7 @@ pact-api:
 	# Ensure database is running
 	docker-compose up -d db
 	
-	export DATABASE_URL="postgres://postgres:password@localhost:5432/calandar"
+	export DATABASE_URL="{{LOCAL_DB_URL}}"
 	export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
 	export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
 	export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"

@@ -3,6 +3,11 @@ name = "calandar-api"
 version = "0.1.0"
 edition = "2021"
 
+# Note: The `home` crate (transitive dependency via sqlx) is pinned to 0.5.11
+# in Cargo.lock to maintain compatibility with Rust 1.87.0.
+# Versions 0.5.12+ require Rust 1.88.
+# Run: cargo update home --precise 0.5.11
+
 [dependencies]
 anyhow = "1.0.100"
 base64 = "0.22.1"
