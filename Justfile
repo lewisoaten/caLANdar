@@ -35,7 +35,7 @@ dev-api:
     cargo watch --workdir api --quiet --clear --exec 'run'
 
 dev-frontend:
-    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8000 npm start
+    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start
 
 dev-storybook:
 	cd frontend && npm install && npm run storybook

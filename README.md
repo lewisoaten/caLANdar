@@ -40,7 +40,7 @@ cd api && cargo run
 #### Frontend
 
 React frontend can be launched with:
-`REACT_APP_API_PROXY=http://localhost:8000 npm start`
+`REACT_APP_API_PROXY=http://localhost:8080 npm start`
 
 Or using Just:
 `just dev-frontend`

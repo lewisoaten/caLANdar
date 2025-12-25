@@ -90,7 +90,7 @@ just frontend-test
 just frontend-build
 
 # Generic commands (use when Just commands don't exist):
-cd frontend && REACT_APP_API_PROXY=http://localhost:8000 npm start  # Dev server (already covered by just dev-frontend)
+cd frontend && REACT_APP_API_PROXY=http://localhost:8080 npm start  # Dev server (already covered by just dev-frontend)
 ```
 
 **Frontend builds output to**: `frontend/build/`
