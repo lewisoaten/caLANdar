@@ -9,7 +9,6 @@ on:
       - "Justfile"
       - ".env.example"
   pull_request:
-    branches: ["main"]
     paths:
       - "api/**"
       - ".github/workflows/cloudrun-staging.yml"
