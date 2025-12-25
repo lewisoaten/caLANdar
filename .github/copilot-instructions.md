@@ -363,7 +363,7 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
 
 **3. Cloud Run Deploy (`.github/workflows/cloudrun-deploy.yml`)**
 
-- Triggers: 
+- Triggers:
   - Push to main → production deployment
   - Push to staging or PRs → staging deployment
   - Manual trigger with environment selection
