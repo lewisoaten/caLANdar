@@ -5,13 +5,13 @@ This directory contains the development container configuration for CaLANdar.
 ## What's Included
 
 - **Base Image**: Ubuntu 22.04
-- **Docker-in-Docker**: Full Docker support for running Shuttle and other containerized tools
+- **Docker-in-Docker**: Full Docker support for running local PostgreSQL database
 - **Nix**: Installed with flakes support for reproducible development environment
 - **Automatic Environment**: Nix development shell activated automatically in all terminals
 - **VS Code Extensions**: Rust, TypeScript, and development tools
 - **Port Forwarding**:
   - 3000: Frontend (React)
-  - 8000: API (Rust/Rocket)
+  - 8080: API (Rust/Rocket)
   - 6006: Storybook
 
 ## Features
@@ -20,7 +20,7 @@ The dev container uses these features:
 
 - Git
 - GitHub CLI
-- Docker-in-Docker (for Shuttle and containerized development)
+- Docker-in-Docker (for local PostgreSQL database)
 - Nix package manager with flakes support
 
 ## Usage
@@ -53,10 +53,10 @@ The Nix development environment is automatically activated in all terminals, so 
 # See all available commands
 just --list
 
-# Run the full development environment (includes Docker support for Shuttle)
+# Run the full development environment (includes Docker support for PostgreSQL)
 just dev
 
-# Run only the API (now works with Docker-in-Docker support)
+# Run only the API (now uses docker-compose for PostgreSQL)
 just dev-api
 
 # Run only the frontend
@@ -70,7 +70,7 @@ just pact-api
 ### Important Notes
 
 - **No Manual Setup Required**: The Nix development shell is automatically activated when you open a terminal
-- **Docker Support**: Shuttle can now run properly with Docker-in-Docker support
+- **Docker Support**: PostgreSQL database runs via docker-compose
 - **All Tools Available**: cargo, just, npm, and all other development tools are in your PATH automatically
 
 ## Development Environment
@@ -80,15 +80,15 @@ The dev container automatically sets up the same development environment as defi
 - Rust toolchain (as specified in `api/rust-toolchain.toml`)
 - Node.js 22
 - PostgreSQL tools
-- Cargo tools (cargo-watch, cargo-shuttle, sqlx-cli)
+- Cargo tools (cargo-watch, sqlx-cli)
 - Just command runner
 - Pre-commit hooks
-- Docker support for Shuttle
+- Docker support for local PostgreSQL
 
 **Key Features:**
 
 - **Automatic Activation**: The Nix development shell is automatically activated in every terminal
-- **Docker-in-Docker**: Full Docker support allows Shuttle to run containers properly
+- **Docker-in-Docker**: Full Docker support allows PostgreSQL to run via docker-compose
 - **Tool Availability**: All development tools are immediately available in your PATH
 
 ## Troubleshooting
@@ -99,7 +99,7 @@ If you encounter issues:
 2. **Docker issues**: Ensure Docker is running (for local VS Code usage). The dev container includes Docker-in-Docker support.
 3. **Container rebuild**: Try rebuilding the container: "Dev Containers: Rebuild Container"
 4. **Nix environment**: If the environment isn't loading, check: `which just` should show a Nix store path
-5. **Shuttle errors**: With Docker-in-Docker support, `just dev-api` should now work properly
+5. **Database errors**: With Docker-in-Docker support, `just dev-api` should start PostgreSQL automatically
 
 ### Manual Nix Shell (if needed)
 

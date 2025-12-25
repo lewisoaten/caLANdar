@@ -1,6 +1,9 @@
 # Load environment variables from .env file if it exists (for local development)
 set dotenv-load := true
 
+# Local development database URL
+LOCAL_DB_URL := "postgres://postgres:password@localhost:5432/calandar"
+
 default:
   just --list
 
@@ -11,10 +14,31 @@ dev:
 	(trap 'kill 0' SIGINT; just dev-api & just dev-frontend)
 
 dev-api:
-    cargo watch --workdir api --quiet --clear --exec 'shuttle run'
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    echo "Starting local PostgreSQL with docker-compose..."
+    docker-compose up -d db
+
+    # Wait for database to be ready
+    echo "Waiting for PostgreSQL to be ready..."
+    until docker-compose exec -T db pg_isready -U postgres > /dev/null 2>&1; do
+        echo "Waiting for database..."
+        sleep 1
+    done
+
+    export DATABASE_URL="${LOCAL_DB_URL}"
+    export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
+    export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
+    export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
+
+    echo "Running migrations..."
+    cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
+
+    echo "Starting API with cargo watch..."
+    cargo watch --workdir api --quiet --clear --exec 'run'
 
 dev-frontend:
-    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8000 npm start
+    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start
 
 dev-storybook:
 	cd frontend && npm install && npm run storybook
@@ -22,9 +46,9 @@ dev-storybook:
 migrate-info:
 	#!/usr/bin/env bash
 	set -euxo pipefail
-	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
-	cd api && cargo sqlx migrate info --database-url "${DATABASE_URL}"
+	# Ensure database is running
+	docker-compose up -d db
+	cd api && cargo sqlx migrate info --database-url "{{LOCAL_DB_URL}}"
 
 migrate-add name:
 	cd api && cargo sqlx migrate add -r {{name}}
@@ -32,23 +56,23 @@ migrate-add name:
 migrate-run:
 	#!/usr/bin/env bash
 	set -euxo pipefail
-	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
-	cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
+	# Ensure database is running
+	docker-compose up -d db
+	cd api && cargo sqlx migrate run --database-url "{{LOCAL_DB_URL}}"
 
 migrate-revert:
 	#!/usr/bin/env bash
 	set -euxo pipefail
-	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
-	cd api && cargo sqlx migrate revert --database-url "${DATABASE_URL}"
+	# Ensure database is running
+	docker-compose up -d db
+	cd api && cargo sqlx migrate revert --database-url "{{LOCAL_DB_URL}}"
 
 update-sqlx:
 	#!/usr/bin/env bash
 	set -euxo pipefail
-	DATABASE_PORT=$(docker container inspect shuttle_calandar-api_shared_postgres --format '{{{{ (index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort }}')
-	DATABASE_URL="postgres://postgres:postgres@127.0.0.1:${DATABASE_PORT}/calandar-api"
-	cd api && cargo sqlx prepare --database-url "${DATABASE_URL}" -- --all-targets --all-features
+	# Ensure database is running
+	docker-compose up -d db
+	cd api && cargo sqlx prepare --database-url "{{LOCAL_DB_URL}}" -- --all-targets
 
 bacon:
 	cd api && bacon
@@ -77,19 +101,27 @@ frontend-build:
 pact-api:
 	#!/usr/bin/env bash
 	set -euxo pipefail
-	cargo shuttle run --working-directory api &
+	# Ensure database is running
+	docker-compose up -d db
+
+	export DATABASE_URL="{{LOCAL_DB_URL}}"
+	export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
+	export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
+	export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
+
+	cd api && cargo run &
 	PID=$!
 	trap "kill ${PID}" EXIT
 
 	echo "Wait for the server to start..."
 	counter=0
-	until [[ $(curl -I -s -o /dev/null -w "%{http_code}" localhost:8000/api/healthz) =~ "204" ]] || [[ $counter -gt 10 ]]; do
+	until [[ $(curl -I -s -o /dev/null -w "%{http_code}" localhost:8080/api/healthz) =~ "204" ]] || [[ $counter -gt 10 ]]; do
 		sleep 1s
 		(( counter=counter+1 ))
 		echo "Counter: ${counter}"
 	done
 
-	pact_verifier_cli --header Authorization="Bearer put_something_here" --port 8000 --dir ./frontend/pacts
+	pact_verifier_cli --header Authorization="Bearer put_something_here" --port 8080 --dir ./frontend/pacts
 
 pact-frontend:
 	cd frontend && npm install && npm run test:pact
@@ -522,10 +554,3 @@ cloudrun-deploy-current:
 	fi
 
 	echo "✅ Deployment complete!"
-
-# Build and run API in standalone mode (without Shuttle)
-dev-api-standalone:
-	#!/usr/bin/env bash
-	set -euxo pipefail
-	echo "Running API in standalone mode (no Shuttle)..."
-	cd api && cargo run --no-default-features
