@@ -107,7 +107,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Build and push Docker image
         id: build-push
@@ -151,7 +151,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Upsert secrets to Secret Manager
         env:
@@ -199,7 +199,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Deploy to Cloud Run
         id: deploy
@@ -241,7 +241,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Run health check on new revision
         env:
@@ -299,7 +299,7 @@ jobs:
         uses: google-github-actions/setup-gcloud@v3
 
       - name: Install just
-        uses: extractions/setup-just@v2
+        uses: extractions/setup-just@v3
 
       - name: Rollback to previous revision
         env:
