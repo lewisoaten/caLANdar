@@ -9,7 +9,7 @@ edition = "2021"
 # Run: cargo update home --precise 0.5.11
 
 [dependencies]
-anyhow = "1.0.100"
+anyhow = "1.0.101"
 base64 = "0.22.1"
 chrono = { version = "0.4.43", features = ["serde"] }
 dotenvy = "0.15.7"
