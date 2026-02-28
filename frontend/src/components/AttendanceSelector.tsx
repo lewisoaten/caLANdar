@@ -1,11 +1,13 @@
 import * as React from "react";
 import { useState } from "react";
-import { ToggleButtonGroup, ToggleButton, Tooltip } from "@mui/material";
+import { ToggleButtonGroup, ToggleButton, Tooltip, Badge } from "@mui/material";
 import WbTwilightIcon from "@mui/icons-material/WbTwilight";
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import BedtimeIcon from "@mui/icons-material/Bedtime";
 import HotelIcon from "@mui/icons-material/Hotel";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
 import Timeline from "@mui/lab/Timeline";
 import TimelineItem from "@mui/lab/TimelineItem";
 import TimelineSeparator from "@mui/lab/TimelineSeparator";
@@ -109,6 +111,46 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
     }
   };
 
+  const isSelected = (buttonValue: number) =>
+    selectedButtons.includes(buttonValue);
+
+  const slotIcon = (
+    buttonValue: number,
+    icon: React.ReactElement<unknown>,
+    label: string,
+    disabled: boolean,
+  ) => {
+    const selected = isSelected(buttonValue);
+    const showBadge = !disabled;
+    return (
+      <Tooltip title={label}>
+        <Badge
+          invisible={!showBadge}
+          badgeContent={
+            selected ? (
+              <CheckCircleIcon sx={{ fontSize: 14 }} />
+            ) : (
+              <CancelIcon sx={{ fontSize: 14 }} />
+            )
+          }
+          overlap="circular"
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          sx={{
+            "& .MuiBadge-badge": {
+              color: selected ? "success.main" : "error.main",
+              backgroundColor: "transparent",
+              minWidth: "auto",
+              height: "auto",
+              padding: 0,
+            },
+          }}
+        >
+          {icon}
+        </Badge>
+      </Tooltip>
+    );
+  };
+
   return (
     <Timeline>
       {dates.map((bucket_array, idx) => (
@@ -138,33 +180,45 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
                 value={idx * 4 + 0}
                 disabled={bucket_array[0] === 0}
               >
-                <Tooltip title="Morning">
-                  <WbTwilightIcon />
-                </Tooltip>
+                {slotIcon(
+                  idx * 4 + 0,
+                  <WbTwilightIcon />,
+                  "Morning",
+                  bucket_array[0] === 0,
+                )}
               </ToggleButton>
               <ToggleButton
                 value={idx * 4 + 1}
                 disabled={bucket_array[1] === 0}
               >
-                <Tooltip title="Afternoon">
-                  <WbSunnyIcon />
-                </Tooltip>
+                {slotIcon(
+                  idx * 4 + 1,
+                  <WbSunnyIcon />,
+                  "Afternoon",
+                  bucket_array[1] === 0,
+                )}
               </ToggleButton>
               <ToggleButton
                 value={idx * 4 + 2}
                 disabled={bucket_array[2] === 0}
               >
-                <Tooltip title="Evening">
-                  <BedtimeIcon />
-                </Tooltip>
+                {slotIcon(
+                  idx * 4 + 2,
+                  <BedtimeIcon />,
+                  "Evening",
+                  bucket_array[2] === 0,
+                )}
               </ToggleButton>
               <ToggleButton
                 value={idx * 4 + 3}
                 disabled={bucket_array[3] === 0}
               >
-                <Tooltip title="Overnight">
-                  <HotelIcon />
-                </Tooltip>
+                {slotIcon(
+                  idx * 4 + 3,
+                  <HotelIcon />,
+                  "Overnight",
+                  bucket_array[3] === 0,
+                )}
               </ToggleButton>
             </ToggleButtonGroup>
           </TimelineContent>

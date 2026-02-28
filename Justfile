@@ -26,7 +26,7 @@ dev-api:
         sleep 1
     done
 
-    export DATABASE_URL="${LOCAL_DB_URL}"
+    export DATABASE_URL="{{LOCAL_DB_URL}}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
@@ -35,7 +35,7 @@ dev-api:
     cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
 
     echo "Starting API with cargo watch..."
-    cargo watch --workdir api --quiet --clear --exec 'run'
+    cargo watch --quiet --clear --exec 'run'
 
 dev-frontend:
     cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start

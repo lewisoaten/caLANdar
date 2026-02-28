@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Typography, Stack, Alert } from "@mui/material";
+import EventIcon from "@mui/icons-material/Event";
 import AttendanceSelector from "../AttendanceSelector";
+import { getAttendanceDescription } from "../../utils/attendanceDescription";
 import moment from "moment";
 
 interface AttendanceStepProps {
@@ -12,6 +14,9 @@ interface AttendanceStepProps {
 }
 
 export default function AttendanceStep(props: AttendanceStepProps) {
+  const hasSelection =
+    props.value && props.value.length > 0 && props.value.some((v) => v === 1);
+
   return (
     <Stack spacing={3}>
       <Typography variant="h6" component="h2">
@@ -32,6 +37,16 @@ export default function AttendanceStep(props: AttendanceStepProps) {
         colour="primary"
         onChange={props.onChange}
       />
+      {hasSelection && (
+        <Alert severity="success" icon={<EventIcon />}>
+          <strong>Attending:</strong>{" "}
+          {getAttendanceDescription(
+            props.value,
+            props.timeBegin,
+            props.timeEnd,
+          )}
+        </Alert>
+      )}
     </Stack>
   );
 }
