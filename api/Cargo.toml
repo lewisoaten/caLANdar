@@ -15,7 +15,7 @@ chrono = { version = "0.4.44", features = ["serde"] }
 dotenvy = "0.15.7"
 env_logger = "0.11.10"
 futures = "0.3.32"
-rand = "0.10.0"
+rand = "0.10.1"
 log = "0.4.29"
 md5 = "0.8.0"
 resend-rs = "0.22"
