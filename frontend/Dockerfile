@@ -1,4 +1,4 @@
-FROM node:25.9.0
+FROM node:26.2.0
 
 WORKDIR /usr/src/app/calandar
 
