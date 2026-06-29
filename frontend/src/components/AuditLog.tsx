@@ -156,11 +156,9 @@ const getActionDescription = (log: AuditLogEntry): string => {
       if (action === "send") {
         const emailType = log.metadata?.email_type as string | undefined;
         const recipientEmail = log.metadata?.recipient_email as
-          | string
-          | undefined;
+          string | undefined;
         const recipientCount = log.metadata?.recipient_count as
-          | number
-          | undefined;
+          number | undefined;
         const subject = log.metadata?.subject as string | undefined;
 
         if (emailType === "invitation_resend") {
