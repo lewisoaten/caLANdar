@@ -17,7 +17,7 @@
     "node-fetch": "3.3.2",
     "notistack": "3.0.2",
     "react": "19.1.0",
-    "react-big-calendar": "^1.19.4",
+    "react-big-calendar": "^1.20.0",
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "19.1.0",
