@@ -16,7 +16,7 @@ dotenvy = "0.15.7"
 env_logger = "0.11.10"
 futures = "0.3.32"
 rand = "0.10.1"
-log = "0.4.29"
+log = "0.4.30"
 md5 = "0.8.0"
 resend-rs = "0.22"
 rocket = { version = "0.5.0", features = [ "json" ] }
