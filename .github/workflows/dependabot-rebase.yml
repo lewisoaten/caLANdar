@@ -158,15 +158,46 @@ jobs:
           PR: ${{ steps.pick.outputs.number }}
         run: |
           set -euo pipefail
-          echo "Requesting rebase of #${PR}"
-          gh pr comment "$PR" --repo "$REPO" --body "@dependabot rebase"
 
-          # Dependabot answers a refused command with a comment rather than an
-          # error, so without this the job would go green having achieved
-          # nothing. Give it a moment, then read its reply.
-          sleep 45
-          reply="$(gh pr view "$PR" --repo "$REPO" --json comments \
-                     --jq '.comments[-3:][].body')"
+          # Remember the head so a rebase can be detected directly, and post via
+          # the API so the reply window can be anchored to this request rather
+          # than guessed. Dependabot's own refusals are durable comments that
+          # stay on the PR for months, so "look at the last few comments"
+          # matches history: an old "edited by someone other than Dependabot"
+          # notice would trigger a recreate even after a rebase had succeeded.
+          old_head="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)"
+          posted_at="$(gh api "repos/${REPO}/issues/${PR}/comments" \
+                         -f body='@dependabot rebase' --jq '.created_at')"
+          echo "Requested rebase of #${PR} at ${posted_at} (head ${old_head})"
+
+          # Wait for one of: the branch moving (rebased), or a reply from
+          # Dependabot (refused). `since` is server-side and anchored to this
+          # request, and the author filter drops our own comment.
+          reply=""
+          for attempt in $(seq 1 12); do
+            sleep 10
+
+            new_head="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)"
+            if [ "$new_head" != "$old_head" ]; then
+              echo "Dependabot rebased #${PR} (${old_head:0:7} -> ${new_head:0:7})."
+              exit 0
+            fi
+
+            reply="$(gh api \
+                       "repos/${REPO}/issues/${PR}/comments?since=${posted_at}&per_page=100" \
+                       --jq '[ .[]
+                               | select(.user.login | test("^dependabot"))
+                               | .body ] | join("\n")')"
+            if [ -n "$reply" ]; then
+              break
+            fi
+          done
+
+          if [ -z "$reply" ]; then
+            echo "::warning::No response from Dependabot within two minutes and"
+            echo "#${PR} has not moved. Leaving it for the next run."
+            exit 0
+          fi
 
           if printf '%s' "$reply" | grep -qi "only users with push access"; then
             echo "::error::Dependabot rejected the command from this token."
@@ -191,4 +222,4 @@ jobs:
             exit 0
           fi
 
-          echo "Rebase requested; Dependabot did not refuse."
+          echo "Dependabot replied without refusing; leaving #${PR} to settle."
