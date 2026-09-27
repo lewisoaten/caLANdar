@@ -10,9 +10,22 @@ delete_branch_on_merge = true
 # only auto merge "minor" and "patch" version upgrades.
 # do not automerge "major" version upgrades.
 versions = ["minor", "patch"]
-# These must be the *exact* GitHub logins. Kodiak compares
-# `pull_request.author.login` against this list verbatim, with no handling of
-# the "[bot]" suffix that GitHub Apps always carry, so plain "dependabot" never
-# matches and every dependency PR silently falls through to the automerge-label
-# check instead.
-usernames = ["dependabot[bot]", "pre-commit-ci[bot]"]
+# These are GraphQL logins, NOT the REST ones. Kodiak reads pull requests via
+# GitHub's GraphQL API, where a GitHub App author is a `Bot` whose `login` has
+# no "[bot]" suffix - "dependabot", not "dependabot[bot]". The REST API reports
+# the suffixed form, so copying a login from a REST response or from the web UI
+# gives a value that never matches. Verified against the GraphQL API for both.
+usernames = ["dependabot", "pre-commit-ci"]
+
+[update]
+# Leave Dependabot's branches alone. Dependabot already runs with
+# rebase-strategy "auto" for every ecosystem, so it will keep its own pull
+# requests rebased on main and ready to merge - but only while it still
+# recognises the branch as its own. Kodiak updating a branch (a "Merge branch
+# 'main' into dependabot/..." commit) makes Dependabot treat it as edited by
+# someone else, after which it refuses both to rebase it *and* to bump it to
+# newer releases, so the PR silently rots at an old version.
+#
+# GraphQL login, for the same reason as merge.automerge_dependencies.usernames
+# above: no "[bot]" suffix.
+ignored_usernames = ["dependabot"]
