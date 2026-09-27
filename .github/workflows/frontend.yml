@@ -28,7 +28,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          # Shared with Netlify, which reads the same file from its base
+          # directory. Without it Netlify builds on the site's own pinned
+          # default rather than what CI tested, and ESM-only tooling such as
+          # @vitejs/plugin-react-swc 4 fails there first.
+          node-version-file: frontend/.nvmrc
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
@@ -62,7 +66,7 @@ jobs:
   #     - name: Setup Node.js
   #       uses: actions/setup-node@v7
   #       with:
-  #         node-version: "20"
+  #         node-version-file: frontend/.nvmrc
   #         cache: "npm"
   #         cache-dependency-path: frontend/package-lock.json
   #
