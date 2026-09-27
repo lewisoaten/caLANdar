@@ -6,11 +6,13 @@ on:
     paths:
       - "frontend/**"
       - ".github/workflows/frontend.yml"
+  # No `paths` filter on pull_request, deliberately. This job ("test") is a
+  # required status check on main, and GitHub blocks a pull request forever
+  # when a required check never reports. With a paths filter, any PR that does
+  # not touch frontend/** - an api-only dependency bump, a config change -
+  # would wait on a check that never runs. Pushes stay filtered; PRs gate main.
   pull_request:
     branches: ["main"]
-    paths:
-      - "frontend/**"
-      - ".github/workflows/frontend.yml"
 
 defaults:
   run:
