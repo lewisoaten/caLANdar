@@ -74,7 +74,7 @@ jobs:
           unknown=0
           for attempt in $(seq 1 12); do
             gh pr list --repo "$REPO" --state open --limit 100 \
-              --json number,title,body,author,mergeStateStatus,createdAt,statusCheckRollup \
+              --json number,title,body,author,mergeStateStatus,createdAt,statusCheckRollup,labels \
               --jq '[ .[]
                       | select(.author.login
                                | test("(^|/)dependabot(\\[bot\\])?$")) ]' \
@@ -138,14 +138,34 @@ jobs:
               m = re.search(r"from ([0-9][^\s]*) to ([0-9][^\s]*)", pr["title"])
               return bump(m.group(1), m.group(2)) if m else None
 
+          # Kodiak's automerge label bypasses merge.automerge_dependencies
+          # .versions entirely - the version check lives solely inside its
+          # `should_dependency_automerge`, which is skipped once the label is
+          # present. So a labelled major *will* be merged, and this workflow
+          # must keep it rebased too, or it sits behind main forever waiting
+          # for a rebase that nothing is willing to perform.
+          #
+          # Must match merge.automerge_label in .kodiak.toml, which is unset
+          # there and so takes Kodiak's default.
+          AUTOMERGE_LABEL = "automerge"
+
+          def labelled(pr):
+              return any(
+                  l.get("name") == AUTOMERGE_LABEL for l in (pr.get("labels") or [])
+              )
+
           prs = json.load(open("prs.json"))
           eligible = sorted(
-              (p for p in prs if classify(p) in ("minor", "patch")),
+              (p for p in prs if labelled(p) or classify(p) in ("minor", "patch")),
               key=lambda p: p["createdAt"],
+          )
+          by_label = sum(
+              1 for p in eligible if labelled(p) and classify(p) not in ("minor", "patch")
           )
           print(f"number={eligible[0]['number'] if eligible else ''}")
           print(
-              f"{len(prs)} behind and passing, {len(eligible)} automergeable",
+              f"{len(prs)} behind and passing, {len(eligible)} automergeable "
+              f"({by_label} by label)",
               file=sys.stderr,
           )
           PY
