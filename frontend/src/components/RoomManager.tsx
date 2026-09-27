@@ -216,9 +216,11 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
     >
       <Stack
         direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 2 }}
+        sx={{
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 2,
+        }}
       >
         <Typography component="h2" variant="h6" color="primary">
           Rooms & Floorplans
@@ -234,7 +236,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
       </Stack>
 
       {rooms.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No rooms defined yet. Click &quot;Add Room&quot; to create one.
         </Typography>
       ) : (
@@ -272,7 +279,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
                   {room.name}
                 </Typography>
                 {room.description && (
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     {room.description}
                   </Typography>
                 )}
@@ -324,7 +336,9 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
               required
               fullWidth
               autoFocus
-              inputProps={{ "aria-label": "Room name" }}
+              slotProps={{
+                htmlInput: { "aria-label": "Room name" },
+              }}
             />
             <TextField
               label="Description"
@@ -338,7 +352,9 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
               multiline
               rows={3}
               fullWidth
-              inputProps={{ "aria-label": "Room description" }}
+              slotProps={{
+                htmlInput: { "aria-label": "Room description" },
+              }}
             />
             <Box>
               <Typography variant="subtitle2" gutterBottom>
@@ -401,8 +417,10 @@ const RoomManager: React.FC<RoomManagerProps> = ({ eventId, onRoomSelect }) => {
                 })
               }
               fullWidth
-              inputProps={{ "aria-label": "Sort order" }}
               helperText="Lower numbers appear first"
+              slotProps={{
+                htmlInput: { "aria-label": "Sort order" },
+              }}
             />
           </Stack>
         </DialogContent>

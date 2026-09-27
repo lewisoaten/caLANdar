@@ -552,7 +552,12 @@ export default function InvitationSeatManagementTable(
                       sx={{ height: 20, fontSize: "0.7rem" }}
                     />
                   ) : (
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       No response
                     </Typography>
                   )}
@@ -572,19 +577,39 @@ export default function InvitationSeatManagementTable(
                   <Tooltip
                     title={
                       <Box>
-                        <Typography variant="caption" display="block">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: "block",
+                          }}
+                        >
                           Invited: {attendee.invitedAt.calendar()}
                         </Typography>
                         {attendee.respondedAt && (
-                          <Typography variant="caption" display="block">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: "block",
+                            }}
+                          >
                             Responded: {attendee.respondedAt.calendar()}
                           </Typography>
                         )}
-                        <Typography variant="caption" display="block">
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: "block",
+                          }}
+                        >
                           Last Modified: {attendee.lastModified.calendar()}
                         </Typography>
                         {attendee.reservationLastModified && (
-                          <Typography variant="caption" display="block">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: "block",
+                            }}
+                          >
                             Seat Modified:{" "}
                             {attendee.reservationLastModified.calendar()}
                           </Typography>
@@ -595,8 +620,10 @@ export default function InvitationSeatManagementTable(
                   >
                     <Typography
                       variant="body2"
-                      color="text.secondary"
-                      sx={{ cursor: "help" }}
+                      sx={{
+                        color: "text.secondary",
+                        cursor: "help",
+                      }}
                     >
                       {attendee.lastModified.fromNow()}
                     </Typography>
@@ -606,7 +633,9 @@ export default function InvitationSeatManagementTable(
                   <Stack
                     direction="row"
                     spacing={0.5}
-                    justifyContent="flex-end"
+                    sx={{
+                      justifyContent: "flex-end",
+                    }}
                   >
                     {!attendee.response && (
                       <Tooltip title="Resend invitation">

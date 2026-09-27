@@ -1290,7 +1290,13 @@ export default function EventGameSchedule() {
               )}
             </Box>
           </Box>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography
+            variant="body1"
+            sx={{
+              color: "text.secondary",
+              mb: 2,
+            }}
+          >
             {schedule.length === 0 && isAdmin
               ? "Click games in the menu to add them to the schedule"
               : "View the schedule of games for this event"}
@@ -1410,7 +1416,13 @@ export default function EventGameSchedule() {
                 <Skeleton variant="rectangular" height={60} />
               </Box>
             ) : gameSuggestions.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  p: 2,
+                }}
+              >
                 No game suggestions available. Add games to the event first.
               </Typography>
             ) : (
@@ -1428,7 +1440,12 @@ export default function EventGameSchedule() {
             )}
 
             <Divider sx={{ my: 2 }} />
-            <Typography variant="caption" color="text.secondary">
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               Click on a game to add it to the schedule.
             </Typography>
           </Drawer>
@@ -1531,7 +1548,13 @@ export default function EventGameSchedule() {
                 </strong>
                 ?
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                  mt: 2,
+                }}
+              >
                 This will convert the suggested game into a manually scheduled
                 (pinned) game that won&apos;t change when the schedule is
                 recalculated.

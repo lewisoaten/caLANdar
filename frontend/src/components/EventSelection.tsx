@@ -86,7 +86,12 @@ const Event = () => {
         columns={{ sm: 4, md: 8, lg: 12 }}
       >
         <Grid size={{ sm: 4, md: 8, lg: 12 }}>
-          <Box display="flex" justifyContent="flex-end">
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+            }}
+          >
             <FormControl>
               <FormControlLabel
                 control={
@@ -96,7 +101,11 @@ const Event = () => {
                   />
                 }
                 label={
-                  <Typography color="text.secondary">
+                  <Typography
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Show Old Events
                   </Typography>
                 }
@@ -107,7 +116,13 @@ const Event = () => {
         </Grid>
         {loading ? (
           <Grid size={{ sm: 4, md: 8, lg: 12 }}>
-            <Box display="flex" justifyContent="center" p={4}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                p: 4,
+              }}
+            >
               <CircularProgress />
             </Box>
           </Grid>
@@ -120,7 +135,13 @@ const Event = () => {
         )}
         {!loading && events.length > 0 && totalPages > 1 && (
           <Grid size={{ sm: 4, md: 8, lg: 12 }}>
-            <Box display="flex" justifyContent="center" mt={2}>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                mt: 2,
+              }}
+            >
               <Pagination
                 count={totalPages}
                 page={page}

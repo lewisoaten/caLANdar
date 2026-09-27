@@ -37,7 +37,7 @@ frontend/
 Create a file `src/stories/ComponentName.stories.tsx`:
 
 ```typescript
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { http, HttpResponse } from "msw";
 import ComponentName from "../components/ComponentName";
 

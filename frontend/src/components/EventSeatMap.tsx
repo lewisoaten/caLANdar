@@ -368,7 +368,12 @@ const EventSeatMap: React.FC = () => {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Paper sx={{ p: 3, textAlign: "center" }}>
-          <Typography variant="body1" color="text.secondary">
+          <Typography
+            variant="body1"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Seating is not enabled for this event.
           </Typography>
         </Paper>
@@ -408,13 +413,24 @@ const EventSeatMap: React.FC = () => {
             <Typography variant="h4" gutterBottom>
               Seat Map
             </Typography>
-            <Typography variant="body1" color="text.secondary">
+            <Typography
+              variant="body1"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               View the event&apos;s room layout and see which seats are occupied
             </Typography>
           </Box>
 
           {/* Legend */}
-          <Stack direction="row" spacing={2} flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              flexWrap: "wrap",
+            }}
+          >
             <Chip
               icon={<EventSeatIcon />}
               label="Available"
@@ -444,7 +460,12 @@ const EventSeatMap: React.FC = () => {
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Card variant="outlined">
                 <CardContent>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Total Seats
                   </Typography>
                   <Typography variant="h4">{seats.length}</Typography>
@@ -454,7 +475,12 @@ const EventSeatMap: React.FC = () => {
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Card variant="outlined">
                 <CardContent>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Occupied Seats
                   </Typography>
                   <Typography variant="h4">
@@ -466,7 +492,12 @@ const EventSeatMap: React.FC = () => {
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <Card variant="outlined">
                 <CardContent>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Available Seats
                   </Typography>
                   <Typography variant="h4">
@@ -479,7 +510,12 @@ const EventSeatMap: React.FC = () => {
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
                 <Card variant="outlined">
                   <CardContent>
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
                       Unspecified Seats
                     </Typography>
                     <Typography variant="h4">
@@ -531,8 +567,10 @@ const EventSeatMap: React.FC = () => {
                         {room.description && (
                           <Typography
                             variant="body2"
-                            color="text.secondary"
-                            sx={{ mb: 2 }}
+                            sx={{
+                              color: "text.secondary",
+                              mb: 2,
+                            }}
                           >
                             {room.description}
                           </Typography>
@@ -584,7 +622,11 @@ const EventSeatMap: React.FC = () => {
                           >
                             <TableCell>{room?.name || "Unknown"}</TableCell>
                             <TableCell>
-                              <Typography fontWeight="medium">
+                              <Typography
+                                sx={{
+                                  fontWeight: "medium",
+                                }}
+                              >
                                 {seat.label}
                               </Typography>
                             </TableCell>
@@ -766,7 +808,9 @@ const EventSeatMap: React.FC = () => {
                             <Stack
                               direction="row"
                               spacing={2}
-                              alignItems="center"
+                              sx={{
+                                alignItems: "center",
+                              }}
                             >
                               <Avatar
                                 src={
@@ -779,12 +823,19 @@ const EventSeatMap: React.FC = () => {
                                 <PersonIcon />
                               </Avatar>
                               <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                <Typography variant="body1" fontWeight="bold">
+                                <Typography
+                                  variant="body1"
+                                  sx={{
+                                    fontWeight: "bold",
+                                  }}
+                                >
                                   {invitation.handle || "Someone"}
                                 </Typography>
                                 <Typography
                                   variant="body2"
-                                  color="text.secondary"
+                                  sx={{
+                                    color: "text.secondary",
+                                  }}
                                 >
                                   Unspecified Seat
                                 </Typography>

@@ -34,25 +34,33 @@ const apiOriginForContext = (context: string | undefined): string =>
  * precede the SPA fallback or "/api/*" would be swallowed by it. The trailing
  * "!" on the proxy rule forces it to win over any static file of the same path.
  */
-const netlifyRedirects = (): Plugin => ({
-  name: "emit-netlify-redirects",
-  apply: "build",
-  closeBundle() {
-    const context = process.env.CONTEXT;
-    const apiOrigin = apiOriginForContext(context);
-    const body = [
-      `# Generated at build time for CONTEXT=${context ?? "(unset)"}.`,
-      "# Edit vite.config.ts, not this file.",
-      `/api/*  ${apiOrigin}/api/:splat  200!`,
-      "/*      /                        200",
-      "",
-    ].join("\n");
-    writeFileSync(join("build", "_redirects"), body);
-    console.log(
-      `[netlify] _redirects -> ${apiOrigin} (CONTEXT=${context ?? "unset"})`,
-    );
-  },
-});
+const netlifyRedirects = (): Plugin => {
+  // Resolved rather than hard-coded: Storybook 10 builds with this config's
+  // plugins but its own outDir, and a literal "build/" does not exist there.
+  let outDir = "build";
+  return {
+    name: "emit-netlify-redirects",
+    apply: "build",
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    closeBundle() {
+      const context = process.env.CONTEXT;
+      const apiOrigin = apiOriginForContext(context);
+      const body = [
+        `# Generated at build time for CONTEXT=${context ?? "(unset)"}.`,
+        "# Edit vite.config.ts, not this file.",
+        `/api/*  ${apiOrigin}/api/:splat  200!`,
+        "/*      /                        200",
+        "",
+      ].join("\n");
+      writeFileSync(join(outDir, "_redirects"), body);
+      console.log(
+        `[netlify] _redirects -> ${apiOrigin} (CONTEXT=${context ?? "unset"})`,
+      );
+    },
+  };
+};
 
 // https://vitejs.dev/config/
 export default defineConfig({

@@ -3,12 +3,12 @@ import { useContext, useEffect, useState, useRef } from "react";
 import {
   Avatar,
   Box,
+  Button,
   Container,
   CssBaseline,
   TextField,
   Typography,
 } from "@mui/material";
-import LoadingButton from "@mui/lab/LoadingButton";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { UserDispatchContext } from "../UserProvider";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
@@ -85,7 +85,7 @@ export default function VerifyEmail() {
             defaultValue={urlToken}
             autoFocus
           />
-          <LoadingButton
+          <Button
             type="submit"
             ref={submitButton}
             loading={loading}
@@ -94,7 +94,7 @@ export default function VerifyEmail() {
             sx={{ mt: 3, mb: 2 }}
           >
             Sign In
-          </LoadingButton>
+          </Button>
         </Box>
       </Box>
     </Container>

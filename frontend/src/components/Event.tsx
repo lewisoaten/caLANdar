@@ -265,13 +265,13 @@ const Event = () => {
                     <Typography
                       component="h3"
                       variant="h6"
-                      display="block"
                       align="center"
+                      gutterBottom
                       sx={{
+                        display: "block",
                         color: theme.palette.secondary.main,
                         fontWeight: 600,
                       }}
-                      gutterBottom
                     >
                       Gaming {event.timeBegin.fromNow()}!
                     </Typography>

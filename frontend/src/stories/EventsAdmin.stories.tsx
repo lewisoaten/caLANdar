@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventsAdmin from "../components/EventsAdmin";
 
 const meta = {

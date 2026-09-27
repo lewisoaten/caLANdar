@@ -173,7 +173,13 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" p={3}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          p: 3,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -239,7 +245,13 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       )}
 
       {/* Legend */}
-      <Stack direction="row" spacing={2} flexWrap="wrap">
+      <Stack
+        direction="row"
+        spacing={2}
+        sx={{
+          flexWrap: "wrap",
+        }}
+      >
         <Chip
           icon={<EventSeatIcon />}
           label="Available"
@@ -273,7 +285,13 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
                 {room.name}
               </Typography>
               {room.description && (
-                <Typography variant="body2" color="text.secondary" gutterBottom>
+                <Typography
+                  variant="body2"
+                  gutterBottom
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   {room.description}
                 </Typography>
               )}

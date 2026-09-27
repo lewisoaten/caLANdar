@@ -61,7 +61,12 @@ export default function ReviewStep(props: ReviewStepProps) {
       <Typography variant="h6" component="h2">
         Review your RSVP
       </Typography>
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         Please review your response before confirming.
       </Typography>
 
@@ -69,7 +74,13 @@ export default function ReviewStep(props: ReviewStepProps) {
         <CardContent>
           <Grid container spacing={2}>
             <Grid size={12}>
-              <Box display="flex" alignItems="center" gap={1}>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
                 {getResponseIcon(props.response)}
                 <Typography variant="body1" component="span">
                   <strong>Response:</strong> {getResponseText(props.response)}
@@ -80,7 +91,13 @@ export default function ReviewStep(props: ReviewStepProps) {
             {props.response !== RSVP.no && (
               <>
                 <Grid size={12}>
-                  <Box display="flex" alignItems="center" gap={1}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
                     <PersonIcon color="primary" />
                     <Typography variant="body1" component="span">
                       <strong>Handle:</strong> {props.handle || "Not set"}
@@ -89,7 +106,13 @@ export default function ReviewStep(props: ReviewStepProps) {
                 </Grid>
 
                 <Grid size={12}>
-                  <Box display="flex" alignItems="center" gap={1}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                    }}
+                  >
                     <EventIcon color="primary" />
                     <Typography variant="body1" component="span">
                       <strong>Attendance:</strong>{" "}
@@ -104,7 +127,13 @@ export default function ReviewStep(props: ReviewStepProps) {
 
                 {props.hasSeating && (
                   <Grid size={12}>
-                    <Box display="flex" alignItems="center" gap={1}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 1,
+                      }}
+                    >
                       <EventSeatIcon color="primary" />
                       <Typography variant="body1" component="span">
                         <strong>Seat:</strong>{" "}
@@ -127,8 +156,10 @@ export default function ReviewStep(props: ReviewStepProps) {
       {props.response !== RSVP.no && (
         <Typography
           variant="body2"
-          color="text.secondary"
-          sx={{ fontStyle: "italic" }}
+          sx={{
+            color: "text.secondary",
+            fontStyle: "italic",
+          }}
         >
           After confirming, you&apos;ll be able to view attendees and suggest
           games.

@@ -30,7 +30,12 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
       <Typography variant="h6" component="h2">
         Choose your seat {isOptional ? "(Optional)" : ""}
       </Typography>
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         {isOptional
           ? "You can select a seat now or skip this step and choose one later."
           : "Please select a seat to continue. This event requires seat selection."}

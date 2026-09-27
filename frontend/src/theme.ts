@@ -1,4 +1,5 @@
 import { createTheme } from "@mui/material/styles";
+import type {} from "@mui/x-date-pickers/themeAugmentation";
 
 // Extend MUI theme to include DataGrid component types
 declare module "@mui/material/styles" {
@@ -18,6 +19,19 @@ declare module "@mui/material/styles" {
     };
   }
 }
+
+// Shared by TextField and the date pickers' PickersTextField.
+const inputLabelStyles = {
+  backgroundColor: "transparent",
+  paddingLeft: "4px",
+  paddingRight: "4px",
+  color: "#d0d7f7", // Light purple-blue color for labels
+  "&.Mui-focused": {
+    // Add background to label when focused to prevent glow cutting through
+    backgroundColor: "#232946",
+    color: "#d0d7f7", // Keep same light color when focused (not primary purple)
+  },
+};
 
 /**
  * CaLANdar Custom Theme - Futuristic Gamer Aesthetic
@@ -195,19 +209,26 @@ const theme = createTheme({
           padding: "10px 24px",
           transition: "all 0.3s ease-in-out",
           fontWeight: 700, // Bolder text for better contrast
+          // Material UI 9 dropped the combined variant+color override keys
+          // (containedPrimary and friends); variants is the replacement.
+          variants: [
+            {
+              props: { variant: "contained", color: "primary" },
+              style: {
+                backgroundColor: "#5F27DD",
+                color: "#ffffff", // Ensure white text on primary buttons
+                "&:hover": {
+                  backgroundColor: "#7540ee",
+                },
+              },
+            },
+          ],
         },
         contained: {
           boxShadow: "0px 4px 12px rgba(95, 39, 221, 0.4)",
           "&:hover": {
             boxShadow: "0px 6px 20px rgba(95, 39, 221, 0.6)",
             transform: "translateY(-2px)",
-          },
-        },
-        containedPrimary: {
-          backgroundColor: "#5F27DD",
-          color: "#ffffff", // Ensure white text on primary buttons
-          "&:hover": {
-            backgroundColor: "#7540ee",
           },
         },
         outlined: {
@@ -282,17 +303,30 @@ const theme = createTheme({
               boxShadow: "0px 0px 8px rgba(8, 247, 254, 0.5)",
             },
           },
-          "& .MuiInputLabel-root": {
-            backgroundColor: "transparent",
-            paddingLeft: "4px",
-            paddingRight: "4px",
-            color: "#d0d7f7", // Light purple-blue color for labels
-            "&.Mui-focused": {
-              // Add background to label when focused to prevent glow cutting through
-              backgroundColor: "#232946",
-              color: "#d0d7f7", // Keep same light color when focused (not primary purple)
+          "& .MuiInputLabel-root": inputLabelStyles,
+        },
+      },
+    },
+    // Date and time pickers render their own field (PickersTextField) rather
+    // than a TextField, so the MuiTextField overrides above do not reach
+    // them. Mirror them here so pickers match every other outlined input.
+    MuiPickersTextField: {
+      styleOverrides: {
+        root: {
+          "& .MuiPickersOutlinedInput-root": {
+            "& .MuiPickersOutlinedInput-notchedOutline": {
+              borderColor: "rgba(95, 39, 221, 0.3)",
+              borderWidth: 2,
+            },
+            "&:hover .MuiPickersOutlinedInput-notchedOutline": {
+              borderColor: "rgba(95, 39, 221, 0.5)",
+            },
+            "&.Mui-focused .MuiPickersOutlinedInput-notchedOutline": {
+              borderColor: "#08F7FE",
+              boxShadow: "0px 0px 8px rgba(8, 247, 254, 0.5)",
             },
           },
+          "& .MuiInputLabel-root": inputLabelStyles,
         },
       },
     },
@@ -323,18 +357,32 @@ const theme = createTheme({
         root: {
           borderRadius: 8,
           fontWeight: 600,
-        },
-        filledSuccess: {
-          background: "linear-gradient(135deg, #51FF7E 0%, #2acc5f 100%)",
-        },
-        filledError: {
-          background: "linear-gradient(135deg, #F2059F 0%, #b80077 100%)",
-        },
-        filledWarning: {
-          background: "linear-gradient(135deg, #FFA500 0%, #cc8400 100%)",
-        },
-        filledInfo: {
-          background: "linear-gradient(135deg, #08F7FE 0%, #00c4cb 100%)",
+          variants: [
+            {
+              props: { variant: "filled", severity: "success" },
+              style: {
+                background: "linear-gradient(135deg, #51FF7E 0%, #2acc5f 100%)",
+              },
+            },
+            {
+              props: { variant: "filled", severity: "error" },
+              style: {
+                background: "linear-gradient(135deg, #F2059F 0%, #b80077 100%)",
+              },
+            },
+            {
+              props: { variant: "filled", severity: "warning" },
+              style: {
+                background: "linear-gradient(135deg, #FFA500 0%, #cc8400 100%)",
+              },
+            },
+            {
+              props: { variant: "filled", severity: "info" },
+              style: {
+                background: "linear-gradient(135deg, #08F7FE 0%, #00c4cb 100%)",
+              },
+            },
+          ],
         },
       },
     },
