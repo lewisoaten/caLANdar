@@ -10,7 +10,7 @@ This document provides comprehensive guidelines for GitHub Copilot agents workin
 **Type**: Full-stack web application
 **Languages & Frameworks**:
 
-- **Backend**: Rust 1.87.0, Rocket web framework, Google Cloud Run deployment platform
+- **Backend**: Rust 1.98.1, Rocket web framework, Google Cloud Run deployment platform
 - **Frontend**: React 19, TypeScript 5.8, Vite 6, Material-UI 7
 - **Database**: PostgreSQL via SQLx with migrations
 - **Contract Testing**: Pact for API contract verification
@@ -28,7 +28,7 @@ nix develop --impure
 # You'll see: "CaLANdar development environment activated!"
 ```
 
-The Nix shell provides: Rust 1.87.0, cargo tools, Node.js 24, PostgreSQL, Just, pre-commit, and all other dependencies. **Do not try to use system-installed versions.**
+The Nix shell provides: Rust 1.98.1, cargo tools, Node.js 24, PostgreSQL, Just, pre-commit, and all other dependencies. **Do not try to use system-installed versions.**
 
 ### Step 2: Verify Environment
 
@@ -266,7 +266,7 @@ just bacon             # Run bacon (Rust background compiler)
 │   ├── Cargo.toml         # Rust dependencies
 │   ├── Rocket.toml        # Rocket configuration
 │   ├── Dockerfile.cloudrun # Docker config for Cloud Run
-│   └── rust-toolchain.toml  # Rust version (1.87.0)
+│   └── rust-toolchain.toml  # Rust version (1.98.1)
 ├── frontend/              # React frontend
 │   ├── src/
 │   │   ├── components/    # React components
@@ -423,7 +423,7 @@ The project uses pre-commit.ci which runs pre-commit hooks on every PR. **Your c
 - **`flake.nix`**: Nix environment with Rust, Node.js, PostgreSQL
 - **`Justfile`**: Task automation recipes
 - **`api/Rocket.toml`**: Rocket web framework config
-- **`api/rust-toolchain.toml`**: Rust version (1.87.0)
+- **`api/rust-toolchain.toml`**: Rust version (1.98.1)
 - **`frontend/vite.config.ts`**: Vite build and dev server config
 - **`frontend/eslint.config.mjs`**: ESLint rules (flat config format)
 - **`frontend/tsconfig.json`**: TypeScript compiler options
