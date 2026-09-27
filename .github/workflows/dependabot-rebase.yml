@@ -63,23 +63,48 @@ jobs:
           # "dependabot[bot]" via REST, "app/dependabot" via the gh CLI. A
           # filter matching none of them is indistinguishable from "no work".
           #
+          # GitHub computes mergeStateStatus lazily. Querying it starts the
+          # computation and returns UNKNOWN until that finishes, and this
+          # workflow runs seconds after a merge invalidates every open PR. So
+          # poll until the states settle: on the very first real run every PR
+          # was UNKNOWN, the BEHIND filter matched nothing, and the job
+          # reported "nothing to do" while the queue sat still - a silent
+          # no-op of exactly the kind the token guard exists to prevent. The
+          # same filter found eleven candidates a minute later.
+          unknown=0
+          for attempt in $(seq 1 12); do
+            gh pr list --repo "$REPO" --state open --limit 100 \
+              --json number,title,body,author,mergeStateStatus,createdAt,statusCheckRollup \
+              --jq '[ .[]
+                      | select(.author.login
+                               | test("(^|/)dependabot(\\[bot\\])?$")) ]' \
+              > all.json
+
+            unknown="$(jq '[ .[] | select(.mergeStateStatus == "UNKNOWN") ] | length' all.json)"
+            if [ "$unknown" -eq 0 ]; then
+              break
+            fi
+            echo "$unknown PR(s) still UNKNOWN; waiting for GitHub (attempt ${attempt}/12)"
+            sleep 10
+          done
+
+          if [ "$unknown" -ne 0 ]; then
+            echo "::warning::${unknown} PR(s) still UNKNOWN after 2 minutes; skipping them this run."
+          fi
+
           # BEHIND means mergeable but not up to date, which a rebase fixes.
           # A PR with a failing check is excluded: rebasing it just re-runs the
           # same failure, and since only a *merge* pushes main and re-triggers
           # this workflow, picking one would stall the queue on a PR that
           # cannot merge.
-          gh pr list --repo "$REPO" --state open --limit 100 \
-            --json number,title,body,author,mergeStateStatus,createdAt,statusCheckRollup \
-            --jq '[ .[]
-                    | select(.author.login
-                             | test("(^|/)dependabot(\\[bot\\])?$"))
-                    | select(.mergeStateStatus == "BEHIND")
-                    | select([ .statusCheckRollup[]?
-                               | select(.conclusion == "FAILURE"
-                                        or .conclusion == "TIMED_OUT"
-                                        or .conclusion == "STARTUP_FAILURE"
-                                        or .conclusion == "ACTION_REQUIRED") ]
-                             | length == 0) ]' > prs.json
+          jq '[ .[]
+                | select(.mergeStateStatus == "BEHIND")
+                | select([ .statusCheckRollup[]?
+                           | select(.conclusion == "FAILURE"
+                                    or .conclusion == "TIMED_OUT"
+                                    or .conclusion == "STARTUP_FAILURE"
+                                    or .conclusion == "ACTION_REQUIRED") ]
+                         | length == 0) ]' all.json > prs.json
 
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json, re, sys
