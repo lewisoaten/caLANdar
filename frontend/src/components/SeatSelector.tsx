@@ -503,7 +503,13 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
 
   if (!dataLoaded) {
     return (
-      <Box display="flex" justifyContent="center" p={3}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+          p: 3,
+        }}
+      >
         <CircularProgress />
       </Box>
     );
@@ -576,7 +582,14 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
           )}
 
           {/* Legend */}
-          <Stack direction="row" spacing={2} sx={{ mb: 2 }} flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              flexWrap: "wrap",
+              mb: 2,
+            }}
+          >
             <Chip
               icon={<EventSeatIcon />}
               label="Available"
@@ -619,8 +632,10 @@ const SeatSelector: React.FC<SeatSelectorProps> = ({
                       {room.description && (
                         <Typography
                           variant="body2"
-                          color="text.secondary"
                           gutterBottom
+                          sx={{
+                            color: "text.secondary",
+                          }}
                         >
                           {room.description}
                         </Typography>

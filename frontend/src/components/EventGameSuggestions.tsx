@@ -343,16 +343,19 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   label="Suggest Game"
                   error={errorMessage ? true : false}
                   helperText={errorMessage}
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <React.Fragment>
-                        {loading ? (
-                          <CircularProgress color="inherit" size={20} />
-                        ) : null}
-                        {params.InputProps.endAdornment}
-                      </React.Fragment>
-                    ),
+                  slotProps={{
+                    ...params.slotProps,
+                    input: {
+                      ...params.slotProps.input,
+                      endAdornment: (
+                        <React.Fragment>
+                          {loading ? (
+                            <CircularProgress color="inherit" size={20} />
+                          ) : null}
+                          {params.slotProps.input.endAdornment}
+                        </React.Fragment>
+                      ),
+                    },
                   }}
                 />
               )}
@@ -376,7 +379,9 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   onChange={(e) => setCommentValue(e.target.value)}
                   disabled={props.disabled}
                   helperText="Explain why you're suggesting this game"
-                  inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
+                  slotProps={{
+                    htmlInput: { maxLength: COMMENT_MAX_LENGTH },
+                  }}
                 />
               </Grid>
               <Grid size={12}>
@@ -467,8 +472,10 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                           checkedIcon={<ThumbUpAltIcon />}
                           onChange={handleVote}
                           checked={gameSuggestion.selfVote === GameVote.yes}
-                          inputProps={{ "aria-labelledby": labelId }}
                           disabled={props.disabled}
+                          slotProps={{
+                            input: { "aria-labelledby": labelId },
+                          }}
                         />
                       </Stack>
                     )
@@ -518,8 +525,10 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         label="Comment"
                         value={editCommentValue}
                         onChange={(e) => setEditCommentValue(e.target.value)}
-                        inputProps={{ maxLength: COMMENT_MAX_LENGTH }}
                         disabled={props.disabled}
+                        slotProps={{
+                          htmlInput: { maxLength: COMMENT_MAX_LENGTH },
+                        }}
                       />
                       <Stack direction="row" spacing={2}>
                         <Button

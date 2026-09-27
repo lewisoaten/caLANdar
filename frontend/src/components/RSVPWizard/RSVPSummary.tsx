@@ -211,9 +211,11 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
       <CardContent>
         <Stack spacing={2}>
           <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
           >
             <Typography variant="h6" component="h2">
               Your RSVP
@@ -229,7 +231,13 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
             </Button>
           </Box>
 
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+            }}
+          >
             <Chip
               icon={getResponseIcon(invitation.response)}
               label={getResponseText(invitation.response)}
@@ -242,7 +250,12 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
             <>
               {invitation.handle && (
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     Handle
                   </Typography>
                   <Typography variant="body1">{invitation.handle}</Typography>
@@ -250,7 +263,12 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
               )}
 
               <Box>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Attendance
                 </Typography>
                 <Typography variant="body1">
@@ -260,7 +278,12 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
 
               {hasSeating && (
                 <Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: "text.secondary",
+                    }}
+                  >
                     <EventSeatIcon
                       fontSize="small"
                       sx={{ verticalAlign: "middle", mr: 0.5 }}
@@ -280,7 +303,12 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
           )}
 
           {!invitation.response && (
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               You haven&apos;t responded to this event yet. Click
               &quot;Edit&quot; to RSVP.
             </Typography>

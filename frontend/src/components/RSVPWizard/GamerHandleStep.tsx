@@ -38,7 +38,12 @@ export default function GamerHandleStep(props: GamerHandleStepProps) {
       <Typography variant="h6" component="h2">
         Enter your gamer handle
       </Typography>
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         This is how you&apos;ll be identified to other attendees.
       </Typography>
       <TextField

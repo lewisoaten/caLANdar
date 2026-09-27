@@ -146,8 +146,10 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({ eventId }) => {
               <Switch
                 checked={config.hasSeating}
                 onChange={handleHasSeatingChange}
-                inputProps={{
-                  "aria-label": "Enable seating for this event",
+                slotProps={{
+                  input: {
+                    "aria-label": "Enable seating for this event",
+                  },
                 }}
               />
             }
@@ -159,8 +161,10 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({ eventId }) => {
                 checked={config.allowUnspecifiedSeat}
                 onChange={handleAllowUnspecifiedSeatChange}
                 disabled={!config.hasSeating}
-                inputProps={{
-                  "aria-label": "Allow unspecified seat option",
+                slotProps={{
+                  input: {
+                    "aria-label": "Allow unspecified seat option",
+                  },
                 }}
               />
             }
@@ -173,10 +177,12 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({ eventId }) => {
             disabled={!config.hasSeating || !config.allowUnspecifiedSeat}
             required={config.allowUnspecifiedSeat}
             fullWidth
-            inputProps={{
-              "aria-label": "Label for unspecified seat option",
-            }}
             helperText="Label to display for the unspecified seat option"
+            slotProps={{
+              htmlInput: {
+                "aria-label": "Label for unspecified seat option",
+              },
+            }}
           />
           <Button
             variant="contained"

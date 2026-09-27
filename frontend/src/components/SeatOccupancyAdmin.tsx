@@ -522,7 +522,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   if (!seatingConfig?.hasSeating) {
     return (
       <Paper sx={{ p: 3, textAlign: "center" }}>
-        <Typography variant="body1" color="text.secondary">
+        <Typography
+          variant="body1"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Seating is not enabled for this event.
         </Typography>
       </Paper>
@@ -585,7 +590,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <Typography variant="h5" gutterBottom>
             Seat Occupancy Overview
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+            }}
+          >
             Manage seat assignments for all attendees
           </Typography>
         </Box>
@@ -595,7 +605,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Total Seats
                 </Typography>
                 <Typography variant="h4">{seats.length}</Typography>
@@ -605,7 +620,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Occupied Seats
                 </Typography>
                 <Typography variant="h4">
@@ -617,7 +637,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Unspecified Seats
                 </Typography>
                 <Typography variant="h4">
@@ -629,7 +654,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <Card>
               <CardContent>
-                <Typography variant="body2" color="text.secondary">
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
                   Total Reservations
                 </Typography>
                 <Typography variant="h4">{reservations.length}</Typography>
@@ -679,8 +709,10 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                       {room.description && (
                         <Typography
                           variant="body2"
-                          color="text.secondary"
-                          sx={{ mb: 2 }}
+                          sx={{
+                            color: "text.secondary",
+                            mb: 2,
+                          }}
                         >
                           {room.description}
                         </Typography>
@@ -771,7 +803,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                               {reservation.invitationHandle && (
                                 <Typography
                                   variant="caption"
-                                  color="text.secondary"
+                                  sx={{
+                                    color: "text.secondary",
+                                  }}
                                 >
                                   {reservation.invitationEmail}
                                 </Typography>
@@ -876,7 +910,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                               {reservation.invitationHandle && (
                                 <Typography
                                   variant="caption"
-                                  color="text.secondary"
+                                  sx={{
+                                    color: "text.secondary",
+                                  }}
                                 >
                                   {reservation.invitationEmail}
                                 </Typography>
@@ -938,7 +974,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 Attendee
               </Typography>
               <Typography variant="body1">
@@ -948,7 +989,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
             </Box>
 
             <Box>
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 Current Seat
               </Typography>
               <Typography variant="body1">
@@ -1025,7 +1071,13 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
             Are you sure you want to clear the seat assignment for{" "}
             <strong>{emailToDelete}</strong>?
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.secondary",
+              mt: 1,
+            }}
+          >
             This action will remove their seat reservation. They will need to
             select a seat again if they want one.
           </Typography>

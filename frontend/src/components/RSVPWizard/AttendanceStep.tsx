@@ -22,7 +22,12 @@ export default function AttendanceStep(props: AttendanceStepProps) {
       <Typography variant="h6" component="h2">
         When will you be attending?
       </Typography>
-      <Typography variant="body2" color="text.secondary">
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+        }}
+      >
         Select the times you plan to attend. You can select multiple time slots.
       </Typography>
       {!props.value || props.value.length === 0 ? (
