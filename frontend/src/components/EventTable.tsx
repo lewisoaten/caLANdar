@@ -18,13 +18,13 @@ import {
   GridActionsCellItem,
   GridRenderCellParams,
   GridRowId,
+  GridApi,
 } from "@mui/x-data-grid";
 import LinkIcon from "@mui/icons-material/Link";
 import { useNavigate } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
-import { GridApiCommunity } from "@mui/x-data-grid/models/api/gridApiCommunity";
 
 interface GridCellExpandProps {
   value: string;
@@ -207,7 +207,7 @@ export default function EventTable(props: EventTableProps) {
         _row: any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         _column: GridColDef<any, moment.Moment, string>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
+        _apiRef: React.MutableRefObject<GridApi>,
       ) => {
         if (value == null) {
           return "";
@@ -228,7 +228,7 @@ export default function EventTable(props: EventTableProps) {
         row: any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         _column: GridColDef<any, string, any>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
+        _apiRef: React.MutableRefObject<GridApi>,
       ) => {
         const timeBegin = moment(row.timeBegin);
         const timeEnd = moment(row.timeEnd);
@@ -244,7 +244,7 @@ export default function EventTable(props: EventTableProps) {
         _row: any,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         _column: GridColDef<any, number, string>,
-        _apiRef: React.MutableRefObject<GridApiCommunity>,
+        _apiRef: React.MutableRefObject<GridApi>,
       ) => {
         if (value == null) {
           return "";
