@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import VerifyEmail from "../components/VerifyEmail";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
