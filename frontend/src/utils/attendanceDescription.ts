@@ -1,9 +1,5 @@
 import moment from "moment";
-
-/**
- * Time periods for the 4 buckets per day
- */
-const TIME_PERIODS = ["Morning", "Afternoon", "Evening", "Overnight"];
+import { getAttendanceGrid, TIME_PERIODS } from "./attendanceBuckets";
 
 /**
  * Get a human-readable description of attendance times
@@ -21,36 +17,27 @@ export const getAttendanceDescription = (
     return "No attendance selected";
   }
 
-  // Build the mapping of all possible buckets
-  const numberOfDays =
-    moment(timeEnd)
-      .startOf("day")
-      .diff(moment(timeBegin).startOf("day"), "days") + 1;
-
+  // Build the mapping of all possible buckets, on the same UTC grid the API
+  // uses so that indices line up with the stored attendance array.
   const allBuckets: Array<{
+    /** Position within the full day x slot grid, for continuity checks. */
+    gridIndex: number;
     day: number;
-    bucket: number;
     dayName: string;
     period: string;
   }> = [];
 
-  for (let dayNum = 0; dayNum < numberOfDays; dayNum++) {
-    const day = moment(timeBegin).startOf("day").add(dayNum, "days");
-    for (let bucketNum = 0; bucketNum < 4; bucketNum++) {
-      const bucketTime = moment(day).add(6 * (bucketNum + 1), "hours");
-      if (
-        timeBegin < moment(bucketTime).add(6, "hours") &&
-        timeEnd >= bucketTime
-      ) {
-        allBuckets.push({
-          day: dayNum,
-          bucket: bucketNum,
-          dayName: day.format("dddd"),
-          period: TIME_PERIODS[bucketNum],
-        });
-      }
-    }
-  }
+  getAttendanceGrid(timeBegin, timeEnd).forEach((day, dayNum) => {
+    day.slots.forEach((slot) => {
+      if (!slot.inRange) return;
+      allBuckets.push({
+        gridIndex: dayNum * 4 + slot.slot,
+        day: dayNum,
+        dayName: day.dayStart.format("dddd"),
+        period: TIME_PERIODS[slot.slot],
+      });
+    });
+  });
 
   // Filter to only selected buckets
   const selectedBuckets = allBuckets.filter(
@@ -70,10 +57,7 @@ export const getAttendanceDescription = (
     const curr = selectedBuckets[i];
 
     // Check if buckets are continuous
-    const prevIndex = prev.day * 4 + prev.bucket;
-    const currIndex = curr.day * 4 + curr.bucket;
-
-    if (currIndex !== prevIndex + 1) {
+    if (curr.gridIndex !== prev.gridIndex + 1) {
       // End current range
       ranges.push({ start: currentRangeStart, end: i - 1 });
       currentRangeStart = i;
