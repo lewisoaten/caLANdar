@@ -1,7 +1,12 @@
 import moment from "moment";
+import { getAttendanceBucketCount } from "./attendanceBuckets";
 
 /**
  * Calculate default attendance buckets for an event (all buckets = 1)
+ *
+ * The length of the returned array must match the API's own bucket count
+ * exactly, or the RSVP is rejected — see `./attendanceBuckets`.
+ *
  * @param timeBegin Event start time
  * @param timeEnd Event end time
  * @returns Array of attendance buckets (1 = attending, 0 = not attending)
@@ -9,22 +14,5 @@ import moment from "moment";
 export const calculateDefaultAttendance = (
   timeBegin: moment.Moment,
   timeEnd: moment.Moment,
-): number[] => {
-  const numberOfDays =
-    moment(timeEnd)
-      .startOf("day")
-      .diff(moment(timeBegin).startOf("day"), "days") + 1;
-
-  const dates = Array.from(Array(numberOfDays)).map((_, day_number) => {
-    return Array.from(Array(4)).map((_, bucket_number) => {
-      const day = moment(timeBegin).startOf("day").add(day_number, "days");
-      const bucket = moment(day).add(6 * (bucket_number + 1), "hours");
-      if (timeBegin < moment(bucket).add(6, "hours") && timeEnd >= bucket) {
-        return 1;
-      }
-      return 0;
-    });
-  });
-
-  return dates.flat().filter((e) => e === 1);
-};
+): number[] =>
+  Array.from({ length: getAttendanceBucketCount(timeBegin, timeEnd) }, () => 1);

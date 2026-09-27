@@ -550,4 +550,24 @@ mod tests {
             "Event ending exactly at bucket start should include that bucket"
         );
     }
+
+    #[test]
+    fn test_get_day_quarter_buckets_across_dst_transition() {
+        // A Friday-evening-to-Sunday event crossing a DST transition. When the
+        // frontend derived its grid from the viewer's local calendar it counted
+        // 8 buckets here against this function's 9, and every RSVP for such an
+        // event was rejected for having the wrong length. The frontend now
+        // mirrors this UTC grid; this test pins the count it must match.
+        let time_begin = Utc.with_ymd_and_hms(2026, 10, 23, 17, 0, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2026, 10, 25, 16, 0, 0).unwrap();
+
+        let buckets = get_day_quarter_buckets(time_begin, time_end);
+
+        assert_eq!(
+            buckets.len(),
+            9,
+            "this window must yield 9 buckets; frontend/attendanceBuckets.ts \
+             must agree or RSVPs fail to save"
+        );
+    }
 }

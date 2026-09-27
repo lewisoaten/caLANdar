@@ -195,7 +195,12 @@ pub fn format_attendance_description(
 
     while current_day < time_end_naive {
         for bucket_num in 0..4 {
-            let bucket_start = current_day + Duration::hours(6 * (bucket_num + 1));
+            // `current_day` is already the 06:00 anchor, so bucket 0 starts at
+            // 06:00, not 12:00. Offsetting by `bucket_num + 1` shifted every
+            // bucket a slot later than the grid `get_day_quarter_buckets`
+            // builds, so descriptions named the wrong period (a morning
+            // bucket was reported as "afternoon").
+            let bucket_start = current_day + Duration::hours(6 * bucket_num);
             let bucket_end = bucket_start + Duration::hours(6);
 
             if bucket_start <= time_end_naive && bucket_end > time_begin_naive {
@@ -281,5 +286,70 @@ pub async fn log_audit(
         Err(e) => {
             log::error!("Failed to write audit log: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::controllers::event_invitation::get_day_quarter_buckets;
+    use chrono::TimeZone;
+
+    /// An event window that crosses a DST transition.
+    fn dst_crossing_event() -> (chrono::DateTime<Utc>, chrono::DateTime<Utc>) {
+        (
+            Utc.with_ymd_and_hms(2026, 10, 23, 17, 0, 0).unwrap(),
+            Utc.with_ymd_and_hms(2026, 10, 25, 16, 0, 0).unwrap(),
+        )
+    }
+
+    #[test]
+    fn describes_the_first_bucket_as_the_period_it_actually_covers() {
+        // Event runs 06:00 -> 12:00 UTC, i.e. exactly the morning bucket.
+        // Before the fix this function anchored bucket 0 at 12:00 rather than
+        // 06:00 and so reported "Afternoon".
+        let time_begin = Utc.with_ymd_and_hms(2025, 1, 15, 6, 0, 0).unwrap();
+        let time_end = Utc.with_ymd_and_hms(2025, 1, 15, 12, 0, 0).unwrap();
+
+        let description = format_attendance_description(&Some(vec![1, 0]), time_begin, time_end);
+
+        assert_eq!(description, "Wed morning");
+    }
+
+    #[test]
+    fn enumerates_the_same_number_of_buckets_as_the_validator() {
+        // `format_attendance_description` indexes into the attendance array
+        // that `get_day_quarter_buckets` validates, so the two must walk the
+        // same grid or descriptions are attributed to the wrong slots.
+        let (time_begin, time_end) = dst_crossing_event();
+        let expected = get_day_quarter_buckets(time_begin, time_end).len();
+
+        // All buckets selected -> "<first> until <last>", which only names the
+        // two ends, so assert via a fully-selected array of the expected size.
+        let attendance = vec![1u8; expected];
+        let description = format_attendance_description(&Some(attendance), time_begin, time_end);
+
+        assert_eq!(
+            description, "Fri afternoon until Sun afternoon",
+            "description must span the same grid the validator accepts"
+        );
+    }
+
+    #[test]
+    fn reports_none_for_empty_or_unselected_attendance() {
+        let (time_begin, time_end) = dst_crossing_event();
+
+        assert_eq!(
+            format_attendance_description(&None, time_begin, time_end),
+            "none"
+        );
+        assert_eq!(
+            format_attendance_description(&Some(vec![]), time_begin, time_end),
+            "none"
+        );
+        assert_eq!(
+            format_attendance_description(&Some(vec![0; 9]), time_begin, time_end),
+            "none"
+        );
     }
 }

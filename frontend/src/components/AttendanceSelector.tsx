@@ -16,6 +16,7 @@ import TimelineContent from "@mui/lab/TimelineContent";
 import TimelineDot from "@mui/lab/TimelineDot";
 import TimelineOppositeContent from "@mui/lab/TimelineOppositeContent";
 import moment from "moment";
+import { getAttendanceGrid, TIME_PERIODS } from "../utils/attendanceBuckets";
 
 interface AttendanceSelectorProps {
   timeBegin: moment.Moment;
@@ -33,69 +34,56 @@ interface AttendanceSelectorProps {
   onChange?: (value: number[]) => void;
 }
 
+/** Icon component per slot, indexed by slot number. */
+const SLOT_ICONS = [WbTwilightIcon, WbSunnyIcon, BedtimeIcon, HotelIcon];
+
+/** Stable ToggleButton value for a given day/slot pair. */
+const buttonValue = (dayNum: number, slot: number) => dayNum * 4 + slot;
+
 export default function InvitationResponse(props: AttendanceSelectorProps) {
-  const numberOfDays =
-    moment(props.timeEnd)
-      .startOf("day")
-      .diff(moment(props.timeBegin).startOf("day"), "days") + 1;
+  // The UTC day/slot grid the API validates against. Deriving this from the
+  // browser's local calendar makes the bucket count timezone-dependent, which
+  // caused RSVPs to be rejected outright.
+  const grid = getAttendanceGrid(props.timeBegin, props.timeEnd);
 
-  let firstButtonForAttendance: number | undefined;
+  const bucketCount = grid.reduce(
+    (total, day) => total + day.slots.filter((slot) => slot.inRange).length,
+    0,
+  );
 
-  //Create array of dates between timeBegin and timeEnd
-  const dates = Array.from(Array(numberOfDays)).map((_, day_number) => {
-    return Array.from(Array(4)).map((_, bucket_number) => {
-      const day = moment(props.timeBegin)
-        .startOf("day")
-        .add(day_number, "days");
-      const bucket = moment(day).add(6 * (bucket_number + 1), "hours");
-      if (
-        props.timeBegin < moment(bucket).add(6, "hours") &&
-        props.timeEnd >= bucket
-      ) {
-        if (firstButtonForAttendance === undefined) {
-          firstButtonForAttendance = day_number * 4 + bucket_number;
+  // Normalise the incoming value to exactly one entry per in-range bucket,
+  // defaulting missing entries to "attending".
+  const attendance: number[] = Array.from({ length: bucketCount }, (_, i) =>
+    props.value && props.value.length > i ? props.value[i] : 1,
+  );
+
+  const selectedButtonsFromAttendance = (current: number[]) => {
+    const selected: number[] = [];
+    grid.forEach((day, dayNum) => {
+      day.slots.forEach((slot) => {
+        if (slot.attendanceIndex === null) return;
+        if (current[slot.attendanceIndex] === 1) {
+          selected.push(buttonValue(dayNum, slot.slot));
         }
-        return 1;
-      }
-
-      return 0;
+      });
     });
-  });
+    return selected;
+  };
+
+  const attendanceFromSelectedButtons = (selected: number[]) => {
+    const next = Array.from({ length: bucketCount }, () => 0);
+    grid.forEach((day, dayNum) => {
+      day.slots.forEach((slot) => {
+        if (slot.attendanceIndex === null) return;
+        if (selected.includes(buttonValue(dayNum, slot.slot))) {
+          next[slot.attendanceIndex] = 1;
+        }
+      });
+    });
+    return next;
+  };
 
   const buttonColour = props.colour ? props.colour : "primary";
-
-  const calculatedAttendance = dates.flat().filter((e) => e === 1);
-
-  const attendance: number[] = calculatedAttendance.map((_, i) => {
-    return props.value && props.value.length > i ? props.value[i] : 1;
-  });
-
-  const selectedButtonsFromAttendance = (attendance: number[]) => {
-    // Convert array of 1s and 0s to array of indices of 1s
-    const selectedButtons: number[] = [];
-
-    dates.flat().forEach((e, i) => {
-      if (
-        e === 1 &&
-        firstButtonForAttendance !== undefined &&
-        attendance[i - firstButtonForAttendance] === 1
-      ) {
-        selectedButtons.push(i);
-      }
-    });
-    return selectedButtons;
-  };
-
-  const attendanceFromSelectedButtons = (selectedButtons: number[]) => {
-    return attendance.map((_, idx) => {
-      if (
-        firstButtonForAttendance !== undefined &&
-        selectedButtons.includes(idx + firstButtonForAttendance)
-      )
-        return 1;
-      return 0;
-    });
-  };
 
   const [selectedButtons, setSelectedButtons] = useState(
     selectedButtonsFromAttendance(attendance),
@@ -111,16 +99,15 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
     }
   };
 
-  const isSelected = (buttonValue: number) =>
-    selectedButtons.includes(buttonValue);
+  const isSelected = (value: number) => selectedButtons.includes(value);
 
   const slotIcon = (
-    buttonValue: number,
+    value: number,
     icon: React.ReactElement<unknown>,
     label: string,
     disabled: boolean,
   ) => {
-    const selected = isSelected(buttonValue);
+    const selected = isSelected(value);
     const showBadge = !disabled;
     return (
       <Tooltip title={label}>
@@ -153,15 +140,15 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
 
   return (
     <Timeline>
-      {dates.map((bucket_array, idx) => (
-        <TimelineItem key={idx}>
+      {grid.map((day, dayNum) => (
+        <TimelineItem key={dayNum}>
           <TimelineOppositeContent
             sx={{ m: "auto 0" }}
             align="right"
             variant="body2"
             color="text.secondary"
           >
-            {moment(props.timeBegin).add(idx, "days").format("ddd Do")}
+            {day.dayStart.format("ddd Do")}
           </TimelineOppositeContent>
           <TimelineSeparator>
             <TimelineConnector />
@@ -176,50 +163,23 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
               value={selectedButtons}
               onChange={handleButtonChange}
             >
-              <ToggleButton
-                value={idx * 4 + 0}
-                disabled={bucket_array[0] === 0}
-              >
-                {slotIcon(
-                  idx * 4 + 0,
-                  <WbTwilightIcon />,
-                  "Morning",
-                  bucket_array[0] === 0,
-                )}
-              </ToggleButton>
-              <ToggleButton
-                value={idx * 4 + 1}
-                disabled={bucket_array[1] === 0}
-              >
-                {slotIcon(
-                  idx * 4 + 1,
-                  <WbSunnyIcon />,
-                  "Afternoon",
-                  bucket_array[1] === 0,
-                )}
-              </ToggleButton>
-              <ToggleButton
-                value={idx * 4 + 2}
-                disabled={bucket_array[2] === 0}
-              >
-                {slotIcon(
-                  idx * 4 + 2,
-                  <BedtimeIcon />,
-                  "Evening",
-                  bucket_array[2] === 0,
-                )}
-              </ToggleButton>
-              <ToggleButton
-                value={idx * 4 + 3}
-                disabled={bucket_array[3] === 0}
-              >
-                {slotIcon(
-                  idx * 4 + 3,
-                  <HotelIcon />,
-                  "Overnight",
-                  bucket_array[3] === 0,
-                )}
-              </ToggleButton>
+              {day.slots.map((slot) => {
+                const Icon = SLOT_ICONS[slot.slot];
+                return (
+                  <ToggleButton
+                    key={slot.slot}
+                    value={buttonValue(dayNum, slot.slot)}
+                    disabled={!slot.inRange}
+                  >
+                    {slotIcon(
+                      buttonValue(dayNum, slot.slot),
+                      <Icon />,
+                      TIME_PERIODS[slot.slot],
+                      !slot.inRange,
+                    )}
+                  </ToggleButton>
+                );
+              })}
             </ToggleButtonGroup>
           </TimelineContent>
         </TimelineItem>

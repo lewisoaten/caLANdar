@@ -103,6 +103,12 @@ export default defineConfig({
     globals: true,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Pin a non-UTC, DST-observing zone. Attendance buckets must be derived
+    // from the UTC calendar to stay in step with the API; running the suite in
+    // UTC would silently hide any regression back to local-calendar logic.
+    env: {
+      TZ: "Europe/London",
+    },
     css: {
       modules: {
         classNameStrategy: "non-scoped",
