@@ -53,10 +53,18 @@
               # Cargo will create this directory if it doesn't exist and needs to write.
               export CARGO_HOME="$ROOT_PATH/.cargo"
 
-              # Isolate npm's cache and prefix to the project, just like cargo.
-              # This prevents conflicts with your global ~/.npm cache or config.
-              export NPM_CONFIG_CACHE="$ROOT_PATH/.npm-cache"
+              # Isolate npm's *prefix* to the project, just like cargo. This is what
+              # prevents conflicts with globally-installed CLIs leaking onto PATH.
+              #
+              # Deliberately NOT overriding NPM_CONFIG_CACHE: npm's cache is
+              # content-addressed and immutable, so sharing ~/.npm across projects is
+              # safe and is npm's intended design. Redirecting it to an empty
+              # project-local dir forces every `npx` to re-download its whole
+              # dependency tree, which is slow enough to blow the startup timeout of
+              # anything that spawns one (e.g. npx-based MCP servers).
               export NPM_CONFIG_PREFIX="$ROOT_PATH/.npm-prefix"
+              # Create it so the PATH entry below is always valid.
+              mkdir -p "$ROOT_PATH/.npm-prefix/bin"
               # Add the local prefix's bin directory to the PATH
               export PATH="$ROOT_PATH/.npm-prefix/bin:$PATH"
 
