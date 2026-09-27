@@ -17,6 +17,22 @@ name: Rebase next Dependabot PR
 on:
   push:
     branches: [main]
+  # A merge is not the only thing that makes a PR eligible. Adding the
+  # automerge label does too, and without this the labelled PR sits until some
+  # unrelated merge happens to wake the workflow - which, with the minor/patch
+  # queue drained, may be never.
+  #
+  # pull_request_target rather than pull_request: it runs in the context of the
+  # base branch with this repository's secrets. That is safe here only because
+  # this workflow never checks out or executes code from the pull request - it
+  # reads PR metadata through the API and posts a comment. Keep it that way.
+  pull_request_target:
+    types: [labeled]
+  # Safety net for everything else that can change eligibility without a merge
+  # or a label: a failing check going green, a merge state left UNKNOWN past
+  # the polling window, a recreate finishing after the run that requested it.
+  schedule:
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -33,6 +49,10 @@ concurrency:
 
 jobs:
   rebase-next:
+    # Only the automerge label makes a PR newly eligible; ignore other labels.
+    if: >-
+      github.event_name != 'pull_request_target'
+      || github.event.label.name == 'automerge'
     runs-on: ubuntu-latest
     steps:
       - name: Check the rebase token is configured
