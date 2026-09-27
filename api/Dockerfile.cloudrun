@@ -7,7 +7,7 @@
 # `cargo run --no-default-features` after setting required environment variables.
 
 # Build stage
-FROM rust:1.87.0-slim AS builder
+FROM rust:1.98.1-slim AS builder
 
 WORKDIR /app
 
@@ -36,14 +36,20 @@ ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
 RUN cargo build --release --no-default-features
 
 # Runtime stage
-FROM debian:bookworm-slim
+#
+# Must be the same Debian release as the builder image above: the binary links
+# against the builder's glibc, and rust:*-slim tracks the current Debian stable.
+# A trixie-built binary on bookworm fails at startup with "GLIBC_2.39 not
+# found", which Cloud Run reports only as the container failing to listen on
+# PORT.
+FROM debian:trixie-slim
 
 WORKDIR /app
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl3 \
+    libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the binary from builder
