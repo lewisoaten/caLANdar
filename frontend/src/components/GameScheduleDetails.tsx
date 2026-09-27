@@ -68,8 +68,8 @@ const GamerList = ({
         <Stack
           direction="row"
           spacing={1}
-          alignItems="center"
           sx={{
+            alignItems: "center",
             mb: 0.5,
             cursor: tooltip ? "help" : "default",
             width: "fit-content",
@@ -88,7 +88,9 @@ const GamerList = ({
           <Typography
             variant="subtitle2"
             color={color ? `${color}.main` : "text.secondary"}
-            fontWeight="bold"
+            sx={{
+              fontWeight: "bold",
+            }}
           >
             {title}
           </Typography>
@@ -106,7 +108,9 @@ const GamerList = ({
             </ListItemAvatar>
             <ListItemText
               primary={gamer.handle || "Unknown Gamer"}
-              primaryTypographyProps={{ variant: "body2" }}
+              slotProps={{
+                primary: { variant: "body2" },
+              }}
             />
           </ListItem>
         ))}
@@ -271,7 +275,12 @@ export default function GameScheduleDetails({
             <TrophyIcon sx={{ color: trophyColor, fontSize: 32 }} />
           </Tooltip>
         )}
-        <Typography variant="h5" fontWeight="bold">
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: "bold",
+          }}
+        >
           {scheduleEntry.gameName}
         </Typography>
       </Box>
@@ -283,15 +292,22 @@ export default function GameScheduleDetails({
             <Stack
               direction="row"
               spacing={1}
-              alignItems="center"
-              sx={{ mb: 1 }}
+              sx={{
+                alignItems: "center",
+                mb: 1,
+              }}
             >
               <Avatar
                 alt={suggestion.suggester.handle || "Suggester"}
                 src={suggestion.suggester.avatarUrl || undefined}
                 sx={{ width: 24, height: 24 }}
               />
-              <Typography variant="body2" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
                 Suggested by{" "}
                 <strong>{suggestion.suggester.handle || "Unknown"}</strong>
               </Typography>
@@ -299,7 +315,12 @@ export default function GameScheduleDetails({
           )}
           {suggestion.comment && (
             <Box sx={{ p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
-              <Typography variant="body2" fontStyle="italic">
+              <Typography
+                variant="body2"
+                sx={{
+                  fontStyle: "italic",
+                }}
+              >
                 &quot;{suggestion.comment}&quot;
               </Typography>
             </Box>
@@ -338,7 +359,12 @@ export default function GameScheduleDetails({
         <Typography variant="body1" gutterBottom>
           <strong>End:</strong> {endTime.format("dddd, D MMM HH:mm")}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Duration: {durationHuman}
         </Typography>
       </Box>
@@ -390,8 +416,10 @@ export default function GameScheduleDetails({
       ) : (
         <Typography
           variant="body2"
-          color="text.secondary"
-          sx={{ fontStyle: "italic" }}
+          sx={{
+            color: "text.secondary",
+            fontStyle: "italic",
+          }}
         >
           Additional details not available.
         </Typography>

@@ -12,7 +12,6 @@ import {
   Container,
 } from "@mui/material";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
-import LoadingButton from "@mui/lab/LoadingButton";
 import { UserDispatchContext } from "../UserProvider";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -86,7 +85,7 @@ export default function SignIn() {
               autoComplete="email"
               autoFocus
             />
-            <LoadingButton
+            <Button
               type="submit"
               loading={loading}
               fullWidth
@@ -94,7 +93,7 @@ export default function SignIn() {
               sx={{ mt: 3, mb: 2 }}
             >
               Submit Email Verification
-            </LoadingButton>
+            </Button>
           </Box>
         ) : (
           <React.Fragment>

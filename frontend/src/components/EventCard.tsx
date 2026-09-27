@@ -40,8 +40,10 @@ export default function EventCard(props: EventCardProps) {
         </Typography>
         <Typography
           variant="body2"
-          color="text.secondary"
-          sx={{ whiteSpace: "pre-wrap" }}
+          sx={{
+            color: "text.secondary",
+            whiteSpace: "pre-wrap",
+          }}
         >
           {event.description}
         </Typography>

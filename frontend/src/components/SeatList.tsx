@@ -187,7 +187,12 @@ const SeatList: React.FC<SeatListProps> = ({
           minHeight: 200,
         }}
       >
-        <Typography variant="body1" color="text.secondary">
+        <Typography
+          variant="body1"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Select a room to view its seats
         </Typography>
       </Paper>
@@ -204,9 +209,11 @@ const SeatList: React.FC<SeatListProps> = ({
     >
       <Stack
         direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        sx={{ mb: 2 }}
+        sx={{
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 2,
+        }}
       >
         <Typography component="h2" variant="h6" color="primary">
           Seats for {room.name}
@@ -222,7 +229,12 @@ const SeatList: React.FC<SeatListProps> = ({
       </Stack>
 
       {seats.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           No seats defined yet. Click &quot;Add Seat&quot; to create one.
         </Typography>
       ) : (
@@ -295,8 +307,10 @@ const SeatList: React.FC<SeatListProps> = ({
               required
               fullWidth
               autoFocus
-              inputProps={{ "aria-label": "Seat label" }}
               helperText="e.g., A1, B2, Table 5"
+              slotProps={{
+                htmlInput: { "aria-label": "Seat label" },
+              }}
             />
             <TextField
               label="Description"
@@ -310,7 +324,9 @@ const SeatList: React.FC<SeatListProps> = ({
               multiline
               rows={2}
               fullWidth
-              inputProps={{ "aria-label": "Seat description" }}
+              slotProps={{
+                htmlInput: { "aria-label": "Seat description" },
+              }}
             />
             <Stack direction="row" spacing={2}>
               <TextField
@@ -323,14 +339,16 @@ const SeatList: React.FC<SeatListProps> = ({
                     x: parseFloat(e.target.value) || 0,
                   })
                 }
-                inputProps={{
-                  step: 0.01,
-                  min: 0,
-                  max: 1,
-                  "aria-label": "X position",
-                }}
                 fullWidth
                 helperText="0.0 (left) to 1.0 (right)"
+                slotProps={{
+                  htmlInput: {
+                    step: 0.01,
+                    min: 0,
+                    max: 1,
+                    "aria-label": "X position",
+                  },
+                }}
               />
               <TextField
                 label="Y Position"
@@ -342,14 +360,16 @@ const SeatList: React.FC<SeatListProps> = ({
                     y: parseFloat(e.target.value) || 0,
                   })
                 }
-                inputProps={{
-                  step: 0.01,
-                  min: 0,
-                  max: 1,
-                  "aria-label": "Y position",
-                }}
                 fullWidth
                 helperText="0.0 (top) to 1.0 (bottom)"
+                slotProps={{
+                  htmlInput: {
+                    step: 0.01,
+                    min: 0,
+                    max: 1,
+                    "aria-label": "Y position",
+                  },
+                }}
               />
             </Stack>
           </Stack>

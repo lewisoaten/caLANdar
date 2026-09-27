@@ -143,10 +143,12 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
       {grid.map((day, dayNum) => (
         <TimelineItem key={dayNum}>
           <TimelineOppositeContent
-            sx={{ m: "auto 0" }}
             align="right"
             variant="body2"
-            color="text.secondary"
+            sx={{
+              color: "text.secondary",
+              m: "auto 0",
+            }}
           >
             {day.dayStart.format("ddd Do")}
           </TimelineOppositeContent>

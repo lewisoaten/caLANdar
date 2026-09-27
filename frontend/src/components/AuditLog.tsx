@@ -341,7 +341,13 @@ const AuditLog = () => {
         </Typography>
 
         <Paper sx={{ p: 2, mb: 2 }}>
-          <Stack direction="row" spacing={2} flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{
+              flexWrap: "wrap",
+            }}
+          >
             <TextField
               label="User Email"
               value={userId}

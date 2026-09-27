@@ -27,7 +27,12 @@ export default function RSVPResponseStep(props: RSVPResponseStepProps) {
       <Typography variant="h6" component="h2">
         Will you be attending?
       </Typography>
-      <Box display="flex" justifyContent="center">
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
         <ToggleButtonGroup
           color="primary"
           value={props.value}
