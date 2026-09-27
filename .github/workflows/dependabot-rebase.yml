@@ -161,16 +161,34 @@ jobs:
           echo "Requesting rebase of #${PR}"
           gh pr comment "$PR" --repo "$REPO" --body "@dependabot rebase"
 
-          # Dependabot answers a rejected command with a comment rather than an
+          # Dependabot answers a refused command with a comment rather than an
           # error, so without this the job would go green having achieved
-          # nothing. Give it a moment, then look for the refusal.
+          # nothing. Give it a moment, then read its reply.
           sleep 45
-          if gh pr view "$PR" --repo "$REPO" --json comments \
-               --jq '.comments[-3:][].body' \
-             | grep -qi "only users with push access"; then
+          reply="$(gh pr view "$PR" --repo "$REPO" --json comments \
+                     --jq '.comments[-3:][].body')"
+
+          if printf '%s' "$reply" | grep -qi "only users with push access"; then
             echo "::error::Dependabot rejected the command from this token."
             echo "DEPENDABOT_REBASE_TOKEN must belong to an identity with push"
             echo "access that Dependabot accepts - a bot account is not one."
             exit 1
           fi
-          echo "Rebase requested; Dependabot did not reject the command."
+
+          # If anything other than Dependabot has committed to the branch -
+          # Kodiak updating it, a pre-commit.ci autofix, a human - Dependabot
+          # disowns it and will neither rebase it nor bump it to newer
+          # releases. The PR is then stuck behind main forever, because a
+          # rebase is the only thing that can make it mergeable and the only
+          # actor allowed to rebase it has refused. Recreating discards the
+          # foreign commits and rebuilds the branch at the current version,
+          # which is the documented escape hatch and the one we used by hand to
+          # clear the original backlog.
+          if printf '%s' "$reply" | grep -qi "edited by someone other than Dependabot"; then
+            echo "::warning::#${PR} was edited by another actor; recreating it."
+            gh pr comment "$PR" --repo "$REPO" --body "@dependabot recreate"
+            echo "Recreate requested; it will be picked up on a later run."
+            exit 0
+          fi
+
+          echo "Rebase requested; Dependabot did not refuse."
