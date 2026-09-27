@@ -158,19 +158,68 @@ jobs:
           PR: ${{ steps.pick.outputs.number }}
         run: |
           set -euo pipefail
-          echo "Requesting rebase of #${PR}"
-          gh pr comment "$PR" --repo "$REPO" --body "@dependabot rebase"
 
-          # Dependabot answers a rejected command with a comment rather than an
-          # error, so without this the job would go green having achieved
-          # nothing. Give it a moment, then look for the refusal.
-          sleep 45
-          if gh pr view "$PR" --repo "$REPO" --json comments \
-               --jq '.comments[-3:][].body' \
-             | grep -qi "only users with push access"; then
+          # Remember the head so a rebase can be detected directly, and post via
+          # the API so the reply window can be anchored to this request rather
+          # than guessed. Dependabot's own refusals are durable comments that
+          # stay on the PR for months, so "look at the last few comments"
+          # matches history: an old "edited by someone other than Dependabot"
+          # notice would trigger a recreate even after a rebase had succeeded.
+          old_head="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)"
+          posted_at="$(gh api "repos/${REPO}/issues/${PR}/comments" \
+                         -f body='@dependabot rebase' --jq '.created_at')"
+          echo "Requested rebase of #${PR} at ${posted_at} (head ${old_head})"
+
+          # Wait for one of: the branch moving (rebased), or a reply from
+          # Dependabot (refused). `since` is server-side and anchored to this
+          # request, and the author filter drops our own comment.
+          reply=""
+          for attempt in $(seq 1 12); do
+            sleep 10
+
+            new_head="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq .headRefOid)"
+            if [ "$new_head" != "$old_head" ]; then
+              echo "Dependabot rebased #${PR} (${old_head:0:7} -> ${new_head:0:7})."
+              exit 0
+            fi
+
+            reply="$(gh api \
+                       "repos/${REPO}/issues/${PR}/comments?since=${posted_at}&per_page=100" \
+                       --jq '[ .[]
+                               | select(.user.login | test("^dependabot"))
+                               | .body ] | join("\n")')"
+            if [ -n "$reply" ]; then
+              break
+            fi
+          done
+
+          if [ -z "$reply" ]; then
+            echo "::warning::No response from Dependabot within two minutes and"
+            echo "#${PR} has not moved. Leaving it for the next run."
+            exit 0
+          fi
+
+          if printf '%s' "$reply" | grep -qi "only users with push access"; then
             echo "::error::Dependabot rejected the command from this token."
             echo "DEPENDABOT_REBASE_TOKEN must belong to an identity with push"
             echo "access that Dependabot accepts - a bot account is not one."
             exit 1
           fi
-          echo "Rebase requested; Dependabot did not reject the command."
+
+          # If anything other than Dependabot has committed to the branch -
+          # Kodiak updating it, a pre-commit.ci autofix, a human - Dependabot
+          # disowns it and will neither rebase it nor bump it to newer
+          # releases. The PR is then stuck behind main forever, because a
+          # rebase is the only thing that can make it mergeable and the only
+          # actor allowed to rebase it has refused. Recreating discards the
+          # foreign commits and rebuilds the branch at the current version,
+          # which is the documented escape hatch and the one we used by hand to
+          # clear the original backlog.
+          if printf '%s' "$reply" | grep -qi "edited by someone other than Dependabot"; then
+            echo "::warning::#${PR} was edited by another actor; recreating it."
+            gh pr comment "$PR" --repo "$REPO" --body "@dependabot recreate"
+            echo "Recreate requested; it will be picked up on a later run."
+            exit 0
+          fi
+
+          echo "Dependabot replied without refusing; leaving #${PR} to settle."
