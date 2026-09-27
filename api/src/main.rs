@@ -190,8 +190,10 @@ fn load_secrets_and_config(
 ) -> Result<(PasetoSymmetricKey<V4, Local>, Resend, String, Tera), Box<dyn std::error::Error>> {
     log::info!("PASETO_SECRET_KEY obtained.");
 
-    let paseto_symmetric_key =
-        PasetoSymmetricKey::<V4, Local>::from(Key::from(paseto_secret_key.as_bytes()));
+    let paseto_symmetric_key = PasetoSymmetricKey::<V4, Local>::from(
+        Key::<32>::try_from(paseto_secret_key.as_bytes())
+            .map_err(|_| "PASETO_SECRET_KEY must be exactly 32 bytes")?,
+    );
 
     log::info!("Paseto key created.");
     log::info!("RESEND_API_KEY obtained.");
