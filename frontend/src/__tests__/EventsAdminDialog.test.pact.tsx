@@ -9,7 +9,7 @@ import EventsAdminDialog from "../components/EventsAdminDialog";
 describe("CaLANDar Create Event API", () => {
   describe("create event", () => {
     beforeEach((done) => {
-      const _contentTypeJsonMatcher = Pact.Matchers.term({
+      const _contentTypeJsonMatcher = Pact.MatchersV2.term({
         matcher: "application\\/json; *charset=utf-8",
         generate: "application/json; charset=utf-8",
       });
@@ -32,8 +32,8 @@ describe("CaLANDar Create Event API", () => {
             body: {
               title: "test",
               description: "test",
-              timeBegin: Pact.Matchers.iso8601DateTimeWithMillis(),
-              timeEnd: Pact.Matchers.iso8601DateTimeWithMillis(),
+              timeBegin: Pact.MatchersV2.iso8601DateTimeWithMillis(),
+              timeEnd: Pact.MatchersV2.iso8601DateTimeWithMillis(),
             },
           },
           willRespondWith: {
@@ -42,14 +42,14 @@ describe("CaLANDar Create Event API", () => {
               "Content-Type": "application/json",
               Accept: "application/json",
             },
-            body: Pact.Matchers.somethingLike({
+            body: Pact.MatchersV2.somethingLike({
               id: 1,
-              createdAt: Pact.Matchers.iso8601DateTimeWithMillis(),
-              lastModified: Pact.Matchers.iso8601DateTimeWithMillis(),
+              createdAt: Pact.MatchersV2.iso8601DateTimeWithMillis(),
+              lastModified: Pact.MatchersV2.iso8601DateTimeWithMillis(),
               title: "test",
               description: "test",
-              timeBegin: Pact.Matchers.iso8601DateTimeWithMillis(),
-              timeEnd: Pact.Matchers.iso8601DateTimeWithMillis(),
+              timeBegin: Pact.MatchersV2.iso8601DateTimeWithMillis(),
+              timeEnd: Pact.MatchersV2.iso8601DateTimeWithMillis(),
             }),
           },
         })

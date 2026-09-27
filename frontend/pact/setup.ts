@@ -1,8 +1,8 @@
-import { Pact } from "@pact-foundation/pact";
+import { PactV2 } from "@pact-foundation/pact";
 import path from "path";
 
 global.port = 8080;
-global.provider = new Pact({
+global.provider = new PactV2({
   cors: true,
   port: global.port,
   log: path.resolve(process.cwd(), "logs", "pact.log"),
