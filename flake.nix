@@ -1,7 +1,7 @@
 {
   description = "CaLANdar LAN organisation app";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -29,7 +29,7 @@
             pkg-config
             postgresql
             pre-commit
-            nodejs_22
+            nodejs_24
             just
             docker-compose
           ];
