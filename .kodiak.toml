@@ -5,10 +5,14 @@ version = 1
 [merge]
 method = "rebase_fast_forward"
 delete_branch_on_merge = true
-require_status_checks = true
 
 [merge.automerge_dependencies]
 # only auto merge "minor" and "patch" version upgrades.
 # do not automerge "major" version upgrades.
 versions = ["minor", "patch"]
-usernames = ["dependabot", "pre-commit-ci"]
+# These must be the *exact* GitHub logins. Kodiak compares
+# `pull_request.author.login` against this list verbatim, with no handling of
+# the "[bot]" suffix that GitHub Apps always carry, so plain "dependabot" never
+# matches and every dependency PR silently falls through to the automerge-label
+# check instead.
+usernames = ["dependabot[bot]", "pre-commit-ci[bot]"]
