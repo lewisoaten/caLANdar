@@ -78,7 +78,7 @@ just pact-api
 The dev container automatically sets up the same development environment as defined in `flake.nix`, including:
 
 - Rust toolchain (as specified in `api/rust-toolchain.toml`)
-- Node.js 22
+- Node.js 24
 - PostgreSQL tools
 - Cargo tools (cargo-watch, sqlx-cli)
 - Just command runner

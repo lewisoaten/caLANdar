@@ -28,7 +28,7 @@ nix develop --impure
 # You'll see: "CaLANdar development environment activated!"
 ```
 
-The Nix shell provides: Rust 1.87.0, cargo tools, Node.js 22, PostgreSQL, Just, pre-commit, and all other dependencies. **Do not try to use system-installed versions.**
+The Nix shell provides: Rust 1.87.0, cargo tools, Node.js 24, PostgreSQL, Just, pre-commit, and all other dependencies. **Do not try to use system-installed versions.**
 
 ### Step 2: Verify Environment
 
@@ -354,7 +354,7 @@ Located in `api/migrations/`, migrations use SQLx's migration system:
 
 - Triggers: Push to main/staging/trying (if frontend/\*\* changed), PRs to main
 - Steps:
-  1. Setup Node.js 20
+  1. Setup Node.js 24 (from frontend/.nvmrc)
   2. `npm ci` to install dependencies
   3. `npm test -- --run` to run tests
   4. `npm run build` to build production bundle
