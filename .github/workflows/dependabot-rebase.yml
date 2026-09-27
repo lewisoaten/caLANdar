@@ -1,0 +1,119 @@
+name: Rebase next Dependabot PR
+
+# Kodiak merges with "rebase_fast_forward", which requires the "Require
+# branches to be up to date before merging" protection rule. Every merge
+# therefore leaves all other open PRs behind main and unmergeable until
+# something rebases them.
+#
+# Kodiak would do that itself, but its update pushes a merge commit onto the
+# branch, and Dependabot then disowns the branch: it refuses to rebase it, and
+# - worse - stops bumping it to newer releases, so the PR silently rots at an
+# old version. `update.ignored_usernames` in .kodiak.toml stops Kodiak touching
+# them, which leaves nobody to do the rebase: Dependabot does not rebase PRs
+# merely for being behind, only for conflicts. (Observed directly: PRs sat 6
+# months and 29 commits behind without ever being rebased.)
+#
+# So ask Dependabot to do it, which keeps the branch Dependabot-owned. This is
+# Kodiak's unimplemented "update by comment" strategy, chdsbd/kodiak#438, done
+# from the outside.
+#
+# One PR per run, deliberately. Rebasing every open PR after each merge is the
+# N(N-1)/2 problem Kodiak warns about under `update.always`; the queue only
+# needs its next candidate ready, and merging that one re-triggers this
+# workflow for the one after it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: dependabot-rebase
+  cancel-in-progress: false
+
+jobs:
+  rebase-next:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask Dependabot to rebase its next mergeable out-of-date PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Match the author loosely. The same bot is spelled three different
+          # ways depending on which interface you ask: "dependabot" via
+          # GraphQL, "dependabot[bot]" via REST, and "app/dependabot" via the
+          # gh CLI's --json output. Pinning one spelling silently matches
+          # nothing if the tooling changes its mind, and a filter that matches
+          # nothing looks exactly like "no work to do".
+          #
+          # BEHIND means "mergeable, but not up to date with the base branch",
+          # which is precisely what a rebase fixes. BLOCKED or DIRTY needs a
+          # human, so leave those alone.
+          gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,title,body,author,mergeStateStatus,createdAt \
+            --jq '[ .[]
+                    | select(.author.login
+                             | test("(^|/)dependabot(\\[bot\\])?$"))
+                    | select(.mergeStateStatus == "BEHIND") ]' > prs.json
+
+          python3 - <<'PY' > target
+          import json, os, re
+
+          RANK = {"patch": 0, "minor": 1, "major": 2}
+
+          def bump(a, b):
+              pa = [int(x) for x in re.findall(r"\d+", a)[:3]]
+              pb = [int(x) for x in re.findall(r"\d+", b)[:3]]
+              pa += [0] * (3 - len(pa))
+              pb += [0] * (3 - len(pb))
+              if pb[0] != pa[0]:
+                  return "major"
+              return "minor" if pb[1] != pa[1] else "patch"
+
+          def classify(pr):
+              """Mirror Kodiak's dep_versions_from_pr: read every bump in the
+              body and take the largest, so a group containing one major is
+              treated as major; fall back to the title for single updates."""
+              found = re.findall(
+                  r"[Uu]pdates? `?([^\s`]+)`? from ([0-9][^\s]*) to ([0-9][^\s]*)",
+                  pr.get("body") or "",
+              )
+              if found:
+                  return max((bump(a, b) for _, a, b in found), key=RANK.get)
+              m = re.search(r"from ([0-9][^\s]*) to ([0-9][^\s]*)", pr["title"])
+              return bump(m.group(1), m.group(2)) if m else None
+
+          prs = json.load(open("prs.json"))
+
+          # Only rebase what Kodiak would actually merge. A major bump waits for
+          # a human, so rebasing it burns CI and - because only a merge pushes
+          # main and re-triggers this workflow - would stall the queue on a PR
+          # that can never merge. Unclassifiable PRs are skipped for the same
+          # reason.
+          eligible = [p for p in prs if classify(p) in ("minor", "patch")]
+          eligible.sort(key=lambda p: p["createdAt"])
+
+          skipped = len(prs) - len(eligible)
+          print(eligible[0]["number"] if eligible else "", end="")
+          import sys
+          print(
+              f"{len(prs)} behind, {len(eligible)} eligible, {skipped} skipped "
+              f"(major or unclassifiable)",
+              file=sys.stderr,
+          )
+          PY
+
+          pr="$(cat target)"
+          if [ -z "$pr" ]; then
+            echo "No out-of-date Dependabot PRs eligible for automerge."
+            exit 0
+          fi
+
+          echo "Requesting rebase of #$pr"
+          gh pr comment "$pr" --repo "$REPO" --body "@dependabot rebase"
