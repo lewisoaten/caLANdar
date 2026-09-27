@@ -1,26 +1,18 @@
 name: Rebase next Dependabot PR
 
-# Kodiak merges with "rebase_fast_forward", which requires the "Require
-# branches to be up to date before merging" protection rule. Every merge
-# therefore leaves all other open PRs behind main and unmergeable until
-# something rebases them.
+# Kodiak merges with "rebase_fast_forward", which its docs require to be paired
+# with "Require branches to be up to date before merging". Every merge therefore
+# leaves every other open PR behind main and unmergeable until something rebases
+# it, and `update.ignored_usernames` in .kodiak.toml deliberately stops Kodiak
+# from being that something - when Kodiak updates a branch, Dependabot disowns
+# it and stops bumping it to newer releases, so the PR rots at an old version.
 #
-# Kodiak would do that itself, but its update pushes a merge commit onto the
-# branch, and Dependabot then disowns the branch: it refuses to rebase it, and
-# - worse - stops bumping it to newer releases, so the PR silently rots at an
-# old version. `update.ignored_usernames` in .kodiak.toml stops Kodiak touching
-# them, which leaves nobody to do the rebase: Dependabot does not rebase PRs
-# merely for being behind, only for conflicts. (Observed directly: PRs sat 6
-# months and 29 commits behind without ever being rebased.)
+# That leaves nobody: Dependabot does not rebase a PR merely for being behind,
+# only for conflicts. (Measured here: PRs it has always owned sat up to 29
+# commits and six months behind without ever being rebased.)
 #
-# So ask Dependabot to do it, which keeps the branch Dependabot-owned. This is
-# Kodiak's unimplemented "update by comment" strategy, chdsbd/kodiak#438, done
-# from the outside.
-#
-# One PR per run, deliberately. Rebasing every open PR after each merge is the
-# N(N-1)/2 problem Kodiak warns about under `update.always`; the queue only
-# needs its next candidate ready, and merging that one re-triggers this
-# workflow for the one after it.
+# So ask it to, which keeps the branch Dependabot-owned. This is Kodiak's own
+# unimplemented "update by comment" strategy, chdsbd/kodiak#438, from outside.
 
 on:
   push:
@@ -28,7 +20,12 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   pull-requests: write
+  # `gh pr comment` posts to the issues comments endpoint. Whether
+  # pull-requests:write alone authorises that is ambiguous in the docs, and the
+  # failure mode is a 403 that looks like "nothing to do", so grant both.
+  issues: write
 
 concurrency:
   group: dependabot-rebase
@@ -38,32 +35,54 @@ jobs:
   rebase-next:
     runs-on: ubuntu-latest
     steps:
-      - name: Ask Dependabot to rebase its next mergeable out-of-date PR
+      - name: Check the rebase token is configured
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REBASE_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}
+        run: |
+          if [ -z "${REBASE_TOKEN}" ]; then
+            echo "::error::DEPENDABOT_REBASE_TOKEN is not set."
+            echo "Dependabot refuses comment commands from github-actions[bot]:"
+            echo '  "Sorry, only users with push access can use that command."'
+            echo "That is Dependabot's own identity check, so the default"
+            echo "GITHUB_TOKEN cannot work here no matter what permissions it"
+            echo "is granted. Provide a PAT or GitHub App token with push"
+            echo "access as the DEPENDABOT_REBASE_TOKEN secret."
+            exit 1
+          fi
+
+      - name: Pick the next mergeable out-of-date Dependabot PR
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          # Match the author loosely. The same bot is spelled three different
-          # ways depending on which interface you ask: "dependabot" via
-          # GraphQL, "dependabot[bot]" via REST, and "app/dependabot" via the
-          # gh CLI's --json output. Pinning one spelling silently matches
-          # nothing if the tooling changes its mind, and a filter that matches
-          # nothing looks exactly like "no work to do".
+          # Match the author loosely. The same bot is spelled three ways
+          # depending on the interface: "dependabot" via GraphQL,
+          # "dependabot[bot]" via REST, "app/dependabot" via the gh CLI. A
+          # filter matching none of them is indistinguishable from "no work".
           #
-          # BEHIND means "mergeable, but not up to date with the base branch",
-          # which is precisely what a rebase fixes. BLOCKED or DIRTY needs a
-          # human, so leave those alone.
+          # BEHIND means mergeable but not up to date, which a rebase fixes.
+          # A PR with a failing check is excluded: rebasing it just re-runs the
+          # same failure, and since only a *merge* pushes main and re-triggers
+          # this workflow, picking one would stall the queue on a PR that
+          # cannot merge.
           gh pr list --repo "$REPO" --state open --limit 100 \
-            --json number,title,body,author,mergeStateStatus,createdAt \
+            --json number,title,body,author,mergeStateStatus,createdAt,statusCheckRollup \
             --jq '[ .[]
                     | select(.author.login
                              | test("(^|/)dependabot(\\[bot\\])?$"))
-                    | select(.mergeStateStatus == "BEHIND") ]' > prs.json
+                    | select(.mergeStateStatus == "BEHIND")
+                    | select([ .statusCheckRollup[]?
+                               | select(.conclusion == "FAILURE"
+                                        or .conclusion == "TIMED_OUT"
+                                        or .conclusion == "STARTUP_FAILURE"
+                                        or .conclusion == "ACTION_REQUIRED") ]
+                             | length == 0) ]' > prs.json
 
-          python3 - <<'PY' > target
-          import json, os, re
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, re, sys
 
           RANK = {"patch": 0, "minor": 1, "major": 2}
 
@@ -77,9 +96,14 @@ jobs:
               return "minor" if pb[1] != pa[1] else "patch"
 
           def classify(pr):
-              """Mirror Kodiak's dep_versions_from_pr: read every bump in the
-              body and take the largest, so a group containing one major is
-              treated as major; fall back to the title for single updates."""
+              """Mirror Kodiak's dep_versions_from_pr: take the largest bump in
+              the body so a group containing one major counts as major, and
+              fall back to the title for single-dependency PRs.
+
+              Grouped PRs list each member as "Updates `x` from a to b"; the
+              leading "Bumps the <group> group with N updates" summary carries
+              no version pair, and single-dependency bodies are covered by the
+              title fallback."""
               found = re.findall(
                   r"[Uu]pdates? `?([^\s`]+)`? from ([0-9][^\s]*) to ([0-9][^\s]*)",
                   pr.get("body") or "",
@@ -90,30 +114,38 @@ jobs:
               return bump(m.group(1), m.group(2)) if m else None
 
           prs = json.load(open("prs.json"))
-
-          # Only rebase what Kodiak would actually merge. A major bump waits for
-          # a human, so rebasing it burns CI and - because only a merge pushes
-          # main and re-triggers this workflow - would stall the queue on a PR
-          # that can never merge. Unclassifiable PRs are skipped for the same
-          # reason.
-          eligible = [p for p in prs if classify(p) in ("minor", "patch")]
-          eligible.sort(key=lambda p: p["createdAt"])
-
-          skipped = len(prs) - len(eligible)
-          print(eligible[0]["number"] if eligible else "", end="")
-          import sys
+          eligible = sorted(
+              (p for p in prs if classify(p) in ("minor", "patch")),
+              key=lambda p: p["createdAt"],
+          )
+          print(f"number={eligible[0]['number'] if eligible else ''}")
           print(
-              f"{len(prs)} behind, {len(eligible)} eligible, {skipped} skipped "
-              f"(major or unclassifiable)",
+              f"{len(prs)} behind and passing, {len(eligible)} automergeable",
               file=sys.stderr,
           )
           PY
 
-          pr="$(cat target)"
-          if [ -z "$pr" ]; then
-            echo "No out-of-date Dependabot PRs eligible for automerge."
-            exit 0
-          fi
+      - name: Request the rebase and confirm Dependabot accepted it
+        if: steps.pick.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.DEPENDABOT_REBASE_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.pick.outputs.number }}
+        run: |
+          set -euo pipefail
+          echo "Requesting rebase of #${PR}"
+          gh pr comment "$PR" --repo "$REPO" --body "@dependabot rebase"
 
-          echo "Requesting rebase of #$pr"
-          gh pr comment "$pr" --repo "$REPO" --body "@dependabot rebase"
+          # Dependabot answers a rejected command with a comment rather than an
+          # error, so without this the job would go green having achieved
+          # nothing. Give it a moment, then look for the refusal.
+          sleep 45
+          if gh pr view "$PR" --repo "$REPO" --json comments \
+               --jq '.comments[-3:][].body' \
+             | grep -qi "only users with push access"; then
+            echo "::error::Dependabot rejected the command from this token."
+            echo "DEPENDABOT_REBASE_TOKEN must belong to an identity with push"
+            echo "access that Dependabot accepts - a bot account is not one."
+            exit 1
+          fi
+          echo "Rebase requested; Dependabot did not reject the command."
