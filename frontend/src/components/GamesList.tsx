@@ -120,8 +120,10 @@ const GameCard = React.memo(({ game }: { game: EventGame }) => {
 
         <Stack
           direction="row"
-          alignItems="baseline"
-          justifyContent="space-between"
+          sx={{
+            alignItems: "baseline",
+            justifyContent: "space-between",
+          }}
         >
           {game.playtimeForever !== 0 ? (
             <React.Fragment>
@@ -160,9 +162,11 @@ const GameCardSkeleton = () => (
       <Skeleton variant="text" width="80%" height={32} animation="wave" />
       <Stack
         direction="row"
-        alignItems="baseline"
-        justifyContent="space-between"
-        sx={{ mt: 2 }}
+        sx={{
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          mt: 2,
+        }}
       >
         <Skeleton variant="rounded" width={100} height={24} animation="wave" />
         <Skeleton variant="circular" width={24} height={24} animation="wave" />

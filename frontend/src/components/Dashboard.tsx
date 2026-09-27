@@ -66,16 +66,24 @@ function ResponsiveDrawer(props: AppProps) {
           >
             <MenuIcon />
           </IconButton>
-          <Stack direction="row" spacing={1} alignItems="center">
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{
+              alignItems: "center",
+            }}
+          >
             <Typography variant="h4">
               <CalandarIcon />
             </Typography>
             <Typography
               component="h1"
               variant="h4"
-              color="inherit"
               noWrap
-              sx={{ flexGrow: 1 }}
+              sx={{
+                color: "inherit",
+                flexGrow: 1,
+              }}
             >
               caLANdar
             </Typography>

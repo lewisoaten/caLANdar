@@ -297,7 +297,12 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
           minHeight: 400,
         }}
       >
-        <Typography variant="body1" color="text.secondary">
+        <Typography
+          variant="body1"
+          sx={{
+            color: "text.secondary",
+          }}
+        >
           Select a room to edit its seats
         </Typography>
       </Paper>
@@ -358,7 +363,12 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               height: 400,
             }}
           >
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
               No floorplan image - click to place seats
             </Typography>
           </Box>
@@ -446,7 +456,13 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
         ))}
       </Box>
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          color: "text.secondary",
+          mt: 1,
+        }}
+      >
         Click on the floorplan to add a new seat. Drag seats to move them, or
         hover over them to edit or delete.
       </Typography>
@@ -469,8 +485,10 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               required
               fullWidth
               autoFocus
-              inputProps={{ "aria-label": "Seat label" }}
               helperText="e.g., A1, B2, Table 5"
+              slotProps={{
+                htmlInput: { "aria-label": "Seat label" },
+              }}
             />
             <TextField
               label="Description"
@@ -484,7 +502,9 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
               multiline
               rows={2}
               fullWidth
-              inputProps={{ "aria-label": "Seat description" }}
+              slotProps={{
+                htmlInput: { "aria-label": "Seat description" },
+              }}
             />
             <Stack direction="row" spacing={2}>
               <TextField
@@ -497,14 +517,16 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                     x: parseFloat(e.target.value) || 0,
                   })
                 }
-                inputProps={{
-                  step: 0.01,
-                  min: 0,
-                  max: 1,
-                  "aria-label": "X position",
-                }}
                 fullWidth
                 helperText="0.0 (left) to 1.0 (right)"
+                slotProps={{
+                  htmlInput: {
+                    step: 0.01,
+                    min: 0,
+                    max: 1,
+                    "aria-label": "X position",
+                  },
+                }}
               />
               <TextField
                 label="Y Position"
@@ -516,14 +538,16 @@ const FloorplanEditor: React.FC<FloorplanEditorProps> = ({
                     y: parseFloat(e.target.value) || 0,
                   })
                 }
-                inputProps={{
-                  step: 0.01,
-                  min: 0,
-                  max: 1,
-                  "aria-label": "Y position",
-                }}
                 fullWidth
                 helperText="0.0 (top) to 1.0 (bottom)"
+                slotProps={{
+                  htmlInput: {
+                    step: 0.01,
+                    min: 0,
+                    max: 1,
+                    "aria-label": "Y position",
+                  },
+                }}
               />
             </Stack>
           </Stack>

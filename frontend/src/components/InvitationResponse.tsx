@@ -237,7 +237,13 @@ export default function InvitationResponse(props: InvitationResponseProps) {
       <Typography component="h2" variant="h6" color="primary" gutterBottom>
         RSVP
       </Typography>
-      <Stack spacing={2} direction="column" alignItems="flex-start">
+      <Stack
+        spacing={2}
+        direction="column"
+        sx={{
+          alignItems: "flex-start",
+        }}
+      >
         <Stack spacing={2} direction="row">
           <TextField
             label="Handle"

@@ -251,14 +251,9 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   label="Start Date"
                   value={formValues.timeBegin}
                   onChange={handleTimeBeginChange}
-                  enableAccessibleFieldDOMStructure={false}
-                  slots={{
-                    textField: (textFieldProps) => (
-                      <TextField {...textFieldProps} />
-                    ),
-                  }}
                   views={["year", "month", "day", "hours"]}
                   ampm={false}
+                  slotProps={{ textField: { fullWidth: true } }}
                 />
               </Grid>
               <Grid size={6}>
@@ -266,14 +261,9 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                   label="End Date"
                   value={formValues.timeEnd}
                   onChange={handleTimeEndChange}
-                  enableAccessibleFieldDOMStructure={false}
-                  slots={{
-                    textField: (textFieldProps) => (
-                      <TextField {...textFieldProps} />
-                    ),
-                  }}
                   views={["year", "month", "day", "hours"]}
                   ampm={false}
+                  slotProps={{ textField: { fullWidth: true } }}
                 />
               </Grid>
               <Grid size={12}>
