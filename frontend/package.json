@@ -51,6 +51,7 @@
   "devDependencies": {
     "@chromatic-com/storybook": "^5.3.1",
     "@eslint/compat": "^2.1.1",
+    "@eslint/js": "^10.0.1",
     "@pact-foundation/pact": "17.1.4",
     "@pact-foundation/pact-node": "10.18.0",
     "@storybook/addon-docs": "^10.6.0",
@@ -69,7 +70,7 @@
     "@vitejs/plugin-react-swc": "^4.3.3",
     "@vitest/coverage-v8": "5.0.1",
     "cross-env": "10.1.0",
-    "eslint": "^9.27.0",
+    "eslint": "^10.11.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-storybook": "^10.6.0",
@@ -92,5 +93,10 @@
     "workerDirectory": [
       "public"
     ]
+  },
+  "overrides": {
+    "eslint-plugin-react": {
+      "eslint": "$eslint"
+    }
   }
 }
