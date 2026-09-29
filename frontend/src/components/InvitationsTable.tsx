@@ -75,12 +75,15 @@ const GridCellExpand = memo(function GridCellExpand(
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [showFullCell, setShowFullCell] = useState(false);
   const [showPopper, setShowPopper] = useState(false);
+  // Measured when the popper opens: refs must not be read during render.
+  const [cellHeight, setCellHeight] = useState(0);
 
   const handleMouseEnter = () => {
     const isCurrentlyOverflown = cellValue.current
       ? isOverflown(cellValue.current)
       : false;
     setShowPopper(isCurrentlyOverflown);
+    setCellHeight(wrapper.current?.offsetHeight ?? 0);
     setAnchorEl(cellDiv.current);
     setShowFullCell(true);
   };
@@ -148,12 +151,7 @@ const GridCellExpand = memo(function GridCellExpand(
           anchorEl={anchorEl}
           style={{ width, marginLeft: -17 }}
         >
-          <Paper
-            elevation={1}
-            style={{
-              minHeight: wrapper.current ? wrapper.current.offsetHeight - 3 : 0,
-            }}
-          >
+          <Paper elevation={1} style={{ minHeight: cellHeight - 3 }}>
             <Typography
               variant="body2"
               style={{ padding: 8 }}
