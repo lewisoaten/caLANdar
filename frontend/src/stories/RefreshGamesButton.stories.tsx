@@ -18,6 +18,23 @@ const RefreshGamesButtonWrapper = (args: any) => {
   );
 };
 
+// Renders the button with its state pre-set. Hooks cannot be called from a
+// story's render function directly, since that is not a component.
+const RefreshGamesButtonInState = ({
+  loading,
+  done,
+}: {
+  loading: boolean;
+  done: boolean;
+}) => {
+  const loadingState = useState(loading);
+  const doneState = useState(done);
+
+  return (
+    <RefreshGamesButton loadingState={loadingState} doneState={doneState} />
+  );
+};
+
 const meta = {
   title: "Components/RefreshGamesButton",
   component: RefreshGamesButtonWrapper,
@@ -43,13 +60,7 @@ export const Default: Story = {
 };
 
 export const Loading: Story = {
-  render: () => {
-    const loadingState = useState(true);
-    const doneState = useState(false);
-    return (
-      <RefreshGamesButton loadingState={loadingState} doneState={doneState} />
-    );
-  },
+  render: () => <RefreshGamesButtonInState loading={true} done={false} />,
   parameters: {
     msw: {
       handlers: [
@@ -67,13 +78,7 @@ export const Loading: Story = {
 };
 
 export const Done: Story = {
-  render: () => {
-    const loadingState = useState(false);
-    const doneState = useState(true);
-    return (
-      <RefreshGamesButton loadingState={loadingState} doneState={doneState} />
-    );
-  },
+  render: () => <RefreshGamesButtonInState loading={false} done={true} />,
   parameters: {
     msw: {
       handlers: [
