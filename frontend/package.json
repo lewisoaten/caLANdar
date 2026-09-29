@@ -23,7 +23,7 @@
     "react-dom": "19.3.0",
     "react-router-dom": "7.18.4",
     "recharts": "2.15.3",
-    "web-vitals": "5.0.1"
+    "web-vitals": "6.2.2"
   },
   "scripts": {
     "start": "vite dev --port 3000",
