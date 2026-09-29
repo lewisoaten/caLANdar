@@ -303,7 +303,9 @@ pub async fn get(
     user: User,
 ) -> Result<Json<InvitationsResponse>, rocket::response::status::BadRequest<String>> {
     log::info!("Getting invitation details for email: {email}");
-    if user.email != email {
+    // user.email is normalised by the auth guard; sessions from before sign-in
+    // normalised addresses still send the address as it was typed.
+    if user.email != crate::util::normalise_email(&email) {
         return Err(rocket::response::status::BadRequest(
             "You can only respond to invitations for your own email address".to_string(),
         ));
@@ -530,7 +532,9 @@ pub async fn patch(
     pool: &State<PgPool>,
     user: User,
 ) -> Result<rocket::response::status::NoContent, InvitationsPatchError> {
-    if user.email != email {
+    // user.email is normalised by the auth guard; sessions from before sign-in
+    // normalised addresses still send the address as it was typed.
+    if user.email != crate::util::normalise_email(&email) {
         return Err(InvitationsPatchError::Unauthorized(
             "You can only respond to invitations for your own email address".to_string(),
         ));

@@ -46,7 +46,7 @@ pub async fn create(
         ), event_game_patch_response AS (
             INSERT INTO event_game_vote (event_id, game_id, email, vote)
                 SELECT event_id, game_id, user_email, 'yes'::vote AS vote FROM event_game_suggestion_response
-                ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = 'yes'::vote, last_modified = NOW()
+                ON CONFLICT (event_id, game_id, LOWER(email)) DO UPDATE SET vote = 'yes'::vote, last_modified = NOW()
                 RETURNING event_id, game_id, email, vote, vote_date, last_modified
         ) SELECT
             event_game_suggestion_response.event_id AS event_id,
@@ -133,7 +133,7 @@ pub async fn edit(
         r#"WITH event_game_patch_response AS (
             INSERT INTO event_game_vote (event_id, game_id, email, vote)
                 VALUES ($1, $2, $3, $4)
-                ON CONFLICT (event_id, game_id, email) DO UPDATE SET vote = $4, last_modified = NOW()
+                ON CONFLICT (event_id, game_id, LOWER(email)) DO UPDATE SET vote = $4, last_modified = NOW()
                 RETURNING event_id, game_id, email, vote, vote_date, last_modified
         ) SELECT
             event_game.event_id AS event_id,

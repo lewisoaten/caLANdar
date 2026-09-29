@@ -18,6 +18,13 @@ import { UserProvider } from "../UserProvider";
 import { SnackbarProvider } from "notistack";
 import RSVPWizard from "../components/RSVPWizard/RSVPWizard";
 import moment from "moment";
+import * as Sentry from "@sentry/react";
+import { ApiError } from "../utils/apiError";
+
+vi.mock("@sentry/react", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@sentry/react")>()),
+  captureException: vi.fn(),
+}));
 
 const theme = createTheme({ palette: { mode: "dark" } });
 
@@ -56,11 +63,15 @@ const server = setupServer(
 beforeAll(() => server.listen({ onUnhandledRequest: "warn" }));
 beforeEach(() => {
   localStorage.clear();
+  // UserProvider restores the session from "user_context"; storing it under
+  // any other key leaves the wizard signed out, with no token or email.
   localStorage.setItem(
-    "user",
+    "user_context",
     JSON.stringify({
       token: "mock-token",
       email: "test@example.com",
+      loggedIn: true,
+      isAdmin: false,
     }),
   );
 });
@@ -246,6 +257,124 @@ describe("RSVPWizard", () => {
     // Next button should be enabled
     await waitFor(() => {
       expect(nextButton).toBeEnabled();
+    });
+  });
+});
+
+describe("RSVPWizard seat reservation failures", () => {
+  const seatingHandlers = (seatResponse: () => Response) => [
+    http.get("/api/events/:eventId/seating-config", () =>
+      HttpResponse.json({
+        eventId: 1,
+        hasSeating: true,
+        allowUnspecifiedSeat: true,
+        unspecifiedSeatLabel: "Unspecified",
+        createdAt: "2025-01-15T10:00:00Z",
+        lastModified: "2025-01-15T10:00:00Z",
+      }),
+    ),
+    http.get("/api/events/:eventId/seat-reservations/me", () =>
+      HttpResponse.json({}, { status: 404 }),
+    ),
+    http.get("/api/events/:eventId/rooms", () => HttpResponse.json([])),
+    http.get("/api/events/:eventId/seats", () => HttpResponse.json([])),
+    http.post("/api/events/:eventId/seat-reservations/check-availability", () =>
+      HttpResponse.json({ availableSeatIds: [] }),
+    ),
+    http.delete(
+      "/api/events/:eventId/seat-reservations/me",
+      () => new HttpResponse(null, { status: 204 }),
+    ),
+    http.post("/api/events/:eventId/seat-reservations/me", seatResponse),
+  ];
+
+  const completeYesRsvp = async () => {
+    const user = userEvent.setup();
+    const onSaved = vi.fn();
+    renderWizard({ onSaved });
+
+    await waitFor(() => expect(screen.getByText("Yes")).toBeInTheDocument());
+    await user.click(screen.getByText("Yes"));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.type(await screen.findByLabelText(/Gamer Handle/i), "Josh");
+    // Handle, attendance and seat steps, then confirm on the review step.
+    while (!screen.queryByRole("button", { name: /Confirm RSVP/i })) {
+      await user.click(screen.getByRole("button", { name: /Next/i }));
+    }
+    await user.click(screen.getByRole("button", { name: /Confirm RSVP/i }));
+    return onSaved;
+  };
+
+  beforeEach(() => vi.mocked(Sentry.captureException).mockClear());
+
+  test("reports a server error to Sentry without exposing its details", async () => {
+    server.use(
+      ...seatingHandlers(() =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 500,
+              reason: "Internal Server Error",
+              description: 'violates foreign key constraint "fk_invitation"',
+            },
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+
+    const onSaved = await completeYesRsvp();
+
+    expect(
+      await screen.findByText(
+        /RSVP saved, but your seat couldn't be reserved\. Please try again/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/fk_invitation/)).not.toBeInTheDocument();
+    expect(onSaved).toHaveBeenCalled();
+
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    const [error, context] = vi.mocked(Sentry.captureException).mock.calls[0];
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(500);
+    expect((error as ApiError).description).toContain("fk_invitation");
+    expect(context).toMatchObject({
+      level: "error",
+      tags: { rsvp_step: "seat_reservation", http_status: "500" },
+      extra: { eventId: 1, status: 500 },
+    });
+  });
+
+  test("shows the server's reason for a client error", async () => {
+    server.use(
+      ...seatingHandlers(() =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 409,
+              reason: "Conflict",
+              description:
+                "This seat is already reserved for one or more of the selected time buckets",
+            },
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+
+    await completeYesRsvp();
+
+    expect(
+      await screen.findByText(
+        "RSVP saved, but your seat couldn't be reserved: This seat is already reserved for one or more of the selected time buckets",
+      ),
+    ).toBeInTheDocument();
+    expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    // An expected outcome: reported as a warning with its status attached.
+    expect(vi.mocked(Sentry.captureException).mock.calls[0][1]).toMatchObject({
+      level: "warning",
+      tags: { rsvp_step: "seat_reservation", http_status: "409" },
+      extra: { status: 409 },
     });
   });
 });

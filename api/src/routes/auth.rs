@@ -34,8 +34,10 @@ pub async fn login(
     sender: &State<Resend>,
     tera: &State<Tera>,
 ) -> Result<Json<LoginResponse>, rocket::response::status::BadRequest<String>> {
+    let email = crate::util::normalise_email(&login_request.email);
+
     let mut context = Context::new();
-    context.insert("name", &login_request.email);
+    context.insert("name", &email);
 
     let redirect = login_request
         .redirect
@@ -43,7 +45,7 @@ pub async fn login(
         .map_or("", |redirect| redirect);
 
     let email_details = PreauthEmailDetails {
-        address: login_request.email.to_string(),
+        address: email,
         subject: "Calandar Email Verification".to_string(),
         template: "email_verification.html.tera".to_string(),
     };
@@ -110,6 +112,10 @@ pub async fn verify_email(
         }
     };
 
+    // Verification links sent before sign-in normalised the address still
+    // carry it as typed.
+    let email = crate::util::normalise_email(&typed_token.sub);
+
     // create a new long-lasting token for the user for subsequent api requests
     let Ok(expiration_claim) =
         ExpirationClaim::try_from((Utc::now() + Duration::days(7)).to_rfc3339())
@@ -123,7 +129,7 @@ pub async fn verify_email(
         .set_claim(expiration_claim)
         .set_claim(IssuerClaim::from("calandar.org"))
         .set_claim(TokenIdentifierClaim::from("api"))
-        .set_claim(SubjectClaim::from(typed_token.sub.as_str()))
+        .set_claim(SubjectClaim::from(email.as_str()))
         .build(key)
     else {
         return Err(rocket::response::status::BadRequest(
@@ -134,12 +140,12 @@ pub async fn verify_email(
     // Also specified in `fn authorise_paseto_header`
     let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
 
-    let is_admin = admins.contains(&typed_token.sub.to_lowercase().as_str());
+    let is_admin = admins.contains(&email.as_str());
 
     // Log successful login
     crate::util::log_audit(
         pool,
-        Some(typed_token.sub.clone()),
+        Some(email.clone()),
         "auth.login".to_string(),
         "auth".to_string(),
         None,
@@ -149,7 +155,7 @@ pub async fn verify_email(
 
     Ok(Json(VerifyEmailResponse {
         token,
-        email: typed_token.sub,
+        email,
         redirect: typed_token.r.unwrap_or_default(),
         is_admin,
     }))

@@ -184,8 +184,11 @@ pub async fn create(
         Ok((true, event)) => event,
     };
 
-    // Check if the invitation exists
-    match invitation::filter(
+    // Check if the invitation exists. The lookup ignores case, but the
+    // reservation's foreign key to the invitation does not, so from here on use
+    // the address exactly as the invitation stores it rather than as the
+    // caller typed it.
+    let email = match invitation::filter(
         pool,
         invitation::Filter {
             event_id: Some(event_id),
@@ -194,18 +197,20 @@ pub async fn create(
     )
     .await
     {
-        Ok(invitations) if invitations.is_empty() => {
-            return Err(Error::BadInput(format!(
-                "No invitation found for email {email} at event {event_id}"
-            )))
-        }
+        Ok(invitations) => match invitations.into_iter().next() {
+            Some(invitation) => invitation.email,
+            None => {
+                return Err(Error::BadInput(format!(
+                    "No invitation found for email {email} at event {event_id}"
+                )))
+            }
+        },
         Err(e) => {
             return Err(Error::Controller(format!(
                 "Unable to check invitation due to: {e}"
             )))
         }
-        Ok(_) => {}
-    }
+    };
 
     // Validate attendance buckets match event duration
     let expected_bucket_count = crate::controllers::event_invitation::get_day_quarter_buckets(
