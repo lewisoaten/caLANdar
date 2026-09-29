@@ -52,6 +52,7 @@
   "devDependencies": {
     "@chromatic-com/storybook": "^5.3.1",
     "@eslint/compat": "^2.1.1",
+    "@eslint/js": "^10.0.1",
     "@pact-foundation/pact": "17.1.4",
     "@pact-foundation/pact-node": "10.18.0",
     "@storybook/addon-docs": "^10.6.0",
@@ -81,7 +82,7 @@
     "prop-types": "^15.8.1",
     "storybook": "^10.6.0",
     "ts-jest": "29.4.14",
-    "typescript-eslint": "^8.39.0",
+    "typescript-eslint": "^8.71.0",
     "vite": "^8.3.1",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^5.1.4",
@@ -92,5 +93,10 @@
     "workerDirectory": [
       "public"
     ]
+  },
+  "overrides": {
+    "eslint-plugin-react": {
+      "eslint": "$eslint"
+    }
   }
 }
