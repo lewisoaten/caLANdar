@@ -338,7 +338,11 @@ describe("RSVPWizard seat reservation failures", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(500);
     expect((error as ApiError).description).toContain("fk_invitation");
-    expect(context).toMatchObject({ tags: { rsvp_step: "seat_reservation" } });
+    expect(context).toMatchObject({
+      level: "error",
+      tags: { rsvp_step: "seat_reservation", http_status: "500" },
+      extra: { eventId: 1, status: 500 },
+    });
   });
 
   test("shows the server's reason for a client error", async () => {
@@ -366,5 +370,11 @@ describe("RSVPWizard seat reservation failures", () => {
       ),
     ).toBeInTheDocument();
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
+    // An expected outcome: reported as a warning with its status attached.
+    expect(vi.mocked(Sentry.captureException).mock.calls[0][1]).toMatchObject({
+      level: "warning",
+      tags: { rsvp_step: "seat_reservation", http_status: "409" },
+      extra: { status: 409 },
+    });
   });
 });

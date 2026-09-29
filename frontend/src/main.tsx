@@ -12,6 +12,7 @@ import {
 import * as Sentry from "@sentry/react";
 import App from "./App";
 import theme from "./theme";
+import { shouldShowReportDialog } from "./utils/sentryReporting";
 
 Sentry.init({
   dsn: "https://923bbfe5a18542a2abce46873d376d65@o159962.ingest.sentry.io/4504028795371520",
@@ -30,9 +31,10 @@ Sentry.init({
     }),
   ],
 
-  beforeSend(event) {
-    // Check if it is an exception, and if so, show the report dialog
-    if (event.exception) {
+  beforeSend(event, hint) {
+    // Ask for a crash report on exceptions, except handled client errors
+    // (4xx), which the UI has already explained to the user.
+    if (shouldShowReportDialog(event, hint)) {
       Sentry.showReportDialog({ eventId: event.event_id });
     }
     return event;

@@ -14,12 +14,12 @@ import {
   Alert,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
-import * as Sentry from "@sentry/react";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
 import { EventData } from "../../types/events";
 import { RSVP, InvitationData } from "../../types/invitations";
 import { calculateDefaultAttendance } from "../../utils/attendance";
 import { apiErrorFrom, userFacingReason } from "../../utils/apiError";
+import { captureHandledError } from "../../utils/sentryReporting";
 import RSVPResponseStep from "./RSVPResponseStep";
 import GamerHandleStep from "./GamerHandleStep";
 import AttendanceStep from "./AttendanceStep";
@@ -430,7 +430,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           console.error("Error saving seat reservation:", seatError);
           // The RSVP itself succeeded, so this is otherwise invisible: it was
           // only ever logged to the browser console.
-          Sentry.captureException(seatError, {
+          captureHandledError(seatError, {
             tags: { rsvp_step: "seat_reservation" },
             extra: {
               eventId: props.event.id,
@@ -463,7 +463,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       resetWizard();
     } catch (error) {
       console.error("Error saving RSVP:", error);
-      Sentry.captureException(error, {
+      captureHandledError(error, {
         tags: { rsvp_step: "rsvp" },
         extra: { eventId: props.event.id, asAdmin: Boolean(props.asAdmin) },
       });
