@@ -11,7 +11,7 @@ This document provides comprehensive guidelines for GitHub Copilot agents workin
 **Languages & Frameworks**:
 
 - **Backend**: Rust 1.98.1, Rocket web framework, Google Cloud Run deployment platform
-- **Frontend**: React 19, TypeScript 5.8, Vite 6, Material-UI 7
+- **Frontend**: React 19, TypeScript 7 (tsc) with the TypeScript 6 API for tooling, Vite 8, Material-UI 9
 - **Database**: PostgreSQL via SQLx with migrations
 - **Contract Testing**: Pact for API contract verification
 
