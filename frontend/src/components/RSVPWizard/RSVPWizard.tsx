@@ -14,10 +14,12 @@ import {
   Alert,
 } from "@mui/material";
 import { useSnackbar } from "notistack";
+import * as Sentry from "@sentry/react";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
 import { EventData } from "../../types/events";
 import { RSVP, InvitationData } from "../../types/invitations";
 import { calculateDefaultAttendance } from "../../utils/attendance";
+import { apiErrorFrom, userFacingReason } from "../../utils/apiError";
 import RSVPResponseStep from "./RSVPResponseStep";
 import GamerHandleStep from "./GamerHandleStep";
 import AttendanceStep from "./AttendanceStep";
@@ -370,7 +372,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       }
 
       if (rsvpResponse.status !== 204) {
-        throw new Error("Unable to save RSVP");
+        throw await apiErrorFrom("Unable to save RSVP", rsvpResponse);
       }
 
       // Step 2: Save seat reservation if seating is enabled and user is attending
@@ -419,13 +421,30 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           });
 
           if (!seatReservationResponse.ok) {
-            throw new Error("Unable to save seat reservation");
+            throw await apiErrorFrom(
+              "Unable to save seat reservation",
+              seatReservationResponse,
+            );
           }
         } catch (seatError) {
           console.error("Error saving seat reservation:", seatError);
-          enqueueSnackbar("RSVP saved but failed to reserve seat", {
-            variant: "warning",
+          // The RSVP itself succeeded, so this is otherwise invisible: it was
+          // only ever logged to the browser console.
+          Sentry.captureException(seatError, {
+            tags: { rsvp_step: "seat_reservation" },
+            extra: {
+              eventId: props.event.id,
+              seatId: selectedSeatId,
+              asAdmin: Boolean(props.asAdmin),
+            },
           });
+          const reason = userFacingReason(seatError);
+          enqueueSnackbar(
+            reason
+              ? `RSVP saved, but your seat couldn't be reserved: ${reason}`
+              : "RSVP saved, but your seat couldn't be reserved. Please try again, or contact the organiser if it keeps happening.",
+            { variant: "warning" },
+          );
           props.onSaved();
           props.onClose();
           resetWizard();
@@ -444,7 +463,15 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       resetWizard();
     } catch (error) {
       console.error("Error saving RSVP:", error);
-      enqueueSnackbar("Failed to save RSVP", { variant: "error" });
+      Sentry.captureException(error, {
+        tags: { rsvp_step: "rsvp" },
+        extra: { eventId: props.event.id, asAdmin: Boolean(props.asAdmin) },
+      });
+      const reason = userFacingReason(error);
+      enqueueSnackbar(
+        reason ? `Failed to save RSVP: ${reason}` : "Failed to save RSVP",
+        { variant: "error" },
+      );
     } finally {
       setSaving(false);
     }
