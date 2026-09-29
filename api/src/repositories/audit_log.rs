@@ -69,8 +69,11 @@ pub async fn filter(pool: &PgPool, filter: AuditLogFilter) -> Result<Vec<AuditLo
     );
 
     if let Some(user_id) = &filter.user_id {
-        query.push(" AND user_id = ");
+        // Case-insensitive: entries logged before sign-in normalised email
+        // addresses keep the casing the user typed.
+        query.push(" AND LOWER(user_id) = LOWER(");
         query.push_bind(user_id);
+        query.push(")");
     }
 
     if let Some(entity_type) = &filter.entity_type {
@@ -108,8 +111,11 @@ pub async fn count(pool: &PgPool, filter: AuditLogFilter) -> Result<i64, sqlx::E
     let mut query = sqlx::QueryBuilder::new("SELECT COUNT(*) as count FROM audit_log WHERE 1=1");
 
     if let Some(user_id) = &filter.user_id {
-        query.push(" AND user_id = ");
+        // Case-insensitive: entries logged before sign-in normalised email
+        // addresses keep the casing the user typed.
+        query.push(" AND LOWER(user_id) = LOWER(");
         query.push_bind(user_id);
+        query.push(")");
     }
 
     if let Some(entity_type) = &filter.entity_type {

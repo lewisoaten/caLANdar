@@ -65,6 +65,17 @@ pub async fn send_email_bcc(
     }
 }
 
+/// Canonical form of an email address used as a user's identity.
+///
+/// Sign-in used to take the address exactly as typed, while invitations store
+/// whatever the organiser entered, so the same person could appear as both
+/// `Joshan@example.com` and `joshan@example.com`. Most queries compare with
+/// `LOWER()`, but the `seat_reservation` -> `invitation` foreign key does not,
+/// so a case mismatch made seat reservations fail with a 500.
+pub fn normalise_email(email: &str) -> String {
+    email.trim().to_lowercase()
+}
+
 pub struct PreauthEmailDetails {
     pub address: String,
     pub subject: String,
@@ -294,6 +305,15 @@ mod tests {
     use super::*;
     use crate::controllers::event_invitation::get_day_quarter_buckets;
     use chrono::TimeZone;
+
+    #[test]
+    fn normalise_email_lowercases_and_trims() {
+        assert_eq!(
+            normalise_email("  Joshan@Live.co.UK \n"),
+            "joshan@live.co.uk"
+        );
+        assert_eq!(normalise_email("already@lower.case"), "already@lower.case");
+    }
 
     /// An event window that crosses a DST transition.
     fn dst_crossing_event() -> (chrono::DateTime<Utc>, chrono::DateTime<Utc>) {

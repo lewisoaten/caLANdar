@@ -55,7 +55,7 @@ pub async fn update(
             $2,
             $3
         )
-        ON CONFLICT (email)
+        ON CONFLICT (LOWER(email))
         DO UPDATE SET
             steam_id = $2,
             last_refreshed = $3
