@@ -18,3 +18,4 @@
 - Several stories rely on `play` functions (filtered/search/room-selected states); check whether the capture runs them before trusting distinct cards.
 - [GENERAL] Don't `pkill -f compare.mjs` from the shell tool: the pattern matches the tool's own command line. Use an anchored pattern (`^node \.ds-sync`).
 - AuditLog filtered/no-results stories skipped: they reach their state only via Storybook play functions, which the static preview doesn't run (would duplicate the Default card). EventSelection/InvitationSeatManagementTable/GamersAdmin have owned previews that replay their play-function clicks/typing.
+- MenuItems: RENDER_THIN (variants identical) is expected - its logged-out/admin stories render the same 'Sign In' item; UserContext isn't provided in the story. Triaged, not a regression.
