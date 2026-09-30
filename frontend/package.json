@@ -13,7 +13,7 @@
     "@sentry/react": "^9.22.0",
     "globals": "^16.2.0",
     "moment": "2.31.0",
-    "moment-timezone": "0.6.0",
+    "moment-timezone": "0.6.4",
     "node-fetch": "3.3.2",
     "notistack": "3.0.2",
     "react": "19.3.0",
