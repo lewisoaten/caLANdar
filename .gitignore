@@ -20,3 +20,8 @@ target/
 ds-bundle/
 frontend/design-sync-pkg/types/
 frontend/design-sync-pkg/dist/
+
+# local tooling / Syncthing
+.mcp.json
+.stignore
+*.sync-conflict-*
