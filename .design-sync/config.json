@@ -6,9 +6,7 @@
   "pkg": "calandar",
   "globalName": "CaLANdar",
   "buildCmd": "sh frontend/design-sync-pkg/build-types.sh",
-  "extraFonts": [
-    "fonts/montserrat.css"
-  ],
+  "extraFonts": ["fonts/montserrat.css"],
   "titleMap": {
     "Button": null,
     "Header": null,
@@ -33,9 +31,7 @@
   },
   "overrides": {
     "VerifyEmail": {
-      "skip": [
-        "components-verifyemail--with-token"
-      ]
+      "skip": ["components-verifyemail--with-token"]
     },
     "Dashboard": {
       "cardMode": "single",
@@ -77,9 +73,7 @@
       ]
     },
     "EventGameSuggestions": {
-      "skip": [
-        "example-eventgamesuggestions--default"
-      ]
+      "skip": ["example-eventgamesuggestions--default"]
     },
     "EventAttendeeList": {
       "cardMode": "column"
@@ -101,9 +95,7 @@
       "primaryStory": "Open"
     },
     "GameOwners": {
-      "skip": [
-        "components-gameowners--no-owners-hidden"
-      ]
+      "skip": ["components-gameowners--no-owners-hidden"]
     },
     "AuditLog": {
       "skip": [
@@ -114,10 +106,7 @@
     }
   },
   "storyImports": {
-    "shim": [
-      "react-router-dom",
-      "@mui/material"
-    ]
+    "shim": ["react-router-dom", "@mui/material"]
   },
   "readmeHeader": ".design-sync/conventions.md",
   "cssEntry": "dist/frontend.css"

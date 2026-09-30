@@ -9,6 +9,7 @@
 - Skipped, unverifiable (MSW/network-driven or portal stories the reference can't render): SeatSelector, RSVPWizard, EventsAdminDialog (all stories), EventGameSuggestions, InvitationsTable data stories.
 
 ## Re-sync risks
+
 - Card grades judged against a storybook without the brand font.
 - Skipped components ship floor cards until MSW-backed data can render in previews.
 - InvitationsTable: owned preview registers an empty invitations response with mockApi (no MSW in static previews) (only Empty State is graded; data stories skipped).
