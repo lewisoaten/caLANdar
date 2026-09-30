@@ -1,0 +1,88 @@
+{
+  "projectId": "11c1dd7d-ac52-479a-881c-df6405fb14ba",
+  "shape": "storybook",
+  "storybookConfigDir": "frontend/.storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "pkg": "calandar",
+  "globalName": "CaLANdar",
+  "buildCmd": "sh frontend/design-sync-pkg/build-types.sh",
+  "extraFonts": [
+    "fonts/montserrat.css"
+  ],
+  "titleMap": {
+    "Button": null,
+    "Header": null
+  },
+  "provider": {
+    "component": "ThemeProvider",
+    "props": {
+      "theme": {
+        "$ref": "theme"
+      }
+    },
+    "inner": {
+      "component": "CssBaseline",
+      "inner": {
+        "component": "MemoryRouter"
+      }
+    }
+  },
+  "overrides": {
+    "VerifyEmail": {
+      "skip": [
+        "components-verifyemail--with-token"
+      ]
+    },
+    "Dashboard": {
+      "cardMode": "single",
+      "primaryStory": "WithContent"
+    },
+    "EventsAdminDialog": {
+      "cardMode": "single",
+      "primaryStory": "Open",
+      "skip": [
+        "components-eventsadmindialog--closed",
+        "components-eventsadmindialog--open"
+      ]
+    },
+    "RSVPWizard": {
+      "cardMode": "single",
+      "primaryStory": "NewRSVP",
+      "skip": [
+        "components-rsvpwizard--new-rsvp",
+        "components-rsvpwizard--edit-existing-yes",
+        "components-rsvpwizard--edit-existing-maybe",
+        "components-rsvpwizard--edit-existing-no"
+      ]
+    },
+    "SeatSelector": {
+      "skip": [
+        "components-seatselector--default",
+        "components-seatselector--no-attendance",
+        "components-seatselector--with-reservation",
+        "components-seatselector--disabled",
+        "components-seatselector--limited-availability",
+        "components-seatselector--no-unspecified-seat"
+      ]
+    },
+    "InvitationsTable": {
+      "skip": [
+        "components-invitationstable--default",
+        "components-invitationstable--with-many-invitations",
+        "components-invitationstable--mixed-responses"
+      ]
+    },
+    "EventGameSuggestions": {
+      "skip": [
+        "example-eventgamesuggestions--default"
+      ]
+    }
+  },
+  "storyImports": {
+    "shim": [
+      "react-router-dom",
+      "@mui/material"
+    ]
+  },
+  "readmeHeader": ".design-sync/conventions.md"
+}

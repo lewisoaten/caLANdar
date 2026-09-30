@@ -2,6 +2,7 @@ import type { Preview } from "@storybook/react-vite";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import theme from "../src/theme";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
 import { setupWorker } from "msw/browser";
 import { mswLoader } from "msw-storybook-addon/csf3";
@@ -41,10 +42,19 @@ const preview: Preview = {
   },
   loaders: [mswLoader(startWorker)],
   decorators: [
-    (Story) => (
+    // Most components call react-router hooks (useNavigate, useLocation), so
+    // every story needs a Router. Stories that mount their own set
+    // `parameters.router = false` to avoid nesting one.
+    (Story, context) => (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Story />
+        {context.parameters.router === false ? (
+          <Story />
+        ) : (
+          <MemoryRouter>
+            <Story />
+          </MemoryRouter>
+        )}
       </ThemeProvider>
     ),
   ],
