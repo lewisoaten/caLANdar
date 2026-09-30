@@ -5,17 +5,10 @@ use base64::{engine::general_purpose, Engine as _};
 use crate::{
     controllers::Error,
     repositories::{event, invitation},
-    routes::events::{Event, EventSubmit},
+    routes::events::{
+        AdminEvent, AdminPaginatedEventsResponse, Event, EventStatusCounts, EventSubmit, RsvpTotals,
+    },
 };
-
-// Response struct for paginated events
-pub struct PaginatedEventsResponse {
-    pub events: Vec<Event>,
-    pub total: i64,
-    pub page: i64,
-    pub limit: i64,
-    pub total_pages: i64,
-}
 
 // Implement From for EventsGetResponse from Event
 impl From<crate::repositories::event::Event> for Event {
@@ -47,25 +40,37 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Event>, Error> {
     }
 }
 
-pub async fn get_all_paginated(
+pub async fn get_all_admin(
     pool: &PgPool,
-    page: i64,
-    limit: i64,
-    filter: event::EventFilter,
-) -> Result<PaginatedEventsResponse, Error> {
-    let params = event::PaginationParams {
-        page,
-        limit,
-        filter,
-    };
-
-    match event::index_paginated(pool, params).await {
-        Ok(paginated) => Ok(PaginatedEventsResponse {
-            events: paginated.events.into_iter().map(Event::from).collect(),
-            total: paginated.total,
-            page: paginated.page,
-            limit: paginated.limit,
-            total_pages: paginated.total_pages,
+    params: event::AdminListParams,
+) -> Result<AdminPaginatedEventsResponse, Error> {
+    match event::index_admin(pool, params).await {
+        Ok(page) => Ok(AdminPaginatedEventsResponse {
+            events: page
+                .events
+                .into_iter()
+                .map(|row| AdminEvent {
+                    event: Event::from(row.event),
+                    status: row.status,
+                    rsvp: RsvpTotals {
+                        invited: row.invited,
+                        yes: row.yes,
+                        maybe: row.maybe,
+                        no: row.no,
+                        pending: (row.invited - row.yes - row.maybe - row.no).max(0),
+                    },
+                })
+                .collect(),
+            total: page.total,
+            page: page.page,
+            limit: page.limit,
+            total_pages: page.total_pages,
+            counts: EventStatusCounts {
+                all: page.counts.all,
+                live: page.counts.live,
+                draft: page.counts.draft,
+                ended: page.counts.ended,
+            },
         }),
         Err(e) => Err(Error::Controller(format!(
             "Unable to get paginated list of events due to: {e}"

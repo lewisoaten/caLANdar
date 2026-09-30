@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE seat_reservation SET seat_id = NULL, last_modified = NOW() WHERE seat_id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4Array"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f81dff64c665fde61d52f33e6649c4647e8c0ff85b306ebfd5cfc3b1a692c685"
+}

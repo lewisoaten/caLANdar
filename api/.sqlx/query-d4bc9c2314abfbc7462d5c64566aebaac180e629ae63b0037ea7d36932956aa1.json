@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH upserted AS (\n            INSERT INTO steam_game (appid, update_id, name, last_modified)\n            SELECT appid, $1, name, NOW()\n            FROM UNNEST($2::bigint[], $3::text[]) AS input(appid, name)\n            ON CONFLICT (appid) DO UPDATE SET update_id = $1, name = EXCLUDED.name, last_modified = NOW()\n            RETURNING (xmax = 0) AS inserted\n        )\n        SELECT COUNT(*) FILTER (WHERE inserted) AS \"added!\" FROM upserted\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "added!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Int8Array",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d4bc9c2314abfbc7462d5c64566aebaac180e629ae63b0037ea7d36932956aa1"
+}

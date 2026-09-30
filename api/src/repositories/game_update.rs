@@ -17,3 +17,14 @@ pub async fn create(pool: &PgPool) -> Result<SteamGameUpdate, sqlx::Error> {
     .fetch_one(pool)
     .await
 }
+
+/// Mark a refresh as finished.
+pub async fn complete(pool: &PgPool, id: i32) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE steam_game_update SET completed_at = NOW() WHERE id = $1",
+        id
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}

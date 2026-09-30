@@ -43,6 +43,33 @@ pub struct Room {
 
     /// The last time this room was modified.
     pub last_modified: DateTime<Utc>,
+
+    /// Number of grid rows in the room editor (12 columns); null for legacy rooms.
+    pub grid_rows: Option<i32>,
+
+    /// Screens/features and entrances placed on the grid.
+    pub features: Vec<RoomFeature>,
+
+    /// Public URL of the uploaded background plan image (no auth needed), if any.
+    pub background_url: Option<String>,
+
+    /// How the background is drawn: "retro" or "original".
+    pub background_style: String,
+
+    /// Background opacity, 0.1 to 1.0.
+    pub background_opacity: f64,
+}
+
+/// A non-desk cell on the room grid.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct RoomFeature {
+    /// Column, 0 to 11.
+    pub col: i32,
+    /// Row, 0 to gridRows - 1.
+    pub row: i32,
+    /// "screen" or "entrance".
+    pub kind: String,
 }
 
 impl SchemaExample for Room {
@@ -56,6 +83,17 @@ impl SchemaExample for Room {
             sort_order: 0,
             created_at: Utc::now(),
             last_modified: Utc::now(),
+            grid_rows: Some(8),
+            features: vec![RoomFeature {
+                col: 5,
+                row: 7,
+                kind: "entrance".to_string(),
+            }],
+            background_url: Some(
+                "/api/room-backgrounds/0123456789abcdef0123456789abcdef".to_string(),
+            ),
+            background_style: "retro".to_string(),
+            background_opacity: 0.6,
         }
     }
 }
@@ -69,6 +107,18 @@ pub struct RoomSubmit {
     pub description: Option<String>,
     pub image: Option<String>,
     pub sort_order: i32,
+    /// Optional; omitted keeps the stored value.
+    #[serde(default)]
+    pub grid_rows: Option<i32>,
+    /// Optional; omitted keeps the stored value.
+    #[serde(default)]
+    pub features: Option<Vec<RoomFeature>>,
+    /// Optional "retro" | "original"; omitted keeps the stored value.
+    #[serde(default)]
+    pub background_style: Option<String>,
+    /// Optional 0.1 to 1.0; omitted keeps the stored value.
+    #[serde(default)]
+    pub background_opacity: Option<f64>,
 }
 
 impl SchemaExample for RoomSubmit {
@@ -76,8 +126,12 @@ impl SchemaExample for RoomSubmit {
         Self {
             name: "Main Hall".to_string(),
             description: Some("The main gaming hall".to_string()),
-            image: Some("https://example.com/floorplan.jpg".to_string()),
+            image: None,
             sort_order: 0,
+            grid_rows: Some(8),
+            features: Some(vec![]),
+            background_style: Some("retro".to_string()),
+            background_opacity: Some(0.6),
         }
     }
 }

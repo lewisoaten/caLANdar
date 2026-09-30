@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO room_background (room_id, token, content_type, data)\n        VALUES ($1, $2, $3, $4)\n        ON CONFLICT (room_id) DO UPDATE\n            SET token = EXCLUDED.token,\n                content_type = EXCLUDED.content_type,\n                data = EXCLUDED.data,\n                created_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9c949990e3709f21d2c8a011d7269bfae83b41dd762697de8293338df07b4f81"
+}

@@ -138,9 +138,7 @@ pub async fn verify_email(
     };
 
     // Also specified in `fn authorise_paseto_header`
-    let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
-
-    let is_admin = admins.contains(&email.as_str());
+    let is_admin = crate::auth::is_admin(&email);
 
     // Log successful login
     crate::util::log_audit(

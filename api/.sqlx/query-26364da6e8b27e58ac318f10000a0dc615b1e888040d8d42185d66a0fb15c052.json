@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            COUNT(*) FILTER (WHERE $2::text IS NULL OR name ILIKE $2) AS \"matching!\",\n            COUNT(*) AS \"total!\",\n            COALESCE(MAX(playtime_forever), 0)::bigint AS \"max_playtime!\",\n            MAX(user_game.last_modified) AS last_synced\n        FROM user_game\n        INNER JOIN steam_game USING(appid)\n        WHERE LOWER(user_game.email) = LOWER($1)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "matching!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "total!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "max_playtime!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_synced",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "26364da6e8b27e58ac318f10000a0dc615b1e888040d8d42185d66a0fb15c052"
+}

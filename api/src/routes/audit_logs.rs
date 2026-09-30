@@ -28,6 +28,8 @@ pub struct AuditLogEntry {
     pub metadata: Option<JsonValue>,
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
+    /// Gravatar of `user_id` (null for system entries).
+    pub avatar_url: Option<String>,
 }
 
 impl SchemaExample for AuditLogEntry {
@@ -42,6 +44,7 @@ impl SchemaExample for AuditLogEntry {
             metadata: None,
             ip_address: Some("192.168.1.1".to_string()),
             user_agent: Some("Mozilla/5.0".to_string()),
+            avatar_url: Some("https://www.gravatar.com/avatar/example?d=robohash".to_string()),
         }
     }
 }
@@ -49,6 +52,7 @@ impl SchemaExample for AuditLogEntry {
 impl From<audit_log::AuditLog> for AuditLogEntry {
     fn from(log: audit_log::AuditLog) -> Self {
         Self {
+            avatar_url: log.user_id.as_deref().map(crate::util::gravatar_url),
             id: log.id,
             timestamp: log.timestamp,
             user_id: log.user_id,
@@ -99,13 +103,20 @@ pub struct AuditLogsQueryParams {
 custom_errors!(AuditLogsGetError, Unauthorized, InternalServerError);
 
 /// Get audit logs (admin only)
+///
+/// - `user_id`: exact user email (case-insensitive)
+/// - `user_search`: case-insensitive substring of the user email
+/// - `entity_type`: exact entity type; `entity_types`: comma-separated list of entity types
+/// - `action`, `from_timestamp` / `to_timestamp` (RFC 3339), `limit` (default 50), `offset`
 #[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Audit")]
-#[get("/audit-logs?<user_id>&<entity_type>&<action>&<from_timestamp>&<to_timestamp>&<limit>&<offset>&<_as_admin>")]
+#[get("/audit-logs?<user_id>&<user_search>&<entity_type>&<entity_types>&<action>&<from_timestamp>&<to_timestamp>&<limit>&<offset>&<_as_admin>")]
 pub async fn get_audit_logs(
     pool: &State<PgPool>,
     user_id: Option<String>,
+    user_search: Option<String>,
     entity_type: Option<String>,
+    entity_types: Option<String>,
     action: Option<String>,
     from_timestamp: Option<String>,
     to_timestamp: Option<String>,
@@ -127,7 +138,9 @@ pub async fn get_audit_logs(
 
     let filter = AuditLogFilter {
         user_id,
+        user_search: crate::util::non_blank(user_search),
         entity_type,
+        entity_types: audit_log::parse_entity_types(entity_types.as_deref()),
         action,
         from_timestamp: from_ts,
         to_timestamp: to_ts,
@@ -146,4 +159,24 @@ pub async fn get_audit_logs(
             "Error retrieving audit logs: {e}"
         ))),
     }
+}
+
+custom_errors!(AuditEntityTypesGetError, Unauthorized, InternalServerError);
+
+/// List the distinct entity types present in the audit log (admin only)
+#[openapi(tag = "Audit")]
+#[get("/audit-logs/entity-types?<_as_admin>")]
+pub async fn get_audit_log_entity_types(
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _admin: AdminUser,
+) -> Result<Json<Vec<String>>, AuditEntityTypesGetError> {
+    audit_log::get_entity_types(pool)
+        .await
+        .map(Json)
+        .map_err(|e| {
+            AuditEntityTypesGetError::InternalServerError(format!(
+                "Error retrieving audit log entity types: {e}"
+            ))
+        })
 }

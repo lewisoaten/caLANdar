@@ -87,6 +87,7 @@ impl ErrorResponse {
 
 macro_rules! generate_error {
     ($responder: ident, $status: literal, $title: literal) => {
+        #[allow(dead_code)]
         pub struct $responder(pub String);
 
         /// Sets the status code of the response to 404 Not Found.

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT DISTINCT ON (i.handle)\n            i.handle AS \"handle!\",\n            COUNT(*) OVER (PARTITION BY i.handle) AS \"event_count!\",\n            e.id AS last_event_id,\n            e.title AS last_event_title,\n            e.time_begin AS last_used\n        FROM invitation i\n        INNER JOIN event e ON e.id = i.event_id\n        WHERE LOWER(i.email) = LOWER($1)\n        AND i.handle IS NOT NULL AND TRIM(i.handle) <> ''\n        ORDER BY i.handle, e.time_begin DESC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "handle!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "last_event_title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_used",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ee4b3cad0f2086665768f9d58f0416bf23bfabeb81d577273e1e673b4f9c13c8"
+}

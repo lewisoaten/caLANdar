@@ -15,6 +15,7 @@ pub mod game_suggestion;
 pub mod gamer;
 pub mod profile;
 pub mod room;
+pub mod room_layout;
 pub mod seat;
 pub mod seat_reservation;
 

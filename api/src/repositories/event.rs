@@ -24,20 +24,6 @@ pub enum EventFilter {
     Past,
 }
 
-pub struct PaginationParams {
-    pub page: i64,
-    pub limit: i64,
-    pub filter: EventFilter,
-}
-
-pub struct PaginatedEvents {
-    pub events: Vec<Event>,
-    pub total: i64,
-    pub page: i64,
-    pub limit: i64,
-    pub total_pages: i64,
-}
-
 pub async fn create(
     pool: &PgPool,
     title: String,
@@ -103,105 +89,6 @@ pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
     )
     .fetch_all(pool)
     .await
-}
-
-pub async fn index_paginated(
-    pool: &PgPool,
-    params: PaginationParams,
-) -> Result<PaginatedEvents, sqlx::Error> {
-    let offset = (params.page - 1) * params.limit;
-    let now = Utc::now();
-
-    // Build query with proper parameterization based on filter
-    let (total, events): (i64, Vec<Event>) = match params.filter {
-        EventFilter::Upcoming => {
-            let count_result: Option<i64> = sqlx::query_scalar!(
-                "SELECT COUNT(*) as count FROM event WHERE time_end > $1",
-                now
-            )
-            .fetch_one(pool)
-            .await?;
-            let total = count_result.unwrap_or(0);
-
-            let events: Vec<Event> = sqlx::query_as!(
-                Event,
-                r#"
-                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
-                FROM event
-                WHERE time_end > $3
-                ORDER BY time_begin DESC
-                LIMIT $1 OFFSET $2
-                "#,
-                params.limit,
-                offset,
-                now
-            )
-            .fetch_all(pool)
-            .await?;
-
-            (total, events)
-        }
-        EventFilter::Past => {
-            let count_result: Option<i64> = sqlx::query_scalar!(
-                "SELECT COUNT(*) as count FROM event WHERE time_end <= $1",
-                now
-            )
-            .fetch_one(pool)
-            .await?;
-            let total = count_result.unwrap_or(0);
-
-            let events: Vec<Event> = sqlx::query_as!(
-                Event,
-                r#"
-                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
-                FROM event
-                WHERE time_end <= $3
-                ORDER BY time_begin DESC
-                LIMIT $1 OFFSET $2
-                "#,
-                params.limit,
-                offset,
-                now
-            )
-            .fetch_all(pool)
-            .await?;
-
-            (total, events)
-        }
-        EventFilter::All => {
-            let count_result: Option<i64> =
-                sqlx::query_scalar!("SELECT COUNT(*) as count FROM event")
-                    .fetch_one(pool)
-                    .await?;
-            let total = count_result.unwrap_or(0);
-
-            let events: Vec<Event> = sqlx::query_as!(
-                Event,
-                r#"
-                SELECT id, created_at, last_modified, title, description, image, time_begin, time_end
-                FROM event
-                ORDER BY time_begin DESC
-                LIMIT $1 OFFSET $2
-                "#,
-                params.limit,
-                offset
-            )
-            .fetch_all(pool)
-            .await?;
-
-            (total, events)
-        }
-    };
-
-    let total_pages = (total + params.limit - 1) / params.limit;
-
-    Ok(PaginatedEvents {
-        events,
-        total,
-        page: params.page,
-        limit: params.limit,
-        total_pages,
-    })
 }
 
 pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::Error> {
@@ -294,4 +181,227 @@ pub async fn edit(
     )
     .fetch_one(pool)
     .await
+}
+
+/// Derived status of an event on the admin list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EventStatus {
+    All,
+    Live,
+    Draft,
+    Ended,
+}
+
+impl EventStatus {
+    /// Unknown values fall back to `All`, matching how `filter` is handled.
+    pub fn parse(value: Option<&str>) -> Self {
+        match value {
+            Some("live") => Self::Live,
+            Some("draft") => Self::Draft,
+            Some("ended") => Self::Ended,
+            _ => Self::All,
+        }
+    }
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Live => "live",
+            Self::Draft => "draft",
+            Self::Ended => "ended",
+        }
+    }
+}
+
+const fn event_filter_str(filter: &EventFilter) -> &'static str {
+    match filter {
+        EventFilter::All => "all",
+        EventFilter::Upcoming => "upcoming",
+        EventFilter::Past => "past",
+    }
+}
+
+pub struct AdminListParams {
+    pub page: i64,
+    pub limit: i64,
+    pub filter: EventFilter,
+    pub search: Option<String>,
+    pub status: EventStatus,
+}
+
+pub struct AdminEventRow {
+    pub event: Event,
+    pub status: String,
+    pub invited: i64,
+    pub yes: i64,
+    pub maybe: i64,
+    pub no: i64,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StatusCounts {
+    pub all: i64,
+    pub live: i64,
+    pub draft: i64,
+    pub ended: i64,
+}
+
+pub struct AdminEventPage {
+    pub events: Vec<AdminEventRow>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
+    pub counts: StatusCounts,
+}
+
+/// Admin event list with search, derived status filter, RSVP totals and
+/// per-status counts. Status: `ended` once `time_end` has passed, otherwise
+/// `draft` while no invitations have been sent, otherwise `live`.
+#[allow(clippy::too_many_lines)]
+pub async fn index_admin(
+    pool: &PgPool,
+    params: AdminListParams,
+) -> Result<AdminEventPage, sqlx::Error> {
+    let offset = (params.page - 1) * params.limit;
+    let now = Utc::now();
+    let pattern = params.search.as_deref().map(crate::util::like_pattern);
+    let filter = event_filter_str(&params.filter);
+
+    let count_rows = sqlx::query!(
+        r#"
+        SELECT status AS "status!", COUNT(*) AS "count!"
+        FROM (
+            SELECT CASE
+                WHEN e.time_end <= $1 THEN 'ended'
+                WHEN NOT EXISTS (SELECT 1 FROM invitation i WHERE i.event_id = e.id) THEN 'draft'
+                ELSE 'live'
+            END AS status
+            FROM event e
+            WHERE ($2::text IS NULL OR e.title ILIKE $2)
+            AND CASE $3::text
+                WHEN 'upcoming' THEN e.time_end > $1
+                WHEN 'past' THEN e.time_end <= $1
+                ELSE TRUE
+            END
+        ) s
+        GROUP BY status
+        "#,
+        now,
+        pattern,
+        filter,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut counts = StatusCounts::default();
+    for row in count_rows {
+        counts.all += row.count;
+        match row.status.as_str() {
+            "live" => counts.live = row.count,
+            "draft" => counts.draft = row.count,
+            _ => counts.ended = row.count,
+        }
+    }
+    let total = match params.status {
+        EventStatus::All => counts.all,
+        EventStatus::Live => counts.live,
+        EventStatus::Draft => counts.draft,
+        EventStatus::Ended => counts.ended,
+    };
+
+    let rows = sqlx::query!(
+        r#"
+        WITH stats AS (
+            SELECT
+                e.id,
+                COUNT(i.email) AS invited,
+                COUNT(*) FILTER (WHERE i.response = 'yes') AS yes,
+                COUNT(*) FILTER (WHERE i.response = 'maybe') AS maybe,
+                COUNT(*) FILTER (WHERE i.response = 'no') AS no
+            FROM event e
+            LEFT JOIN invitation i ON i.event_id = e.id
+            GROUP BY e.id
+        ),
+        classified AS (
+            SELECT
+                e.*,
+                s.invited, s.yes, s.maybe, s.no,
+                CASE
+                    WHEN e.time_end <= $1 THEN 'ended'
+                    WHEN s.invited = 0 THEN 'draft'
+                    ELSE 'live'
+                END AS status
+            FROM event e
+            INNER JOIN stats s ON s.id = e.id
+            WHERE ($2::text IS NULL OR e.title ILIKE $2)
+            AND CASE $3::text
+                WHEN 'upcoming' THEN e.time_end > $1
+                WHEN 'past' THEN e.time_end <= $1
+                ELSE TRUE
+            END
+        )
+        SELECT
+            id AS "id!", created_at AS "created_at!", last_modified AS "last_modified!",
+            title AS "title!", description AS "description!", image,
+            time_begin AS "time_begin!", time_end AS "time_end!",
+            status AS "status!", invited AS "invited!", yes AS "yes!", maybe AS "maybe!", no AS "no!"
+        FROM classified
+        WHERE $4::text = 'all' OR status = $4
+        ORDER BY time_begin DESC
+        LIMIT $5 OFFSET $6
+        "#,
+        now,
+        pattern,
+        filter,
+        params.status.as_str(),
+        params.limit,
+        offset,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let events = rows
+        .into_iter()
+        .map(|row| AdminEventRow {
+            event: Event {
+                id: row.id,
+                created_at: row.created_at,
+                last_modified: row.last_modified,
+                title: row.title,
+                description: row.description,
+                image: row.image,
+                time_begin: row.time_begin,
+                time_end: row.time_end,
+            },
+            status: row.status,
+            invited: row.invited,
+            yes: row.yes,
+            maybe: row.maybe,
+            no: row.no,
+        })
+        .collect();
+
+    Ok(AdminEventPage {
+        events,
+        total,
+        page: params.page,
+        limit: params.limit,
+        total_pages: (total + params.limit - 1) / params.limit,
+        counts,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EventStatus;
+
+    #[test]
+    fn parses_status_and_falls_back_to_all() {
+        assert_eq!(EventStatus::parse(Some("live")), EventStatus::Live);
+        assert_eq!(EventStatus::parse(Some("draft")), EventStatus::Draft);
+        assert_eq!(EventStatus::parse(Some("ended")), EventStatus::Ended);
+        assert_eq!(EventStatus::parse(Some("bogus")), EventStatus::All);
+        assert_eq!(EventStatus::parse(None), EventStatus::All);
+    }
 }

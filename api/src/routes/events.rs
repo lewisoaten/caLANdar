@@ -1,7 +1,7 @@
 use crate::{
     auth::{AdminUser, User},
     controllers::{event, Error},
-    repositories::event::EventFilter,
+    repositories::event::{AdminListParams, EventFilter, EventStatus},
 };
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
@@ -98,6 +98,52 @@ pub struct PaginatedEventsResponse {
     pub total_pages: i64,
 }
 
+/// RSVP totals for an event (admin list).
+#[derive(Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct RsvpTotals {
+    pub invited: i64,
+    pub yes: i64,
+    pub maybe: i64,
+    pub no: i64,
+    /// Invited but not yet responded.
+    pub pending: i64,
+}
+
+/// An event on the admin list: the event plus derived status and RSVP totals.
+#[derive(Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct AdminEvent {
+    #[serde(flatten)]
+    pub event: Event,
+    /// "live" | "draft" | "ended" – `ended` once the event is over, `draft` while
+    /// no invitations have been sent, otherwise `live`.
+    pub status: String,
+    pub rsvp: RsvpTotals,
+}
+
+/// Number of events per derived status (after `search`/`filter`, before `status`).
+#[derive(Clone, Copy, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct EventStatusCounts {
+    pub all: i64,
+    pub live: i64,
+    pub draft: i64,
+    pub ended: i64,
+}
+
+/// The response for the admin `GET /events?as_admin=true` endpoint.
+#[derive(Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct AdminPaginatedEventsResponse {
+    pub events: Vec<AdminEvent>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+    pub total_pages: i64,
+    pub counts: EventStatusCounts,
+}
+
 custom_errors!(EventsGetError, Unauthorized, InternalServerError);
 
 /// Get all events as an administrator, even those which the user is not invited to.
@@ -105,16 +151,24 @@ custom_errors!(EventsGetError, Unauthorized, InternalServerError);
 /// - page: Page number (default: 1, must be >= 1)
 /// - limit: Items per page (default: 20, range: 1-100)
 /// - filter: Event filter - "all", "upcoming", or "past" (default: "all")
+/// - search: optional case-insensitive substring of the title
+/// - status: "all" (default), "live", "draft" or "ended" (derived, see `AdminEvent`)
+#[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Events")]
-#[get("/events?<_as_admin>&<page>&<limit>&<filter>", format = "json")]
+#[get(
+    "/events?<_as_admin>&<page>&<limit>&<filter>&<search>&<status>",
+    format = "json"
+)]
 pub async fn get_all(
     pool: &State<PgPool>,
     _as_admin: Option<bool>,
     page: Option<i64>,
     limit: Option<i64>,
     filter: Option<String>,
+    search: Option<String>,
+    status: Option<String>,
     _user: AdminUser,
-) -> Result<Json<PaginatedEventsResponse>, EventsGetError> {
+) -> Result<Json<AdminPaginatedEventsResponse>, EventsGetError> {
     let page = page.unwrap_or(1).max(1);
     let limit = limit.unwrap_or(20).clamp(1, 100);
 
@@ -124,14 +178,16 @@ pub async fn get_all(
         _ => EventFilter::All,
     };
 
-    match event::get_all_paginated(pool, page, limit, event_filter).await {
-        Ok(response) => Ok(Json(PaginatedEventsResponse {
-            events: response.events,
-            total: response.total,
-            page: response.page,
-            limit: response.limit,
-            total_pages: response.total_pages,
-        })),
+    let params = AdminListParams {
+        page,
+        limit,
+        filter: event_filter,
+        search: crate::util::non_blank(search),
+        status: EventStatus::parse(status.as_deref()),
+    };
+
+    match event::get_all_admin(pool, params).await {
+        Ok(response) => Ok(Json(response)),
         Err(e) => Err(EventsGetError::InternalServerError(format!(
             "Error getting events, due to: {e}"
         ))),

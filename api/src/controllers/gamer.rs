@@ -171,6 +171,7 @@ pub struct PaginatedGamerSummaryResponse {
     pub page: i64,
     pub limit: i64,
     pub total_pages: i64,
+    pub counts: crate::routes::gamers::GamerCounts,
 }
 
 pub async fn get_all_paginated(
@@ -178,11 +179,15 @@ pub async fn get_all_paginated(
     page: i64,
     limit: i64,
     search: Option<String>,
+    filter: gamer_repo::GamerFilter,
+    sort: gamer_repo::GamerSort,
 ) -> Result<PaginatedGamerSummaryResponse, Error> {
     let params = gamer_repo::PaginationParams {
         page,
         limit,
-        search,
+        search: crate::util::non_blank(search),
+        filter,
+        sort,
     };
 
     match gamer_repo::index_paginated(pool, params).await {
@@ -194,7 +199,9 @@ pub async fn get_all_paginated(
                     email: g.email,
                     avatar_url: g.avatar_url,
                     handles: g.handles,
+                    callsign: g.callsign,
                     steam_id: g.steam_id,
+                    steam_linked: g.steam_linked,
                     events_invited_count: g.events_invited_count,
                     events_accepted_count: g.events_accepted_count,
                     events_tentative_count: g.events_tentative_count,
@@ -208,6 +215,12 @@ pub async fn get_all_paginated(
             page: paginated.page,
             limit: paginated.limit,
             total_pages: paginated.total_pages,
+            counts: crate::routes::gamers::GamerCounts {
+                all: paginated.counts.all,
+                steam: paginated.counts.steam,
+                no_steam: paginated.counts.no_steam,
+                stale_library: paginated.counts.stale_library,
+            },
         }),
         Err(e) => Err(Error::Controller(format!(
             "Unable to get paginated list of gamers due to: {e}"

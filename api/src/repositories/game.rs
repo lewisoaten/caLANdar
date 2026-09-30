@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use sqlx::{postgres::PgQueryResult, PgPool};
+use sqlx::PgPool;
 
 #[derive(Clone)]
 pub struct Game {
@@ -34,21 +34,52 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Game>, sqlx::Er
     .await
 }
 
-pub async fn create(
+/// Upsert a batch of Steam games in one round trip.
+/// Returns the number of games that were not in the cache before.
+pub async fn upsert_many(
     pool: &PgPool,
-    appid: i64,
     update_id: i32,
-    name: String,
-) -> Result<PgQueryResult, sqlx::Error> {
-    // Insert/replace new game
-    sqlx::query!(
-        "INSERT INTO steam_game (appid, update_id, name, last_modified)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (appid) DO UPDATE SET update_id = $2, name = $3, last_modified = NOW()",
-        appid,
+    appids: &[i64],
+    names: &[String],
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"
+        WITH upserted AS (
+            INSERT INTO steam_game (appid, update_id, name, last_modified)
+            SELECT appid, $1, name, NOW()
+            FROM UNNEST($2::bigint[], $3::text[]) AS input(appid, name)
+            ON CONFLICT (appid) DO UPDATE SET update_id = $1, name = EXCLUDED.name, last_modified = NOW()
+            RETURNING (xmax = 0) AS inserted
+        )
+        SELECT COUNT(*) FILTER (WHERE inserted) AS "added!" FROM upserted
+        "#,
         update_id,
-        name,
+        appids,
+        names,
     )
-    .execute(pool)
+    .fetch_one(pool)
     .await
+}
+
+pub struct CacheStats {
+    pub games_cached: i64,
+    pub last_refreshed: Option<DateTime<Utc>>,
+}
+
+/// Size of the Steam game cache and when it was last refreshed.
+pub async fn cache_stats(pool: &PgPool) -> Result<CacheStats, sqlx::Error> {
+    let row = sqlx::query!(
+        r#"
+        SELECT
+            (SELECT COUNT(*) FROM steam_game) AS "games_cached!",
+            (SELECT MAX(completed_at) FROM steam_game_update) AS last_refreshed
+        "#
+    )
+    .fetch_one(pool)
+    .await?;
+
+    Ok(CacheStats {
+        games_cached: row.games_cached,
+        last_refreshed: row.last_refreshed,
+    })
 }

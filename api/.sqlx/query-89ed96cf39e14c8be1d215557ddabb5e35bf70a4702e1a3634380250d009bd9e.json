@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM user_game WHERE LOWER(email) = LOWER($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89ed96cf39e14c8be1d215557ddabb5e35bf70a4702e1a3634380250d009bd9e"
+}

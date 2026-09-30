@@ -36,7 +36,9 @@ impl From<audit_log::AuditLog> for AuditLog {
 #[derive(Debug, Clone)]
 pub struct AuditLogFilter {
     pub user_id: Option<String>,
+    pub user_search: Option<String>,
     pub entity_type: Option<String>,
+    pub entity_types: Option<Vec<String>>,
     pub action: Option<String>,
     pub from_timestamp: Option<DateTime<Utc>>,
     pub to_timestamp: Option<DateTime<Utc>>,
@@ -65,7 +67,9 @@ impl std::fmt::Display for Error {
 pub async fn get_logs(pool: &PgPool, filter: AuditLogFilter) -> Result<AuditLogsResult, Error> {
     let repo_filter = audit_log::AuditLogFilter {
         user_id: filter.user_id.clone(),
+        user_search: filter.user_search.clone(),
         entity_type: filter.entity_type.clone(),
+        entity_types: filter.entity_types.clone(),
         action: filter.action.clone(),
         from_timestamp: filter.from_timestamp,
         to_timestamp: filter.to_timestamp,
@@ -85,4 +89,40 @@ pub async fn get_logs(pool: &PgPool, filter: AuditLogFilter) -> Result<AuditLogs
         logs: logs.into_iter().map(AuditLog::from).collect(),
         total_count,
     })
+}
+
+pub async fn get_entity_types(pool: &PgPool) -> Result<Vec<String>, Error> {
+    audit_log::entity_types(pool)
+        .await
+        .map_err(|e| Error::Database(e.to_string()))
+}
+
+/// Split a comma-separated `entity_types` query value, ignoring blanks.
+pub fn parse_entity_types(value: Option<&str>) -> Option<Vec<String>> {
+    let types: Vec<String> = value?
+        .split(',')
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(str::to_string)
+        .collect();
+    if types.is_empty() {
+        None
+    } else {
+        Some(types)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_entity_types;
+
+    #[test]
+    fn parses_comma_separated_entity_types() {
+        assert_eq!(
+            parse_entity_types(Some("rsvp, invitation,,")),
+            Some(vec!["rsvp".to_string(), "invitation".to_string()])
+        );
+        assert_eq!(parse_entity_types(Some(" , ")), None);
+        assert_eq!(parse_entity_types(None), None);
+    }
 }

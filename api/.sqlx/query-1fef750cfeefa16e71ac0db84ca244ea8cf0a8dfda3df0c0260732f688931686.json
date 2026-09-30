@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT status AS \"status!\", COUNT(*) AS \"count!\"\n        FROM (\n            SELECT CASE\n                WHEN e.time_end <= $1 THEN 'ended'\n                WHEN NOT EXISTS (SELECT 1 FROM invitation i WHERE i.event_id = e.id) THEN 'draft'\n                ELSE 'live'\n            END AS status\n            FROM event e\n            WHERE ($2::text IS NULL OR e.title ILIKE $2)\n            AND CASE $3::text\n                WHEN 'upcoming' THEN e.time_end > $1\n                WHEN 'past' THEN e.time_end <= $1\n                ELSE TRUE\n            END\n        ) s\n        GROUP BY status\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "1fef750cfeefa16e71ac0db84ca244ea8cf0a8dfda3df0c0260732f688931686"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified\n        FROM seat\n        WHERE room_id = $1\n        ORDER BY label\n        ",
+  "query": "\n        SELECT\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        FROM seat\n        WHERE room_id = $1\n        ORDER BY label\n        ",
   "describe": {
     "columns": [
       {
@@ -47,6 +47,16 @@
         "ordinal": 8,
         "name": "last_modified",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "grid_col",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "grid_row",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
@@ -63,8 +73,10 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "f6515ac1f67544442e653c8005af822be7f184fd3bd59868b3c8d3d47f9b442f"
+  "hash": "0824d462baf6e91dc9891c0d7e4338836248c62dab28e1375075a2b6f4066279"
 }

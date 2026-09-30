@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            (SELECT COUNT(*) FROM steam_game) AS \"games_cached!\",\n            (SELECT MAX(completed_at) FROM steam_game_update) AS last_refreshed\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "games_cached!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "last_refreshed",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "83dcc2f35a0166b1cfc3cafc84ac4894f8e4e0307cd381f0f068ec1e45c8f314"
+}

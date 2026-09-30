@@ -87,7 +87,7 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
 
     // Sort games by votes (descending) to prioritize higher-voted games
     let mut sorted_games = input.games.clone();
-    sorted_games.sort_by(|a, b| b.votes.cmp(&a.votes));
+    sorted_games.sort_by_key(|game| std::cmp::Reverse(game.votes));
 
     // For each game (sorted by votes), find the best time slot
     for game in &sorted_games {

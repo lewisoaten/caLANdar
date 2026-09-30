@@ -312,3 +312,37 @@ pub async fn get_current_game(
 
     Ok(player_summaries.response.players[0].gameid.clone())
 }
+
+#[derive(Clone, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ResolveVanityUrlResponse {
+    pub steamid: Option<String>,
+    pub success: i32,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ResolveVanityUrl {
+    pub response: ResolveVanityUrlResponse,
+}
+
+/// Resolve a `steamcommunity.com/id/<vanity>` name to a `SteamID64`.
+/// Returns `Ok(None)` when Steam reports no match.
+pub async fn resolve_vanity_url(
+    steam_api_key: &String,
+    vanity: &str,
+) -> Result<Option<String>, reqwest::Error> {
+    let request_url = format!(
+        "https://api.steampowered.com/ISteamUser/ResolveVanityURL/v1/?key={steam_api_key}&vanityurl={vanity}",
+    );
+
+    log::info!("Resolving Steam vanity URL {vanity}");
+
+    let resolved: ResolveVanityUrl = reqwest::get(&request_url).await?.json().await?;
+
+    Ok(if resolved.response.success == 1 {
+        resolved.response.steamid
+    } else {
+        None
+    })
+}

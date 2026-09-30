@@ -46,6 +46,12 @@ pub struct Seat {
 
     /// The last time this seat was modified.
     pub last_modified: DateTime<Utc>,
+
+    /// Grid column (0 to 11) in the room editor; null for seats placed by the legacy editor.
+    pub grid_col: Option<i32>,
+
+    /// Grid row in the room editor; null for seats placed by the legacy editor.
+    pub grid_row: Option<i32>,
 }
 
 impl SchemaExample for Seat {
@@ -60,6 +66,8 @@ impl SchemaExample for Seat {
             y: 0.5,
             created_at: Utc::now(),
             last_modified: Utc::now(),
+            grid_col: Some(2),
+            grid_row: Some(3),
         }
     }
 }
@@ -74,6 +82,12 @@ pub struct SeatSubmit {
     pub description: Option<String>,
     pub x: f64,
     pub y: f64,
+    /// Optional grid column; omitted keeps the stored value.
+    #[serde(default)]
+    pub grid_col: Option<i32>,
+    /// Optional grid row; omitted keeps the stored value.
+    #[serde(default)]
+    pub grid_row: Option<i32>,
 }
 
 impl SchemaExample for SeatSubmit {
@@ -84,6 +98,8 @@ impl SchemaExample for SeatSubmit {
             description: Some("Front row, left corner".to_string()),
             x: 0.25,
             y: 0.5,
+            grid_col: Some(2),
+            grid_row: Some(3),
         }
     }
 }

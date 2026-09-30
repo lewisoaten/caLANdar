@@ -126,7 +126,7 @@ pub async fn post(
     context.insert("description", &event.description);
 
     let email_details = PreauthEmailDetails {
-        address: invitation_request.email.to_string(),
+        address: invitation_request.email.clone(),
         subject: format!("{} - caLANdar Invitation", event.title),
         template: "email_invitation.html.tera".to_string(),
     };
@@ -253,7 +253,7 @@ pub async fn resend(
     context.insert("description", &event.description);
 
     let email_details = PreauthEmailDetails {
-        address: email.to_string(),
+        address: email.clone(),
         subject: format!("{} - caLANdar Invitation", event.title),
         template: "email_invitation.html.tera".to_string(),
     };

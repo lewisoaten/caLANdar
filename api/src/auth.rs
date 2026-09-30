@@ -51,14 +51,11 @@ fn authorise_paseto_header(
                 }
             };
 
-            // Also specified at the end of the file
-            let admins = ["lewis@oaten.name", "marshallx7a@gmail.com"];
-
             // Normalised here rather than only at sign-in so that tokens issued
             // before sign-in normalised the address resolve to the same user.
             let email = crate::util::normalise_email(&typed_token.sub);
 
-            if must_be_admin && !admins.contains(&email.as_str()) {
+            if must_be_admin && !is_admin(&email) {
                 return Err(UserError::TokenError);
             }
 
@@ -66,6 +63,14 @@ fn authorise_paseto_header(
         }
         None => Err(UserError::MissingToken),
     }
+}
+
+/// Administrators of the system (emails are compared after normalisation).
+const ADMINS: [&str; 2] = ["lewis@oaten.name", "marshallx7a@gmail.com"];
+
+/// Whether the (normalised) email belongs to an administrator.
+pub fn is_admin(email: &str) -> bool {
+    ADMINS.contains(&email)
 }
 
 pub struct User {

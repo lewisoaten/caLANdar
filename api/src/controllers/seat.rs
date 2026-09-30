@@ -18,6 +18,8 @@ impl From<seat::Seat> for Seat {
             y: seat.y,
             created_at: seat.created_at,
             last_modified: seat.last_modified,
+            grid_col: seat.grid_col,
+            grid_row: seat.grid_row,
         }
     }
 }
@@ -115,6 +117,7 @@ pub async fn create(
         seat_submit.description.clone(),
         seat_submit.x,
         seat_submit.y,
+        (seat_submit.grid_col, seat_submit.grid_row),
     )
     .await
     {
@@ -167,6 +170,7 @@ pub async fn update(
         seat_submit.description.clone(),
         seat_submit.x,
         seat_submit.y,
+        (seat_submit.grid_col, seat_submit.grid_row),
     )
     .await
     {

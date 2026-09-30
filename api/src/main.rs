@@ -34,6 +34,7 @@ mod routes;
 mod scheduler;
 mod util;
 
+#[allow(dead_code)]
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 struct RootResponse {
@@ -183,6 +184,7 @@ const EMAIL_TEMPLATES: [(&str, &str); 4] = [
 ];
 
 // Helper function to load secrets and create configuration objects
+#[allow(clippy::needless_pass_by_value, clippy::type_complexity)]
 fn load_secrets_and_config(
     paseto_secret_key: String,
     resend_api_key: String,
@@ -263,6 +265,11 @@ fn build_rocket(
                 routes::rooms::post,
                 routes::rooms::put,
                 routes::rooms::delete,
+                routes::room_layout::get,
+                routes::room_layout::put,
+                routes::room_layout::put_background,
+                routes::room_layout::delete_background,
+                routes::room_layout::get_background,
                 routes::seats::get_all,
                 routes::seats::get_all_user,
                 routes::seats::get_user,
@@ -280,6 +287,7 @@ fn build_rocket(
                 routes::seat_reservations::delete_admin,
                 routes::seat_reservations::check_availability,
                 routes::games::steam_game_update_v2,
+                routes::games::steam_game_cache_stats,
                 routes::games::get_steam_game,
                 routes::event_games::get_all,
                 routes::event_games::get_all_suggested,
@@ -293,12 +301,14 @@ fn build_rocket(
                 routes::game_schedule::pin,
                 routes::game_schedule::recalculate_suggested_schedule,
                 routes::profiles::get,
+                routes::profiles::get_me,
                 routes::profiles::put,
                 routes::profiles::put_admin,
                 routes::profiles::post_games_update,
                 routes::gamers::get_all_paginated,
                 routes::gamers::get_all,
                 routes::audit_logs::get_audit_logs,
+                routes::audit_logs::get_audit_log_entity_types,
             ],
         )
         .mount(
@@ -390,7 +400,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .configure(config);
 
-    log::info!("Launching Rocket on {}:{}", address, port);
+    log::info!("Launching Rocket on {address}:{port}");
 
     // Launch Rocket
     let _rocket = rocket.launch().await?;

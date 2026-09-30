@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            r.id,\n            r.event_id,\n            r.name,\n            r.description,\n            r.image,\n            r.sort_order,\n            r.created_at,\n            r.last_modified,\n            r.grid_rows,\n            r.features,\n            r.background_style,\n            r.background_opacity,\n            rb.token AS \"background_token?\"\n        FROM room r\n        LEFT JOIN room_background rb ON rb.room_id = r.id\n        WHERE r.event_id = $1\n        ORDER BY r.sort_order, r.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "image",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "sort_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "grid_rows",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "features",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "background_style",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "background_opacity",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 12,
+        "name": "background_token?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5b9205ed75ffbdb1e175f23f1dea07075f880733cd5ec7bdb0866edd23fe0854"
+}

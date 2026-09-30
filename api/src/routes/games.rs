@@ -14,6 +14,47 @@ use crate::{
     controllers::{game, Error},
 };
 
+/// Steam game cache statistics.
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct SteamGameCacheStats {
+    /// Number of Steam games in the local cache.
+    pub games_cached: i64,
+    /// When the last successful refresh finished.
+    pub last_refreshed: Option<DateTime<Utc>>,
+}
+
+/// Result of refreshing the Steam game cache.
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct SteamGameCacheRefresh {
+    pub games_cached: i64,
+    /// Games that were not in the cache before this refresh.
+    pub games_added: i64,
+    pub last_refreshed: Option<DateTime<Utc>>,
+}
+
+custom_errors!(SteamGameCacheStatsError, Unauthorized, InternalServerError);
+
+#[openapi(tag = "Games")]
+#[get("/steam-game-update-v2/stats?<_as_admin>", format = "json")]
+/// Size of the Steam game cache and when it was last refreshed (admin only)
+pub async fn steam_game_cache_stats(
+    pool: &State<PgPool>,
+    _as_admin: Option<bool>,
+    _user: AdminUser,
+) -> Result<Json<SteamGameCacheStats>, SteamGameCacheStatsError> {
+    game::cache_stats(pool)
+        .await
+        .map(|stats| {
+            Json(SteamGameCacheStats {
+                games_cached: stats.games_cached,
+                last_refreshed: stats.last_refreshed,
+            })
+        })
+        .map_err(|e| SteamGameCacheStatsError::InternalServerError(e.to_string()))
+}
+
 custom_errors!(UpdateGameError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Games")]
@@ -24,9 +65,9 @@ pub async fn steam_game_update_v2(
     steam_api_key: &State<String>,
     _as_admin: Option<bool>,
     user: AdminUser,
-) -> Result<Json<()>, UpdateGameError> {
+) -> Result<Json<SteamGameCacheRefresh>, UpdateGameError> {
     match game::update(pool, steam_api_key.inner()).await {
-        Ok(()) => {
+        Ok(refresh) => {
             // Log audit entry
             crate::util::log_audit(
                 pool.inner(),
@@ -34,11 +75,18 @@ pub async fn steam_game_update_v2(
                 "steam_games.update".to_string(),
                 "steam_games".to_string(),
                 None,
-                None,
+                Some(rocket::serde::json::serde_json::json!({
+                    "games_cached": refresh.games_cached,
+                    "games_added": refresh.games_added,
+                })),
             )
             .await;
 
-            Ok(Json(()))
+            Ok(Json(SteamGameCacheRefresh {
+                games_cached: refresh.games_cached,
+                games_added: refresh.games_added,
+                last_refreshed: refresh.last_refreshed,
+            }))
         }
         Err(e) => Err(UpdateGameError::InternalServerError(format!(
             "Error updating games, due to: {e}"

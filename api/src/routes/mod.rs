@@ -9,6 +9,7 @@ pub mod game_schedule;
 pub mod gamers;
 pub mod games;
 pub mod profiles;
+pub mod room_layout;
 pub mod rooms;
 pub mod seat_reservations;
 pub mod seats;

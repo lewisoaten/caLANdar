@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            ARRAY[user_game.email]::text[] AS emails,\n            appid AS \"appid!\",\n            name,\n            playtime_forever::bigint AS playtime_forever,\n            user_game.last_modified AS \"last_modified?\"\n        FROM user_game\n        INNER JOIN steam_game USING(appid)\n        WHERE LOWER(user_game.email) = LOWER($1)\n        AND ($2::text IS NULL OR name ILIKE $2)\n        ORDER BY\n            CASE WHEN $3 THEN LOWER(name) END ASC,\n            playtime_forever DESC,\n            LOWER(name) ASC\n        LIMIT $4\n        OFFSET $5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "emails",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 1,
+        "name": "appid!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "playtime_forever",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_modified?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bool",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "cef19c3c3c8d3eeaf0510b9fb9bb4b9384dc6972aa228019e68d9eb1c7445815"
+}

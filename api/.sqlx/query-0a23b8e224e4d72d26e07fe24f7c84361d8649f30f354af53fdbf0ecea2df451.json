@@ -1,0 +1,129 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH gamer_events AS (\n            SELECT\n                LOWER(i.email) AS email,\n                ARRAY_AGG(DISTINCT i.handle) FILTER (WHERE i.handle IS NOT NULL) AS handles,\n                (ARRAY_AGG(i.handle ORDER BY e.time_begin DESC) FILTER (WHERE i.handle IS NOT NULL AND i.handle <> ''))[1] AS callsign,\n                MAX(i.responded_at) AS events_last_response,\n                COUNT(*) AS events_invited_count,\n                COUNT(*) FILTER (WHERE i.response = 'yes') AS events_accepted_count,\n                COUNT(*) FILTER (WHERE i.response = 'maybe') AS events_tentative_count,\n                COUNT(*) FILTER (WHERE i.response = 'no') AS events_declined_count,\n                BOOL_OR($1::text IS NULL OR LOWER(i.email) LIKE $1 OR LOWER(i.handle) LIKE $1) AS matches_search\n            FROM invitation i\n            INNER JOIN event e ON e.id = i.event_id\n            GROUP BY LOWER(i.email)\n        ),\n        gamer_games AS (\n            SELECT\n                LOWER(ug.email) AS email,\n                COUNT(*) AS games_owned_count,\n                MAX(ug.last_modified) AS games_owned_last_modified\n            FROM user_game ug\n            GROUP BY LOWER(ug.email)\n        ),\n        gamers AS (\n            SELECT\n                ge.*,\n                p.steam_id,\n                COALESCE(p.steam_id, 0) <> 0 AS steam_linked,\n                COALESCE(gg.games_owned_count, 0) AS games_owned_count,\n                gg.games_owned_last_modified\n            FROM gamer_events ge\n            LEFT JOIN profiles p ON LOWER(p.email) = ge.email\n            LEFT JOIN gamer_games gg ON gg.email = ge.email\n            WHERE ge.matches_search\n        ),\n        classified AS (\n            SELECT\n                g.*,\n                (g.steam_linked AND (g.games_owned_last_modified IS NULL\n                    OR g.games_owned_last_modified < NOW() - make_interval(days => $6::int))) AS stale_library\n            FROM gamers g\n        ),\n        counted AS (\n            SELECT\n                c.*,\n                COUNT(*) OVER () AS count_all,\n                COUNT(*) FILTER (WHERE c.steam_linked) OVER () AS count_steam,\n                COUNT(*) FILTER (WHERE NOT c.steam_linked) OVER () AS count_no_steam,\n                COUNT(*) FILTER (WHERE c.stale_library) OVER () AS count_stale\n            FROM classified c\n        ),\n        filtered AS (\n            SELECT c.*, COUNT(*) OVER () AS total\n            FROM counted c\n            WHERE CASE $2::text\n                WHEN 'steam' THEN c.steam_linked\n                WHEN 'no_steam' THEN NOT c.steam_linked\n                WHEN 'stale_library' THEN c.stale_library\n                ELSE TRUE\n            END\n        )\n        SELECT\n            f.email AS \"email!\",\n            'https://www.gravatar.com/avatar/' || MD5(f.email) || '?d=robohash' AS \"avatar_url!\",\n            f.handles,\n            f.callsign,\n            f.steam_id AS \"steam_id?\",\n            f.steam_linked AS \"steam_linked!\",\n            f.events_invited_count AS \"events_invited_count!\",\n            f.events_accepted_count AS \"events_accepted_count!\",\n            f.events_tentative_count AS \"events_tentative_count!\",\n            f.events_declined_count AS \"events_declined_count!\",\n            f.events_last_response,\n            f.games_owned_count AS \"games_owned_count!\",\n            f.games_owned_last_modified,\n            f.total AS \"total!\",\n            f.count_all AS \"count_all!\",\n            f.count_steam AS \"count_steam!\",\n            f.count_no_steam AS \"count_no_steam!\",\n            f.count_stale AS \"count_stale!\"\n        FROM filtered f\n        ORDER BY\n            CASE WHEN $3::text = 'last_rsvp' THEN f.events_last_response END DESC NULLS LAST,\n            CASE WHEN $3::text = 'games_updated' THEN f.games_owned_last_modified END DESC NULLS LAST,\n            CASE WHEN $3::text = 'callsign' THEN f.callsign IS NULL END,\n            CASE WHEN $3::text = 'callsign' THEN LOWER(f.callsign) END,\n            f.email\n        LIMIT $4 OFFSET $5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "avatar_url!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "handles",
+        "type_info": "VarcharArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "callsign",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "steam_id?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "steam_linked!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "events_invited_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "events_accepted_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "events_tentative_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "events_declined_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "events_last_response",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "games_owned_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "games_owned_last_modified",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "total!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
+        "name": "count_all!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "count_steam!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 16,
+        "name": "count_no_steam!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 17,
+        "name": "count_stale!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0a23b8e224e4d72d26e07fe24f7c84361d8649f30f354af53fdbf0ecea2df451"
+}

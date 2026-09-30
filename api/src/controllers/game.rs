@@ -1,4 +1,3 @@
-use futures::future::join_all;
 use sqlx::PgPool;
 
 use crate::{
@@ -36,7 +35,23 @@ pub async fn get(
     }
 }
 
-pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> {
+/// Result of a Steam game cache refresh.
+pub struct CacheRefresh {
+    pub games_cached: i64,
+    pub games_added: i64,
+    pub last_refreshed: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Rows per batched upsert; keeps each statement well under Postgres' limits.
+const UPSERT_BATCH_SIZE: usize = 5000;
+
+pub async fn cache_stats(pool: &PgPool) -> Result<game::CacheStats, Error> {
+    game::cache_stats(pool)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to get Steam game cache stats: {e}")))
+}
+
+pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefresh, Error> {
     let Ok(steam_game_update) = game_update::create(pool).await else {
         return Err(Error::Controller(
             "Unable to create game update log".to_string(),
@@ -54,30 +69,27 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<(), Error> 
 
     log::info!("Retrieved {} games from Steam API", steam_games.len());
 
-    let chunk_size = 20;
+    let mut games_added = 0;
+    for chunk in steam_games.chunks(UPSERT_BATCH_SIZE) {
+        let appids: Vec<i64> = chunk.iter().map(|g| g.appid).collect();
+        let names: Vec<String> = chunk.iter().map(|g| g.name.clone()).collect();
 
-    for chunk in steam_games.chunks(chunk_size) {
-        let mut insert_promises = vec![];
-        for steam_game in chunk {
-            insert_promises.push(game::create(
-                pool,
-                steam_game.appid,
-                steam_game_update.id,
-                steam_game.name.clone(),
-            ));
-        }
+        games_added += game::upsert_many(pool, steam_game_update.id, &appids, &names)
+            .await
+            .map_err(|e| Error::Controller(format!("Failed to insert games: {e}")))?;
 
-        let results = join_all(insert_promises).await;
-
-        for result in results {
-            if let Err(e) = result {
-                log::error!("Failed to insert game: {e}");
-                break;
-            }
-        }
-
-        log::info!("Inserted {chunk_size} games successfully.");
+        log::info!("Upserted {} games.", chunk.len());
     }
 
-    Ok(())
+    game_update::complete(pool, steam_game_update.id)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to complete game update log: {e}")))?;
+
+    let stats = cache_stats(pool).await?;
+
+    Ok(CacheRefresh {
+        games_cached: stats.games_cached,
+        games_added,
+        last_refreshed: stats.last_refreshed,
+    })
 }

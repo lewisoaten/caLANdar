@@ -76,6 +76,32 @@ pub fn normalise_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
+/// Gravatar URL for an email address.
+///
+/// Must stay identical to the SQL form used across the repositories:
+/// `'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash'`,
+/// so the same user gets the same avatar on every payload.
+pub fn gravatar_url(email: &str) -> String {
+    let digest = md5::compute(email.to_lowercase().as_bytes());
+    format!("https://www.gravatar.com/avatar/{digest:x}?d=robohash")
+}
+
+/// Escape `LIKE`/`ILIKE` wildcards in user input and wrap it for a substring match.
+pub fn like_pattern(input: &str) -> String {
+    let escaped = input
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
+    format!("%{escaped}%")
+}
+
+/// Trim a user supplied search string, treating blank input as "no search".
+pub fn non_blank(input: Option<String>) -> Option<String> {
+    input
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 pub struct PreauthEmailDetails {
     pub address: String,
     pub subject: String,
@@ -305,6 +331,31 @@ mod tests {
     use super::*;
     use crate::controllers::event_invitation::get_day_quarter_buckets;
     use chrono::TimeZone;
+
+    #[test]
+    fn gravatar_url_matches_sql_form() {
+        // md5("test@example.com") – same value Postgres' MD5(LOWER(email)) produces.
+        assert_eq!(
+            gravatar_url("Test@Example.com"),
+            "https://www.gravatar.com/avatar/55502f40dc8b7c769880b10874abc9d0?d=robohash"
+        );
+    }
+
+    #[test]
+    fn like_pattern_escapes_wildcards() {
+        assert_eq!(like_pattern("a%b_c\\"), "%a\\%b\\_c\\\\%");
+        assert_eq!(like_pattern("nia"), "%nia%");
+    }
+
+    #[test]
+    fn non_blank_drops_whitespace_only_input() {
+        assert_eq!(non_blank(Some("  ".to_string())), None);
+        assert_eq!(non_blank(None), None);
+        assert_eq!(
+            non_blank(Some(" nia ".to_string())),
+            Some("nia".to_string())
+        );
+    }
 
     #[test]
     fn normalise_email_lowercases_and_trims() {

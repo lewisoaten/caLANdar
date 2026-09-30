@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE seat\n        SET\n            label = $2,\n            description = $3,\n            x = $4,\n            y = $5,\n            last_modified = NOW()\n        WHERE id = $1\n        RETURNING\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified\n        ",
+  "query": "\n        SELECT\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        FROM seat\n        WHERE event_id = $1\n        ORDER BY room_id, label\n        ",
   "describe": {
     "columns": [
       {
@@ -47,15 +47,21 @@
         "ordinal": 8,
         "name": "last_modified",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "grid_col",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "grid_row",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Varchar",
-        "Text",
-        "Float8",
-        "Float8"
+        "Int4"
       ]
     },
     "nullable": [
@@ -67,8 +73,10 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "e44dd8c9103c276a97742a2ee132bb4ecd4bb00f47686aebef93a5799e0e3cb1"
+  "hash": "6bf1eb2f4d11e1781b39934480941375c51696e6ac713d6a158062828b0ce9a2"
 }
