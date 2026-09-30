@@ -12,3 +12,9 @@
 - Card grades judged against a storybook without the brand font.
 - Skipped components ship floor cards until MSW-backed data can render in previews.
 - InvitationsTable: owned preview swallows the unhandled rejection from the un-mocked /api fetch (only Empty State is graded; data stories skipped).
+- Names ending in `Manager` are dropped by the converter (treated as utility singletons): RoomManager is exported twice in entry.ts, as `RoomManager` (story imports shim to it) and `RoomManagerPanel` (the component-list name; titleMap maps the story title).
+- GameOwners `NoOwnersHidden` renders nothing by design -> skipped. SendEmailDialog stories render only in a portal, which the storybook reference capture can't see -> all skipped (unverified).
+- `src/stories/mockApi.tsx`: new stories use a page-level fetch fake (not MSW, which can't run in static previews). Scope scenarios by event id in URLs. `stubImages()` swaps Steam covers / default banner for SVGs and forces `loading=lazy` images eager - lazy images below the fold never decode and hang the compare harness forever.
+- Several stories rely on `play` functions (filtered/search/room-selected states); check whether the capture runs them before trusting distinct cards.
+- [GENERAL] Don't `pkill -f compare.mjs` from the shell tool: the pattern matches the tool's own command line. Use an anchored pattern (`^node \.ds-sync`).
+- AuditLog filtered/no-results stories skipped: they reach their state only via Storybook play functions, which the static preview doesn't run (would duplicate the Default card). EventSelection/InvitationSeatManagementTable/GamersAdmin have owned previews that replay their play-function clicks/typing.

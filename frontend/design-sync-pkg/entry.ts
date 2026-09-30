@@ -13,8 +13,36 @@ export { default as RefreshGamesButton } from "../src/components/RefreshGamesBut
 export { default as SeatSelector } from "../src/components/SeatSelector";
 export { default as SignIn } from "../src/components/SignIn";
 export { default as VerifyEmail } from "../src/components/VerifyEmail";
-export * from "../src/components/RSVPWizard";
+
+// Shared contexts/providers (single copy so stories and components agree).
+export {
+  UserContext,
+  UserDispatchContext,
+  UserProvider,
+} from "../src/UserProvider";
+export { SnackbarProvider } from "notistack";
+export { default as Account } from "../src/components/Account";
+export { default as AuditLog } from "../src/components/AuditLog";
+export { default as EventAttendeeList } from "../src/components/EventAttendeeList";
+export { default as EventCard } from "../src/components/EventCard";
+export { default as EventGameSchedule } from "../src/components/EventGameSchedule";
+export { default as EventManagement } from "../src/components/EventManagement";
+export { default as EventSeatMap } from "../src/components/EventSeatMap";
+export { default as EventSeatingConfig } from "../src/components/EventSeatingConfig";
+export { default as EventSelection } from "../src/components/EventSelection";
+export { default as FloorplanEditor } from "../src/components/FloorplanEditor";
+export { default as GameOwners } from "../src/components/GameOwners";
+export { default as GameScheduleDetails } from "../src/components/GameScheduleDetails";
+export { default as GamersAdmin } from "../src/components/GamersAdmin";
+export { default as GamesList } from "../src/components/GamesList";
+export { default as InvitationSeatManagementTable } from "../src/components/InvitationSeatManagementTable";
+export { default as RoomFloorplanView } from "../src/components/RoomFloorplanView";
+export { default as RoomManager } from "../src/components/RoomManager";
+export { default as SeatList } from "../src/components/SeatList";
+export { default as SendEmailDialog } from "../src/components/SendEmailDialog";
 // One shared copy of MUI + react-router for components, providers and stories
 // (context identity). `Link` exists in both; the ambiguous name is dropped.
 export * from "@mui/material";
 export * from "react-router-dom";
+export * from "../src/components/RSVPWizard";
+export { default as RoomManagerPanel } from "../src/components/RoomManager";

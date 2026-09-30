@@ -3,6 +3,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import theme from "../src/theme";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
+import { SnackbarProvider } from "notistack";
 
 import { setupWorker } from "msw/browser";
 import { mswLoader } from "msw-storybook-addon/csf3";
@@ -48,13 +49,15 @@ const preview: Preview = {
     (Story, context) => (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        {context.parameters.router === false ? (
-          <Story />
-        ) : (
-          <MemoryRouter>
+        <SnackbarProvider maxSnack={3}>
+          {context.parameters.router === false ? (
             <Story />
-          </MemoryRouter>
-        )}
+          ) : (
+            <MemoryRouter>
+              <Story />
+            </MemoryRouter>
+          )}
+        </SnackbarProvider>
       </ThemeProvider>
     ),
   ],

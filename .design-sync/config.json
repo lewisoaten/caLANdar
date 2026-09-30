@@ -11,7 +11,8 @@
   ],
   "titleMap": {
     "Button": null,
-    "Header": null
+    "Header": null,
+    "RoomManager": "RoomManagerPanel"
   },
   "provider": {
     "component": "ThemeProvider",
@@ -23,7 +24,10 @@
     "inner": {
       "component": "CssBaseline",
       "inner": {
-        "component": "MemoryRouter"
+        "component": "SnackbarProvider",
+        "inner": {
+          "component": "MemoryRouter"
+        }
       }
     }
   },
@@ -76,6 +80,37 @@
       "skip": [
         "example-eventgamesuggestions--default"
       ]
+    },
+    "EventAttendeeList": {
+      "cardMode": "column"
+    },
+    "EventCard": {
+      "cardMode": "column"
+    },
+    "EventGameSchedule": {
+      "cardMode": "single",
+      "primaryStory": "PopulatedAdmin"
+    },
+    "SendEmailDialog": {
+      "skip": [
+        "components-sendemaildialog--open",
+        "components-sendemaildialog--long-event-title",
+        "components-sendemaildialog--draft-ready"
+      ],
+      "cardMode": "single",
+      "primaryStory": "Open"
+    },
+    "GameOwners": {
+      "skip": [
+        "components-gameowners--no-owners-hidden"
+      ]
+    },
+    "AuditLog": {
+      "skip": [
+        "components-auditlog--filtered-by-entity-type",
+        "components-auditlog--filtered-by-user",
+        "components-auditlog--no-results"
+      ]
     }
   },
   "storyImports": {
@@ -84,5 +119,6 @@
       "@mui/material"
     ]
   },
-  "readmeHeader": ".design-sync/conventions.md"
+  "readmeHeader": ".design-sync/conventions.md",
+  "cssEntry": "dist/frontend.css"
 }
