@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { fn } from "@storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { fn } from "storybook/test";
 import moment from "moment";
 import GameScheduleDetails from "../components/GameScheduleDetails";
 import { GameScheduleEntry } from "../types/game_schedule";

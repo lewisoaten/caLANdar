@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import EventGameSchedule from "../components/EventGameSchedule";
 import { mockApi, withRoute, withUser } from "./mockApi";
 

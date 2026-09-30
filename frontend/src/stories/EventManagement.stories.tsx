@@ -1,6 +1,8 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { userEvent, within } from "@storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { userEvent, within } from "storybook/test";
+import moment from "moment";
 import EventManagement from "../components/EventManagement";
+import { getAttendanceBucketCount } from "../utils/attendanceBuckets";
 import { mockApi, withRoute, withUser } from "./mockApi";
 
 const meta = {
@@ -378,6 +380,16 @@ const table: Record<string, unknown> = {
 
 for (const s of scenarios) {
   const id = s.event.id;
+  // Fixtures list attended bucket indexes for readability; the API (and
+  // getAttendanceDescription) expect a 0/1 mask with one entry per bucket.
+  const bucketCount = getAttendanceBucketCount(
+    moment.utc(s.event.timeBegin),
+    moment.utc(s.event.timeEnd),
+  );
+  const toMask = (indexes: number[]): number[] =>
+    Array.from({ length: bucketCount }, (_, n) =>
+      indexes.includes(n) ? 1 : 0,
+    );
   table[`GET /api/events/${id}`] = s.event;
   table[`GET /api/events/${id}/seating-config`] = {
     eventId: id,
@@ -389,6 +401,7 @@ for (const s of scenarios) {
     eventId: id,
     avatarUrl: null,
     ...i,
+    attendance: i.attendance && toMask(i.attendance),
   }));
   table[`GET /api/events/${id}/rooms`] = s.rooms.map((r) => ({
     ...r,
@@ -406,6 +419,7 @@ for (const s of scenarios) {
   table[`GET /api/events/${id}/seat-reservations`] = s.reservations.map(
     (r) => ({
       ...r,
+      attendanceBuckets: toMask(r.attendanceBuckets),
       eventId: id,
       createdAt: STAMP,
       lastModified: STAMP,

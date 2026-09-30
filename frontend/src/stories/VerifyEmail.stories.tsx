@@ -1,6 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import VerifyEmail from "../components/VerifyEmail";
-import { MemoryRouter, Route, Routes, useInRouterContext } from "react-router-dom";
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useInRouterContext,
+} from "react-router-dom";
 
 // Wrapper to provide routing context
 const VerifyEmailWrapper = (args: { token?: string }) => {

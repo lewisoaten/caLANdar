@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { fn, userEvent, within } from "@storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { fn, userEvent, within } from "storybook/test";
 import moment from "moment";
 import SendEmailDialog from "../components/SendEmailDialog";
 import { mockApi, withUser } from "./mockApi";

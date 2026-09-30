@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import moment from "moment";
 import EventSeatMap from "../components/EventSeatMap";
 import { EventData, EventSeatingConfig, Room, Seat } from "../types/events";

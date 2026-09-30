@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import Account from "../components/Account";
 import { mockApi, withUser, stubImages } from "./mockApi";
 

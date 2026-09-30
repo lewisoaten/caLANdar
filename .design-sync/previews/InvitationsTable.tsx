@@ -1,8 +1,9 @@
 import * as React from 'react';
-// The component fetches /api/... on mount; storybook answers via MSW, a static
-// preview page can't, and the failed res.json() surfaces as an unhandled
-// rejection. The component renders its empty state either way - keep the page clean.
-if (typeof window !== 'undefined') window.addEventListener('unhandledrejection', (e) => e.preventDefault());
+// The component fetches /api/... on mount. Storybook answers via MSW, which a
+// static preview can't run, so answer with the page-level fetch fake instead
+// (an empty invitation list, matching the Empty State story).
+import { mockApi } from "@ds-stories/frontend/src/stories/mockApi";
+mockApi({ "GET /api/events/:id/invitations": [] });
 import * as S from "@ds-stories/frontend/src/stories/InvitationsTable.stories";
 
 function compose(S: any, key: string) {

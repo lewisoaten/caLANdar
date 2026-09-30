@@ -1,5 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/react";
-import { fn } from "@storybook/test";
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { fn } from "storybook/test";
 import moment from "moment";
 import RoomManager from "../components/RoomManager";
 import { Room, Seat } from "../types/events";

@@ -1,6 +1,6 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import moment from "moment";
-import { userEvent, within } from "@storybook/test";
+import { userEvent, within } from "storybook/test";
 import InvitationSeatManagementTable from "../components/InvitationSeatManagementTable";
 import { mockApi, withUser } from "./mockApi";
 

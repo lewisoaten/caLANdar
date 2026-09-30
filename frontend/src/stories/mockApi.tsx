@@ -9,7 +9,7 @@
  */
 import * as React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import type { Decorator } from "@storybook/react";
+import type { Decorator } from "@storybook/react-vite";
 import { UserContext } from "../UserProvider";
 
 export interface MockRequest {

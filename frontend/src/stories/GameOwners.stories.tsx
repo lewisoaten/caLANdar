@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import GameOwners from "../components/GameOwners";
 import { Gamer } from "../types/game_suggestions";
 
