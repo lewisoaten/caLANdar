@@ -1,9 +1,11 @@
 import type { Preview } from "@storybook/react-vite";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import theme from "../src/theme";
+import "../src/fonts";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
-import { SnackbarProvider } from "notistack";
+import { BackgroundFxProvider } from "../src/components/hl/BackgroundFx";
+import { HlSnackbarProvider } from "../src/components/hl/HlSnackbarProvider";
 
 import { setupWorker } from "msw/browser";
 import { mswLoader } from "msw-storybook-addon/csf3";
@@ -49,15 +51,17 @@ const preview: Preview = {
     (Story, context) => (
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <SnackbarProvider maxSnack={3}>
-          {context.parameters.router === false ? (
-            <Story />
-          ) : (
-            <MemoryRouter>
+        <BackgroundFxProvider defaultEnabled={context.parameters.backgroundFx}>
+          <HlSnackbarProvider>
+            {context.parameters.router === false ? (
               <Story />
-            </MemoryRouter>
-          )}
-        </SnackbarProvider>
+            ) : (
+              <MemoryRouter>
+                <Story />
+              </MemoryRouter>
+            )}
+          </HlSnackbarProvider>
+        </BackgroundFxProvider>
       </ThemeProvider>
     ),
   ],

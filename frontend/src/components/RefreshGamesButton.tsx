@@ -1,26 +1,38 @@
-import {
-  CircularProgress,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-} from "@mui/material";
-import UpdateIcon from "@mui/icons-material/Update";
-import TaskAltIcon from "@mui/icons-material/TaskAlt";
-import React, { useContext } from "react";
+import * as React from "react";
+import { useContext, useState } from "react";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
+import SyncSharp from "@mui/icons-material/SyncSharp";
+import TaskAltSharp from "@mui/icons-material/TaskAltSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 
+type BoolState = [boolean, React.Dispatch<React.SetStateAction<boolean>>];
+
 interface RefreshGamesButtonProps {
-  loadingState: [boolean, React.Dispatch<React.SetStateAction<boolean>>];
-  doneState: [boolean, React.Dispatch<React.SetStateAction<boolean>>];
+  /** Optional externally-owned loading state (so it survives remounts). */
+  loadingState?: BoolState;
+  /** Optional externally-owned "finished" state. */
+  doneState?: BoolState;
+  /** Button label; defaults to "Refresh cache". */
+  label?: string;
 }
 
+/**
+ * Admin action: refresh the server's Steam game cache
+ * (`POST /api/steam-game-update-v2?as_admin=true`).
+ *
+ * The HyperLAN design places this on the Gamers admin page (the amber "Steam
+ * game cache" card) rather than in the navigation.
+ */
 export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
-  const [loading, setLoading] = props.loadingState;
-  const [done, setDone] = props.doneState;
+  const ownLoading = useState(false);
+  const ownDone = useState(false);
+  const [loading, setLoading] = props.loadingState ?? ownLoading;
+  const [done, setDone] = props.doneState ?? ownDone;
 
   function handleClick() {
     setLoading(true);
@@ -39,6 +51,7 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
       } else if (response.status === 401) {
         signOut();
       } else {
+        setLoading(false);
         response.text().then((data) => console.log(data));
         const error = `Something has gone wrong, please contact the administrator. More details: ${response.status}`;
         alert(error);
@@ -48,35 +61,23 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   }
 
   return (
-    <ListItemButton onClick={handleClick} disabled={loading}>
-      <ListItemIcon>
-        {!loading && !done && <UpdateIcon />}
-        {loading && (
-          <React.Fragment>
-            <svg width={0} height={0}>
-              <defs>
-                <linearGradient
-                  id="my_gradient"
-                  x1="0%"
-                  y1="0%"
-                  x2="0%"
-                  y2="100%"
-                >
-                  <stop offset="0%" stopColor="#e01cd5" />
-                  <stop offset="100%" stopColor="#1CB5E0" />
-                </linearGradient>
-              </defs>
-            </svg>
-            <CircularProgress
-              sx={{ "svg circle": { stroke: "url(#my_gradient)" } }}
-              size={25}
-              thickness={6}
-            />
-          </React.Fragment>
-        )}
-        {!loading && done && <TaskAltIcon color="success" />}
-      </ListItemIcon>
-      <ListItemText primary="Update Games" />
-    </ListItemButton>
+    <Button
+      variant="outlined"
+      color="warning"
+      onClick={handleClick}
+      disabled={loading}
+      aria-busy={loading || undefined}
+      startIcon={
+        loading ? (
+          <CircularProgress size={18} thickness={6} color="inherit" />
+        ) : done ? (
+          <TaskAltSharp />
+        ) : (
+          <SyncSharp />
+        )
+      }
+    >
+      {props.label ?? "Refresh cache"}
+    </Button>
   );
 }

@@ -12,6 +12,7 @@ import {
 import * as Sentry from "@sentry/react";
 import App from "./App";
 import theme from "./theme";
+import "./fonts";
 import { shouldShowReportDialog } from "./utils/sentryReporting";
 
 Sentry.init({

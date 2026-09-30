@@ -1,342 +1,289 @@
-import * as React from "react";
-import { useEffect, useState, useContext } from "react";
-import moment from "moment";
-import {
-  Typography,
-  Avatar,
-  Paper,
-  Box,
-  Slide,
-  Chip,
-  CircularProgress,
-  IconButton,
-} from "@mui/material";
-import {
-  Celebration,
-  HowToReg,
-  SportsEsports,
-  ThumbUp,
-  EventSeat,
-  Pause,
-  PlayArrow,
-} from "@mui/icons-material";
+import { useContext, useEffect, useState } from "react";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import PauseSharp from "@mui/icons-material/PauseSharp";
+import PlayArrowSharp from "@mui/icons-material/PlayArrowSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
+import { UserAvatar } from "./hl/UserAvatar";
+import { colors, fonts, tint, srOnly } from "./hl/tokens";
 
-interface ActivityTickerEvent {
+export interface ActivityTickerEvent {
   id: number;
   timestamp: string;
   message: string;
   icon: string;
   eventType: string;
-  userHandle?: string;
-  userAvatarUrl?: string;
-  gameId?: number;
+  userHandle?: string | null;
+  userAvatarUrl?: string | null;
+  gameId?: number | null;
+}
+
+/** Ticker label + colour for an activity item (colour-coded by type). */
+export function tickerKind(
+  item: Pick<ActivityTickerEvent, "eventType" | "icon">,
+): {
+  label: string;
+  color: string;
+} {
+  switch (item.eventType) {
+    case "rsvp":
+      // The API marks the response with an icon: Yes, Maybe, other.
+      if (item.icon === "🎉") return { label: "RSVP", color: colors.lime };
+      if (item.icon === "🙋") return { label: "RSVP", color: colors.amber };
+      return { label: "RSVP", color: colors.textMuted };
+    case "game_vote":
+      return { label: "VOTE", color: colors.cyan };
+    case "game_suggestion":
+      return { label: "SUGGEST", color: colors.violetText };
+    case "seat_reservation":
+      return { label: "SEAT", color: colors.violetLight };
+    case "event_create":
+      return { label: "EVENT", color: colors.gold };
+    default:
+      return {
+        label: item.eventType.replace(/_/g, " ").toUpperCase().slice(0, 8),
+        color: colors.textDim,
+      };
+  }
+}
+
+/** Minimum items per marquee half, so short feeds still fill the bar. */
+const MIN_RUN = 8;
+
+export interface ActivityTickerViewProps {
+  items: ReadonlyArray<ActivityTickerEvent>;
+  /** `sticky`: bottom of the content column (desktop). `fixed`: above the mobile tab bar. */
+  placement?: "sticky" | "fixed";
+}
+
+/**
+ * The 36px LIVE bar: a chamfered LIVE tag and a 60s marquee of colour-coded
+ * activity. Pauses on hover/focus or with the pause button; 4x slower under
+ * prefers-reduced-motion (via the `.hl-tick` rule in the theme).
+ */
+export function ActivityTickerView({
+  items,
+  placement = "sticky",
+}: ActivityTickerViewProps) {
+  const [paused, setPaused] = useState(false);
+  if (items.length === 0) return null;
+
+  const run: ActivityTickerEvent[] = [];
+  while (run.length < MIN_RUN) run.push(...items);
+
+  const renderRun = (copy: number) => (
+    <Box sx={{ display: "flex", alignItems: "center", flex: "none" }}>
+      {run.map((item, i) => {
+        const kind = tickerKind(item);
+        return (
+          <Box
+            component="span"
+            key={`${copy}-${i}-${item.id}`}
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "10px",
+              px: "22px",
+              whiteSpace: "nowrap",
+              borderRight: `1px solid ${tint("cyan", 0.12)}`,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                fontFamily: fonts.mono,
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: "0.16em",
+                color: kind.color,
+              }}
+            >
+              {kind.label}
+            </Box>
+            {(item.userHandle || item.userAvatarUrl) && (
+              <UserAvatar
+                name={item.userHandle}
+                src={item.userAvatarUrl}
+                size={22}
+              />
+            )}
+            <Box component="span" sx={{ fontSize: 13, color: colors.text2 }}>
+              {item.message}
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
+
+  return (
+    <Box
+      role="region"
+      aria-label="Live activity"
+      sx={{
+        position: placement,
+        bottom:
+          placement === "fixed"
+            ? "calc(64px + env(safe-area-inset-bottom))"
+            : 0,
+        left: placement === "fixed" ? 0 : undefined,
+        right: placement === "fixed" ? 0 : undefined,
+        zIndex: 14,
+        height: 36,
+        flex: "none",
+        display: "flex",
+        alignItems: "stretch",
+        backgroundColor: "rgba(8,10,16,0.92)",
+        borderTop: `1px solid ${tint("cyan", 0.18)}`,
+        backdropFilter: "blur(10px)",
+        overflow: "hidden",
+        "&:hover .hl-tick, &:focus-within .hl-tick": {
+          animationPlayState: "paused",
+        },
+      }}
+    >
+      <Box
+        aria-hidden="true"
+        sx={{
+          flex: "none",
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          pl: "14px",
+          pr: "22px",
+          backgroundColor: colors.cyan,
+          color: colors.ink,
+          fontFamily: fonts.mono,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.18em",
+          clipPath: "polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%)",
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: colors.ink,
+            animation: "hlPulse 1.2s ease-in-out infinite",
+          }}
+        />
+        LIVE
+      </Box>
+      {/* Screen readers get the feed once, as a plain list. */}
+      <Box component="ul" sx={{ ...srOnly, m: 0, p: 0 }}>
+        {items.map((item) => (
+          <li key={item.id}>
+            {tickerKind(item).label}: {item.message}
+          </li>
+        ))}
+      </Box>
+      <Box
+        aria-hidden="true"
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          overflow: "hidden",
+          display: "flex",
+          alignItems: "center",
+          maskImage:
+            "linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 48px), transparent)",
+        }}
+      >
+        <Box
+          className="hl-tick"
+          data-testid="activity-ticker-track"
+          sx={{
+            display: "flex",
+            width: "max-content",
+            animation: "hlTick 60s linear infinite",
+            animationPlayState: paused ? "paused" : "running",
+          }}
+        >
+          {renderRun(0)}
+          {renderRun(1)}
+        </Box>
+      </Box>
+      <IconButton
+        aria-label={paused ? "Resume live activity" : "Pause live activity"}
+        aria-pressed={paused}
+        onClick={() => setPaused((p) => !p)}
+        sx={{
+          flex: "none",
+          minWidth: 36,
+          minHeight: 36,
+          width: 36,
+          height: 36,
+          borderLeft: `1px solid ${tint("cyan", 0.12)}`,
+          "& svg": { fontSize: 18 },
+          "&.Mui-focusVisible": {
+            outline: `2px solid ${colors.cyan}`,
+            outlineOffset: -2,
+          },
+        }}
+      >
+        {paused ? <PlayArrowSharp /> : <PauseSharp />}
+      </IconButton>
+    </Box>
+  );
 }
 
 interface ActivityTickerProps {
   event_id: number;
-  responded: number;
+  /** Truthy once the viewer has RSVP'd; the feed is only shown to them. */
+  responded: number | boolean;
+  placement?: "sticky" | "fixed";
 }
 
-export default function ActivityTicker(props: ActivityTickerProps) {
+/** Live activity ticker for an event; polls the API every 30s. */
+export default function ActivityTicker({
+  event_id,
+  responded,
+  placement = "sticky",
+}: ActivityTickerProps) {
   const { signOut } = useContext(UserDispatchContext);
-  const userDetails = useContext(UserContext);
-  const token = userDetails?.token;
-
-  const [activeEvents, setActiveEvents] = useState<ActivityTickerEvent[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [visible, setVisible] = useState(true);
-  const [isPaused, setIsPaused] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const [progress, setProgress] = useState(0);
-
-  const activeEventsRef = React.useRef<ActivityTickerEvent[]>([]);
-  const nextEventsRef = React.useRef<ActivityTickerEvent[]>([]);
+  const { token } = useContext(UserContext);
+  const [feed, setFeed] = useState<{
+    eventId: number;
+    items: ActivityTickerEvent[];
+  } | null>(null);
 
   useEffect(() => {
-    activeEventsRef.current = activeEvents;
-  }, [activeEvents]);
-
-  const fetchTickerEvents = () => {
-    fetch(`/api/events/${props.event_id}/activity-ticker`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok) return response.json();
+    if (!responded || !event_id) return;
+    let cancelled = false;
+    const load = () => {
+      fetch(`/api/events/${event_id}/activity-ticker`, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
       })
-      .then((data) => {
-        if (data && data.events && data.events.length > 0) {
-          if (activeEventsRef.current.length === 0) {
-            setActiveEvents(data.events);
-          } else {
-            nextEventsRef.current = data.events;
+        .then((response) => {
+          if (response.status === 401) signOut();
+          else if (response.ok) return response.json();
+        })
+        .then((data) => {
+          if (!cancelled && data && Array.isArray(data.events)) {
+            setFeed({ eventId: event_id, items: data.events });
           }
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching activity ticker:", error);
-      });
-  };
-
-  useEffect(() => {
-    if (!props.responded) {
-      return;
-    }
-
-    // Initial fetch
-    fetchTickerEvents();
-
-    // Poll every 30 seconds
-    const interval = setInterval(fetchTickerEvents, 30000);
-
-    return () => clearInterval(interval);
-  }, [props.event_id, props.responded]);
-
-  useEffect(() => {
-    if (activeEvents.length > 0 && visible) {
-      if (isPaused || isHovered) {
-        return;
-      }
-
-      const step = 100;
-      const duration = 8000;
-      const increment = (step / duration) * 100;
-
-      const timer = setInterval(() => {
-        setProgress((prev) => {
-          const next = prev + increment;
-          if (next >= 100) {
-            setVisible(false);
-            return 0;
-          }
-          return next;
+        })
+        .catch((error) => {
+          console.error("Error fetching activity ticker:", error);
         });
-      }, step);
+    };
+    load();
+    const interval = window.setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [event_id, responded, token, signOut]);
 
-      return () => clearInterval(timer);
-    }
-  }, [activeEvents.length, visible, currentIndex, isPaused, isHovered]);
-
-  const handleExited = () => {
-    setProgress(0);
-    let nextIndex = currentIndex + 1;
-    if (nextIndex >= activeEvents.length) {
-      if (nextEventsRef.current.length > 0) {
-        setActiveEvents(nextEventsRef.current);
-        nextEventsRef.current = [];
-        nextIndex = 0;
-      } else {
-        nextIndex = 0;
-      }
-    }
-    setCurrentIndex(nextIndex);
-    setVisible(true);
-  };
-
-  if (!props.responded || activeEvents.length === 0) {
-    return null;
-  }
-
-  const event = activeEvents[currentIndex];
-
-  const getIcon = (type: string) => {
-    switch (type) {
-      case "event_create":
-        return <Celebration sx={{ fontSize: 40, color: "#60a5fa" }} />;
-      case "rsvp":
-        return <HowToReg sx={{ fontSize: 40, color: "#4ade80" }} />;
-      case "game_suggestion":
-        return <SportsEsports sx={{ fontSize: 40, color: "#f472b6" }} />;
-      case "game_vote":
-        return <ThumbUp sx={{ fontSize: 40, color: "#fbbf24" }} />;
-      case "seat_reservation":
-        return <EventSeat sx={{ fontSize: 40, color: "#a78bfa" }} />;
-      default:
-        return <Celebration sx={{ fontSize: 40, color: "#60a5fa" }} />;
-    }
-  };
-
-  return (
-    <Box
-      sx={{
-        position: "fixed",
-        bottom: 0,
-        left: { sm: "240px", xs: 0 },
-        right: 0,
-        zIndex: 1300,
-        pointerEvents: "none",
-        display: "flex",
-        justifyContent: "center",
-      }}
-    >
-      <Paper
-        elevation={6}
-        sx={{
-          pointerEvents: "auto",
-          background: event.gameId
-            ? `linear-gradient(to right, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.9)), url(https://steamcdn-a.akamaihd.net/steam/apps/${event.gameId}/page_bg_generated.jpg)`
-            : "rgba(15, 23, 42, 0.95)",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backdropFilter: "blur(12px)",
-          borderTop: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          px: 3,
-          py: 1.5,
-          width: "100%",
-          minHeight: "72px",
-          boxShadow: "0 -4px 32px rgba(0, 0, 0, 0.4)",
-          overflow: "hidden",
-          transition: "background 0.5s ease-in-out",
-        }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <Slide
-          direction="up"
-          in={visible}
-          onExited={handleExited}
-          mountOnEnter
-          unmountOnExit
-        >
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-              width: "100%",
-              maxWidth: "1200px",
-            }}
-          >
-            {/* Big Icon */}
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                minWidth: 60,
-              }}
-            >
-              {getIcon(event.eventType)}
-            </Box>
-
-            {/* Content */}
-            <Box sx={{ display: "flex", flexDirection: "column", flexGrow: 1 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "#94a3b8",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.5px",
-                  lineHeight: 1,
-                  mb: 0.5,
-                }}
-              >
-                {event.eventType.replace(/_/g, " ")}
-              </Typography>
-              <Typography
-                sx={{
-                  color: "#f8fafc",
-                  fontWeight: 600,
-                  fontSize: "1rem",
-                  lineHeight: 1.2,
-                }}
-              >
-                {event.message}
-              </Typography>
-            </Box>
-
-            {/* User Avatar */}
-            {event.userAvatarUrl ? (
-              <Avatar
-                alt={event.userHandle || "User"}
-                src={event.userAvatarUrl}
-                sx={{ width: 32, height: 32, border: "2px solid #334155" }}
-              />
-            ) : (
-              <Avatar
-                sx={{
-                  width: 32,
-                  height: 32,
-                  bgcolor: "#334155",
-                  fontSize: "0.8rem",
-                }}
-              >
-                {event.userHandle?.charAt(0) || "?"}
-              </Avatar>
-            )}
-
-            <Chip
-              label={moment(event.timestamp).fromNow()}
-              size="small"
-              sx={{
-                backgroundColor: "rgba(255, 255, 255, 0.1)",
-                color: "#cbd5e1",
-                fontWeight: 500,
-                fontSize: "0.75rem",
-                height: 24,
-              }}
-            />
-
-            <Box sx={{ position: "relative", display: "inline-flex", ml: 1 }}>
-              <CircularProgress
-                variant="determinate"
-                value={progress}
-                size={28}
-                thickness={5}
-                sx={{
-                  color: isPaused
-                    ? "#ef4444"
-                    : isHovered
-                      ? "#f59e0b"
-                      : "#3b82f6",
-                  transition: "color 0.3s ease",
-                }}
-              />
-              <Box
-                sx={{
-                  top: 0,
-                  left: 0,
-                  bottom: 0,
-                  right: 0,
-                  position: "absolute",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <IconButton
-                  size="small"
-                  onClick={() => setIsPaused(!isPaused)}
-                  sx={{
-                    padding: 0,
-                    minWidth: 0,
-                    color: "#fff",
-                    "&:hover": {
-                      backgroundColor: "rgba(255,255,255,0.1)",
-                    },
-                  }}
-                >
-                  {isPaused ? (
-                    <PlayArrow sx={{ fontSize: 16 }} />
-                  ) : (
-                    <Pause sx={{ fontSize: 16 }} />
-                  )}
-                </IconButton>
-              </Box>
-            </Box>
-          </Box>
-        </Slide>
-      </Paper>
-    </Box>
-  );
+  if (!responded || feed?.eventId !== event_id) return null;
+  return <ActivityTickerView items={feed.items} placement={placement} />;
 }
+
+export type { ActivityTickerProps };
