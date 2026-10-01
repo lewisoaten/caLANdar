@@ -2,11 +2,17 @@ import * as React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { BrandMark, colors, fonts, hairline } from "./hl";
-import { DEFAULT_EVENT_IMAGE } from "./eventListModel";
+import { AuthHeroArt } from "./auth/AuthHeroArt";
+
+const heroPad = "clamp(22px,4vw,56px)";
+const heroPadNeg = `calc(-1 * ${heroPad})`;
+/** Scrim colour behind hero text (page background at 88%). */
+export const AUTH_SCRIM = "rgba(6,7,11,0.88)";
+const scrim = AUTH_SCRIM;
 
 /**
  * Full-bleed two-column frame shared by Sign in and Verify email: a hero with
- * the LAN photo, brand and pitch (the page's H1) on the left, and the form
+ * generated artwork (`AuthHeroArt`), brand and pitch (the page's H1) on the left, and the form
  * column on the right. Stacks on narrow screens. The shell renders these
  * pages without chrome and already provides `<main>`.
  */
@@ -33,7 +39,7 @@ export default function AuthLayout({
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          p: "clamp(22px,4vw,56px)",
+          p: heroPad,
           // The grid is two columns from 880px (2 x 440px minimum).
           borderBottom: `1px solid ${hairline.chrome}`,
           "@media (min-width: 880px)": {
@@ -42,44 +48,34 @@ export default function AuthLayout({
           },
         }}
       >
-        <Box
-          aria-hidden="true"
-          sx={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage: `url('${DEFAULT_EVENT_IMAGE}')`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundColor: colors.surface2,
-            filter: "saturate(1.2)",
-          }}
-        />
-        <Box
-          aria-hidden="true"
-          sx={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "linear-gradient(160deg,rgba(6,7,11,0.55) 0%,rgba(6,7,11,0.85) 55%,#06070b 100%)",
-          }}
-        />
-        <Box
-          aria-hidden="true"
-          sx={{
-            position: "absolute",
-            inset: 0,
-            backgroundImage:
-              "repeating-linear-gradient(0deg,rgba(255,255,255,0.025) 0 1px,transparent 1px 3px)",
-          }}
-        />
+        <AuthHeroArt />
         <BrandMark size={38} sx={{ position: "relative" }} />
         <Box
           sx={{
             position: "relative",
+            isolation: "isolate",
             display: "flex",
             flexDirection: "column",
             gap: "18px",
             pt: 4,
+            // Stacked (mobile) layout: leave a banner of artwork between the
+            // brand and the pitch.
+            "@media (max-width: 879.98px)": {
+              mt: "clamp(140px, 36vw, 230px)",
+            },
+            // Scrim between the artwork and the pitch: at least 88% page
+            // background under every line of text (contrast >= 4.5:1 over
+            // any part of the art), fading in above the kicker.
+            "&::before": {
+              content: '""',
+              position: "absolute",
+              zIndex: -1,
+              left: heroPadNeg,
+              right: heroPadNeg,
+              bottom: heroPadNeg,
+              top: "-72px",
+              background: `linear-gradient(180deg, rgba(6,7,11,0) 0, ${scrim} 104px)`,
+            },
           }}
         >
           <Box
