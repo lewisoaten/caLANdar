@@ -1,12 +1,5 @@
 import * as React from "react";
-import {
-  useEffect,
-  useState,
-  useContext,
-  useCallback,
-  useRef,
-  memo,
-} from "react";
+import { useEffect, useState, useContext, useCallback } from "react";
 import moment from "moment";
 import {
   Box,
@@ -17,30 +10,21 @@ import {
   DialogTitle,
   TextField,
   Button,
-  Stack,
   Typography,
   Popover,
   ToggleButtonGroup,
   ToggleButton,
-  Paper,
-  Popper,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   SelectChangeEvent,
 } from "@mui/material";
-import {
-  DataGrid,
-  GridColDef,
-  GridRowParams,
-  GridActionsCellItem,
-  GridRenderCellParams,
-  GridActionsCellItemProps,
-} from "@mui/x-data-grid";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import SendIcon from "@mui/icons-material/Send";
+import EditSharp from "@mui/icons-material/EditSharp";
+import PersonRemoveSharp from "@mui/icons-material/PersonRemoveSharp";
+import ForwardToInboxSharp from "@mui/icons-material/ForwardToInboxSharp";
+import PersonAddSharp from "@mui/icons-material/PersonAddSharp";
+import GroupSharp from "@mui/icons-material/GroupSharp";
 import {
   InvitationData,
   defaultInvitationsData,
@@ -52,128 +36,21 @@ import { dateParser } from "../utils";
 import AttendanceSelector from "./AttendanceSelector";
 import { EventData, PaginatedEventsResponse } from "../types/events";
 import { useSnackbar } from "notistack";
-
-interface GridCellExpandProps {
-  value: string;
-  width: number;
-}
-
-function isOverflown(element: Element): boolean {
-  return (
-    element.scrollHeight > element.clientHeight ||
-    element.scrollWidth > element.clientWidth
-  );
-}
-
-const GridCellExpand = memo(function GridCellExpand(
-  props: GridCellExpandProps,
-) {
-  const { width, value } = props;
-  const wrapper = useRef<HTMLDivElement | null>(null);
-  const cellDiv = useRef(null);
-  const cellValue = useRef(null);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [showFullCell, setShowFullCell] = useState(false);
-  const [showPopper, setShowPopper] = useState(false);
-  // Measured when the popper opens: refs must not be read during render.
-  const [cellHeight, setCellHeight] = useState(0);
-
-  const handleMouseEnter = () => {
-    const isCurrentlyOverflown = cellValue.current
-      ? isOverflown(cellValue.current)
-      : false;
-    setShowPopper(isCurrentlyOverflown);
-    setCellHeight(wrapper.current?.offsetHeight ?? 0);
-    setAnchorEl(cellDiv.current);
-    setShowFullCell(true);
-  };
-
-  const handleMouseLeave = () => {
-    setShowFullCell(false);
-  };
-
-  useEffect(() => {
-    if (!showFullCell) {
-      return undefined;
-    }
-
-    function handleKeyDown(nativeEvent: KeyboardEvent) {
-      // IE11, Edge (prior to using Bink?) use 'Esc'
-      if (nativeEvent.key === "Escape" || nativeEvent.key === "Esc") {
-        setShowFullCell(false);
-      }
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [setShowFullCell, showFullCell]);
-
-  return (
-    <Box
-      ref={wrapper}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      sx={{
-        alignItems: "center",
-        lineHeight: "24px",
-        width: "100%",
-        height: "100%",
-        position: "relative",
-        display: "flex",
-      }}
-    >
-      <Box
-        ref={cellDiv}
-        sx={{
-          height: "100%",
-          width,
-          display: "block",
-          position: "absolute",
-          top: 0,
-        }}
-      />
-      <Box
-        ref={cellValue}
-        sx={{
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {value}
-      </Box>
-      {showPopper && (
-        <Popper
-          open={showFullCell && anchorEl !== null}
-          anchorEl={anchorEl}
-          style={{ width, marginLeft: -17 }}
-        >
-          <Paper elevation={1} style={{ minHeight: cellHeight - 3 }}>
-            <Typography
-              variant="body2"
-              style={{ padding: 8 }}
-              sx={{ whiteSpace: "pre-wrap" }}
-            >
-              {value}
-            </Typography>
-          </Paper>
-        </Popper>
-      )}
-    </Box>
-  );
-});
-
-function renderCellExpand(params: GridRenderCellParams) {
-  return (
-    <GridCellExpand
-      value={params.value || ""}
-      width={params.colDef.computedWidth}
-    />
-  );
-}
+import {
+  EmptyState,
+  UserAvatar,
+  colors,
+  fonts,
+  hairline,
+  tint,
+  tones,
+} from "./hl";
+import {
+  ConfirmDialog,
+  RowAction,
+  parseEmailList,
+  rsvpStatus,
+} from "./InvitationSeatManagementTable";
 
 interface InvitationsTableProps {
   event: EventData;
@@ -201,6 +78,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
   const [availableEvents, setAvailableEvents] = useState<EventData[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | "">(0);
   const [emailsValue, setEmailsValue] = useState<string>("");
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
 
   useEffect(() => {
     if (event_id) {
@@ -245,6 +123,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
             (invitation) => invitation.email !== email,
           );
           setInvitations(remainingInvitations);
+          setPendingDelete(null);
           enqueueSnackbar("Invitation deleted successfully", {
             variant: "success",
           });
@@ -270,7 +149,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     [invitations],
   );
 
-  // Helper to be used by DataGrid actions (accepts email directly)
+  // Curried so row actions can pass the email directly
   const handleResendInvitation = useCallback(
     (email: string) => () => {
       fetch(
@@ -409,7 +288,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     const data = new FormData(event.currentTarget);
     const emails = data.get("emails") as string;
 
-    const emailArr = emails.split(",");
+    const emailArr = parseEmailList(emails);
 
     Promise.all<Promise<InvitationData>[]>(
       emailArr.map((email) => {
@@ -532,17 +411,13 @@ export default function InvitationsTable(props: InvitationsTableProps) {
     defaultInvitationData,
   );
 
-  const handlePopoverOpen = (event: React.MouseEvent<HTMLElement>) => {
-    const popoverOpen = Boolean(popoverAnchorEl);
-    if (!popoverOpen) {
-      const email = event?.currentTarget.id.replace("attendance-", "");
-      const invitation = invitations.find(
-        (x) => x.email.toLowerCase() === email.toLowerCase(),
-      );
-      if (invitation && invitation.attendance) {
-        setPopoverInvitation(invitation);
-        setPopoverAnchorEl(event.currentTarget);
-      }
+  const handlePopoverOpen = (
+    event: React.MouseEvent<HTMLElement>,
+    invitation: InvitationData,
+  ) => {
+    if (invitation.attendance) {
+      setPopoverInvitation(invitation);
+      setPopoverAnchorEl(event.currentTarget);
     }
   };
 
@@ -552,163 +427,215 @@ export default function InvitationsTable(props: InvitationsTableProps) {
 
   const popoverOpen = Boolean(popoverAnchorEl);
 
-  // Reusable date formatter for DataGrid columns
-  const formatMomentDate = (value: moment.Moment | null) => {
-    if (value == null) {
-      return "";
-    }
-    return value.calendar();
-  };
+  const formatMomentDate = (value: moment.Moment | null) =>
+    value == null ? "—" : value.calendar();
 
-  // DataGrid columns definition
-  const columns: GridColDef[] = [
-    {
-      field: "email",
-      headerName: "Email",
-      type: "string",
-      flex: 1.5,
-      editable: false,
-      renderCell: renderCellExpand,
-    },
-    {
-      field: "handle",
-      headerName: "Handle",
-      type: "string",
-      flex: 1,
-      editable: false,
-      renderCell: renderCellExpand,
-    },
-    {
-      field: "invitedAt",
-      headerName: "Invitation Sent",
-      type: "dateTime",
-      flex: 1,
-      editable: false,
-      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
-    },
-    {
-      field: "response",
-      headerName: "Response",
-      type: "string",
-      flex: 0.7,
-      editable: false,
-    },
-    {
-      field: "respondedAt",
-      headerName: "Response Sent",
-      type: "dateTime",
-      flex: 1,
-      editable: false,
-      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
-    },
-    {
-      field: "attendance",
-      headerName: "Attendance",
-      type: "string",
-      flex: 1,
-      editable: false,
-      renderCell: (params: GridRenderCellParams) => {
-        const attendance = params.value as number[] | null;
-        return (
-          <Box
-            id={"attendance-" + params.row.email}
-            onMouseEnter={handlePopoverOpen}
-            onClick={handlePopoverOpen}
-            onMouseLeave={handlePopoverClose}
-            sx={{ cursor: attendance ? "pointer" : "default" }}
-          >
-            {attendance ? attendance.join(", ") : ""}
-          </Box>
-        );
-      },
-    },
-    {
-      field: "lastModified",
-      headerName: "Last Modified",
-      type: "dateTime",
-      flex: 1,
-      editable: false,
-      valueFormatter: (value: moment.Moment | null) => formatMomentDate(value),
-    },
-    {
-      field: "actions",
-      type: "actions",
-      headerName: "Actions",
-      flex: 0.9,
-      getActions: (params: GridRowParams) => {
-        const actions: React.ReactElement<GridActionsCellItemProps>[] = [];
-        // Only show resend if the invitee hasn't responded yet
-        if (params.row.response == null) {
-          actions.push(
-            <GridActionsCellItem
-              key="resend"
-              icon={<SendIcon />}
-              label="Resend"
-              onClick={handleResendInvitation(params.row.email)}
-            />,
-          );
-        }
-        actions.push(
-          <GridActionsCellItem
-            key="edit"
-            icon={<EditIcon />}
-            label="Edit"
-            onClick={handleEditInvitation(params.row.email)}
-          />,
-        );
-        actions.push(
-          <GridActionsCellItem
-            key="delete"
-            icon={<DeleteIcon />}
-            label="Remove"
-            onClick={handleDeleteInvitation(params.row.email)}
-          />,
-        );
-        return actions;
-      },
-    },
-  ];
+  const sorted = [...invitations].sort(
+    (x, y) => moment(y.invitedAt).valueOf() - moment(x.invitedAt).valueOf(),
+  );
 
   return (
     <React.Fragment>
-      <Typography component="h2" variant="h6" color="primary" gutterBottom>
-        Invitations
-      </Typography>
-      <Box sx={{ width: "100%" }}>
-        <DataGrid
-          rows={invitations}
-          columns={columns}
-          getRowId={(row) => row.email}
-          autoHeight
-          disableRowSelectionOnClick
-          sx={{
-            // Ensure the actions cell and its inner container align items to the right
-            "& .dt-actions-cell": {
-              display: "flex",
-              justifyContent: "flex-end",
-              paddingRight: 1,
-            },
-            "& .MuiDataGrid-cell--withRenderer": {
-              // ensure cells with custom renderers stretch so our flex-end works
-              display: "flex",
-            },
-            "& .MuiDataGrid-cell .MuiGridActionsCell-root": {
-              width: "100%",
-              display: "flex",
-              justifyContent: "flex-end",
-            },
-          }}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: "invitedAt", sort: "desc" }],
-            },
-          }}
-        />
-      </Box>
-      <Popover
+      <Box
+        component="section"
+        aria-labelledby="invitations-heading"
         sx={{
-          pointerEvents: "none",
+          border: `1px solid ${hairline.panel}`,
+          backgroundColor: colors.surface,
+          minWidth: 0,
         }}
+      >
+        <Box
+          sx={{
+            p: "14px 20px",
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 1.5,
+            borderBottom: `1px solid ${hairline.soft}`,
+          }}
+        >
+          <Typography
+            id="invitations-heading"
+            component="h2"
+            sx={{
+              m: 0,
+              flex: 1,
+              fontSize: 18,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+            }}
+          >
+            Invitations
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<PersonAddSharp />}
+            onClick={handleClickOpen}
+          >
+            Send invitations
+          </Button>
+        </Box>
+        {sorted.length === 0 ? (
+          <EmptyState
+            icon={<GroupSharp />}
+            title="Nobody invited yet"
+            description="Send invitations by email to get the party started."
+          />
+        ) : (
+          <Box component="ul" aria-label="Invitations" sx={{ m: 0, p: 0 }}>
+            {sorted.map((row) => {
+              const st = rsvpStatus(row.response);
+              return (
+                <Box
+                  component="li"
+                  key={row.email}
+                  sx={{
+                    listStyle: "none",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: "10px 18px",
+                    p: "12px 20px",
+                    borderBottom: `1px solid ${hairline.faint}`,
+                    "&:hover": { backgroundColor: tint("cyan", 0.03) },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      flex: "1 1 220px",
+                      minWidth: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1.5,
+                    }}
+                  >
+                    <UserAvatar
+                      name={row.handle || row.email}
+                      src={row.avatarUrl}
+                    />
+                    <Box
+                      sx={{
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                      }}
+                    >
+                      <Typography
+                        component="span"
+                        sx={{
+                          fontSize: 15,
+                          fontWeight: 600,
+                          color: row.handle ? colors.text : colors.textMuted,
+                          overflowWrap: "anywhere",
+                        }}
+                      >
+                        {row.handle || "No callsign yet"}
+                      </Typography>
+                      <Box
+                        component="span"
+                        title={row.email}
+                        sx={{
+                          fontFamily: fonts.mono,
+                          fontSize: 12,
+                          color: colors.textMuted,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {row.email}
+                      </Box>
+                    </Box>
+                  </Box>
+                  <Box
+                    component="span"
+                    sx={{
+                      width: 80,
+                      fontFamily: fonts.mono,
+                      fontSize: 11,
+                      letterSpacing: "0.12em",
+                      color: tones[st.tone].fg,
+                    }}
+                  >
+                    {st.label}
+                  </Box>
+                  <Box
+                    sx={{
+                      width: 200,
+                      display: "flex",
+                      flexDirection: "column",
+                      fontSize: 12,
+                      color: colors.textMuted,
+                    }}
+                  >
+                    <span>Invited {formatMomentDate(row.invitedAt)}</span>
+                    <span>Responded {formatMomentDate(row.respondedAt)}</span>
+                  </Box>
+                  <Box sx={{ width: 110 }}>
+                    {row.attendance ? (
+                      <Button
+                        variant="text"
+                        size="small"
+                        onClick={(e) => handlePopoverOpen(e, row)}
+                        aria-haspopup="dialog"
+                        sx={{ px: 1, fontFamily: fonts.mono, fontSize: 12 }}
+                      >
+                        {row.attendance.filter((b) => b === 1).length}/
+                        {row.attendance.length} slots
+                      </Button>
+                    ) : (
+                      <Box
+                        component="span"
+                        sx={{ color: colors.textDim, fontSize: 13 }}
+                      >
+                        —
+                      </Box>
+                    )}
+                  </Box>
+                  <Box sx={{ display: "flex", gap: "6px", ml: "auto" }}>
+                    {row.response == null && (
+                      <RowAction
+                        label={`Resend invite to ${row.email}`}
+                        onClick={handleResendInvitation(row.email)}
+                      >
+                        <ForwardToInboxSharp />
+                      </RowAction>
+                    )}
+                    <RowAction
+                      label={`Edit ${row.email}`}
+                      onClick={handleEditInvitation(row.email)}
+                    >
+                      <EditSharp />
+                    </RowAction>
+                    <RowAction
+                      danger
+                      label={`Remove ${row.email}`}
+                      onClick={() => setPendingDelete(row.email)}
+                    >
+                      <PersonRemoveSharp />
+                    </RowAction>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+      </Box>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Remove invitation?"
+        confirmLabel="Remove"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() =>
+          pendingDelete && handleDeleteInvitation(pendingDelete)()
+        }
+      >
+        Remove <strong>{pendingDelete}</strong> from this event?
+      </ConfirmDialog>
+      <Popover
         open={popoverOpen}
         anchorEl={popoverAnchorEl}
         anchorOrigin={{
@@ -720,22 +647,21 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           horizontal: "right",
         }}
         onClose={handlePopoverClose}
-        disableRestoreFocus
       >
-        <AttendanceSelector
-          timeBegin={props.event.timeBegin}
-          timeEnd={props.event.timeEnd}
-          value={popoverInvitation.attendance}
-        />
+        <Box sx={{ p: 2 }}>
+          <Typography sx={{ mb: 1, fontSize: 14, fontWeight: 600 }}>
+            {popoverInvitation.handle || popoverInvitation.email}
+          </Typography>
+          <AttendanceSelector
+            timeBegin={props.event.timeBegin}
+            timeEnd={props.event.timeEnd}
+            value={popoverInvitation.attendance}
+          />
+        </Box>
       </Popover>
-      <Stack direction="row" spacing={2}>
-        <Button variant="outlined" onClick={handleClickOpen}>
-          Send Inviations
-        </Button>
-      </Stack>
       <Dialog open={open} onClose={handleClose}>
         <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-          <DialogTitle>Send Inviations</DialogTitle>
+          <DialogTitle>Send invitations</DialogTitle>
           <DialogContent>
             <DialogContentText>
               Invite gamers here! Just specify their email addresses separated
@@ -780,8 +706,12 @@ export default function InvitationsTable(props: InvitationsTableProps) {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleClose}>Cancel</Button>
-            <Button type="submit">Create</Button>
+            <Button onClick={handleClose} color="inherit">
+              Cancel
+            </Button>
+            <Button type="submit" variant="contained">
+              Send
+            </Button>
           </DialogActions>
         </Box>
       </Dialog>
@@ -791,7 +721,7 @@ export default function InvitationsTable(props: InvitationsTableProps) {
           <DialogContentText>
             Update the handle and RSVP response for {editingInvitation.email}
           </DialogContentText>
-          <Stack spacing={3} sx={{ mt: 2 }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 3, mt: 2 }}>
             <TextField
               label="Handle"
               variant="outlined"
@@ -836,10 +766,12 @@ export default function InvitationsTable(props: InvitationsTableProps) {
                 />
               </Box>
             )}
-          </Stack>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleEditClose}>Cancel</Button>
+          <Button onClick={handleEditClose} color="inherit">
+            Cancel
+          </Button>
           <Button onClick={handleEditSave} variant="contained">
             Save
           </Button>

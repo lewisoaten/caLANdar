@@ -1,17 +1,37 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { userEvent, within } from "storybook/test";
 import moment from "moment";
+import { Route, Routes } from "react-router-dom";
 import EventManagement from "../components/EventManagement";
+import Dashboard from "../components/Dashboard";
+import { sectionGap } from "../components/hl";
+import { atPath, mockShellApi } from "./shellMocks";
 import { getAttendanceBucketCount } from "../utils/attendanceBuckets";
-import { mockApi, withRoute, withUser } from "./mockApi";
+import { mockApi, mockResponse, withRoute, withUser } from "./mockApi";
 
 const meta = {
   title: "Components/EventManagement",
   component: EventManagement,
   parameters: {
-    layout: "fullscreen",
+    layout: "padded",
   },
-  decorators: [withUser({ isAdmin: true })],
+  decorators: [
+    withUser({ isAdmin: true }),
+    // The shell's <main> lays pages out as a column with the section gap.
+    (Story) => (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: sectionGap,
+          maxWidth: 1400,
+          margin: "0 auto",
+        }}
+      >
+        <Story />
+      </div>
+    ),
+  ],
   tags: ["autodocs"],
 } satisfies Meta<typeof EventManagement>;
 
@@ -364,6 +384,7 @@ const paginatedEvents = {
 };
 
 const table: Record<string, unknown> = {
+  "GET /api/events/409": () => mockResponse(404, null),
   "GET /api/events": paginatedEvents,
   // The component first renders with the placeholder event id 0, before the
   // event itself has loaded.
@@ -429,20 +450,72 @@ for (const s of scenarios) {
 
 mockApi(table);
 
+const inShell = (path: string) => [
+  (Story: () => React.JSX.Element) => {
+    mockShellApi("yes");
+    mockApi(table);
+    return (
+      <Dashboard>
+        <Routes>
+          <Route path="/admin/events/:id" element={<Story />} />
+        </Routes>
+      </Dashboard>
+    );
+  },
+  atPath(path),
+];
+
+/** Details tab inside the app shell, as in the design. */
+export const InShell: Story = {
+  parameters: { layout: "fullscreen", router: false },
+  decorators: inShell("/admin/events/401"),
+};
+
+/** Seating tab inside the app shell. */
+export const InShellSeating: Story = {
+  parameters: { layout: "fullscreen", router: false },
+  decorators: inShell("/admin/events/401?tab=seating"),
+};
+
 /** Fully configured event: seating, rooms, seats and mixed RSVPs. */
 export const Default: Story = {
   decorators: [withRoute("/events/:id", "/events/401")],
 };
 
-/** As Default, with the Main Hall selected so the floorplan and seat list show its seats. */
-export const RoomSelected: Story = {
+/** Roster tab: invite bar and every invitee with RSVP, attendance and seat. */
+export const Roster: Story = {
+  decorators: [withRoute("/events/:id", "/events/401?tab=roster")],
+};
+
+/** Seating tab: seat-map options, rooms (linking to the room editor) and occupancy. */
+export const Seating: Story = {
+  decorators: [withRoute("/events/:id", "/events/401?tab=seating")],
+};
+
+/** Broadcast tab: email the guests, with audience counts. */
+export const Broadcast: Story = {
+  decorators: [withRoute("/events/:id", "/events/401?tab=broadcast")],
+};
+
+/** Delete confirmation from the Details tab. */
+export const DeleteConfirm: Story = {
   decorators: [withRoute("/events/:id", "/events/401")],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Select Main Hall" }),
+      await canvas.findByRole("button", { name: "Delete event" }),
     );
   },
+};
+
+/** Seating tab with seating disabled and no rooms. */
+export const SeatingOff: Story = {
+  decorators: [withRoute("/events/:id", "/events/402?tab=seating")],
+};
+
+/** An event id that doesn't exist. */
+export const NotFound: Story = {
+  decorators: [withRoute("/events/:id", "/events/409")],
 };
 
 /** Seating disabled and no rooms; a small invite list. */

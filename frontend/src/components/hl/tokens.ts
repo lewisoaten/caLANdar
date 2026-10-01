@@ -105,9 +105,11 @@ export const effects = {
 /** Visually hide content but keep it for screen readers (spread into `sx`). */
 export const srOnly = {
   position: "absolute",
-  width: 1,
-  height: 1,
-  margin: -1,
+  // Strings, not numbers: in MUI `sx` a width of 1 means 100%, and margin -1
+  // is a theme spacing unit.
+  width: "1px",
+  height: "1px",
+  margin: "-1px",
   padding: 0,
   border: 0,
   overflow: "hidden",

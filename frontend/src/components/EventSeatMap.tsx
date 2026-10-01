@@ -1,857 +1,1006 @@
 import * as React from "react";
 import { useEffect, useState, useContext, useCallback, useMemo } from "react";
+import { Link as RouterLink, useParams } from "react-router-dom";
 import {
-  Typography,
-  Box,
-  Stack,
-  Chip,
   Alert,
+  Box,
+  Button,
   CircularProgress,
-  Grid,
-  Card,
-  CardContent,
-  Avatar,
-  Container,
-  Paper,
   Tooltip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Typography,
 } from "@mui/material";
-import { alpha, useTheme } from "@mui/material/styles";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
-import PersonIcon from "@mui/icons-material/Person";
+import DeskSharp from "@mui/icons-material/DeskSharp";
+import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { Room, Seat, EventSeatingConfig, EventData } from "../types/events";
-import { InvitationLiteData, RSVP } from "../types/invitations";
-import { useParams } from "react-router-dom";
-import RoomFloorplanView, { SeatDisplayData } from "./RoomFloorplanView";
+import { Seat, EventSeatingConfig, EventData } from "../types/events";
+import { InvitationData, InvitationLiteData, RSVP } from "../types/invitations";
 import { getAttendanceDescription } from "../utils/attendanceDescription";
+import {
+  EmptyState,
+  Kicker,
+  PageHeader,
+  Panel,
+  StatCell,
+  StatGrid,
+  Tag,
+  UserAvatar,
+  bracket,
+  colors,
+  fonts,
+  hairline,
+  tint,
+} from "./hl";
+import {
+  SeatFloorPlan,
+  FloorPlanLegend,
+  type DeskState,
+  type FloorPlanDesk,
+} from "./SeatFloorPlan";
+import {
+  layoutRoom,
+  ownDeskLabel,
+  roomCode,
+  sortByCell,
+  sortRooms,
+  type FloorPlanRoom,
+  type FloorPlanSeat,
+} from "./seatFloorPlanModel";
+import { useSeatReservation } from "./useSeatReservation";
 
-interface SeatWithOccupancy extends Seat {
-  invitations: InvitationLiteData[];
-  isOccupied: boolean;
-  occupantCount: number;
+const isGoing = (r: RSVP | null | undefined) =>
+  r === RSVP.yes || r === RSVP.maybe;
+
+const displayName = (inv: { handle: string | null }) => inv.handle || "Someone";
+
+interface DeskInfo extends FloorPlanDesk {
+  seat: FloorPlanSeat;
+  /** Everyone booked on the desk (any time), for the "who's where" list. */
+  people: InvitationLiteData[];
 }
 
-interface InvitationWithDetails extends InvitationLiteData {
-  seatLabel: string | null;
-  roomName: string | null;
+function AttendancePips({
+  attendance,
+  response,
+  event,
+}: {
+  attendance: number[] | null;
+  response: RSVP | null;
+  event: EventData | null;
+}) {
+  if (!attendance || attendance.length === 0 || !event) return null;
+  const text = getAttendanceDescription(
+    attendance,
+    event.timeBegin,
+    event.timeEnd,
+  );
+  const on = response === RSVP.maybe ? colors.amber : colors.lime;
+  return (
+    <Tooltip title={text} enterDelay={200}>
+      <Box
+        role="img"
+        aria-label={`Attending: ${text}`}
+        sx={{ display: "flex", gap: "3px", flex: "none" }}
+      >
+        {attendance.map((bucket, index) => (
+          <Box
+            key={index}
+            sx={{
+              width: 6,
+              height: 10,
+              backgroundColor: bucket === 1 ? on : "transparent",
+              border: `1px solid ${bucket === 1 ? on : colors.disabled}`,
+            }}
+          />
+        ))}
+      </Box>
+    </Tooltip>
+  );
 }
 
 const EventSeatMap: React.FC = () => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
-  const theme = useTheme();
-  const { id: eventId } = useParams<{ id: string }>();
+  const email = userDetails?.email;
+  const { id: eventIdParam } = useParams<{ id: string }>();
+  const eventId = eventIdParam ? Number(eventIdParam) : undefined;
 
   const [event, setEvent] = useState<EventData | null>(null);
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [seats, setSeats] = useState<Seat[]>([]);
+  const [rooms, setRooms] = useState<FloorPlanRoom[]>([]);
+  const [seats, setSeats] = useState<FloorPlanSeat[]>([]);
   const [seatingConfig, setSeatingConfig] = useState<EventSeatingConfig | null>(
     null,
   );
   const [invitations, setInvitations] = useState<InvitationLiteData[]>([]);
-  const [dataLoaded, setDataLoaded] = useState(false);
+  const [myInvitation, setMyInvitation] = useState<InvitationData | null>(null);
+  // Which event the loaded data (and any error) belongs to.
+  const [loadedFor, setLoadedFor] = useState<number | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const dataLoaded = eventId !== undefined && loadedFor === eventId;
+  const [activeRoomId, setActiveRoomId] = useState<number | null>(null);
+  const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null);
 
-  // Fetch event data
-  const fetchEvent = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch event");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as EventData);
-      })
-      .then((data) => {
-        if (data) {
-          setEvent(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching event:", error);
-        throw error;
+  const getJson = useCallback(
+    async <T,>(url: string, what: string): Promise<T> => {
+      const response = await fetch(url, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: "Bearer " + token,
+        },
       });
-  }, [eventId, token, signOut]);
+      if (response.status === 401) {
+        signOut();
+        throw new Error("Unauthorized");
+      }
+      if (!response.ok) throw new Error(`Failed to fetch ${what}`);
+      return JSON.parse(await response.text(), dateParser) as T;
+    },
+    [token, signOut],
+  );
 
-  // Fetch seating configuration
-  const fetchSeatingConfig = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}/seating-config`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch seating config");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as EventSeatingConfig);
-      })
-      .then((data) => {
-        if (data) {
-          setSeatingConfig(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching seating config:", error);
-        setFetchError("Failed to load seating configuration");
-        throw error;
-      });
-  }, [eventId, token, signOut]);
-
-  // Fetch rooms
-  const fetchRooms = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}/rooms`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch rooms");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as Room[]);
-      })
-      .then((data) => {
-        if (data) {
-          setRooms(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching rooms:", error);
-        throw error;
-      });
-  }, [eventId, token, signOut]);
-
-  // Fetch seats
-  const fetchSeats = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}/seats`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch seats");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as Seat[]);
-      })
-      .then((data) => {
-        if (data) {
-          setSeats(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching seats:", error);
-        throw error;
-      });
-  }, [eventId, token, signOut]);
-
-  // Fetch invitations with seat information (non-admin endpoint)
   const fetchInvitations = useCallback(() => {
     if (!eventId || !token) return Promise.resolve();
-
-    return fetch(`/api/events/${eventId}/invitations`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 401) {
-          signOut();
-          throw new Error("Unauthorized");
-        }
-        if (!response.ok) {
-          throw new Error("Failed to fetch invitations");
-        }
-        return response
-          .text()
-          .then((data) => JSON.parse(data, dateParser) as InvitationLiteData[]);
-      })
-      .then((data) => {
-        if (data) {
-          setInvitations(data);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching invitations:", error);
-        throw error;
-      });
-  }, [eventId, token, signOut]);
+    return getJson<InvitationLiteData[]>(
+      `/api/events/${eventId}/invitations`,
+      "invitations",
+    ).then((data) => setInvitations(data ?? []));
+  }, [eventId, token, getJson]);
 
   // Load all data
   useEffect(() => {
-    setDataLoaded(false);
-    setFetchError(null);
-
+    if (!eventId || !token) return;
+    const base = `/api/events/${eventId}`;
     Promise.all([
-      fetchEvent(),
-      fetchSeatingConfig(),
-      fetchRooms(),
-      fetchSeats(),
+      getJson<EventData>(base, "event").then(setEvent),
+      getJson<EventSeatingConfig>(
+        `${base}/seating-config`,
+        "seating config",
+      ).then(setSeatingConfig),
+      getJson<FloorPlanRoom[]>(`${base}/rooms`, "rooms").then((data) =>
+        setRooms(data ?? []),
+      ),
+      getJson<FloorPlanSeat[]>(`${base}/seats`, "seats").then((data) =>
+        setSeats(data ?? []),
+      ),
       fetchInvitations(),
     ])
       .then(() => {
-        setDataLoaded(true);
+        setFetchError(null);
+        setLoadedFor(eventId);
       })
       .catch((error) => {
         console.error("Error loading data:", error);
         setFetchError(
           "Failed to load seat map data. Please try refreshing the page.",
         );
-        setDataLoaded(true);
+        setLoadedFor(eventId);
       });
-  }, [
-    eventId,
-    fetchEvent,
-    fetchSeatingConfig,
-    fetchRooms,
-    fetchSeats,
-    fetchInvitations,
-  ]);
+  }, [eventId, token, getJson, fetchInvitations]);
 
-  // Build enriched invitation list with seat/room details
-  const enrichedInvitations: InvitationWithDetails[] = useMemo(
-    () =>
-      invitations.map((invitation) => {
-        const seat = seats.find((s) => s.id === invitation.seatId);
-        const room = seat ? rooms.find((r) => r.id === seat.roomId) : null;
-
-        return {
-          ...invitation,
-          seatLabel: seat?.label || null,
-          roomName: room?.name || null,
-        };
-      }),
-    [invitations, seats, rooms],
-  );
-
-  // Group invitations by seat
-  const seatsWithOccupancy: SeatWithOccupancy[] = useMemo(
-    () =>
-      seats.map((seat) => {
-        const seatInvitations = invitations.filter(
-          (inv) => inv.seatId === seat.id,
-        );
-        return {
-          ...seat,
-          invitations: seatInvitations,
-          isOccupied: seatInvitations.length > 0,
-          occupantCount: seatInvitations.length,
-        };
-      }),
-    [seats, invitations],
-  );
-
-  // Unspecified seat invitations
-  const unspecifiedInvitations = useMemo(
-    () => enrichedInvitations.filter((inv) => inv.seatId === null),
-    [enrichedInvitations],
-  );
-
-  // Helper to get seats for a room
-  const getSeatsForRoom = (roomId: number): SeatWithOccupancy[] => {
-    return seatsWithOccupancy.filter((seat) => seat.roomId === roomId);
-  };
-
-  // Render attendance pips for a user
-  const renderAttendancePips = (
-    attendance: number[] | null,
-    response: RSVP | null,
-  ) => {
-    if (!attendance || !event) return null;
-
-    const attendanceText = getAttendanceDescription(
-      attendance,
-      event.timeBegin,
-      event.timeEnd,
-    );
-
-    const pipColor =
-      response === RSVP.yes
-        ? theme.palette.success.main // Green for Yes
-        : response === RSVP.maybe
-          ? theme.palette.warning.main // Orange for Maybe
-          : theme.palette.success.main;
-
-    return (
-      <Tooltip title={attendanceText} enterDelay={200}>
-        <Box
-          sx={{ display: "flex", gap: 0.5 }}
-          role="img"
-          aria-label={attendanceText}
-        >
-          {attendance.map((bucket, index) => (
-            <Box
-              key={index}
-              sx={{
-                width: 8,
-                height: 8,
-                backgroundColor:
-                  bucket === 1
-                    ? pipColor
-                    : theme.palette.action.disabledBackground,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: "50%",
-              }}
-            />
-          ))}
-        </Box>
-      </Tooltip>
-    );
-  };
-
-  // Convert seats to SeatDisplayData for RoomFloorplanView
-  const convertToSeatDisplayData = (
-    seat: SeatWithOccupancy,
-  ): SeatDisplayData => {
-    return {
-      seat,
-      occupants: seat.invitations,
-      onClick: undefined, // Read-only view, no interaction
+  // The signed-in user's own invitation: RSVP, attendance, avatar.
+  const [myInvitationLoaded, setMyInvitationLoaded] = useState(false);
+  useEffect(() => {
+    if (!eventId || !token || !email) return;
+    let cancelled = false;
+    fetch(`/api/events/${eventId}/invitations/${encodeURIComponent(email)}`, {
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: "Bearer " + token,
+      },
+    })
+      .then((response) =>
+        response.ok
+          ? response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as InvitationData)
+          : null,
+      )
+      .then((data) => {
+        if (!cancelled) setMyInvitation(data);
+      })
+      .catch((error) => {
+        console.error("Error fetching your invitation:", error);
+      })
+      .finally(() => {
+        if (!cancelled) setMyInvitationLoaded(true);
+      });
+    return () => {
+      cancelled = true;
     };
+  }, [eventId, token, email]);
+
+  const going = isGoing(myInvitation?.response);
+  const attendanceBuckets = useMemo(
+    () => (going ? (myInvitation?.attendance ?? null) : null),
+    [going, myInvitation],
+  );
+  const hasTimes = Boolean(
+    attendanceBuckets && attendanceBuckets.some(Boolean),
+  );
+
+  const onReservationChange = useCallback(() => {
+    setSelectedSeatId(null);
+    fetchInvitations()?.catch((error) =>
+      console.error("Error refreshing invitations:", error),
+    );
+  }, [fetchInvitations]);
+
+  const {
+    reservation,
+    loaded: reservationLoaded,
+    availableSeatIds,
+    saving,
+    reserve,
+    release,
+    canRelease,
+  } = useSeatReservation({
+    eventId,
+    token,
+    signOut,
+    seatingConfig,
+    seats,
+    seatsLoaded: dataLoaded,
+    attendanceBuckets: hasTimes ? attendanceBuckets : null,
+    onChange: onReservationChange,
+  });
+
+  const canPick = going && hasTimes && availableSeatIds !== null;
+
+  // The attendee list has no emails: recognise yourself by your (email-derived)
+  // avatar, or by handle and seat when there is no avatar.
+  const isMe = useCallback(
+    (inv: InvitationLiteData) => {
+      if (!myInvitation || !isGoing(myInvitation.response)) return false;
+      if (myInvitation.avatarUrl && inv.avatarUrl) {
+        return inv.avatarUrl === myInvitation.avatarUrl;
+      }
+      return (
+        Boolean(inv.handle) &&
+        inv.handle === myInvitation.handle &&
+        inv.seatId === (reservation?.seatId ?? null)
+      );
+    },
+    [myInvitation, reservation],
+  );
+
+  const orderedRooms = useMemo(
+    () =>
+      sortRooms(rooms).filter((room) =>
+        seats.some((s) => s.roomId === room.id),
+      ),
+    [rooms, seats],
+  );
+  const activeRoom =
+    orderedRooms.find((r) => r.id === activeRoomId) ??
+    // Start on the room holding the user's seat.
+    orderedRooms.find((r) =>
+      seats.some((s) => s.roomId === r.id && s.id === reservation?.seatId),
+    ) ??
+    orderedRooms[0] ??
+    null;
+
+  const me = useMemo(
+    () => ({
+      name: myInvitation?.handle || email || "You",
+      avatarUrl: myInvitation?.avatarUrl ?? null,
+    }),
+    [myInvitation, email],
+  );
+
+  const deskFor = useCallback(
+    (seat: FloorPlanSeat): DeskInfo => {
+      const people = invitations.filter((inv) => inv.seatId === seat.id);
+      const others = people.filter((inv) => !isMe(inv));
+      const mine = reservation?.seatId === seat.id;
+      let state: DeskState;
+      if (mine) state = "mine";
+      else if (selectedSeatId === seat.id) state = "selected";
+      else if (canPick) {
+        state = availableSeatIds!.includes(seat.id) ? "free" : "taken";
+      } else state = others.length > 0 ? "taken" : "free";
+      return {
+        seat,
+        state,
+        people,
+        occupants:
+          state === "mine"
+            ? [me]
+            : others.map((o) => ({
+                name: displayName(o),
+                avatarUrl: o.avatarUrl,
+              })),
+        disabled: !canPick || saving,
+      };
+    },
+    [
+      invitations,
+      isMe,
+      reservation,
+      selectedSeatId,
+      canPick,
+      availableSeatIds,
+      me,
+      saving,
+    ],
+  );
+
+  const desksByRoom = useMemo(() => {
+    const map = new Map<number, DeskInfo[]>();
+    for (const room of orderedRooms) {
+      const roomSeats = seats.filter((s) => s.roomId === room.id);
+      const { cells } = layoutRoom(room, roomSeats);
+      map.set(
+        room.id,
+        sortByCell(roomSeats, cells).map((s) => deskFor(s)),
+      );
+    }
+    return map;
+  }, [orderedRooms, seats, deskFor]);
+
+  const selectedSeat = seats.find((s) => s.id === selectedSeatId) ?? null;
+  const mySeat = seats.find((s) => s.id === reservation?.seatId) ?? null;
+  const roomName = (seat: Seat | null) =>
+    rooms.find((r) => r.id === seat?.roomId)?.name ?? "";
+
+  const handleDeskSelect = (seat: FloorPlanSeat) => {
+    if (seat.id === reservation?.seatId) {
+      setSelectedSeatId(null);
+      return;
+    }
+    setSelectedSeatId((cur) => (cur === seat.id ? null : seat.id));
   };
 
-  if (!seatingConfig?.hasSeating) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Paper sx={{ p: 3, textAlign: "center" }}>
-          <Typography
-            variant="body1"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            Seating is not enabled for this event.
-          </Typography>
-        </Paper>
-      </Container>
-    );
-  }
+  const switchRoom = (id: number) => {
+    setActiveRoomId(id);
+    setSelectedSeatId(null);
+  };
+
+  const tabRefs = React.useRef(new Map<number, HTMLButtonElement>());
+  const onTabKeyDown = (e: React.KeyboardEvent, index: number) => {
+    const last = orderedRooms.length - 1;
+    const next =
+      e.key === "ArrowRight"
+        ? index === last
+          ? 0
+          : index + 1
+        : e.key === "ArrowLeft"
+          ? index === 0
+            ? last
+            : index - 1
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? last
+              : null;
+    if (next === null) return;
+    e.preventDefault();
+    const room = orderedRooms[next];
+    switchRoom(room.id);
+    tabRefs.current.get(room.id)?.focus();
+  };
+
+  const header = (actions?: React.ReactNode) => (
+    <PageHeader kicker="FLOOR PLAN" title="Seat map" actions={actions} />
+  );
 
   if (!dataLoaded) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Paper sx={{ p: 3, textAlign: "center" }}>
-          <CircularProgress />
-          <Typography variant="body2" sx={{ mt: 2 }}>
-            Loading seat map...
-          </Typography>
-        </Paper>
-      </Container>
+      <>
+        {header()}
+        <Panel aria-label="Loading seat map">
+          <Box
+            role="status"
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+              py: 4,
+            }}
+          >
+            <CircularProgress aria-hidden="true" />
+            <Typography sx={{ color: colors.textMuted }}>
+              Loading seat map…
+            </Typography>
+          </Box>
+        </Panel>
+      </>
     );
   }
 
   if (fetchError) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Paper sx={{ p: 3 }}>
-          <Alert severity="error">{fetchError}</Alert>
-        </Paper>
-      </Container>
+      <>
+        {header()}
+        <Alert severity="error" role="alert">
+          {fetchError}
+        </Alert>
+      </>
     );
   }
 
-  return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ p: 3 }}>
-        <Stack spacing={3}>
-          {/* Header */}
-          <Box>
-            <Typography variant="h4" gutterBottom>
-              Seat Map
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              View the event&apos;s room layout and see which seats are occupied
-            </Typography>
-          </Box>
+  if (!seatingConfig?.hasSeating) {
+    return (
+      <>
+        {header()}
+        <EmptyState
+          variant="panel"
+          icon={<EventSeatSharp />}
+          kicker="NO SEATING"
+          title="Seating is not enabled for this event."
+          description="Just turn up and grab a spot."
+          action={
+            eventId ? (
+              <Button
+                component={RouterLink}
+                to={`/events/${eventId}`}
+                variant="outlined"
+              >
+                Back to the lobby
+              </Button>
+            ) : undefined
+          }
+        />
+      </>
+    );
+  }
 
-          {/* Legend */}
-          <Stack
-            direction="row"
-            spacing={2}
+  if (!activeRoom) {
+    return (
+      <>
+        {header()}
+        <EmptyState
+          variant="panel"
+          icon={<EventSeatSharp />}
+          kicker="NO ROOMS YET"
+          title="No rooms or seats have been configured for this event yet."
+          description="Check back once the organisers have laid out the room."
+        />
+      </>
+    );
+  }
+
+  const activeDesks = desksByRoom.get(activeRoom.id) ?? [];
+  const freeCount = (roomId: number) =>
+    (desksByRoom.get(roomId) ?? []).filter((d) => d.state === "free").length;
+  const activeIndex = orderedRooms.findIndex((r) => r.id === activeRoom.id);
+
+  const occupiedSeats = seats.filter((s) =>
+    invitations.some((inv) => inv.seatId === s.id),
+  ).length;
+  const ownDesk = ownDeskLabel(seatingConfig.unspecifiedSeatLabel);
+  const unspecifiedInvitations = invitations.filter(
+    (inv) => inv.seatId === null && isGoing(inv.response),
+  );
+
+  const tabs = (
+    <Box
+      role="tablist"
+      aria-label="Rooms"
+      sx={{
+        display: "flex",
+        maxWidth: "100%",
+        overflowX: "auto",
+        border: `1px solid ${hairline.control}`,
+        backgroundColor: "rgba(12,15,24,0.8)",
+      }}
+    >
+      {orderedRooms.map((room, i) => {
+        const on = room.id === activeRoom.id;
+        return (
+          <Box
+            key={room.id}
+            component="button"
+            type="button"
+            role="tab"
+            id={`seat-room-tab-${room.id}`}
+            aria-selected={on}
+            aria-controls="seat-room-panel"
+            tabIndex={on ? 0 : -1}
+            ref={(el: HTMLButtonElement | null) => {
+              if (el) tabRefs.current.set(room.id, el);
+              else tabRefs.current.delete(room.id);
+            }}
+            onClick={() => switchRoom(room.id)}
+            onKeyDown={(e: React.KeyboardEvent) => onTabKeyDown(e, i)}
             sx={{
-              flexWrap: "wrap",
+              flex: "none",
+              minHeight: 44,
+              px: "18px",
+              border: 0,
+              borderRadius: 0,
+              backgroundColor: on ? colors.cyan : "transparent",
+              color: on ? colors.ink : colors.textMuted,
+              fontFamily: fonts.ui,
+              fontWeight: 600,
+              fontSize: 13,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              whiteSpace: "nowrap",
+              "&:hover": on ? {} : { color: colors.text },
+              "&:focus-visible": {
+                outline: `2px solid ${colors.cyan}`,
+                outlineOffset: "-4px",
+                ...(on ? { outlineColor: colors.ink } : {}),
+              },
             }}
           >
-            <Chip
-              icon={<EventSeatIcon />}
-              label="Available"
-              color="success"
-              variant="outlined"
-              size="small"
-            />
-            <Chip
-              icon={<PersonIcon />}
-              label="Occupied"
-              color="primary"
-              size="small"
-            />
-            {seatingConfig.allowUnspecifiedSeat && (
-              <Chip
-                icon={<EventSeatIcon />}
-                label="Unspecified"
-                color="default"
-                variant="outlined"
-                size="small"
-              />
-            )}
-          </Stack>
+            {room.name}
+            <Box
+              component="span"
+              sx={{ fontFamily: fonts.mono, fontSize: 11, opacity: 0.85 }}
+            >
+              {freeCount(room.id)} FREE
+            </Box>
+          </Box>
+        );
+      })}
+    </Box>
+  );
 
-          {/* Summary Statistics */}
-          <Grid container spacing={2}>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    Total Seats
-                  </Typography>
-                  <Typography variant="h4">{seats.length}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    Occupied Seats
-                  </Typography>
-                  <Typography variant="h4">
-                    {seatsWithOccupancy.filter((s) => s.isOccupied).length}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    Available Seats
-                  </Typography>
-                  <Typography variant="h4">
-                    {seatsWithOccupancy.filter((s) => !s.isOccupied).length}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-            {seatingConfig.allowUnspecifiedSeat && (
-              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <Card variant="outlined">
-                  <CardContent>
-                    <Typography
-                      variant="body2"
+  // --- Status panel ---------------------------------------------------------
+  let kicker: string;
+  let title: string;
+  let titleTone: "lime" | "cyan" = "cyan";
+  let sub: React.ReactNode;
+  const actions: React.ReactNode[] = [];
+  const lobbyButton = (
+    <Button
+      key="lobby"
+      component={RouterLink}
+      to={`/events/${eventId}`}
+      variant="outlined"
+    >
+      RSVP in the lobby
+    </Button>
+  );
+
+  if (!myInvitationLoaded || (going && hasTimes && !reservationLoaded)) {
+    kicker = "YOUR SEAT";
+    title = "Checking…";
+    sub = "Looking up your reservation.";
+  } else if (!going) {
+    kicker = "LOCKED";
+    title = "RSVP first";
+    sub = myInvitation
+      ? "Seats open up once you RSVP yes or maybe."
+      : "Only invited guests can claim a desk.";
+    if (myInvitation) actions.push(lobbyButton);
+  } else if (!hasTimes) {
+    kicker = "LOCKED";
+    title = "Set your times";
+    sub = "Pick the times you'll be there in the lobby, then claim a desk.";
+    actions.push(lobbyButton);
+  } else if (selectedSeat) {
+    kicker = "SELECTED";
+    title = selectedSeat.label;
+    sub = mySeat
+      ? `Swap from ${mySeat.label} to ${selectedSeat.label}? Your old seat frees up for the squad.`
+      : "Free for the times you're here. Claim it before someone else does.";
+    if (selectedSeat.description) {
+      sub = (
+        <>
+          {sub}
+          <Box component="span" sx={{ display: "block", mt: 1 }}>
+            {selectedSeat.description}
+          </Box>
+        </>
+      );
+    }
+    actions.push(
+      <Button
+        key="claim"
+        variant="contained"
+        size="large"
+        disabled={saving}
+        onClick={() => reserve(selectedSeat.id)}
+      >
+        {saving
+          ? "Saving…"
+          : mySeat
+            ? `Swap to ${selectedSeat.label}`
+            : `Claim ${selectedSeat.label}`}
+      </Button>,
+      <Button
+        key="cancel"
+        variant="text"
+        color="inherit"
+        disabled={saving}
+        onClick={() => setSelectedSeatId(null)}
+      >
+        Cancel
+      </Button>,
+    );
+  } else if (reservation) {
+    kicker = "YOUR SEAT";
+    titleTone = "lime";
+    title = mySeat ? `${mySeat.label} · ${roomName(mySeat)}` : ownDesk;
+    sub = mySeat
+      ? canRelease
+        ? "Tap another free desk to move."
+        : "This event needs everyone at a desk: tap another free desk to move."
+      : "Tap a free desk on the plan to claim one instead.";
+    if (canRelease) {
+      actions.push(
+        <Button
+          key="release"
+          variant="outlined"
+          color="error"
+          disabled={saving}
+          onClick={() => release()}
+        >
+          {saving ? "Saving…" : "Release seat"}
+        </Button>,
+      );
+    }
+  } else {
+    kicker = "NO SEAT YET";
+    title = "Pick a desk";
+    sub = "Tap any free desk on the plan to select it.";
+  }
+
+  const showOwnDesk =
+    seatingConfig.allowUnspecifiedSeat &&
+    canPick &&
+    !selectedSeat &&
+    !(reservation && reservation.seatId === null);
+  if (showOwnDesk) {
+    actions.push(
+      <Button
+        key="byo"
+        variant="outlined"
+        color="inherit"
+        startIcon={<DeskSharp />}
+        disabled={saving}
+        onClick={() => reserve(null)}
+        sx={{ justifyContent: "flex-start" }}
+      >
+        {ownDesk}
+      </Button>,
+    );
+  }
+
+  const listRowSx = {
+    display: "flex",
+    alignItems: "center",
+    gap: 1.5,
+    minHeight: 44,
+    px: 2.5,
+    py: 0.75,
+    borderBottom: `1px solid ${hairline.faint}`,
+    "&:last-of-type": { borderBottom: 0 },
+  } as const;
+  const labelTone: Record<DeskState, string> = {
+    mine: colors.lime,
+    taken: colors.violetText,
+    selected: colors.cyan,
+    free: colors.cyan,
+  };
+
+  return (
+    <>
+      {header(tabs)}
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "clamp(16px,2vw,24px)",
+          alignItems: "flex-start",
+        }}
+      >
+        <Box
+          component="section"
+          id="seat-room-panel"
+          role="tabpanel"
+          aria-labelledby={`seat-room-tab-${activeRoom.id}`}
+          sx={{
+            flex: "2 1 520px",
+            minWidth: 0,
+            position: "relative",
+            border: `1px solid ${tint("cyan", 0.2)}`,
+            backgroundColor: colors.surface,
+            ...bracket(),
+            p: "14px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 1.5,
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: "4px 12px",
+            }}
+          >
+            <Kicker component="h2" prefix={false}>
+              {roomCode(activeIndex)} · {activeRoom.name}
+            </Kicker>
+            <Box
+              component="span"
+              sx={{
+                fontFamily: fonts.mono,
+                fontSize: 11,
+                letterSpacing: "0.16em",
+                color: colors.cyan,
+              }}
+            >
+              {freeCount(activeRoom.id)} / {activeDesks.length} FREE
+            </Box>
+          </Box>
+          {activeRoom.description && (
+            <Typography
+              sx={{ fontSize: 14, color: colors.textMuted, mt: -0.5 }}
+            >
+              {activeRoom.description}
+            </Typography>
+          )}
+          <SeatFloorPlan
+            room={activeRoom}
+            desks={activeDesks}
+            label={`${activeRoom.name} floor plan`}
+            onDeskSelect={canPick ? handleDeskSelect : undefined}
+            minCellSize={48}
+          />
+          <FloorPlanLegend
+            items={["mine", "free", "taken", "selected"]}
+            sx={{ pt: 0.5 }}
+          />
+        </Box>
+
+        <Box
+          component="aside"
+          aria-label="Your seat and who's where"
+          sx={{
+            flex: "1 1 280px",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: 2,
+          }}
+        >
+          <Box
+            component="section"
+            aria-labelledby="seat-status-kicker"
+            sx={{
+              border: `1px solid ${hairline.panel}`,
+              backgroundColor: colors.surface,
+              p: 2.5,
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.5,
+            }}
+          >
+            <Kicker component="h2" id="seat-status-kicker">
+              {kicker}
+            </Kicker>
+            <Box
+              aria-live="polite"
+              sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
+            >
+              <Box
+                component="p"
+                sx={{
+                  m: 0,
+                  fontSize: "clamp(28px,3vw,36px)",
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  color: titleTone === "lime" ? colors.lime : colors.cyan,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {title}
+              </Box>
+              <Typography
+                component="div"
+                sx={{ fontSize: 14, lineHeight: 1.55, color: colors.textMuted }}
+              >
+                {sub}
+              </Typography>
+            </Box>
+            {actions.length > 0 && (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
+                {actions}
+              </Box>
+            )}
+          </Box>
+
+          <Box
+            component="section"
+            aria-labelledby="seat-who-kicker"
+            sx={{
+              border: `1px solid ${hairline.panel}`,
+              backgroundColor: colors.surface,
+            }}
+          >
+            <Kicker
+              component="h2"
+              id="seat-who-kicker"
+              prefix={false}
+              sx={{
+                px: 2.5,
+                py: "14px",
+                borderBottom: `1px solid ${hairline.soft}`,
+              }}
+            >
+              {activeRoom.name} · Who&apos;s where
+            </Kicker>
+            <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
+              {activeDesks.map((desk) => {
+                const people = desk.people;
+                return (
+                  <Box component="li" key={desk.seat.id} sx={listRowSx}>
+                    <Box
+                      component="span"
                       sx={{
-                        color: "text.secondary",
+                        width: 40,
+                        flex: "none",
+                        fontFamily: fonts.mono,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: labelTone[desk.state],
                       }}
                     >
-                      Unspecified Seats
-                    </Typography>
-                    <Typography variant="h4">
-                      {unspecifiedInvitations.length}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )}
-          </Grid>
-
-          {/* Room Floorplans - Side by side on wide screens */}
-          {rooms.length === 0 ? (
-            <Alert severity="info">
-              No rooms or seats have been configured for this event yet.
-            </Alert>
-          ) : (
-            <Grid container spacing={3}>
-              {rooms.map((room) => {
-                const roomSeats = getSeatsForRoom(room.id);
-                if (roomSeats.length === 0) return null;
-
-                const occupiedCount = roomSeats.filter(
-                  (s) => s.isOccupied,
-                ).length;
-                const totalCount = roomSeats.length;
-
-                return (
-                  <Grid size={{ xs: 12, lg: 6 }} key={room.id}>
-                    <Card variant="outlined" sx={{ height: "100%" }}>
-                      <CardContent>
+                      {desk.seat.label}
+                    </Box>
+                    <Box
+                      sx={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 0.5,
+                      }}
+                    >
+                      {people.length === 0 ? (
                         <Box
-                          sx={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            mb: 2,
-                          }}
+                          component="span"
+                          sx={{ fontSize: 14, color: colors.textMuted }}
                         >
-                          <Typography variant="h6">{room.name}</Typography>
-                          <Chip
-                            label={`${occupiedCount}/${totalCount} occupied`}
-                            color={
-                              occupiedCount === totalCount ? "error" : "default"
-                            }
-                            size="small"
-                          />
+                          {desk.state === "selected" ? "Selected" : "Free"}
                         </Box>
-                        {room.description && (
-                          <Typography
-                            variant="body2"
+                      ) : (
+                        people.map((inv, i) => (
+                          <Box
+                            key={i}
                             sx={{
-                              color: "text.secondary",
-                              mb: 2,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 1.25,
+                              minWidth: 0,
                             }}
                           >
-                            {room.description}
-                          </Typography>
-                        )}
-
-                        {/* Floorplan visualization using RoomFloorplanView */}
-                        <RoomFloorplanView
-                          room={room}
-                          seats={roomSeats.map(convertToSeatDisplayData)}
-                        />
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                );
-              })}
-            </Grid>
-          )}
-
-          {/* Seat Assignments Table - All seats from all rooms */}
-          {seatsWithOccupancy.filter((s) => s.isOccupied).length > 0 && (
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Seat Assignments
-              </Typography>
-              <TableContainer component={Paper} variant="outlined">
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Room</TableCell>
-                      <TableCell>Seat</TableCell>
-                      <TableCell>Attendee(s)</TableCell>
-                      <TableCell>Attendance</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {seatsWithOccupancy
-                      .filter((s) => s.isOccupied)
-                      .map((seat) => {
-                        const room = rooms.find((r) => r.id === seat.roomId);
-                        const hasMultipleOccupants = seat.occupantCount > 1;
-
-                        return (
-                          <TableRow
-                            key={seat.id}
-                            hover
-                            sx={{
-                              "&:last-child td, &:last-child th": { border: 0 },
-                            }}
-                          >
-                            <TableCell>{room?.name || "Unknown"}</TableCell>
-                            <TableCell>
-                              <Typography
-                                sx={{
-                                  fontWeight: "medium",
-                                }}
-                              >
-                                {seat.label}
-                              </Typography>
-                            </TableCell>
-                            <TableCell>
-                              {hasMultipleOccupants ? (
-                                // Multiple occupants
-                                <Stack spacing={1.5}>
-                                  {seat.invitations.map((inv, index) => (
-                                    <Box
-                                      key={index}
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1.5,
-                                      }}
-                                    >
-                                      <Avatar
-                                        src={
-                                          inv.avatarUrl ||
-                                          "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                        }
-                                        alt={inv.handle || "Someone"}
-                                        sx={{
-                                          width: 32,
-                                          height: 32,
-                                          border: "2px solid",
-                                          borderColor:
-                                            inv.response === RSVP.yes
-                                              ? "success.main"
-                                              : inv.response === RSVP.maybe
-                                                ? "warning.main"
-                                                : "primary.main",
-                                        }}
-                                      >
-                                        <PersonIcon />
-                                      </Avatar>
-                                      <Tooltip
-                                        title={inv.handle || "Someone"}
-                                        enterDelay={500}
-                                      >
-                                        <Typography variant="body2" noWrap>
-                                          {inv.handle || "Someone"}
-                                        </Typography>
-                                      </Tooltip>
-                                      {inv.response === RSVP.maybe && (
-                                        <Chip
-                                          label="Maybe"
-                                          size="small"
-                                          color="warning"
-                                          sx={{
-                                            height: 20,
-                                            fontSize: "0.7rem",
-                                          }}
-                                        />
-                                      )}
-                                    </Box>
-                                  ))}
-                                </Stack>
-                              ) : (
-                                // Single occupant
-                                seat.invitations[0] && (
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 1.5,
-                                    }}
-                                  >
-                                    <Avatar
-                                      src={
-                                        seat.invitations[0].avatarUrl ||
-                                        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                      }
-                                      alt={
-                                        seat.invitations[0].handle || "Someone"
-                                      }
-                                      sx={{
-                                        width: 32,
-                                        height: 32,
-                                        border: "2px solid",
-                                        borderColor:
-                                          seat.invitations[0].response ===
-                                          RSVP.yes
-                                            ? "success.main"
-                                            : seat.invitations[0].response ===
-                                                RSVP.maybe
-                                              ? "warning.main"
-                                              : "primary.main",
-                                      }}
-                                    >
-                                      <PersonIcon />
-                                    </Avatar>
-                                    <Tooltip
-                                      title={
-                                        seat.invitations[0].handle || "Someone"
-                                      }
-                                      enterDelay={500}
-                                    >
-                                      <Typography variant="body2" noWrap>
-                                        {seat.invitations[0].handle ||
-                                          "Someone"}
-                                      </Typography>
-                                    </Tooltip>
-                                    {seat.invitations[0].response ===
-                                      RSVP.maybe && (
-                                      <Chip
-                                        label="Maybe"
-                                        size="small"
-                                        color="warning"
-                                        sx={{ height: 20, fontSize: "0.7rem" }}
-                                      />
-                                    )}
-                                  </Box>
-                                )
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {hasMultipleOccupants ? (
-                                // Multiple occupants - stack their attendance to align with attendees
-                                <Stack spacing={1.5}>
-                                  {seat.invitations.map((inv, index) => (
-                                    <Box
-                                      key={index}
-                                      sx={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        height: 32, // Match avatar height
-                                      }}
-                                    >
-                                      {renderAttendancePips(
-                                        inv.attendance,
-                                        inv.response,
-                                      )}
-                                    </Box>
-                                  ))}
-                                </Stack>
-                              ) : (
-                                // Single occupant
-                                seat.invitations[0] &&
-                                renderAttendancePips(
-                                  seat.invitations[0].attendance,
-                                  seat.invitations[0].response,
-                                )
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          )}
-
-          {/* Unspecified Seat Attendees */}
-          {seatingConfig.allowUnspecifiedSeat &&
-            unspecifiedInvitations.length > 0 && (
-              <Card variant="outlined">
-                <CardContent>
-                  <Typography variant="h6" gutterBottom>
-                    Attendees with Unspecified Seats
-                  </Typography>
-                  <Grid container spacing={1}>
-                    {unspecifiedInvitations.map((invitation, index) => (
-                      <Grid
-                        size={{ xs: 12, sm: 6, md: 4 }}
-                        key={`unspecified-${index}`}
-                      >
-                        <Card
-                          variant="outlined"
-                          sx={{
-                            backgroundColor: alpha(
-                              theme.palette.grey[500],
-                              0.1,
-                            ),
-                          }}
-                        >
-                          <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-                            <Stack
-                              direction="row"
-                              spacing={2}
+                            <UserAvatar
+                              name={displayName(inv)}
+                              src={inv.avatarUrl}
+                              size={26}
+                            />
+                            <Box
+                              component="span"
                               sx={{
-                                alignItems: "center",
+                                fontSize: 14,
+                                color: colors.text,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                minWidth: 0,
                               }}
                             >
-                              <Avatar
-                                src={
-                                  invitation.avatarUrl ||
-                                  "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                                }
-                                alt={invitation.handle || "Someone"}
-                                sx={{ width: 40, height: 40 }}
-                              >
-                                <PersonIcon />
-                              </Avatar>
-                              <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                <Typography
-                                  variant="body1"
-                                  sx={{
-                                    fontWeight: "bold",
-                                  }}
-                                >
-                                  {invitation.handle || "Someone"}
-                                </Typography>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  Unspecified Seat
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </CardContent>
-              </Card>
+                              {displayName(inv)}
+                              {isMe(inv) ? " (you)" : ""}
+                            </Box>
+                            {inv.response === RSVP.maybe && (
+                              <Tag tone="amber" size="sm">
+                                MAYBE
+                              </Tag>
+                            )}
+                            <Box sx={{ flex: 1 }} />
+                            <AttendancePips
+                              attendance={inv.attendance}
+                              response={inv.response}
+                              event={event}
+                            />
+                          </Box>
+                        ))
+                      )}
+                      {desk.seat.description && (
+                        <Box
+                          component="span"
+                          sx={{ fontSize: 12, color: colors.textMuted }}
+                        >
+                          {desk.seat.description}
+                        </Box>
+                      )}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+
+          {seatingConfig.allowUnspecifiedSeat &&
+            unspecifiedInvitations.length > 0 && (
+              <Box
+                component="section"
+                aria-labelledby="seat-own-kicker"
+                sx={{
+                  border: `1px solid ${hairline.panel}`,
+                  backgroundColor: colors.surface,
+                }}
+              >
+                <Kicker
+                  component="h2"
+                  id="seat-own-kicker"
+                  prefix={false}
+                  sx={{
+                    px: 2.5,
+                    py: "14px",
+                    borderBottom: `1px solid ${hairline.soft}`,
+                  }}
+                >
+                  {ownDesk} · {unspecifiedInvitations.length}
+                </Kicker>
+                <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
+                  {unspecifiedInvitations.map((inv, i) => (
+                    <Box component="li" key={i} sx={listRowSx}>
+                      <UserAvatar
+                        name={displayName(inv)}
+                        src={inv.avatarUrl}
+                        size={26}
+                      />
+                      <Box
+                        component="span"
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: 14,
+                          color: colors.text,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {displayName(inv)}
+                        {isMe(inv) ? " (you)" : ""}
+                      </Box>
+                      {inv.response === RSVP.maybe && (
+                        <Tag tone="amber" size="sm">
+                          MAYBE
+                        </Tag>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
             )}
-        </Stack>
-      </Paper>
-    </Container>
+
+          <StatGrid columns={seatingConfig.allowUnspecifiedSeat ? 4 : 3}>
+            <StatCell value={seats.length} label="DESKS" tone="cyan" />
+            <StatCell value={occupiedSeats} label="TAKEN" tone="violet" />
+            <StatCell
+              value={seats.length - occupiedSeats}
+              label="OPEN"
+              tone="lime"
+            />
+            {seatingConfig.allowUnspecifiedSeat && (
+              <StatCell
+                value={unspecifiedInvitations.length}
+                label="OWN DESK"
+              />
+            )}
+          </StatGrid>
+        </Box>
+      </Box>
+    </>
   );
 };
 

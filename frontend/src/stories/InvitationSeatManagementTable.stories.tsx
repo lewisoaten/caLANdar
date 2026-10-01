@@ -318,7 +318,7 @@ export const AdminWithSeating: Story = {
   },
 };
 
-/** Event without seating: every invitee shows "No seat". */
+/** Event without seating: every invitee shows no seat. */
 export const NoSeatingConfigured: Story = {
   args: {
     event: makeEvent(322, "Autumn LAN: Rock and Stone"),
@@ -326,7 +326,7 @@ export const NoSeatingConfigured: Story = {
   },
 };
 
-/** Nothing to manage yet: empty table with the Send Invitations button. */
+/** Nothing to manage yet: empty state under the invite bar. */
 export const NoInvitationsYet: Story = {
   args: {
     event: makeEvent(323, "Autumn LAN: Rock and Stone"),
@@ -342,7 +342,7 @@ export const LongNames: Story = {
   },
 };
 
-/** The Send Invitations dialog, opened from the table footer. */
+/** The copy-from-event invitations dialog, opened from the invite bar. */
 export const SendInvitationsDialogOpen: Story = {
   args: {
     event: makeEvent(324, "Autumn LAN: Rock and Stone"),
@@ -351,7 +351,23 @@ export const SendInvitationsDialogOpen: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.click(
-      await canvas.findByRole("button", { name: "Send Invitations" }),
+      await canvas.findByRole("button", { name: "Copy from event" }),
+    );
+  },
+};
+
+/** Remove confirmation for an invitee. */
+export const RemoveConfirm: Story = {
+  args: {
+    event: makeEvent(324, "Autumn LAN: Rock and Stone"),
+    as_admin: true,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Remove nightowl@example.com",
+      }),
     );
   },
 };

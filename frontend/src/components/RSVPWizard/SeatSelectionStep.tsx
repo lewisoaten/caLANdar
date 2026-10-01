@@ -1,6 +1,8 @@
 import * as React from "react";
-import { Typography, Stack } from "@mui/material";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import WizardSeatSelector from "./WizardSeatSelector";
+import { colors } from "../hl";
 
 interface SeatSelectionStepProps {
   eventId: number;
@@ -18,6 +20,7 @@ interface SeatSelectionStepProps {
   ) => void;
 }
 
+/** Step: pick a desk on the floor plan (the picker itself is WizardSeatSelector). */
 export default function SeatSelectionStep(props: SeatSelectionStepProps) {
   if (!props.hasSeating) {
     return null;
@@ -26,19 +29,14 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
   const isOptional = props.allowUnspecifiedSeat;
 
   return (
-    <Stack spacing={3}>
-      <Typography variant="h6" component="h2">
-        Choose your seat {isOptional ? "(Optional)" : ""}
-      </Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75 }}>
       <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-        }}
+        component="p"
+        sx={{ m: 0, fontSize: 15, color: colors.textMuted }}
       >
         {isOptional
-          ? "You can select a seat now or skip this step and choose one later."
-          : "Please select a seat to continue. This event requires seat selection."}
+          ? "Tap a free desk on the floor plan, or bring your own. You can move later on the seat map."
+          : "Tap a free desk on the floor plan. This event needs everyone to pick a seat; you can move later on the seat map."}
       </Typography>
       <WizardSeatSelector
         eventId={props.eventId}
@@ -50,6 +48,6 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
         reservedSeatId={props.reservedSeatId}
         disabled={props.disabled || false}
       />
-    </Stack>
+    </Box>
   );
 }

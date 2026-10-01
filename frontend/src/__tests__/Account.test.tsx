@@ -1,21 +1,50 @@
 import { describe, test, expect, beforeAll, afterEach, afterAll } from "vitest";
-import { render, screen, waitFor } from "../test/test-utils";
+import { render, screen, waitFor, within } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import Account from "../components/Account";
+import Account, { syncSummary } from "../components/Account";
+import {
+  formatLibraryHours,
+  playtimePercent,
+} from "../components/AccountLibrary";
 
-// Mock profile data
 const mockProfile = {
+  email: "u@example.com",
   steamId: "76561198000000000",
-  games: [],
-  gameCount: 0,
+  games: [
+    { appid: 730, name: "Counter-Strike 2", playtimeForever: 6000 },
+    { appid: 620, name: "Portal 2", playtimeForever: 0 },
+  ],
+  gameCount: 1,
+  totalGames: 2,
+  libraryGames: 2,
+  maxPlaytimeForever: 6000,
+  lastSynced: null,
+  avatarUrl: null,
 };
 
-// Create MSW server for API mocking
+const mockMe = {
+  email: "u@example.com",
+  avatarUrl: null,
+  isAdmin: false,
+  callsigns: [
+    {
+      handle: "ProGamer123",
+      eventCount: 3,
+      lastEventId: 1,
+      lastEventTitle: "Autumn LAN 2026",
+      lastUsed: "2026-10-16T17:00:00Z",
+    },
+  ],
+};
+
+let lastProfileQuery: URLSearchParams | null = null;
+
 const server = setupServer(
-  // Default handler for profile fetch that happens on mount
-  http.get("/api/profile", () => {
+  http.get("/api/me", () => HttpResponse.json(mockMe)),
+  http.get("/api/profile", ({ request }) => {
+    lastProfileQuery = new URL(request.url).searchParams;
     return HttpResponse.json(mockProfile, { status: 200 });
   }),
 );
@@ -26,22 +55,192 @@ beforeAll(() => {
 
 afterEach(() => {
   server.resetHandlers();
+  lastProfileQuery = null;
 });
 
 afterAll(() => {
   server.close();
 });
 
-describe("Account - Refresh Games Button", () => {
+describe("Account helpers", () => {
+  test("formatLibraryHours", () => {
+    expect(formatLibraryHours(0)).toBe("Unplayed");
+    expect(formatLibraryHours(10)).toBe("1 h");
+    expect(formatLibraryHours(98430)).toBe("1,641 h");
+  });
+
+  test("playtimePercent", () => {
+    expect(playtimePercent(0, 100)).toBe(0);
+    expect(playtimePercent(50, 100)).toBe(50);
+    expect(playtimePercent(1, 100000)).toBe(1);
+    expect(playtimePercent(10, 0)).toBe(0);
+  });
+
+  test("syncSummary", () => {
+    expect(syncSummary(70, 68, false)).toBe(
+      "Library synced just now. 70 games, 2 new.",
+    );
+    expect(syncSummary(1, null, true)).toBe(
+      "Library synced just now from your new Steam ID. 1 game.",
+    );
+  });
+});
+
+describe("Account", { timeout: 15000 }, () => {
+  test("shows callsigns and the library", async () => {
+    render(<Account />);
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "ProGamer123" }),
+    ).toBeInTheDocument();
+    const callsigns = screen.getByRole("list", { name: "Callsigns" });
+    expect(within(callsigns).getByText("3 EVENTS")).toBeInTheDocument();
+    const library = await screen.findByRole("list", { name: "Your games" });
+    expect(within(library).getByText("Counter-Strike 2")).toBeInTheDocument();
+    expect(within(library).getByText("Unplayed")).toBeInTheDocument();
+    expect(lastProfileQuery?.get("count")).toBe("10");
+    expect(lastProfileQuery?.get("sort")).toBe("playtime");
+  });
+
+  test("searching sends the search param and resets to page 0", async () => {
+    render(<Account />);
+    await screen.findByRole("list", { name: "Your games" });
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Search library" }),
+      "portal",
+    );
+    await waitFor(() => expect(lastProfileQuery?.get("search")).toBe("portal"));
+    expect(lastProfileQuery?.get("page")).toBe("0");
+  });
+
+  test("no Steam profile (404) shows the link form", async () => {
+    server.use(
+      http.get("/api/profile", () =>
+        HttpResponse.json({ error: { code: 404 } }, { status: 404 }),
+      ),
+    );
+    render(<Account />);
+    expect(await screen.findByText("NOT LINKED")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: /steam id or profile url/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/link your steam account to see your library/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /resync library/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("rejects an invalid Steam ID without calling the API", async () => {
+    let putCalled = false;
+    server.use(
+      http.put("/api/profile", () => {
+        putCalled = true;
+        return HttpResponse.json({});
+      }),
+    );
+    render(<Account />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Change Steam ID" }),
+    );
+    const input = screen.getByRole("textbox", {
+      name: /steam id or profile url/i,
+    });
+    await userEvent.clear(input);
+    await userEvent.type(input, "12345");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save Steam ID" }),
+    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(/17-digit steamid64/i);
+    expect(putCalled).toBe(false);
+  });
+
+  test("shows the server's reason when the Steam ID is rejected", async () => {
+    server.use(
+      http.put("/api/profile", () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 400,
+              reason: "Bad Request",
+              description: 'No Steam profile found for custom URL "nobody"',
+            },
+          },
+          { status: 400 },
+        ),
+      ),
+    );
+    render(<Account />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Change Steam ID" }),
+    );
+    const input = screen.getByRole("textbox", {
+      name: /steam id or profile url/i,
+    });
+    await userEvent.clear(input);
+    await userEvent.click(input);
+    await userEvent.paste("https://steamcommunity.com/id/nobody");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save Steam ID" }),
+    );
+    expect(
+      await screen.findByText(/no steam profile found for custom url/i),
+    ).toBeInTheDocument();
+  });
+
+  test("saving a new Steam ID triggers a resync", async () => {
+    let putBody: unknown = null;
+    let synced = false;
+    server.use(
+      http.put("/api/profile", async ({ request }) => {
+        putBody = await request.json();
+        return HttpResponse.json({
+          ...mockProfile,
+          steamId: "76561197960287930",
+          games: [],
+        });
+      }),
+      http.post("/api/profile/games/update", () => {
+        synced = true;
+        return HttpResponse.json({});
+      }),
+    );
+    render(<Account />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Change Steam ID" }),
+    );
+    const input = screen.getByRole("textbox", {
+      name: /steam id or profile url/i,
+    });
+    await userEvent.clear(input);
+    await userEvent.click(input);
+    await userEvent.paste(
+      "https://steamcommunity.com/profiles/76561197960287930",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save Steam ID" }),
+    );
+    await waitFor(() => expect(synced).toBe(true));
+    expect(putBody).toEqual({
+      steamId: "https://steamcommunity.com/profiles/76561197960287930",
+    });
+    expect(
+      await screen.findByText(/synced just now from your new steam id/i),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("Account - Resync library button", { timeout: 15000 }, () => {
   test("button is enabled by default", async () => {
     render(<Account />);
     const button = await screen.findByRole("button", {
-      name: /refresh games/i,
+      name: /resync library/i,
     });
     expect(button).toBeEnabled();
   });
 
-  test("shows loading indicator when refresh is clicked", async () => {
+  test("shows a busy state while syncing", async () => {
     server.use(
       http.post("/api/profile/games/update", () => {
         return new Promise((resolve) => {
@@ -55,15 +254,15 @@ describe("Account - Refresh Games Button", () => {
     render(<Account />);
 
     const button = await screen.findByRole("button", {
-      name: /refresh games/i,
+      name: /resync library/i,
     });
     await userEvent.click(button);
 
-    // Button should be disabled during loading
     expect(button).toBeDisabled();
+    expect(screen.getByText("Syncing your Steam library…")).toBeInTheDocument();
   });
 
-  test("shows success notification after successful refresh", async () => {
+  test("shows the result after a successful sync", async () => {
     server.use(
       http.post("/api/profile/games/update", () => {
         return HttpResponse.json({}, { status: 200 });
@@ -73,24 +272,19 @@ describe("Account - Refresh Games Button", () => {
     render(<Account />);
 
     const button = await screen.findByRole("button", {
-      name: /refresh games/i,
+      name: /resync library/i,
     });
     await userEvent.click(button);
 
-    // Wait for success notification
-    await waitFor(() => {
-      expect(
-        screen.getByText(/games refreshed successfully/i),
-      ).toBeInTheDocument();
-    });
-
-    // Button should be re-enabled after completion
+    expect(
+      await screen.findByText("Library synced just now. 2 games, 0 new."),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(button).toBeEnabled();
     });
   });
 
-  test("shows error notification on failure", async () => {
+  test("shows an error on failure", async () => {
     server.use(
       http.post("/api/profile/games/update", () => {
         return HttpResponse.json({ error: "Server error" }, { status: 500 });
@@ -100,16 +294,13 @@ describe("Account - Refresh Games Button", () => {
     render(<Account />);
 
     const button = await screen.findByRole("button", {
-      name: /refresh games/i,
+      name: /resync library/i,
     });
     await userEvent.click(button);
 
-    // Wait for error notification
-    await waitFor(() => {
-      expect(screen.getByText(/failed to refresh games/i)).toBeInTheDocument();
-    });
-
-    // Button should be re-enabled after error
+    expect(
+      await screen.findByText(/failed to refresh games/i),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(button).toBeEnabled();
     });
@@ -125,16 +316,13 @@ describe("Account - Refresh Games Button", () => {
     render(<Account />);
 
     const button = await screen.findByRole("button", {
-      name: /refresh games/i,
+      name: /resync library/i,
     });
     await userEvent.click(button);
 
-    // Wait for error notification
-    await waitFor(() => {
-      expect(screen.getByText(/error refreshing games/i)).toBeInTheDocument();
-    });
-
-    // Button should be re-enabled after error
+    expect(
+      await screen.findByText(/error refreshing games/i),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(button).toBeEnabled();
     });

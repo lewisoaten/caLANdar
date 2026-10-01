@@ -1,74 +1,69 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { fn } from "storybook/test";
 import moment from "moment";
-import GamesList from "../components/GamesList";
-import { EventGame, Gamer } from "../types/game_suggestions";
+import GamesList, { type SquadGame } from "../components/GamesList";
+import { Gamer } from "../types/game_suggestions";
 import { stubImages } from "./mockApi";
 
-const gamers: Gamer[] = [
-  { handle: "NightOwl", avatarUrl: null },
-  { handle: "PixelPirate", avatarUrl: null },
-  { handle: "Rowan_the_Rogue", avatarUrl: null },
-  { handle: "FragQueen", avatarUrl: null },
-  { handle: "LagLord", avatarUrl: null },
-  { handle: "CritHappens", avatarUrl: null },
-  { handle: "SneakyBiscuit", avatarUrl: null },
-  { handle: "ToastedRouter", avatarUrl: null },
-];
+const squad: Gamer[] = [
+  "ProGamer123",
+  "NoScope_Nia",
+  "LagWizard",
+  "CasualGamer",
+  "SamTheSniper",
+  "Dan_the_Man",
+].map((handle) => ({ handle, avatarUrl: null }));
 
-const modified = moment("2024-06-01T12:00:00Z");
+const modified = moment("2026-09-01T12:00:00Z");
 
 const game = (
   appid: number,
   name: string,
+  owners: number[],
   playtimeForever: number,
-  owners: number,
-): EventGame => ({
+  vote?: { rank: number; votes: number },
+): SquadGame => ({
   appid,
   name,
   playtimeForever,
-  gamerOwned: gamers.slice(0, owners),
+  gamerOwned: owners.map((i) => squad[i]),
   lastModified: modified,
+  vote: vote ?? null,
 });
 
-const games = new Map<number, EventGame[]>([
-  [8, [game(730, "Counter-Strike 2", 98430, 8), game(570, "Dota 2", 41250, 8)]],
-  [
-    5,
-    [
-      game(1172470, "Apex Legends", 12600, 5),
-      game(440, "Team Fortress 2", 3400, 6),
-      game(
-        1091500,
-        "Cyberpunk 2077: Phantom Liberty Ultimate Edition Deluxe Bundle",
-        0,
-        5,
-      ),
-    ],
-  ],
-  [
-    3,
-    [
-      game(105600, "Terraria", 745, 3),
-      game(252490, "Rust", 90, 3),
-      game(892970, "Valheim", 26, 4),
-    ],
-  ],
-]);
+const squadGames: SquadGame[] = [
+  game(730, "Counter-Strike 2", [0, 1, 2, 4, 5], 98430, { rank: 1, votes: 5 }),
+  game(548430, "Deep Rock Galactic", [0, 1, 2, 5], 12960, {
+    rank: 2,
+    votes: 3,
+  }),
+  game(427520, "Factorio", [0, 2, 4, 5], 41250, { rank: 3, votes: 2 }),
+  game(892970, "Valheim", [1, 2, 3, 4], 4300),
+  game(813780, "Age of Empires II: Definitive Edition", [0, 2, 5], 2210, {
+    rank: 4,
+    votes: 1,
+  }),
+  game(105600, "Terraria", [1, 3, 4], 745),
+  game(550, "Left 4 Dead 2", [0, 4], 3400),
+  game(252950, "Rocket League", [1, 4], 1800, { rank: 5, votes: 1 }),
+  game(1091500, "Cyberpunk 2077: Phantom Liberty Ultimate Edition", [3], 0),
+];
 
 stubImages();
 
 const meta = {
   title: "Components/GamesList",
   component: GamesList,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "padded" },
   tags: ["autodocs"],
   args: {
-    loadNewPage: fn(),
-    games,
-    gamesCount: 4,
+    games: squadGames,
+    squadSize: 6,
     loading: false,
-    showOwnership: true,
+    me: { handle: "ProGamer123", avatarUrl: null },
+    lobbyHref: "/events/901",
+    onSuggest: fn(),
+    onRetry: fn(),
   },
 } satisfies Meta<typeof GamesList>;
 
@@ -77,12 +72,13 @@ type Story = StoryObj<typeof meta>;
 
 export const GroupedByOwnership: Story = {};
 
-export const WithoutOwnershipHeadings: Story = {
-  args: {
-    showOwnership: false,
-    games: new Map([[1, [...games.get(8)!, ...games.get(3)!]]]),
-    gamesCount: 2,
-  },
+/** RSVP'd "no" or the event has ended: no suggest buttons. */
+export const CannotSuggest: Story = {
+  args: { onSuggest: undefined, suggestUnavailable: "Suggestions closed" },
+};
+
+export const LoadingMore: Story = {
+  args: { loadingMore: true },
 };
 
 export const Loading: Story = {
@@ -90,5 +86,9 @@ export const Loading: Story = {
 };
 
 export const Empty: Story = {
-  args: { games: new Map(), gamesCount: 1 },
+  args: { games: [] },
+};
+
+export const LoadError: Story = {
+  args: { games: [], error: "Something went wrong. Please try again." },
 };

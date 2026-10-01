@@ -1,6 +1,9 @@
 import * as React from "react";
-import { useState, useEffect } from "react";
-import { Typography, TextField, Stack, Alert } from "@mui/material";
+import { useEffect } from "react";
+import Box from "@mui/material/Box";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import { colors, fonts, tint } from "../hl";
 
 interface GamerHandleStepProps {
   value: string;
@@ -9,58 +12,70 @@ interface GamerHandleStepProps {
   onValidationChange?: (isValid: boolean) => void;
 }
 
+/** Pure validation for a callsign; returns an error message or "". */
+export const validateHandle = (value: string): string => {
+  if (!value || value.trim().length === 0) return "Callsign is required";
+  if (value.length < 2) return "Callsign must be at least 2 characters";
+  if (value.length > 50) return "Callsign must be less than 50 characters";
+  return "";
+};
+
+/** Step: your callsign (gamer handle) for this event. */
 export default function GamerHandleStep(props: GamerHandleStepProps) {
-  const [error, setError] = useState<string>("");
+  const error = validateHandle(props.value);
+  const { onValidationChange } = props;
 
   useEffect(() => {
-    // Validate handle
-    if (!props.value || props.value.trim().length === 0) {
-      setError("Handle is required");
-      props.onValidationChange?.(false);
-    } else if (props.value.length < 2) {
-      setError("Handle must be at least 2 characters");
-      props.onValidationChange?.(false);
-    } else if (props.value.length > 50) {
-      setError("Handle must be less than 50 characters");
-      props.onValidationChange?.(false);
-    } else {
-      setError("");
-      props.onValidationChange?.(true);
-    }
-  }, [props.value, props.onValidationChange]);
+    onValidationChange?.(error === "");
+  }, [error, onValidationChange]);
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     props.onChange(event.target.value);
   };
 
+  const showError = !!error && props.value.length > 0;
+
   return (
-    <Stack spacing={3}>
-      <Typography variant="h6" component="h2">
-        Enter your gamer handle
-      </Typography>
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
       <Typography
-        variant="body2"
-        sx={{
-          color: "text.secondary",
-        }}
+        id="callsign-help"
+        component="p"
+        sx={{ m: 0, fontSize: 15, color: colors.textMuted }}
       >
-        This is how you&apos;ll be identified to other attendees.
+        What should the squad call you? This shows on the seat map and roster.
       </Typography>
       <TextField
-        label="Gamer Handle"
+        label="Callsign"
         variant="outlined"
         value={props.value}
         onChange={handleChange}
         disabled={props.disabled}
-        error={!!error && props.value.length > 0}
-        helperText={error && props.value.length > 0 ? error : ""}
+        error={showError}
+        helperText={showError ? error : "2–50 characters"}
         autoFocus
         fullWidth
         required
+        slotProps={{
+          htmlInput: {
+            maxLength: 60,
+            autoComplete: "nickname",
+            spellCheck: false,
+          },
+        }}
+        sx={{
+          mt: 1,
+          "& .MuiInputBase-input": {
+            minHeight: 24,
+            fontSize: 20,
+            fontWeight: 600,
+            letterSpacing: "0.02em",
+          },
+          "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: tint("cyan", 0.4),
+          },
+          "& .MuiFormHelperText-root": { fontFamily: fonts.mono },
+        }}
       />
-      {!error && props.value && (
-        <Alert severity="success">Handle is valid!</Alert>
-      )}
-    </Stack>
+    </Box>
   );
 }

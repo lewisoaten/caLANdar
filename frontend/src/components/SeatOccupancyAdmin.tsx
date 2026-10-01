@@ -3,41 +3,22 @@ import { useEffect, useState, useContext, useCallback, useMemo } from "react";
 import {
   Typography,
   Box,
-  Stack,
   Button,
-  Chip,
-  Alert,
-  CircularProgress,
-  Tooltip,
-  Grid,
-  Card,
-  CardContent,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   MenuItem,
+  ListSubheader,
   FormControl,
   InputLabel,
   Select,
   SelectChangeEvent,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Avatar,
+  Skeleton,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
-import PersonIcon from "@mui/icons-material/Person";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
-import WarningIcon from "@mui/icons-material/Warning";
+import SwapHorizSharp from "@mui/icons-material/SwapHorizSharp";
+import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
+import DeleteSharp from "@mui/icons-material/DeleteSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { Room, Seat, EventSeatingConfig } from "../types/events";
@@ -47,6 +28,24 @@ import {
 } from "../types/seat_reservations";
 import { InvitationData } from "../types/invitations";
 import { useSnackbar } from "notistack";
+import {
+  EmptyState,
+  Panel,
+  StatCell,
+  StatGrid,
+  Tag,
+  UserAvatar,
+  colors,
+  fonts,
+  hairline,
+  srOnly,
+  tint,
+} from "./hl";
+import {
+  AttendancePips,
+  ConfirmDialog,
+  RowAction,
+} from "./InvitationSeatManagementTable";
 
 interface SeatOccupancyAdminProps {
   eventId: number;
@@ -74,7 +73,6 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
   const { enqueueSnackbar } = useSnackbar();
-  const theme = useTheme();
 
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
@@ -85,6 +83,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   const [invitations, setInvitations] = useState<InvitationData[]>([]);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // Move/Edit dialog state
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
@@ -293,6 +292,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
   }, [
     eventId,
     refreshTrigger,
+    reloadKey,
     fetchSeatingConfig,
     fetchRooms,
     fetchSeats,
@@ -474,7 +474,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
     }
   };
 
-  // Helper to generate aria-label for attendance buckets
+  // Text alternative for attendance buckets.
   const getAttendanceAriaLabel = (buckets: number[]) => {
     const pattern = buckets
       .map(
@@ -485,479 +485,412 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
     return `Attendance pattern: ${pattern}`;
   };
 
-  // Render attendance buckets as a visual indicator
-  const renderAttendanceBuckets = (buckets: number[]) => {
-    return (
-      <Box
-        sx={{ display: "flex", gap: 0.5 }}
-        role="img"
-        aria-label={getAttendanceAriaLabel(buckets)}
-      >
-        {buckets.map((bucket, index) => (
-          <Tooltip
-            key={index}
-            title={`Bucket ${index + 1}: ${
-              bucket === 1 ? "Attending" : "Not attending"
-            }`}
-            enterDelay={200}
-          >
-            <Box
-              sx={{
-                width: 12,
-                height: 12,
-                backgroundColor:
-                  bucket === 1
-                    ? theme.palette.success.main
-                    : theme.palette.action.disabledBackground,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 0.5,
-              }}
-            />
-          </Tooltip>
-        ))}
-      </Box>
-    );
-  };
+  const seatName = (r: ReservationWithDetails) =>
+    r.invitationHandle || r.invitationEmail;
 
-  if (!seatingConfig?.hasSeating) {
+  const retryButton = (
+    <Button
+      variant="outlined"
+      size="small"
+      onClick={() => setReloadKey((k) => k + 1)}
+    >
+      Retry
+    </Button>
+  );
+
+  if (fetchError) {
     return (
-      <Paper sx={{ p: 3, textAlign: "center" }}>
-        <Typography
-          variant="body1"
+      <Panel title="Seat assignments" kicker="Occupancy" padding="normal">
+        <Box
+          role="alert"
           sx={{
-            color: "text.secondary",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            gap: 1.5,
+            color: colors.pinkText,
           }}
         >
-          Seating is not enabled for this event.
-        </Typography>
-      </Paper>
+          {fetchError}
+          {retryButton}
+        </Box>
+      </Panel>
     );
   }
 
   if (!dataLoaded) {
     return (
-      <Paper sx={{ p: 3, textAlign: "center" }}>
-        <CircularProgress />
-        <Typography variant="body2" sx={{ mt: 2 }}>
-          Loading seat occupancy data...
-        </Typography>
-      </Paper>
+      <Panel title="Seat assignments" kicker="Occupancy">
+        <Box role="status" aria-label="Loading seat occupancy data">
+          <Skeleton variant="rectangular" height={56} sx={{ mb: 2 }} />
+          <Skeleton width="40%" />
+          <Skeleton width="70%" />
+        </Box>
+      </Panel>
     );
   }
 
-  if (fetchError) {
+  if (!seatingConfig?.hasSeating) {
     return (
-      <Paper sx={{ p: 3 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {fetchError}
-        </Alert>
-        <Button
-          variant="contained"
-          onClick={() => {
-            setFetchError(null);
-            setDataLoaded(false);
-            // Trigger re-fetch by using the current dependencies
-            Promise.all([
-              fetchSeatingConfig(),
-              fetchRooms(),
-              fetchSeats(),
-              fetchReservations(),
-              fetchInvitations(),
-            ])
-              .then(() => {
-                setDataLoaded(true);
-              })
-              .catch((error) => {
-                console.error("Error loading data:", error);
-                setFetchError(
-                  "Failed to load seat occupancy data. Please try refreshing the page.",
-                );
-                setDataLoaded(true);
-              });
-          }}
-        >
-          Retry
-        </Button>
-      </Paper>
+      <Panel title="Seat assignments" kicker="Occupancy">
+        <EmptyState
+          icon={<EventSeatSharp />}
+          title="Seating is off"
+          description="Seating is not enabled for this event. Turn on the seat map above to let attendees pick desks."
+        />
+      </Panel>
     );
   }
 
-  return (
-    <Paper sx={{ p: 3 }}>
-      <Stack spacing={3}>
-        {/* Header */}
-        <Box>
-          <Typography variant="h5" gutterBottom>
-            Seat Occupancy Overview
-          </Typography>
-          <Typography
-            variant="body2"
+  const assigned = enrichedReservations.filter((r) => r.seatId !== null);
+  const occupiedCount = seatsWithOccupancy.filter((s) => s.isOccupied).length;
+
+  const attendeeCell = (reservation: ReservationWithDetails) => (
+    <Box
+      sx={{
+        flex: "1 1 220px",
+        minWidth: 0,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.5,
+      }}
+    >
+      <UserAvatar
+        name={seatName(reservation)}
+        src={reservation.invitationAvatarUrl}
+        size={36}
+      />
+      <Box sx={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <Typography
+          component="span"
+          sx={{ fontSize: 15, fontWeight: 600, overflowWrap: "anywhere" }}
+        >
+          {seatName(reservation)}
+        </Typography>
+        {reservation.invitationHandle && (
+          <Box
+            component="span"
             sx={{
-              color: "text.secondary",
+              fontFamily: fonts.mono,
+              fontSize: 12,
+              color: colors.textMuted,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
           >
-            Manage seat assignments for all attendees
-          </Typography>
-        </Box>
-
-        {/* Summary Statistics */}
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card>
-              <CardContent>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Total Seats
-                </Typography>
-                <Typography variant="h4">{seats.length}</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card>
-              <CardContent>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Occupied Seats
-                </Typography>
-                <Typography variant="h4">
-                  {seatsWithOccupancy.filter((s) => s.isOccupied).length}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card>
-              <CardContent>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Unspecified Seats
-                </Typography>
-                <Typography variant="h4">
-                  {unspecifiedReservations.length}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card>
-              <CardContent>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Total Reservations
-                </Typography>
-                <Typography variant="h4">{reservations.length}</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-
-        {/* Occupancy Map by Room */}
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Occupancy Map
-          </Typography>
-          {rooms.length === 0 ? (
-            <Alert severity="info">No rooms configured for this event.</Alert>
-          ) : (
-            <Stack spacing={2}>
-              {rooms.map((room) => {
-                const roomSeats = seatsWithOccupancy.filter(
-                  (s) => s.roomId === room.id,
-                );
-                const occupiedCount = roomSeats.filter(
-                  (s) => s.isOccupied,
-                ).length;
-                const totalCount = roomSeats.length;
-
-                return (
-                  <Card key={room.id}>
-                    <CardContent>
-                      <Box
-                        sx={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          mb: 2,
-                        }}
-                      >
-                        <Typography variant="h6">{room.name}</Typography>
-                        <Chip
-                          label={`${occupiedCount}/${totalCount} occupied`}
-                          color={
-                            occupiedCount === totalCount ? "error" : "default"
-                          }
-                          size="small"
-                        />
-                      </Box>
-                      {room.description && (
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: "text.secondary",
-                            mb: 2,
-                          }}
-                        >
-                          {room.description}
-                        </Typography>
-                      )}
-                      <Grid container spacing={1}>
-                        {roomSeats.map((seat) => (
-                          <Grid size="auto" key={seat.id}>
-                            <Tooltip
-                              title={
-                                seat.isOccupied
-                                  ? `${seat.label} - ${seat.occupantCount} reservation(s)`
-                                  : `${seat.label} - Available`
-                              }
-                            >
-                              <Chip
-                                icon={<EventSeatIcon />}
-                                label={seat.label}
-                                size="small"
-                                color={seat.isOccupied ? "primary" : "default"}
-                                variant={
-                                  seat.isOccupied ? "filled" : "outlined"
-                                }
-                                sx={{ minWidth: 80 }}
-                              />
-                            </Tooltip>
-                          </Grid>
-                        ))}
-                      </Grid>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </Stack>
-          )}
-        </Box>
-
-        {/* Seat Assignment Table */}
-        <Box>
-          <Typography variant="h6" gutterBottom>
-            Seat Assignments
-          </Typography>
-          {enrichedReservations.length === 0 ? (
-            <Alert severity="info">No seat reservations found.</Alert>
-          ) : (
-            <TableContainer>
-              <Table aria-label="seat assignments table">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Attendee</TableCell>
-                    <TableCell>Room</TableCell>
-                    <TableCell>Seat</TableCell>
-                    <TableCell>Attendance</TableCell>
-                    <TableCell align="right">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {enrichedReservations
-                    .filter((r) => r.seatId !== null)
-                    .map((reservation) => (
-                      <TableRow key={reservation.id} hover>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                            }}
-                          >
-                            {reservation.invitationAvatarUrl ? (
-                              <Avatar
-                                src={reservation.invitationAvatarUrl}
-                                alt={
-                                  reservation.invitationHandle ||
-                                  reservation.invitationEmail
-                                }
-                                sx={{ width: 32, height: 32 }}
-                              />
-                            ) : (
-                              <Avatar sx={{ width: 32, height: 32 }}>
-                                <PersonIcon />
-                              </Avatar>
-                            )}
-                            <Box>
-                              <Typography variant="body2">
-                                {reservation.invitationHandle ||
-                                  reservation.invitationEmail}
-                              </Typography>
-                              {reservation.invitationHandle && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  {reservation.invitationEmail}
-                                </Typography>
-                              )}
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>{reservation.roomName || "—"}</TableCell>
-                        <TableCell>
-                          <Chip
-                            icon={<EventSeatIcon />}
-                            label={reservation.seatLabel || "Unknown"}
-                            size="small"
-                            color="primary"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {renderAttendanceBuckets(
-                            reservation.attendanceBuckets,
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="Move to different seat">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleOpenMoveDialog(reservation)}
-                              aria-label={`Move ${reservation.invitationEmail} to different seat`}
-                            >
-                              <SwapHorizIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Clear seat assignment">
-                            <IconButton
-                              size="small"
-                              onClick={() =>
-                                handleOpenDeleteDialog(
-                                  reservation.invitationEmail,
-                                )
-                              }
-                              aria-label={`Clear seat assignment for ${reservation.invitationEmail}`}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Box>
-
-        {/* Unspecified Seat Reservations */}
-        {seatingConfig.allowUnspecifiedSeat && (
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Unspecified Seat Attendees
-            </Typography>
-            {unspecifiedReservations.length === 0 ? (
-              <Alert severity="info">No unspecified seat reservations.</Alert>
-            ) : (
-              <TableContainer>
-                <Table aria-label="unspecified seat reservations table">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Attendee</TableCell>
-                      <TableCell>Attendance</TableCell>
-                      <TableCell align="right">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {unspecifiedReservations.map((reservation) => (
-                      <TableRow key={reservation.id} hover>
-                        <TableCell>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 1,
-                            }}
-                          >
-                            {reservation.invitationAvatarUrl ? (
-                              <Avatar
-                                src={reservation.invitationAvatarUrl}
-                                alt={
-                                  reservation.invitationHandle ||
-                                  reservation.invitationEmail
-                                }
-                                sx={{ width: 32, height: 32 }}
-                              />
-                            ) : (
-                              <Avatar sx={{ width: 32, height: 32 }}>
-                                <PersonIcon />
-                              </Avatar>
-                            )}
-                            <Box>
-                              <Typography variant="body2">
-                                {reservation.invitationHandle ||
-                                  reservation.invitationEmail}
-                              </Typography>
-                              {reservation.invitationHandle && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: "text.secondary",
-                                  }}
-                                >
-                                  {reservation.invitationEmail}
-                                </Typography>
-                              )}
-                            </Box>
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          {renderAttendanceBuckets(
-                            reservation.attendanceBuckets,
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <Tooltip title="Assign to specific seat">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleOpenMoveDialog(reservation)}
-                              aria-label={`Assign ${reservation.invitationEmail} to specific seat`}
-                            >
-                              <EditIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Clear reservation">
-                            <IconButton
-                              size="small"
-                              onClick={() =>
-                                handleOpenDeleteDialog(
-                                  reservation.invitationEmail,
-                                )
-                              }
-                              aria-label={`Clear reservation for ${reservation.invitationEmail}`}
-                            >
-                              <DeleteIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
+            {reservation.invitationEmail}
           </Box>
         )}
-      </Stack>
+      </Box>
+    </Box>
+  );
+
+  const rowSx = {
+    listStyle: "none",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "10px 18px",
+    p: "12px 20px",
+    borderBottom: `1px solid ${hairline.faint}`,
+  } as const;
+
+  const subHeading = (text: string, count?: number) => (
+    <Box
+      component="h3"
+      sx={{
+        m: 0,
+        px: "20px",
+        py: "12px",
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        fontSize: 15,
+        fontWeight: 700,
+        letterSpacing: "0.08em",
+        textTransform: "uppercase",
+        borderBottom: `1px solid ${hairline.soft}`,
+      }}
+    >
+      {text}
+      {count !== undefined && (
+        <Box
+          component="span"
+          sx={{ fontFamily: fonts.mono, fontSize: 12, color: colors.textMuted }}
+        >
+          {count}
+        </Box>
+      )}
+    </Box>
+  );
+
+  return (
+    <Panel
+      title="Seat assignments"
+      kicker="Occupancy"
+      padding="none"
+      actions={
+        <Box component="span" sx={{ fontSize: 13, color: colors.textMuted }}>
+          Move or clear anyone&apos;s desk.
+        </Box>
+      }
+    >
+      <Box sx={{ p: "16px 20px" }}>
+        <StatGrid
+          columns={4}
+          sx={{
+            "@media (max-width: 480px)": {
+              gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+            },
+          }}
+        >
+          <StatCell size="lg" value={seats.length} label="Total seats" />
+          <StatCell
+            size="lg"
+            value={occupiedCount}
+            label="Occupied"
+            tone="lime"
+          />
+          <StatCell
+            size="lg"
+            value={unspecifiedReservations.length}
+            label="No desk"
+            tone="amber"
+          />
+          <StatCell
+            size="lg"
+            value={reservations.length}
+            label="Reservations"
+            tone="cyan"
+          />
+        </StatGrid>
+      </Box>
+
+      {/* Occupancy map by room */}
+      {subHeading("Occupancy map")}
+      {rooms.length === 0 ? (
+        <Box sx={{ p: "16px 20px", color: colors.textMuted, fontSize: 14 }}>
+          No rooms configured for this event.
+        </Box>
+      ) : (
+        <Box sx={{ display: "flex", flexDirection: "column" }}>
+          {rooms.map((room) => {
+            const roomSeats = seatsWithOccupancy.filter(
+              (s) => s.roomId === room.id,
+            );
+            const taken = roomSeats.filter((s) => s.isOccupied).length;
+            const full = roomSeats.length > 0 && taken === roomSeats.length;
+            return (
+              <Box
+                key={room.id}
+                sx={{
+                  p: "14px 20px",
+                  borderBottom: `1px solid ${hairline.faint}`,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 1.25,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 1.25,
+                  }}
+                >
+                  <Typography
+                    component="h4"
+                    sx={{
+                      m: 0,
+                      fontSize: 16,
+                      fontWeight: 600,
+                      flex: "1 1 auto",
+                    }}
+                  >
+                    {room.name}
+                  </Typography>
+                  <Tag size="sm" tone={full ? "pink" : "neutral"}>
+                    {taken}/{roomSeats.length} occupied
+                  </Tag>
+                </Box>
+                {room.description && (
+                  <Typography sx={{ fontSize: 13, color: colors.textMuted }}>
+                    {room.description}
+                  </Typography>
+                )}
+                {roomSeats.length === 0 ? (
+                  <Typography sx={{ fontSize: 13, color: colors.textMuted }}>
+                    No desks in this room yet.
+                  </Typography>
+                ) : (
+                  <Box
+                    component="ul"
+                    aria-label={`${room.name} desks`}
+                    sx={{
+                      m: 0,
+                      p: 0,
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "6px",
+                    }}
+                  >
+                    {roomSeats.map((seat) => (
+                      <Box
+                        component="li"
+                        key={seat.id}
+                        title={
+                          seat.isOccupied
+                            ? `${seat.label} - ${seat.occupantCount} reservation(s)`
+                            : `${seat.label} - Available`
+                        }
+                        sx={{
+                          listStyle: "none",
+                          minWidth: 48,
+                          height: 36,
+                          px: 1,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontFamily: fonts.mono,
+                          fontSize: 12,
+                          fontWeight: 600,
+                          border: `1px solid ${
+                            seat.isOccupied
+                              ? colors.violetLight
+                              : tint("cyan", 0.45)
+                          }`,
+                          backgroundColor: seat.isOccupied
+                            ? tint("violet", 0.12)
+                            : "transparent",
+                          color: seat.isOccupied
+                            ? colors.violetText
+                            : colors.cyan,
+                        }}
+                      >
+                        {seat.label}
+                        <Box component="span" sx={srOnly}>
+                          {seat.isOccupied
+                            ? `, taken (${seat.occupantCount} reservation${seat.occupantCount === 1 ? "" : "s"})`
+                            : ", free"}
+                        </Box>
+                      </Box>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* Seat assignment list */}
+      {subHeading("Assigned desks", assigned.length)}
+      {assigned.length === 0 ? (
+        <Box sx={{ p: "16px 20px", color: colors.textMuted, fontSize: 14 }}>
+          No seat reservations found.
+        </Box>
+      ) : (
+        <Box component="ul" aria-label="Assigned desks" sx={{ m: 0, p: 0 }}>
+          {assigned.map((reservation) => (
+            <Box component="li" key={reservation.id} sx={rowSx}>
+              {attendeeCell(reservation)}
+              <Box
+                sx={{
+                  width: 150,
+                  minWidth: 0,
+                  fontSize: 13,
+                  color: colors.textMuted,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {reservation.roomName || "—"}
+              </Box>
+              <Tag tone="cyan" icon={<EventSeatSharp />}>
+                {reservation.seatLabel || "Unknown"}
+              </Tag>
+              <Box sx={{ width: 140 }}>
+                <AttendancePips
+                  attendance={reservation.attendanceBuckets}
+                  description={getAttendanceAriaLabel(
+                    reservation.attendanceBuckets,
+                  )}
+                />
+              </Box>
+              <Box sx={{ display: "flex", gap: "6px", ml: "auto" }}>
+                <RowAction
+                  label={`Move ${reservation.invitationEmail} to different seat`}
+                  onClick={() => handleOpenMoveDialog(reservation)}
+                >
+                  <SwapHorizSharp />
+                </RowAction>
+                <RowAction
+                  danger
+                  label={`Clear seat assignment for ${reservation.invitationEmail}`}
+                  onClick={() =>
+                    handleOpenDeleteDialog(reservation.invitationEmail)
+                  }
+                >
+                  <DeleteSharp />
+                </RowAction>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Unspecified seat reservations */}
+      {seatingConfig.allowUnspecifiedSeat && (
+        <>
+          {subHeading(
+            seatingConfig.unspecifiedSeatLabel || "Unspecified seat",
+            unspecifiedReservations.length,
+          )}
+          {unspecifiedReservations.length === 0 ? (
+            <Box sx={{ p: "16px 20px", color: colors.textMuted, fontSize: 14 }}>
+              No unspecified seat reservations.
+            </Box>
+          ) : (
+            <Box
+              component="ul"
+              aria-label="Unspecified seat attendees"
+              sx={{ m: 0, p: 0 }}
+            >
+              {unspecifiedReservations.map((reservation) => (
+                <Box component="li" key={reservation.id} sx={rowSx}>
+                  {attendeeCell(reservation)}
+                  <Box sx={{ width: 140 }}>
+                    <AttendancePips
+                      attendance={reservation.attendanceBuckets}
+                      description={getAttendanceAriaLabel(
+                        reservation.attendanceBuckets,
+                      )}
+                    />
+                  </Box>
+                  <Box sx={{ display: "flex", gap: "6px", ml: "auto" }}>
+                    <RowAction
+                      label={`Assign ${reservation.invitationEmail} to specific seat`}
+                      onClick={() => handleOpenMoveDialog(reservation)}
+                    >
+                      <EventSeatSharp />
+                    </RowAction>
+                    <RowAction
+                      danger
+                      label={`Clear reservation for ${reservation.invitationEmail}`}
+                      onClick={() =>
+                        handleOpenDeleteDialog(reservation.invitationEmail)
+                      }
+                    >
+                      <DeleteSharp />
+                    </RowAction>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </>
+      )}
 
       {/* Move/Assign Seat Dialog */}
       <Dialog
@@ -968,49 +901,42 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       >
         <DialogTitle>
           {selectedReservation?.seatId === null
-            ? "Assign Seat"
-            : "Move to Different Seat"}
+            ? "Assign seat"
+            : "Move to a different seat"}
         </DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <Box>
-              <Typography
-                variant="body2"
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 1 }}>
+            <StatGrid columns={2}>
+              <StatCell
+                value={
+                  selectedReservation ? seatName(selectedReservation) : "—"
+                }
+                label="Attendee"
                 sx={{
-                  color: "text.secondary",
+                  "& > span:first-of-type": {
+                    fontSize: 15,
+                    overflowWrap: "anywhere",
+                  },
                 }}
-              >
-                Attendee
-              </Typography>
-              <Typography variant="body1">
-                {selectedReservation?.invitationHandle ||
-                  selectedReservation?.invitationEmail}
-              </Typography>
-            </Box>
-
-            <Box>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                Current Seat
-              </Typography>
-              <Typography variant="body1">
-                {selectedReservation?.seatLabel
-                  ? `${selectedReservation.seatLabel} (${selectedReservation.roomName})`
-                  : "Unspecified Seat"}
-              </Typography>
-            </Box>
+              />
+              <StatCell
+                value={
+                  selectedReservation?.seatLabel
+                    ? `${selectedReservation.seatLabel} (${selectedReservation.roomName})`
+                    : "Unspecified"
+                }
+                label="Current seat"
+                sx={{ "& > span:first-of-type": { fontSize: 15 } }}
+              />
+            </StatGrid>
 
             <FormControl fullWidth>
-              <InputLabel id="new-seat-label">New Seat</InputLabel>
+              <InputLabel id="new-seat-label">New seat</InputLabel>
               <Select
                 labelId="new-seat-label"
                 id="new-seat-select"
                 value={newSeatId === null ? "" : newSeatId}
-                label="New Seat"
+                label="New seat"
                 onChange={(e: SelectChangeEvent<number | string>) => {
                   const value = e.target.value;
                   setNewSeatId(value === "" ? null : Number(value));
@@ -1024,12 +950,22 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                 {rooms.flatMap((room) => {
                   const roomSeats = seats.filter((s) => s.roomId === room.id);
                   return [
-                    <MenuItem key={`room-${room.id}`} disabled>
-                      <strong>{room.name}</strong>
-                    </MenuItem>,
+                    <ListSubheader
+                      key={`room-${room.id}`}
+                      sx={{
+                        backgroundColor: colors.surfaceSolid,
+                        color: colors.textMuted,
+                        fontFamily: fonts.mono,
+                        fontSize: 11,
+                        letterSpacing: "0.14em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {room.name}
+                    </ListSubheader>,
                     ...roomSeats.map((seat) => (
-                      <MenuItem key={seat.id} value={seat.id}>
-                        &nbsp;&nbsp;{seat.label}
+                      <MenuItem key={seat.id} value={seat.id} sx={{ pl: 3 }}>
+                        {seat.label}
                       </MenuItem>
                     )),
                   ];
@@ -1037,14 +973,25 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
               </Select>
             </FormControl>
 
-            <Alert severity="warning" icon={<WarningIcon />}>
-              This will check for conflicts with existing reservations at the
-              selected seat.
-            </Alert>
-          </Stack>
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.amber,
+                borderLeft: `2px solid ${colors.amber}`,
+                pl: 1.5,
+              }}
+            >
+              This checks for clashes with existing reservations at the selected
+              seat.
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseMoveDialog} disabled={moveInProgress}>
+          <Button
+            onClick={handleCloseMoveDialog}
+            disabled={moveInProgress}
+            color="inherit"
+          >
             Cancel
           </Button>
           <Button
@@ -1054,46 +1001,22 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
               moveInProgress || newSeatId === selectedReservation?.seatId
             }
           >
-            {moveInProgress ? "Moving..." : "Confirm Move"}
+            {moveInProgress ? "Moving…" : "Confirm move"}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
+      <ConfirmDialog
         open={deleteDialogOpen}
-        onClose={handleCloseDeleteDialog}
-        maxWidth="sm"
+        title="Clear seat assignment?"
+        confirmLabel="Clear assignment"
+        onCancel={handleCloseDeleteDialog}
+        onConfirm={handleClearReservation}
       >
-        <DialogTitle>Confirm Clear Assignment</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to clear the seat assignment for{" "}
-            <strong>{emailToDelete}</strong>?
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              mt: 1,
-            }}
-          >
-            This action will remove their seat reservation. They will need to
-            select a seat again if they want one.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDeleteDialog}>Cancel</Button>
-          <Button
-            onClick={handleClearReservation}
-            variant="contained"
-            color="error"
-          >
-            Clear Assignment
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Paper>
+        Clear the seat assignment for <strong>{emailToDelete}</strong>? They
+        will need to select a seat again if they want one.
+      </ConfirmDialog>
+    </Panel>
   );
 };
 

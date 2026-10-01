@@ -1,7 +1,6 @@
 import * as React from "react";
 import { useState, useEffect, useContext, useCallback } from "react";
 import {
-  Paper,
   Typography,
   Table,
   TableBody,
@@ -18,12 +17,17 @@ import {
   Button,
   Stack,
 } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
+import DeleteSharp from "@mui/icons-material/DeleteSharp";
+import EditSharp from "@mui/icons-material/EditSharp";
+import AddSharp from "@mui/icons-material/AddSharp";
+import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
+import { useSnackbar } from "notistack";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
+import { apiErrorFrom, userFacingReason } from "../utils/apiError";
 import { Room, Seat, SeatSubmit } from "../types/events";
+import { EmptyState, Panel, colors, fonts } from "./hl";
+import type { FloorPlanSeat } from "./seatFloorPlanModel";
 
 interface SeatListProps {
   eventId: number;
@@ -42,7 +46,9 @@ const SeatList: React.FC<SeatListProps> = ({
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
-  const [seats, setSeats] = useState<Seat[]>([]);
+  const { enqueueSnackbar } = useSnackbar();
+  const [seats, setSeats] = useState<FloorPlanSeat[]>([]);
+  const [deleting, setDeleting] = useState<Seat | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingSeat, setEditingSeat] = useState<Seat | null>(null);
   const [formData, setFormData] = useState<SeatSubmit>({
@@ -111,9 +117,8 @@ const SeatList: React.FC<SeatListProps> = ({
     setEditDialogOpen(true);
   };
 
-  const handleDeleteSeat = (seatId: number, seatLabel: string) => {
-    if (!confirm(`Are you sure you want to delete seat ${seatLabel}?`)) return;
-
+  const handleDeleteSeat = (seatId: number) => {
+    setDeleting(null);
     fetch(`/api/events/${eventId}/seats/${seatId}?as_admin=true`, {
       method: "DELETE",
       headers: {
@@ -127,13 +132,20 @@ const SeatList: React.FC<SeatListProps> = ({
         else if (response.status === 204) {
           fetchSeats();
           onSeatsChanged();
+          enqueueSnackbar("Seat deleted", { variant: "success" });
         } else {
-          alert("Failed to delete seat");
+          return apiErrorFrom("Failed to delete seat", response).then((e) => {
+            throw e;
+          });
         }
       })
       .catch((error) => {
         console.error("Error deleting seat:", error);
-        alert("Failed to delete seat");
+        const reason = userFacingReason(error);
+        enqueueSnackbar(
+          reason ? `Failed to delete seat: ${reason}` : "Failed to delete seat",
+          { variant: "error" },
+        );
       });
   };
 
@@ -159,7 +171,9 @@ const SeatList: React.FC<SeatListProps> = ({
             .text()
             .then((data) => JSON.parse(data, dateParser) as Seat);
         } else {
-          throw new Error("Failed to save seat");
+          return apiErrorFrom("Failed to save seat", response).then((e) => {
+            throw e;
+          });
         }
       })
       .then((data) => {
@@ -171,79 +185,58 @@ const SeatList: React.FC<SeatListProps> = ({
       })
       .catch((error) => {
         console.error("Error saving seat:", error);
-        alert("Failed to save seat");
+        const reason = userFacingReason(error);
+        enqueueSnackbar(
+          reason ? `Failed to save seat: ${reason}` : "Failed to save seat",
+          { variant: "error" },
+        );
       });
   };
 
   if (!room) {
     return (
-      <Paper
-        sx={{
-          p: 2,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: 200,
-        }}
-      >
-        <Typography
-          variant="body1"
-          sx={{
-            color: "text.secondary",
-          }}
-        >
-          Select a room to view its seats
-        </Typography>
-      </Paper>
+      <Panel aria-label="Seats">
+        <EmptyState
+          icon={<EventSeatSharp />}
+          title="Select a room to view its seats"
+        />
+      </Panel>
     );
   }
 
   return (
-    <Paper
-      sx={{
-        p: 2,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <Stack
-        direction="row"
-        sx={{
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <Typography component="h2" variant="h6" color="primary">
-          Seats for {room.name}
-        </Typography>
+    <Panel
+      title={`Seats for ${room.name}`}
+      padding="compact"
+      actions={
         <Button
-          variant="contained"
-          startIcon={<AddIcon />}
+          variant="outlined"
+          size="small"
+          startIcon={<AddSharp />}
           onClick={handleAddSeat}
           aria-label="Add new seat"
         >
           Add Seat
         </Button>
-      </Stack>
-
+      }
+    >
       {seats.length === 0 ? (
         <Typography
           variant="body2"
           sx={{
-            color: "text.secondary",
+            color: colors.textMuted,
           }}
         >
           No seats defined yet. Click &quot;Add Seat&quot; to create one.
         </Typography>
       ) : (
-        <TableContainer>
-          <Table aria-label="Seats table">
+        <TableContainer sx={{ overflowX: "auto" }}>
+          <Table aria-label="Seats table" size="small">
             <TableHead>
               <TableRow>
                 <TableCell>Label</TableCell>
                 <TableCell>Description</TableCell>
+                <TableCell align="right">Grid</TableCell>
                 <TableCell align="right">X Position</TableCell>
                 <TableCell align="right">Y Position</TableCell>
                 <TableCell align="right">Actions</TableCell>
@@ -255,31 +248,38 @@ const SeatList: React.FC<SeatListProps> = ({
                   key={seat.id}
                   sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
                 >
-                  <TableCell component="th" scope="row">
+                  <TableCell
+                    component="th"
+                    scope="row"
+                    sx={{ fontFamily: fonts.mono, fontWeight: 700 }}
+                  >
                     {seat.label}
                   </TableCell>
                   <TableCell>{seat.description || "-"}</TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ fontFamily: fonts.mono }}>
+                    {seat.gridCol != null && seat.gridRow != null
+                      ? `${seat.gridCol + 1},${seat.gridRow + 1}`
+                      : "-"}
+                  </TableCell>
+                  <TableCell align="right" sx={{ fontFamily: fonts.mono }}>
                     {(seat.x * 100).toFixed(1)}%
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ fontFamily: fonts.mono }}>
                     {(seat.y * 100).toFixed(1)}%
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
                     <IconButton
-                      size="small"
                       onClick={() => handleEditSeat(seat)}
                       aria-label={`Edit seat ${seat.label}`}
                     >
-                      <EditIcon />
+                      <EditSharp />
                     </IconButton>
                     <IconButton
-                      size="small"
-                      onClick={() => handleDeleteSeat(seat.id, seat.label)}
+                      onClick={() => setDeleting(seat)}
                       aria-label={`Delete seat ${seat.label}`}
                       color="error"
                     >
-                      <DeleteIcon />
+                      <DeleteSharp />
                     </IconButton>
                   </TableCell>
                 </TableRow>
@@ -288,6 +288,34 @@ const SeatList: React.FC<SeatListProps> = ({
           </Table>
         </TableContainer>
       )}
+
+      <Dialog
+        open={deleting !== null}
+        onClose={() => setDeleting(null)}
+        maxWidth="xs"
+        fullWidth
+        aria-labelledby="seat-delete-title"
+      >
+        <DialogTitle id="seat-delete-title">Delete seat?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: colors.textMuted }}>
+            Are you sure you want to delete seat {deleting?.label}? Anyone
+            booked on it loses their reservation.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleting(null)} color="inherit">
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => deleting && handleDeleteSeat(deleting.id)}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog
         open={editDialogOpen}
@@ -385,7 +413,7 @@ const SeatList: React.FC<SeatListProps> = ({
           </Button>
         </DialogActions>
       </Dialog>
-    </Paper>
+    </Panel>
   );
 };
 

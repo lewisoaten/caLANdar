@@ -1,8 +1,15 @@
-/* eslint-disable  @typescript-eslint/no-explicit-any */
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import { http, HttpResponse } from "msw";
+import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
 import EventTable from "../components/EventTable";
-import moment from "moment";
+import { mockApi, withUser } from "./mockApi";
+import { adminEventsHandler, eventsScenario } from "./adminEventFixtures";
+
+mockApi({ "GET /api/events": adminEventsHandler });
+
+const scenario = (mode: typeof eventsScenario.mode): Decorator =>
+  function Scenario(Story) {
+    eventsScenario.mode = mode;
+    return <Story />;
+  };
 
 const meta = {
   title: "Components/EventTable",
@@ -10,77 +17,37 @@ const meta = {
   parameters: {
     layout: "padded",
   },
+  decorators: [withUser({ isAdmin: true })],
   tags: ["autodocs"],
 } satisfies Meta<typeof EventTable>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const mockEvents = [
-  {
-    id: 1,
-    title: "Summer LAN Party",
-    description: "Annual summer gaming event",
-    timeBegin: moment(),
-    timeEnd: moment().add(2, "days"),
-    createdAt: moment().subtract(7, "days"),
-    lastModified: moment().subtract(1, "day"),
-  },
-  {
-    id: 2,
-    title: "Winter Championship",
-    description: "Competitive gaming tournament",
-    timeBegin: moment().add(30, "days"),
-    timeEnd: moment().add(32, "days"),
-    createdAt: moment().subtract(14, "days"),
-    lastModified: moment().subtract(2, "days"),
-  },
-];
-
-export const Default: Story = {
-  args: {
-    eventsState: [mockEvents, () => {}] as any,
-    asAdmin: false,
-  },
-  parameters: {
-    msw: {
-      handlers: [
-        http.get("/api/events", () => {
-          return HttpResponse.json(mockEvents);
-        }),
-      ],
-    },
-  },
+export const AdminView: Story = {
+  args: { asAdmin: true, pageSize: 6 },
+  decorators: [scenario("data")],
 };
 
-export const AdminView: Story = {
-  args: {
-    eventsState: [mockEvents, () => {}] as any,
-    asAdmin: true,
-  },
-  parameters: {
-    msw: {
-      handlers: [
-        http.get("/api/events", () => {
-          return HttpResponse.json(mockEvents);
-        }),
-      ],
-    },
-  },
+/** Narrow container: rows stack (as on mobile). */
+export const Narrow: Story = {
+  args: { asAdmin: true, pageSize: 6 },
+  decorators: [
+    scenario("data"),
+    (Story) => (
+      <div style={{ maxWidth: 390 }}>
+        <Story />
+      </div>
+    ),
+  ],
 };
 
 export const EmptyState: Story = {
-  args: {
-    eventsState: [[], () => {}] as any,
-    asAdmin: false,
-  },
-  parameters: {
-    msw: {
-      handlers: [
-        http.get("/api/events", () => {
-          return HttpResponse.json([]);
-        }),
-      ],
-    },
-  },
+  args: { asAdmin: true },
+  decorators: [scenario("empty")],
+};
+
+export const LoadError: Story = {
+  args: { asAdmin: true },
+  decorators: [scenario("error")],
 };

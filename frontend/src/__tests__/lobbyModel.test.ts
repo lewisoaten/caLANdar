@@ -1,0 +1,152 @@
+import { describe, expect, test } from "vitest";
+import moment from "moment";
+import {
+  attendanceCells,
+  eventPhase,
+  formatEventId,
+  formatEventRange,
+  rankSuggestions,
+  rsvpState,
+  splitTitleAccent,
+  summariseSquad,
+} from "../components/lobbyModel";
+import { RSVP } from "../types/invitations";
+
+describe("formatEventId", () => {
+  test("pads to three digits", () => {
+    expect(formatEventId(1)).toBe("EVT-001");
+    expect(formatEventId(42)).toBe("EVT-042");
+    expect(formatEventId(1234)).toBe("EVT-1234");
+  });
+});
+
+describe("formatEventRange", () => {
+  test("formats both ends in upper-case local time", () => {
+    const begin = moment("2026-10-16T18:00:00");
+    const end = moment("2026-10-18T16:00:00");
+    expect(formatEventRange(begin, end)).toBe(
+      "FRI 16 OCT 18:00 → SUN 18 OCT 16:00",
+    );
+  });
+});
+
+describe("splitTitleAccent", () => {
+  test("accents a trailing token with a digit", () => {
+    expect(splitTitleAccent("Autumn LAN 2026")).toEqual({
+      head: "Autumn LAN",
+      accent: "2026",
+    });
+    expect(splitTitleAccent("LAN v2")).toEqual({ head: "LAN", accent: "v2" });
+  });
+
+  test("leaves other titles alone", () => {
+    expect(splitTitleAccent("Summer LAN")).toEqual({
+      head: "Summer LAN",
+      accent: null,
+    });
+    expect(splitTitleAccent("2026")).toEqual({ head: "2026", accent: null });
+  });
+});
+
+describe("rsvpState", () => {
+  test("maps responses", () => {
+    expect(rsvpState(RSVP.yes)).toBe("yes");
+    expect(rsvpState(RSVP.maybe)).toBe("maybe");
+    expect(rsvpState(RSVP.no)).toBe("no");
+    expect(rsvpState(null)).toBe("none");
+  });
+});
+
+describe("summariseSquad", () => {
+  test("sorts IN, MAYBE, OUT, pending then by handle and counts", () => {
+    const people = [
+      { handle: "zed", response: RSVP.no },
+      { handle: "amy", response: null },
+      { handle: "Bob", response: RSVP.yes },
+      { handle: "cat", response: RSVP.maybe },
+      { handle: "abe", response: RSVP.yes },
+    ];
+    const { sorted, counts } = summariseSquad(people);
+    expect(sorted.map((p) => p.handle)).toEqual([
+      "abe",
+      "Bob",
+      "cat",
+      "zed",
+      "amy",
+    ]);
+    expect(counts).toEqual({ yes: 2, maybe: 1, no: 1, none: 1 });
+    expect(people[0].handle).toBe("zed"); // input untouched
+  });
+});
+
+describe("rankSuggestions", () => {
+  test("orders by votes and shares ranks on ties", () => {
+    const ranked = rankSuggestions([
+      { name: "Factorio", votes: 1 },
+      { name: "CS2", votes: 4 },
+      { name: "Deep Rock", votes: 4 },
+      { name: "AoE II", votes: 2 },
+      { name: "Rocket League", votes: 0 },
+    ]);
+    expect(
+      ranked.map((r) => [r.suggestion.name, r.rank, r.trophyRank]),
+    ).toEqual([
+      ["CS2", 1, 1],
+      ["Deep Rock", 1, 1],
+      ["AoE II", 3, 3],
+      ["Factorio", 4, null],
+      ["Rocket League", 5, null],
+    ]);
+  });
+
+  test("no trophy without votes", () => {
+    const ranked = rankSuggestions([
+      { name: "A", votes: 0 },
+      { name: "B", votes: 0 },
+    ]);
+    expect(ranked.map((r) => r.trophyRank)).toEqual([null, null]);
+    expect(ranked.map((r) => r.rank)).toEqual([1, 1]);
+  });
+
+  test("re-sorts when a vote changes", () => {
+    const games = [
+      { name: "A", votes: 2 },
+      { name: "B", votes: 1 },
+    ];
+    expect(rankSuggestions(games)[0].suggestion.name).toBe("A");
+    games[1] = { name: "B", votes: 3 };
+    expect(rankSuggestions(games)[0].suggestion.name).toBe("B");
+  });
+});
+
+describe("attendanceCells", () => {
+  const begin = moment.utc("2026-10-16T18:00:00Z");
+  const end = moment.utc("2026-10-18T16:00:00Z");
+
+  test("one cell per in-range bucket with day spans", () => {
+    const { cells, days } = attendanceCells(
+      [1, 1, 0, 1, 1, 1, 1, 0],
+      begin,
+      end,
+    );
+    expect(cells.length).toBe(days.reduce((n, d) => n + d.span, 0));
+    expect(days.map((d) => d.label)).toEqual(["FRI", "SAT", "SUN"]);
+    expect(cells[0]).toEqual({ label: "FRI Evening", on: true });
+    expect(cells.filter((c) => c.on).length).toBe(6);
+  });
+
+  test("null attendance is all off", () => {
+    const { cells } = attendanceCells(null, begin, end);
+    expect(cells.every((c) => !c.on)).toBe(true);
+  });
+});
+
+describe("eventPhase", () => {
+  const begin = moment("2026-10-16T18:00:00");
+  const end = moment("2026-10-18T16:00:00");
+  test("upcoming, live and ended", () => {
+    expect(eventPhase(begin, end, begin.valueOf() - 1)).toBe("upcoming");
+    expect(eventPhase(begin, end, begin.valueOf())).toBe("live");
+    expect(eventPhase(begin, end, end.valueOf())).toBe("ended");
+  });
+});

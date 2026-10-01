@@ -14,6 +14,7 @@ import EventGames from "./components/EventGames";
 import EventSeatMap from "./components/EventSeatMap";
 import EventGameSchedule from "./components/EventGameSchedule";
 import AuditLog from "./components/AuditLog";
+import RoomEditor from "./components/RoomEditor";
 
 export const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
@@ -34,6 +35,7 @@ const Views = () => {
         <Route path="/account" element={<Account />} />
         <Route path="/admin/events">
           <Route path="" element={<EventsAdmin />} />
+          <Route path=":id/rooms" element={<RoomEditor />} />
           <Route path=":id" element={<EventManagement />} />
         </Route>
         <Route path="/admin/gamers" element={<GamersAdmin />} />

@@ -1,15 +1,24 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
+import Box from "@mui/material/Box";
+import { sectionGap } from "../components/hl";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 import AuditLog from "../components/AuditLog";
 import { mockApi, withUser, type MockRequest } from "./mockApi";
+
+/** Mimics the shell's <main>: a flex column with the section gap. */
+const withPageFrame: Decorator = (Story) => (
+  <Box sx={{ display: "flex", flexDirection: "column", gap: sectionGap }}>
+    <Story />
+  </Box>
+);
 
 const meta = {
   title: "Components/AuditLog",
   component: AuditLog,
   parameters: {
-    layout: "fullscreen",
+    layout: "padded",
   },
-  decorators: [withUser({ isAdmin: true })],
+  decorators: [withPageFrame, withUser({ isAdmin: true })],
   tags: ["autodocs"],
 } satisfies Meta<typeof AuditLog>;
 
@@ -26,6 +35,7 @@ interface MockLog {
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   userAgent: string | null;
+  avatarUrl: string | null;
 }
 
 type Template = Pick<
@@ -169,30 +179,30 @@ const templates: Template[] = [
     action: "steam_games.update",
     entityType: "steam_games",
     entityId: null,
+    metadata: { games_cached: 48297, games_added: 84 },
+  },
+  {
+    userId: "callum.reid@example.com",
+    action: "room.layout_update",
+    entityType: "room",
+    entityId: "12",
     metadata: null,
   },
 ];
 
-const pad = (n: number) => String(n).padStart(2, "0");
-
-// Newest first, one entry every 37 minutes, counting back from a fixed
-// moment on 2026-02-22 (all of it stays within February, so plain
-// arithmetic on a minute-of-month counter is enough).
-const TOTAL = 120;
+// Newest first, one entry every 311 minutes counting back from now, so the
+// time-range select has something to cut (~140 entries over ~30 days).
+const TOTAL = 140;
+const NOW = Date.now();
 const logs: MockLog[] = Array.from({ length: TOTAL }, (_, i) => {
-  const t = templates[i % templates.length];
-  const minutesFromMonthStart = 21 * 24 * 60 + 22 * 60 + 15 - i * 37;
-  const day = Math.floor(minutesFromMonthStart / (24 * 60)) + 1;
-  const hour = Math.floor((minutesFromMonthStart % (24 * 60)) / 60);
-  const minute = minutesFromMonthStart % 60;
+  const t = templates[(i * 7) % templates.length];
   return {
     id: TOTAL - i,
-    timestamp: `2026-02-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(
-      (i * 7) % 60,
-    )}Z`,
+    timestamp: new Date(NOW - i * 311 * 60_000).toISOString(),
     ...t,
     ipAddress: t.userId ? `203.0.113.${10 + (i % 40)}` : null,
     userAgent: t.userId ? "Mozilla/5.0 (X11; Linux x86_64)" : null,
+    avatarUrl: null,
   };
 });
 
@@ -201,12 +211,21 @@ mockApi({
     const limit = Number(req.query.get("limit") ?? "50");
     const offset = Number(req.query.get("offset") ?? "0");
     const userId = (req.query.get("user_id") ?? "").toLowerCase();
+    const userSearch = (req.query.get("user_search") ?? "").toLowerCase();
     const entityType = req.query.get("entity_type") ?? "";
+    const entityTypes = (req.query.get("entity_types") ?? "")
+      .split(",")
+      .filter(Boolean);
+    const from = req.query.get("from_timestamp");
+    const since = from ? Date.parse(from) : -Infinity;
 
     const matching = logs.filter(
       (l) =>
-        (!userId || (l.userId ?? "").toLowerCase().includes(userId)) &&
-        (!entityType || l.entityType === entityType),
+        (!userId || (l.userId ?? "").toLowerCase() === userId) &&
+        (!userSearch || (l.userId ?? "").toLowerCase().includes(userSearch)) &&
+        (!entityType || l.entityType === entityType) &&
+        (!entityTypes.length || entityTypes.includes(l.entityType)) &&
+        Date.parse(l.timestamp) >= since,
     );
 
     return {
@@ -216,9 +235,12 @@ mockApi({
       offset,
     };
   },
+  "GET /api/audit-logs/entity-types": [
+    ...new Set(templates.map((t) => t.entityType)),
+  ].sort(),
 });
 
-/** Admin view: first page of 50 of 120 entries with filters and pagination. */
+/** Admin view: last 7 days, 12 entries a page, chips from the log's types. */
 export const Default: Story = {};
 
 /** Signed-in non-admin sees the permission error instead of the log. */
@@ -226,43 +248,56 @@ export const NotAdmin: Story = {
   decorators: [withUser({ isAdmin: false })],
 };
 
-/** Entity Type filter set to "RSVPs". */
+/** Entity type chip set to "RSVPs" (rsvp + invitation entries). */
 export const FilteredByEntityType: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await userEvent.click(await canvas.findByLabelText("Entity Type"));
-    // The select menu renders in a portal on document.body.
-    await userEvent.click(
-      await within(document.body).findByRole("option", { name: "RSVPs" }),
-    );
+    await userEvent.click(await canvas.findByRole("button", { name: "RSVPs" }));
     await waitFor(() =>
-      expect(canvas.queryAllByText("Authentication").length).toBe(0),
+      expect(canvas.queryAllByText("auth.login").length).toBe(0),
     );
   },
 };
 
-/** User Email filter narrowed to one organiser's activity. */
+/** User email filter (partial match) narrowed to one person's activity. */
 export const FilteredByUser: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.type(
-      await canvas.findByLabelText("User Email"),
-      "grace.liu",
+      await canvas.findByLabelText("Filter by user email"),
+      "grace",
     );
-    await waitFor(() =>
-      expect(canvas.queryAllByText("Authentication").length).toBe(0),
+    await waitFor(
+      () =>
+        expect(canvas.queryAllByText("callum.reid@example.com").length).toBe(0),
+      { timeout: 3000 },
     );
   },
 };
 
-/** A filter with no matches shows the empty "No audit logs found" row. */
+/** Time range "All time" via the themed select menu. */
+export const AllTime: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByLabelText("Time range"));
+    // The select menu renders in a portal on document.body.
+    await userEvent.click(
+      await within(document.body).findByRole("option", { name: "All time" }),
+    );
+    await canvas.findByText(/OF 140/);
+  },
+};
+
+/** A filter with no matches shows the empty state. */
 export const NoResults: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await userEvent.type(
-      await canvas.findByLabelText("User Email"),
+      await canvas.findByLabelText("Filter by user email"),
       "nobody@example.com",
     );
-    await canvas.findByText("No audit logs found");
+    await canvas.findByText("No entries match those filters.", undefined, {
+      timeout: 3000,
+    });
   },
 };

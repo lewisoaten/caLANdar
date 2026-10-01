@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { SnackbarProvider } from "notistack";
 import { MemoryRouter } from "react-router-dom";
@@ -35,7 +36,21 @@ const mockSeats = [
   },
 ];
 
-const mockAvailability = { availableSeatIds: [] };
+let mockAvailability: { availableSeatIds: number[] } = {
+  availableSeatIds: [],
+};
+
+const mockInvitations = [
+  {
+    eventId: 1,
+    avatarUrl: null,
+    handle: "NoScope_Nia",
+    response: "yes",
+    attendance: [1],
+    seatId: 10,
+    lastModified: "2025-01-15T10:00:00Z",
+  },
+];
 
 const jsonResponse = (data: unknown) =>
   Promise.resolve({
@@ -68,6 +83,10 @@ describe("WizardSeatSelector reserved seat handling", () => {
               ? input.toString()
               : input.url;
 
+        if (url.endsWith("/invitations")) {
+          return jsonResponse(mockInvitations);
+        }
+
         if (url.includes("/rooms")) {
           return jsonResponse(mockRooms);
         }
@@ -86,11 +105,23 @@ describe("WizardSeatSelector reserved seat handling", () => {
   });
 
   afterEach(() => {
+    mockAvailability = { availableSeatIds: [] };
     localStorage.clear();
     vi.restoreAllMocks();
   });
 
-  const renderSelector = (reservedSeatId: number | null) => {
+  const renderSelector = (
+    reservedSeatId: number | null,
+    extra: {
+      allowUnspecifiedSeat?: boolean;
+      selectedSeatId?: number | null;
+      onSeatSelect?: (
+        seatId: number | null,
+        label?: string,
+        roomName?: string,
+      ) => void;
+    } = {},
+  ) => {
     render(
       <MemoryRouter>
         <ThemeProvider theme={theme}>
@@ -99,10 +130,10 @@ describe("WizardSeatSelector reserved seat handling", () => {
               <WizardSeatSelector
                 eventId={1}
                 attendanceBuckets={[1]}
-                selectedSeatId={null}
+                selectedSeatId={extra.selectedSeatId ?? null}
                 reservedSeatId={reservedSeatId}
-                onSeatSelect={() => {}}
-                allowUnspecifiedSeat={false}
+                onSeatSelect={extra.onSeatSelect ?? (() => {})}
+                allowUnspecifiedSeat={extra.allowUnspecifiedSeat ?? false}
                 disabled={false}
               />
             </UserProvider>
@@ -124,5 +155,68 @@ describe("WizardSeatSelector reserved seat handling", () => {
 
     const seatButton = await screen.findByRole("button", { name: /Seat 10/ });
     expect(seatButton).not.toBeDisabled();
+  });
+
+  it("shows who has taken an unavailable desk", async () => {
+    renderSelector(null);
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Seat 10, taken by NoScope_Nia/,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("selects a free desk with its label and room", async () => {
+    mockAvailability = { availableSeatIds: [10] };
+    const onSeatSelect = vi.fn();
+    renderSelector(null, { onSeatSelect });
+
+    const seat = await screen.findByRole("button", { name: /Seat 10, free/ });
+    expect(seat).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(seat);
+    expect(onSeatSelect).toHaveBeenCalledWith(10, "Seat 10", "Main Hall");
+  });
+
+  it("deselects the picked desk when pressed again", async () => {
+    mockAvailability = { availableSeatIds: [10] };
+    const onSeatSelect = vi.fn();
+    renderSelector(null, { onSeatSelect, selectedSeatId: 10 });
+
+    const seat = await screen.findByRole("button", {
+      name: /Seat 10, selected/,
+    });
+    expect(seat).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(seat);
+    expect(onSeatSelect).toHaveBeenCalledWith(null);
+  });
+
+  it("offers Bring my own desk when unspecified seats are allowed", async () => {
+    const onSeatSelect = vi.fn();
+    renderSelector(null, {
+      allowUnspecifiedSeat: true,
+      selectedSeatId: 10,
+      onSeatSelect,
+    });
+
+    const byo = await screen.findByRole("button", {
+      name: /Bring my own desk/,
+    });
+    expect(byo).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(byo);
+    expect(onSeatSelect).toHaveBeenCalledWith(
+      null,
+      "Bring my own desk",
+      undefined,
+    );
+  });
+
+  it("hides Bring my own desk when a specific seat is required", async () => {
+    renderSelector(null);
+
+    await screen.findByRole("button", { name: /Seat 10/ });
+    expect(
+      screen.queryByRole("button", { name: /Bring my own desk/ }),
+    ).not.toBeInTheDocument();
   });
 });

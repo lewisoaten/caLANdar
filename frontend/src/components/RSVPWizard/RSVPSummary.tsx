@@ -1,23 +1,36 @@
 import * as React from "react";
 import { useState, useEffect, useContext } from "react";
-import {
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  Stack,
-  Box,
-  Chip,
-} from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import HelpIcon from "@mui/icons-material/Help";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
+import { Link as RouterLink } from "react-router-dom";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Link from "@mui/material/Link";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
+import EditSharp from "@mui/icons-material/EditSharp";
+import VerifiedSharp from "@mui/icons-material/VerifiedSharp";
+import HelpOutlineSharp from "@mui/icons-material/HelpOutlineSharp";
+import BlockSharp from "@mui/icons-material/BlockSharp";
+import MarkEmailUnreadSharp from "@mui/icons-material/MarkEmailUnreadSharp";
 import { RSVP, InvitationData } from "../../types/invitations";
 import { EventData } from "../../types/events";
-import { getAttendanceDescription } from "../../utils/attendanceDescription";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
+import {
+  bracket,
+  colors,
+  fonts,
+  hairline,
+  srOnly,
+  tint,
+  tones,
+  type HlTone,
+} from "../hl";
+import AttendanceStrip from "../AttendanceStrip";
+import {
+  RSVP_STATUS,
+  attendanceCells,
+  rsvpState,
+  type RsvpState,
+} from "../lobbyModel";
 
 interface RSVPSummaryProps {
   invitation: InvitationData;
@@ -26,6 +39,22 @@ interface RSVPSummaryProps {
   disabled?: boolean;
 }
 
+const STATUS_ICON: Record<RsvpState, React.ElementType> = {
+  yes: VerifiedSharp,
+  maybe: HelpOutlineSharp,
+  no: BlockSharp,
+  none: MarkEmailUnreadSharp,
+};
+
+const fieldLabel = {
+  fontFamily: fonts.mono,
+  fontSize: 10,
+  letterSpacing: "0.18em",
+  color: colors.textDim,
+  textTransform: "uppercase",
+} as const;
+
+/** The lobby's "Your RSVP" panel: status, callsign, seat, attendance and CTA. */
 export default function RSVPSummary(props: RSVPSummaryProps) {
   const { invitation } = props;
   const { signOut } = useContext(UserDispatchContext);
@@ -34,287 +63,291 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
 
   const [seatLabel, setSeatLabel] = useState<string | null>(null);
   const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
+  const [seatLoading, setSeatLoading] = useState(false);
   const [hasSeating, setHasSeating] = useState(false);
 
   // Fetch seating config and seat reservation
   useEffect(() => {
     if (!props.event.id || !token) return;
+    let cancelled = false;
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: "Bearer " + token,
+    };
 
-    // Fetch seating config
-    fetch(`/api/events/${props.event.id}/seating-config`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
+    fetch(`/api/events/${props.event.id}/seating-config`, { headers })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) return response.json();
       })
-      .then((data) => {
-        if (data) {
-          setHasSeating(data.hasSeating || false);
-          const unspecifiedLabel =
-            data.unspecifiedSeatLabel || "Unspecified Seat";
-          const allowUnspecifiedSeat = data.allowUnspecifiedSeat || false;
+      .then(async (data) => {
+        if (!data || cancelled) return;
+        setHasSeating(data.hasSeating || false);
+        const unspecifiedLabel =
+          data.unspecifiedSeatLabel || "Unspecified Seat";
+        const allowUnspecifiedSeat = data.allowUnspecifiedSeat || false;
 
-          // If seating is enabled and user has responded, fetch seat reservation
-          if (
-            data.hasSeating &&
-            invitation.response &&
-            invitation.response !== RSVP.no
-          ) {
-            fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-            })
-              .then((response) => {
-                if (response.status === 404) {
-                  // No reservation - if optional seating, default to unspecified
-                  if (allowUnspecifiedSeat) {
-                    setSeatLabel(unspecifiedLabel);
-                    setSeatRoomName(null);
-                  } else {
-                    setSeatLabel(null);
-                    setSeatRoomName(null);
-                  }
-                  return null;
-                }
-                if (response.ok) return response.json();
-                return null;
-              })
-              .then((reservationData) => {
-                if (reservationData) {
-                  if (reservationData.seatId === null) {
-                    setSeatLabel(unspecifiedLabel);
-                    setSeatRoomName(null);
-                  } else if (reservationData.seatId) {
-                    // Fetch seat label and room
-                    fetch(
-                      `/api/events/${props.event.id}/seats/${reservationData.seatId}`,
-                      {
-                        headers: {
-                          "Content-Type": "application/json",
-                          Accept: "application/json",
-                          Authorization: "Bearer " + token,
-                        },
-                      },
-                    )
-                      .then((response) => {
-                        if (response.ok) return response.json();
-                        return null;
-                      })
-                      .then((seatData) => {
-                        if (seatData?.label) {
-                          setSeatLabel(seatData.label);
-                          // Fetch room name
-                          if (seatData.roomId) {
-                            fetch(
-                              `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-                              {
-                                headers: {
-                                  "Content-Type": "application/json",
-                                  Accept: "application/json",
-                                  Authorization: "Bearer " + token,
-                                },
-                              },
-                            )
-                              .then((response) => {
-                                if (response.ok) return response.json();
-                                return null;
-                              })
-                              .then((roomData) => {
-                                if (roomData?.name) {
-                                  setSeatRoomName(roomData.name);
-                                }
-                              })
-                              .catch((error) => {
-                                console.error("Error fetching room:", error);
-                              });
-                          }
-                        }
-                      })
-                      .catch((error) => {
-                        console.error("Error fetching seat:", error);
-                      });
-                  }
-                } else if (allowUnspecifiedSeat) {
-                  // No reservation but optional seating - default to unspecified
-                  setSeatLabel(unspecifiedLabel);
-                  setSeatRoomName(null);
-                }
-              })
-              .catch((error) => {
-                console.error("Error fetching seat reservation:", error);
-              });
+        // If seating is enabled and user has responded, fetch seat reservation
+        if (
+          !data.hasSeating ||
+          !invitation.response ||
+          invitation.response === RSVP.no
+        )
+          return;
+
+        setSeatLoading(true);
+        try {
+          const response = await fetch(
+            `/api/events/${props.event.id}/seat-reservations/me`,
+            { headers },
+          );
+          if (cancelled) return;
+          const reservation =
+            response.status !== 404 && response.ok
+              ? await response.json()
+              : null;
+          if (cancelled) return;
+          if (!reservation) {
+            // No reservation - if optional seating, default to unspecified
+            setSeatLabel(allowUnspecifiedSeat ? unspecifiedLabel : null);
+            setSeatRoomName(null);
+            return;
           }
+          if (reservation.seatId === null || reservation.seatId === undefined) {
+            setSeatLabel(unspecifiedLabel);
+            setSeatRoomName(null);
+            return;
+          }
+          const seatRes = await fetch(
+            `/api/events/${props.event.id}/seats/${reservation.seatId}`,
+            { headers },
+          );
+          const seatData = seatRes.ok ? await seatRes.json() : null;
+          if (cancelled || !seatData?.label) return;
+          setSeatLabel(seatData.label);
+          if (seatData.roomId) {
+            const roomRes = await fetch(
+              `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
+              { headers },
+            );
+            const roomData = roomRes.ok ? await roomRes.json() : null;
+            if (!cancelled && roomData?.name) setSeatRoomName(roomData.name);
+          }
+        } catch (error) {
+          console.error("Error fetching seat reservation:", error);
+        } finally {
+          if (!cancelled) setSeatLoading(false);
         }
       })
       .catch((error) => {
         console.error("Error fetching seating config:", error);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [props.event.id, token, invitation.response, signOut]);
 
-  const getResponseColor = (response: RSVP | null) => {
-    switch (response) {
-      case RSVP.yes:
-        return "success";
-      case RSVP.maybe:
-        return "warning";
-      case RSVP.no:
-        return "error";
-      default:
-        return "default";
-    }
-  };
+  const state = rsvpState(invitation.response);
+  const status = RSVP_STATUS[state];
+  const tone: HlTone = status.tone;
+  const Icon = STATUS_ICON[state];
+  const going = state === "yes" || state === "maybe";
+  const { cells } = attendanceCells(
+    invitation.attendance,
+    props.event.timeBegin,
+    props.event.timeEnd,
+  );
+  const attended = cells.filter((c) => c.on).length;
 
-  const getResponseIcon = (response: RSVP | null) => {
-    switch (response) {
-      case RSVP.yes:
-        return <CheckCircleIcon />;
-      case RSVP.maybe:
-        return <HelpIcon />;
-      case RSVP.no:
-        return <CancelIcon />;
-      default:
-        return <HelpIcon />;
-    }
-  };
-
-  const getResponseText = (response: RSVP | null) => {
-    switch (response) {
-      case RSVP.yes:
-        return "Yes";
-      case RSVP.maybe:
-        return "Maybe";
-      case RSVP.no:
-        return "No";
-      default:
-        return "Not Responded";
-    }
-  };
-
-  const getAttendanceText = (attendance: number[] | null) => {
-    return getAttendanceDescription(
-      attendance,
-      props.event.timeBegin,
-      props.event.timeEnd,
-    );
-  };
+  const seatText = seatLabel
+    ? seatRoomName
+      ? `${seatLabel} · ${seatRoomName}`
+      : seatLabel
+    : "Not chosen";
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={2}>
-          <Box
+    <Box
+      component="section"
+      aria-labelledby="rsvp-summary-title"
+      sx={{
+        position: "relative",
+        border: `1px solid ${hairline.panel}`,
+        backgroundColor: "rgba(12,15,24,0.82)",
+        ...bracket({ both: true }),
+        p: "clamp(18px, 2.4vw, 28px)",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "24px 40px",
+        alignItems: "center",
+      }}
+    >
+      <Box
+        sx={{
+          flex: "1 1 240px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "6px",
+        }}
+      >
+        <Typography
+          id="rsvp-summary-title"
+          component="h2"
+          sx={{
+            m: 0,
+            fontFamily: fonts.mono,
+            fontSize: 11,
+            fontWeight: 400,
+            letterSpacing: "0.18em",
+            color: colors.textDim,
+          }}
+        >
+          <span aria-hidden="true">{"// "}</span>YOUR RSVP
+        </Typography>
+        <Box
+          role="status"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            color: tones[tone].fg,
+          }}
+        >
+          <Icon aria-hidden="true" sx={{ fontSize: 30 }} />
+          <Typography
+            component="p"
             sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
+              m: 0,
+              fontSize: "clamp(26px, 3vw, 34px)",
+              fontWeight: 700,
+              letterSpacing: "0.02em",
+              textTransform: "uppercase",
+              lineHeight: 1.1,
+              color: "inherit",
             }}
           >
-            <Typography variant="h6" component="h2">
-              Your RSVP
-            </Typography>
-            <Button
-              startIcon={<EditIcon />}
-              onClick={props.onEdit}
-              disabled={props.disabled}
-              variant="outlined"
-              size="small"
-            >
-              Edit
-            </Button>
-          </Box>
+            {status.text}
+          </Typography>
+        </Box>
+        <Typography
+          component="p"
+          sx={{ m: 0, fontSize: 15, color: colors.textMuted, lineHeight: 1.5 }}
+        >
+          {props.disabled
+            ? "This event has ended, so RSVPs are closed."
+            : status.sub}
+        </Typography>
+      </Box>
 
+      {going && (
+        <>
           <Box
+            component="dl"
             sx={{
+              m: 0,
+              flex: "0 1 auto",
               display: "flex",
-              alignItems: "center",
-              gap: 1,
+              flexWrap: "wrap",
+              gap: "12px 28px",
+              "& dd": { m: 0 },
             }}
           >
-            <Chip
-              icon={getResponseIcon(invitation.response)}
-              label={getResponseText(invitation.response)}
-              color={getResponseColor(invitation.response)}
-              size="medium"
-            />
-          </Box>
-
-          {invitation.response && invitation.response !== RSVP.no && (
-            <>
-              {invitation.handle && (
-                <Box>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    Handle
-                  </Typography>
-                  <Typography variant="body1">{invitation.handle}</Typography>
-                </Box>
-              )}
-
-              <Box>
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  Attendance
-                </Typography>
-                <Typography variant="body1">
-                  {getAttendanceText(invitation.attendance)}
-                </Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <Box component="dt" sx={fieldLabel}>
+                Callsign
               </Box>
-
-              {hasSeating && (
-                <Box>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: "text.secondary",
-                    }}
-                  >
-                    <EventSeatIcon
-                      fontSize="small"
-                      sx={{ verticalAlign: "middle", mr: 0.5 }}
-                    />
-                    Seat
-                  </Typography>
-                  <Typography variant="body1">
-                    {seatLabel
-                      ? seatRoomName
-                        ? `${seatRoomName} - ${seatLabel}`
-                        : seatLabel
-                      : "Loading..."}
-                  </Typography>
+              <Box
+                component="dd"
+                sx={{
+                  fontSize: 18,
+                  fontWeight: 600,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {invitation.handle || "—"}
+              </Box>
+            </Box>
+            {hasSeating && (
+              <Box
+                sx={{ display: "flex", flexDirection: "column", gap: "4px" }}
+              >
+                <Box component="dt" sx={fieldLabel}>
+                  Seat
                 </Box>
-              )}
-            </>
-          )}
-
-          {!invitation.response && (
-            <Typography
-              variant="body2"
+                <Box component="dd" sx={{ fontSize: 18, fontWeight: 600 }}>
+                  {seatLoading ? (
+                    <Skeleton width={90} aria-label="Loading seat" />
+                  ) : (
+                    <Link
+                      component={RouterLink}
+                      to={`/events/${props.event.id}/seat-map`}
+                      sx={{
+                        color: colors.cyan,
+                        textDecorationColor: tint("cyan", 0.4),
+                        textUnderlineOffset: "4px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        minHeight: 44,
+                      }}
+                    >
+                      {seatText}
+                      <Box component="span" sx={srOnly}>
+                        {" "}
+                        (open seat map)
+                      </Box>
+                    </Link>
+                  )}
+                </Box>
+              </Box>
+            )}
+          </Box>
+          {cells.length > 0 && (
+            <Box
               sx={{
-                color: "text.secondary",
+                flex: "1 1 320px",
+                display: "flex",
+                flexDirection: "column",
+                gap: 1,
               }}
             >
-              You haven&apos;t responded to this event yet. Click
-              &quot;Edit&quot; to RSVP.
-            </Typography>
+              <Box component="span" sx={fieldLabel} aria-hidden="true">
+                Attendance · {attended}/{cells.length} blocks
+              </Box>
+              <AttendanceStrip
+                attendance={invitation.attendance}
+                timeBegin={props.event.timeBegin}
+                timeEnd={props.event.timeEnd}
+                tone={state === "maybe" ? "amber" : "lime"}
+                size="lg"
+                label={`Attendance, ${attended} of ${cells.length} blocks`}
+              />
+            </Box>
           )}
-        </Stack>
-      </CardContent>
-    </Card>
+        </>
+      )}
+
+      <Box sx={{ flex: "0 0 auto", display: "flex", gap: 1.25 }}>
+        {state === "none" ? (
+          <Button
+            variant="contained"
+            size="large"
+            onClick={props.onEdit}
+            disabled={props.disabled}
+            sx={{ px: "28px", fontSize: 15 }}
+          >
+            {status.cta}
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            onClick={props.onEdit}
+            disabled={props.disabled}
+            startIcon={<EditSharp />}
+          >
+            {status.cta}
+          </Button>
+        )}
+      </Box>
+    </Box>
   );
 }

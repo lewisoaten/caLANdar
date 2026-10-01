@@ -10,17 +10,7 @@ import {
   DialogTitle,
   TextField,
   Button,
-  Stack,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Avatar,
-  Chip,
   Tooltip,
   IconButton,
   FormControl,
@@ -28,13 +18,14 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
-  useTheme,
+  Skeleton,
 } from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import PersonIcon from "@mui/icons-material/Person";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
-import SendIcon from "@mui/icons-material/Send";
+import EditSharp from "@mui/icons-material/EditSharp";
+import PersonRemoveSharp from "@mui/icons-material/PersonRemoveSharp";
+import PersonAddSharp from "@mui/icons-material/PersonAddSharp";
+import ForwardToInboxSharp from "@mui/icons-material/ForwardToInboxSharp";
+import ContentCopySharp from "@mui/icons-material/ContentCopySharp";
+import GroupSharp from "@mui/icons-material/GroupSharp";
 import { InvitationData, RSVP } from "../types/invitations";
 import { SeatReservation } from "../types/seat_reservations";
 import {
@@ -48,6 +39,181 @@ import { dateParser } from "../utils";
 import { getAttendanceDescription } from "../utils/attendanceDescription";
 import { useSnackbar } from "notistack";
 import RSVPWizard from "./RSVPWizard/RSVPWizard";
+import {
+  EmptyState,
+  UserAvatar,
+  colors,
+  fonts,
+  hairline,
+  tint,
+  tones,
+  type HlTone,
+} from "./hl";
+
+// ---------------------------------------------------------------------------
+// Shared admin-list pieces (also used by InvitationsTable/SeatOccupancyAdmin)
+// ---------------------------------------------------------------------------
+
+/** RSVP -> the design's status label and tone (IN lime, MAYBE amber...). */
+export function rsvpStatus(response: RSVP | string | null | undefined): {
+  label: string;
+  tone: HlTone;
+} {
+  switch (response) {
+    case RSVP.yes:
+      return { label: "IN", tone: "lime" };
+    case RSVP.maybe:
+      return { label: "MAYBE", tone: "amber" };
+    case RSVP.no:
+      return { label: "OUT", tone: "pink" };
+    default:
+      return { label: "PENDING", tone: "cyan" };
+  }
+}
+
+/** Split and tidy a comma/whitespace separated list of emails. */
+export function parseEmailList(value: string): string[] {
+  const seen = new Set<string>();
+  return value
+    .split(/[,;\s]+/)
+    .map((e) => e.trim())
+    .filter((e) => {
+      const key = e.toLowerCase();
+      if (!e || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+/** Attendance buckets as small squares, with a text alternative. */
+export function AttendancePips({
+  attendance,
+  tone = "lime",
+  description,
+}: {
+  attendance: number[];
+  tone?: HlTone;
+  /** Accessible description; defaults to a per-bucket list. */
+  description?: string;
+}) {
+  const label =
+    description ??
+    `Attendance: ${attendance.filter((b) => b === 1).length} of ${attendance.length} slots`;
+  return (
+    <Tooltip title={label} enterDelay={200}>
+      <Box
+        role="img"
+        aria-label={label}
+        tabIndex={0}
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "3px",
+          maxWidth: 140,
+          "&:focus-visible": {
+            outline: `2px solid ${colors.cyan}`,
+            outlineOffset: 2,
+          },
+        }}
+      >
+        {attendance.map((bucket, index) => (
+          <Box
+            key={index}
+            sx={{
+              width: 8,
+              height: 8,
+              backgroundColor: bucket === 1 ? tones[tone].solid : "transparent",
+              border: `1px solid ${
+                bucket === 1 ? tones[tone].solid : tint("neutral", 0.35)
+              }`,
+            }}
+          />
+        ))}
+      </Box>
+    </Tooltip>
+  );
+}
+
+/** Themed confirmation dialog for destructive actions. */
+export function ConfirmDialog({
+  open,
+  title,
+  children,
+  confirmLabel,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  title: string;
+  children: React.ReactNode;
+  confirmLabel: string;
+  busy?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <DialogContentText component="div">{children}</DialogContentText>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onCancel} color="inherit" disabled={busy}>
+          Cancel
+        </Button>
+        <Button
+          onClick={onConfirm}
+          variant="contained"
+          color="error"
+          disabled={busy}
+        >
+          {confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+/** 44px square icon action used in admin rows. */
+export function RowAction({
+  label,
+  onClick,
+  danger,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip title={label}>
+      <IconButton
+        aria-label={label}
+        onClick={onClick}
+        sx={{
+          width: 44,
+          height: 44,
+          border: `1px solid ${hairline.control}`,
+          color: colors.textMuted,
+          "&:hover": {
+            color: danger ? colors.pinkText : colors.cyan,
+            borderColor: danger ? colors.pinkText : colors.cyan,
+            backgroundColor: "transparent",
+          },
+          "& svg": { fontSize: 18 },
+        }}
+      >
+        {children}
+      </IconButton>
+    </Tooltip>
+  );
+}
+
+const mono = { fontFamily: fonts.mono } as const;
+
+// ---------------------------------------------------------------------------
 
 interface InvitationSeatManagementTableProps {
   event: EventData;
@@ -68,6 +234,11 @@ interface CombinedAttendeeData {
   reservationLastModified: moment.Moment | null;
 }
 
+/**
+ * Event management "Roster" tab: invite by email (or copy a previous event's
+ * list), then one row per invitee with RSVP, attendance, seat and actions
+ * (resend, edit via the RSVP wizard, remove).
+ */
 export default function InvitationSeatManagementTable(
   props: InvitationSeatManagementTableProps,
 ) {
@@ -76,13 +247,14 @@ export default function InvitationSeatManagementTable(
   const token = userDetails?.token;
   const event_id = props.event.id;
   const { enqueueSnackbar } = useSnackbar();
-  const theme = useTheme();
+  const uid = React.useId();
 
   const [invitations, setInvitations] = useState<InvitationData[]>([]);
   const [reservations, setReservations] = useState<SeatReservation[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   // RSVP Wizard state
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -90,93 +262,71 @@ export default function InvitationSeatManagementTable(
     InvitationData | undefined
   >(undefined);
 
-  // Send invitations dialog state
+  // Inline invite field
+  const [inviteValue, setInviteValue] = useState("");
+  const [inviting, setInviting] = useState(false);
+
+  // Send invitations (copy from event) dialog state
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [emailsValue, setEmailsValue] = useState<string>("");
   const [availableEvents, setAvailableEvents] = useState<EventData[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | "">(0);
 
+  // Delete confirmation
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Fetch all data
   const fetchData = useCallback(() => {
     if (!event_id || !token) return;
 
-    setLoading(true);
+    setLoadError(false);
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: "Bearer " + token,
+    };
+    const get = <T,>(url: string): Promise<T | undefined> =>
+      fetch(url, { headers }).then((response) => {
+        if (response.status === 401) {
+          signOut();
+          return undefined;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as T);
+      });
 
     Promise.all([
-      // Fetch invitations
-      fetch(`/api/events/${event_id}/invitations?as_admin=${props.as_admin}`, {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-      })
-        .then((response) => {
-          if (response.status === 401) signOut();
-          else
-            return response
-              .text()
-              .then((data) => JSON.parse(data, dateParser) as InvitationData[]);
-        })
-        .then((data) => {
-          if (data) setInvitations(data);
-        }),
-
-      // Fetch seat reservations
-      fetch(`/api/events/${event_id}/seat-reservations?as_admin=true`, {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-      })
-        .then((response) => {
-          if (response.status === 401) signOut();
-          else
-            return response
-              .text()
-              .then(
-                (data) => JSON.parse(data, dateParser) as SeatReservation[],
-              );
-        })
-        .then((data) => {
-          if (data) setReservations(data);
-        }),
-
-      // Fetch rooms
-      fetch(`/api/events/${event_id}/rooms?as_admin=true`, {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
-        },
-      })
-        .then((response) => {
-          if (response.status === 401) signOut();
-          else return response.json() as Promise<Room[]>;
-        })
-        .then((data) => {
+      get<InvitationData[]>(
+        `/api/events/${event_id}/invitations?as_admin=${props.as_admin}`,
+      ).then((data) => {
+        if (data) setInvitations(data);
+      }),
+      get<SeatReservation[]>(
+        `/api/events/${event_id}/seat-reservations?as_admin=true`,
+      ).then((data) => {
+        if (data) setReservations(data);
+      }),
+      get<Room[]>(`/api/events/${event_id}/rooms?as_admin=true`).then(
+        (data) => {
           if (data) setRooms(data);
-        }),
-
-      // Fetch seats
-      fetch(`/api/events/${event_id}/seats?as_admin=true`, {
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          Authorization: "Bearer " + token,
         },
-      })
-        .then((response) => {
-          if (response.status === 401) signOut();
-          else return response.json() as Promise<Seat[]>;
-        })
-        .then((data) => {
+      ),
+      get<Seat[]>(`/api/events/${event_id}/seats?as_admin=true`).then(
+        (data) => {
           if (data) setSeats(data);
-        }),
-    ]).finally(() => {
-      setLoading(false);
-    });
+        },
+      ),
+    ])
+      .catch((error) => {
+        console.error("Error loading the roster:", error);
+        setLoadError(true);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [event_id, token, props.as_admin, signOut]);
 
   useEffect(() => {
@@ -187,7 +337,7 @@ export default function InvitationSeatManagementTable(
   useEffect(() => {
     if (!token) return;
 
-    fetch("/api/events?as_admin=true", {
+    fetch("/api/events?as_admin=true&limit=100", {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
@@ -196,7 +346,7 @@ export default function InvitationSeatManagementTable(
     })
       .then((response) => {
         if (response.status === 401) signOut();
-        else
+        else if (response.ok)
           return response
             .text()
             .then(
@@ -207,7 +357,8 @@ export default function InvitationSeatManagementTable(
         if (data && data.events) {
           setAvailableEvents(data.events.filter((e) => e.id !== event_id));
         }
-      });
+      })
+      .catch((error) => console.error("Error fetching events:", error));
   }, [token, event_id, signOut]);
 
   // Combine invitations and reservations
@@ -230,13 +381,25 @@ export default function InvitationSeatManagementTable(
     };
   });
 
-  // Get seat label for a seat ID
-  const getSeatLabel = (seatId: number | null): string => {
-    if (!seatId) return "No seat";
-    const seat = seats.find((s) => s.id === seatId);
-    if (!seat) return "Unknown seat";
+  const totals = {
+    invited: invitations.length,
+    yes: invitations.filter((i) => i.response === RSVP.yes).length,
+    maybe: invitations.filter((i) => i.response === RSVP.maybe).length,
+    no: invitations.filter((i) => i.response === RSVP.no).length,
+    pending: invitations.filter((i) => !i.response).length,
+  };
+
+  // Seat label and room for a seat ID
+  const getSeat = (attendee: CombinedAttendeeData) => {
+    if (!attendee.seatId) {
+      return attendee.reservationId
+        ? { label: "No desk", room: "Unspecified seat" }
+        : { label: "—", room: null };
+    }
+    const seat = seats.find((s) => s.id === attendee.seatId);
+    if (!seat) return { label: "?", room: "Unknown seat" };
     const room = rooms.find((r) => r.id === seat.roomId);
-    return room ? `${room.name} - ${seat.label}` : seat.label;
+    return { label: seat.label, room: room?.name ?? null };
   };
 
   // Handle edit - open wizard
@@ -265,13 +428,9 @@ export default function InvitationSeatManagementTable(
     fetchData(); // Refresh the data
   };
 
-  // Handle delete invitation
+  // Handle delete invitation (after confirmation)
   const handleDeleteInvitation = async (email: string) => {
-    if (
-      !confirm(`Are you sure you want to delete the invitation for ${email}?`)
-    )
-      return;
-
+    setDeleting(true);
     try {
       const response = await fetch(
         `/api/events/${event_id}/invitations/${encodeURIComponent(
@@ -300,6 +459,9 @@ export default function InvitationSeatManagementTable(
     } catch (error) {
       console.error("Error deleting:", error);
       enqueueSnackbar("Network error", { variant: "error" });
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
     }
   };
 
@@ -338,54 +500,6 @@ export default function InvitationSeatManagementTable(
     }
   };
 
-  // Render attendance pips
-  const renderAttendancePips = (
-    attendance: number[] | null,
-    response: RSVP | null,
-  ) => {
-    if (!attendance || attendance.length === 0 || response === RSVP.no)
-      return null;
-
-    const description = getAttendanceDescription(
-      attendance,
-      props.event.timeBegin,
-      props.event.timeEnd,
-    );
-
-    const pipColor =
-      response === RSVP.yes
-        ? theme.palette.success.main // Green for Yes
-        : response === RSVP.maybe
-          ? theme.palette.warning.main // Orange for Maybe
-          : theme.palette.success.main;
-
-    return (
-      <Tooltip title={description} enterDelay={200} arrow>
-        <Box
-          sx={{ display: "flex", gap: 0.5, flexWrap: "wrap" }}
-          role="img"
-          aria-label={description}
-        >
-          {attendance.map((bucket, index) => (
-            <Box
-              key={index}
-              sx={{
-                width: 8,
-                height: 8,
-                backgroundColor:
-                  bucket === 1
-                    ? pipColor
-                    : theme.palette.action.disabledBackground,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: "50%",
-              }}
-            />
-          ))}
-        </Box>
-      </Tooltip>
-    );
-  };
-
   // Send invitations handlers
   const handleSendDialogOpen = () => {
     setSendDialogOpen(true);
@@ -402,7 +516,6 @@ export default function InvitationSeatManagementTable(
     setSelectedEventId(selectedId);
 
     if (selectedId && selectedId !== 0) {
-      // Fetch invitations for the selected event
       fetch(`/api/events/${selectedId}/invitations?as_admin=true`, {
         headers: {
           "Content-Type": "application/json",
@@ -419,8 +532,14 @@ export default function InvitationSeatManagementTable(
         })
         .then((data) => {
           if (data) {
-            // Extract emails and populate the text field
-            const emails = data.map((inv) => inv.email).join(", ");
+            // Only people who aren't on this event's list yet.
+            const existing = new Set(
+              invitations.map((i) => i.email.toLowerCase()),
+            );
+            const emails = data
+              .map((inv) => inv.email)
+              .filter((e) => !existing.has(e.toLowerCase()))
+              .join(", ");
             setEmailsValue(emails);
           }
         })
@@ -430,17 +549,13 @@ export default function InvitationSeatManagementTable(
     }
   };
 
-  const handleSendInvitations = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const emails = emailsValue
-      .split(",")
-      .map((email) => email.trim())
-      .filter((email) => email.length > 0);
+  /** POST one invitation per email. Returns true if all succeeded. */
+  const sendInvites = async (raw: string): Promise<boolean> => {
+    const emails = parseEmailList(raw);
 
     if (emails.length === 0) {
       enqueueSnackbar("Please enter at least one email", { variant: "error" });
-      return;
+      return false;
     }
 
     try {
@@ -467,217 +582,404 @@ export default function InvitationSeatManagementTable(
               .text()
               .then((data) => JSON.parse(data, dateParser) as InvitationData);
           } else if (response.status === 400) {
-            const error = "Invalid event data.";
-            throw new Error(error);
+            throw new Error("Invalid event data.");
           } else {
             throw new Error("Failed to send invitation");
           }
         }),
       );
 
-      enqueueSnackbar("Invitations sent successfully", { variant: "success" });
-      handleSendDialogClose();
+      enqueueSnackbar(
+        emails.length === 1
+          ? `Invitation sent to ${emails[0]}`
+          : `${emails.length} invitations sent`,
+        { variant: "success" },
+      );
       fetchData();
+      return true;
     } catch (error) {
       console.error("Error sending invitations:", error);
       enqueueSnackbar("Failed to send some invitations", { variant: "error" });
+      fetchData();
+      return false;
     }
   };
 
-  if (loading) {
+  const handleInlineInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviting(true);
+    if (await sendInvites(inviteValue)) setInviteValue("");
+    setInviting(false);
+  };
+
+  const handleSendInvitations = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (await sendInvites(emailsValue)) handleSendDialogClose();
+  };
+
+  const renderAttendance = (attendee: CombinedAttendeeData) => {
+    const { attendance, response } = attendee;
+    if (!attendance || attendance.length === 0 || response === RSVP.no)
+      return (
+        <Box component="span" sx={{ color: colors.textDim, fontSize: 13 }}>
+          —
+        </Box>
+      );
     return (
-      <Box sx={{ p: 2, textAlign: "center" }}>
-        <Typography>Loading...</Typography>
+      <AttendancePips
+        attendance={attendance}
+        tone={response === RSVP.maybe ? "amber" : "lime"}
+        description={getAttendanceDescription(
+          attendance,
+          props.event.timeBegin,
+          props.event.timeEnd,
+        )}
+      />
+    );
+  };
+
+  const header = (
+    <Box
+      sx={{
+        p: "16px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 1.5,
+        borderBottom: `1px solid ${hairline.soft}`,
+      }}
+    >
+      <Box
+        component="form"
+        onSubmit={handleInlineInvite}
+        aria-label="Invite gamers"
+        sx={{ display: "flex", flexWrap: "wrap", gap: 1.25 }}
+      >
+        <TextField
+          type="email"
+          name="invite"
+          value={inviteValue}
+          onChange={(e) => setInviteValue(e.target.value)}
+          placeholder="Invite by email"
+          required
+          slotProps={{
+            htmlInput: {
+              "aria-label": "Invite by email",
+              "aria-describedby": `${uid}-invite-help`,
+              multiple: true,
+            },
+          }}
+          sx={{
+            flex: "1 1 240px",
+            "& .MuiOutlinedInput-root": { backgroundColor: "rgba(6,7,11,0.6)" },
+          }}
+        />
+        <Button
+          type="submit"
+          variant="contained"
+          disabled={inviting}
+          startIcon={<PersonAddSharp />}
+        >
+          {inviting ? "Inviting…" : "Invite"}
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={handleSendDialogOpen}
+          startIcon={<ContentCopySharp />}
+        >
+          Copy from event
+        </Button>
+      </Box>
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "space-between",
+          gap: 1,
+        }}
+      >
+        <Typography
+          id={`${uid}-invite-help`}
+          sx={{ fontSize: 13, color: colors.textMuted }}
+        >
+          Separate several emails with commas. Each gets an invite email.
+        </Typography>
+        {!loading && totals.invited > 0 && (
+          <Box
+            component="p"
+            sx={{
+              ...mono,
+              m: 0,
+              fontSize: 12,
+              letterSpacing: "0.1em",
+              color: colors.textMuted,
+            }}
+          >
+            {totals.invited} INVITED · {totals.yes} IN · {totals.maybe} MAYBE ·{" "}
+            {totals.no} OUT · {totals.pending} PENDING
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+
+  let content: React.ReactNode;
+  if (loading) {
+    content = (
+      <Box aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <Box
+            key={i}
+            sx={{
+              display: "flex",
+              gap: 2,
+              alignItems: "center",
+              p: "12px 20px",
+              borderBottom: `1px solid ${hairline.faint}`,
+            }}
+          >
+            <Skeleton variant="rectangular" width={36} height={36} />
+            <Box sx={{ flex: 1 }}>
+              <Skeleton width="30%" />
+              <Skeleton width="45%" />
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    );
+  } else if (loadError) {
+    content = (
+      <Box
+        role="alert"
+        sx={{
+          p: 4,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: 1.5,
+          color: colors.pinkText,
+        }}
+      >
+        Couldn&apos;t load the roster.
+        <Button variant="outlined" size="small" onClick={fetchData}>
+          Retry
+        </Button>
+      </Box>
+    );
+  } else if (combinedData.length === 0) {
+    content = (
+      <EmptyState
+        icon={<GroupSharp />}
+        title="Nobody invited yet"
+        description="Invite people by email above, or copy the list from a previous event."
+      />
+    );
+  } else {
+    content = (
+      <Box component="ul" aria-label="Invitees" sx={{ m: 0, p: 0 }}>
+        {combinedData.map((attendee) => {
+          const st = rsvpStatus(attendee.response);
+          const seat = getSeat(attendee);
+          const name = attendee.handle || attendee.email;
+          return (
+            <Box
+              component="li"
+              key={attendee.email}
+              sx={{
+                listStyle: "none",
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "10px 18px",
+                p: "12px 20px",
+                borderBottom: `1px solid ${hairline.faint}`,
+                "&:hover": { backgroundColor: tint("cyan", 0.03) },
+              }}
+            >
+              <Box
+                sx={{
+                  flex: "1 1 220px",
+                  minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                }}
+              >
+                <UserAvatar name={name} src={attendee.avatarUrl} size={36} />
+                <Box
+                  sx={{
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "2px",
+                  }}
+                >
+                  <Typography
+                    component="span"
+                    sx={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: attendee.handle ? colors.text : colors.textMuted,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {attendee.handle || "No callsign yet"}
+                  </Typography>
+                  <Box
+                    component="span"
+                    title={attendee.email}
+                    sx={{
+                      ...mono,
+                      fontSize: 12,
+                      color: colors.textMuted,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {attendee.email}
+                  </Box>
+                </Box>
+              </Box>
+              <Box
+                component="span"
+                sx={{
+                  ...mono,
+                  width: 80,
+                  fontSize: 11,
+                  letterSpacing: "0.12em",
+                  color: tones[st.tone].fg,
+                }}
+              >
+                {st.label}
+              </Box>
+              <Box sx={{ width: 120, display: "flex" }}>
+                {renderAttendance(attendee)}
+              </Box>
+              <Box
+                sx={{
+                  width: 96,
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+              >
+                <Box
+                  component="span"
+                  aria-label={
+                    seat.room
+                      ? `Seat ${seat.label}, ${seat.room}`
+                      : seat.label === "—"
+                        ? "No seat"
+                        : `Seat ${seat.label}`
+                  }
+                  sx={{
+                    ...mono,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: colors.text,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {seat.label}
+                </Box>
+                {seat.room && (
+                  <Box
+                    component="span"
+                    aria-hidden="true"
+                    sx={{
+                      fontSize: 12,
+                      color: colors.textMuted,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {seat.room}
+                  </Box>
+                )}
+              </Box>
+              <Tooltip
+                title={
+                  <Box>
+                    <Box>Invited: {attendee.invitedAt.calendar()}</Box>
+                    {attendee.respondedAt && (
+                      <Box>Responded: {attendee.respondedAt.calendar()}</Box>
+                    )}
+                    <Box>Last modified: {attendee.lastModified.calendar()}</Box>
+                    {attendee.reservationLastModified && (
+                      <Box>
+                        Seat modified:{" "}
+                        {attendee.reservationLastModified.calendar()}
+                      </Box>
+                    )}
+                  </Box>
+                }
+              >
+                <Box
+                  component="span"
+                  tabIndex={0}
+                  sx={{
+                    ...mono,
+                    width: 110,
+                    fontSize: 12,
+                    color: colors.textMuted,
+                    cursor: "help",
+                    "&:focus-visible": {
+                      outline: `2px solid ${colors.cyan}`,
+                      outlineOffset: 2,
+                    },
+                  }}
+                >
+                  {attendee.lastModified.fromNow()}
+                </Box>
+              </Tooltip>
+              <Box sx={{ display: "flex", gap: "6px", ml: "auto" }}>
+                {!attendee.response && (
+                  <RowAction
+                    label={`Resend invite to ${attendee.email}`}
+                    onClick={() => handleResendInvitation(attendee.email)}
+                  >
+                    <ForwardToInboxSharp />
+                  </RowAction>
+                )}
+                <RowAction
+                  label={`Edit RSVP for ${attendee.email}`}
+                  onClick={() => handleEdit(attendee)}
+                >
+                  <EditSharp />
+                </RowAction>
+                <RowAction
+                  label={`Remove ${attendee.email}`}
+                  danger
+                  onClick={() => setPendingDelete(attendee.email)}
+                >
+                  <PersonRemoveSharp />
+                </RowAction>
+              </Box>
+            </Box>
+          );
+        })}
       </Box>
     );
   }
 
   return (
     <React.Fragment>
-      <Typography variant="h6" gutterBottom>
-        Invitations & Seat Assignments
-      </Typography>
-      <TableContainer component={Paper} variant="outlined">
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Attendee</TableCell>
-              <TableCell>Handle</TableCell>
-              <TableCell>RSVP</TableCell>
-              <TableCell>Attendance</TableCell>
-              <TableCell>Seat</TableCell>
-              <TableCell>Timestamps</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {combinedData.map((attendee) => (
-              <TableRow key={attendee.email} hover>
-                <TableCell>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Avatar
-                      src={
-                        attendee.avatarUrl ||
-                        "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-                      }
-                      alt={attendee.email}
-                      sx={{ width: 32, height: 32 }}
-                    >
-                      <PersonIcon />
-                    </Avatar>
-                    <Tooltip title={attendee.email} enterDelay={500}>
-                      <Typography variant="body2" noWrap>
-                        {attendee.email}
-                      </Typography>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2">
-                    {attendee.handle || "-"}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  {attendee.response ? (
-                    <Chip
-                      label={attendee.response}
-                      size="small"
-                      color={
-                        attendee.response === RSVP.yes
-                          ? "success"
-                          : attendee.response === RSVP.maybe
-                            ? "warning"
-                            : "error"
-                      }
-                      sx={{ height: 20, fontSize: "0.7rem" }}
-                    />
-                  ) : (
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      No response
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell>
-                  {renderAttendancePips(attendee.attendance, attendee.response)}
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                    {attendee.seatId && <EventSeatIcon fontSize="small" />}
-                    <Typography variant="body2">
-                      {getSeatLabel(attendee.seatId)}
-                    </Typography>
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Tooltip
-                    title={
-                      <Box>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            display: "block",
-                          }}
-                        >
-                          Invited: {attendee.invitedAt.calendar()}
-                        </Typography>
-                        {attendee.respondedAt && (
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              display: "block",
-                            }}
-                          >
-                            Responded: {attendee.respondedAt.calendar()}
-                          </Typography>
-                        )}
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            display: "block",
-                          }}
-                        >
-                          Last Modified: {attendee.lastModified.calendar()}
-                        </Typography>
-                        {attendee.reservationLastModified && (
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              display: "block",
-                            }}
-                          >
-                            Seat Modified:{" "}
-                            {attendee.reservationLastModified.calendar()}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                    arrow
-                  >
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                        cursor: "help",
-                      }}
-                    >
-                      {attendee.lastModified.fromNow()}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right">
-                  <Stack
-                    direction="row"
-                    spacing={0.5}
-                    sx={{
-                      justifyContent: "flex-end",
-                    }}
-                  >
-                    {!attendee.response && (
-                      <Tooltip title="Resend invitation">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleResendInvitation(attendee.email)}
-                        >
-                          <SendIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Edit">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(attendee)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteInvitation(attendee.email)}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
-        <Button variant="outlined" onClick={handleSendDialogOpen}>
-          Send Invitations
-        </Button>
-      </Stack>
+      <Box
+        component="section"
+        aria-label="Invitations and seat assignments"
+        aria-busy={loading}
+        sx={{
+          border: `1px solid ${hairline.panel}`,
+          backgroundColor: colors.surface,
+          minWidth: 0,
+        }}
+      >
+        {header}
+        {content}
+      </Box>
 
-      {/* Send Invitations Dialog */}
+      {/* Copy invitations from another event */}
       <Dialog
         open={sendDialogOpen}
         onClose={handleSendDialogClose}
@@ -685,20 +987,20 @@ export default function InvitationSeatManagementTable(
         fullWidth
       >
         <Box component="form" onSubmit={handleSendInvitations}>
-          <DialogTitle>Send Invitations</DialogTitle>
+          <DialogTitle>Send invitations</DialogTitle>
           <DialogContent>
-            <DialogContentText>
-              Invite gamers here! Just specify their email addresses separated
-              by commas.
+            <DialogContentText sx={{ mb: 2 }}>
+              Invite gamers here! Pick a previous event to copy its guest list,
+              or type email addresses separated by commas.
             </DialogContentText>
 
             <FormControl fullWidth margin="dense">
-              <InputLabel id="event-select-label">
+              <InputLabel id={`${uid}-event-select-label`}>
                 Pre-fill from another event (optional)
               </InputLabel>
               <Select
-                labelId="event-select-label"
-                id="event-select"
+                labelId={`${uid}-event-select-label`}
+                id={`${uid}-event-select`}
                 value={selectedEventId}
                 label="Pre-fill from another event (optional)"
                 onChange={handleEventSelect}
@@ -715,7 +1017,7 @@ export default function InvitationSeatManagementTable(
             </FormControl>
 
             <TextField
-              id="emails"
+              id={`${uid}-emails`}
               name="emails"
               label="Emails"
               type="text"
@@ -723,20 +1025,35 @@ export default function InvitationSeatManagementTable(
               required
               margin="dense"
               fullWidth
-              variant="outlined"
+              multiline
+              minRows={2}
               value={emailsValue}
               onChange={(e) => setEmailsValue(e.target.value)}
               helperText="Separate multiple emails with commas"
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleSendDialogClose}>Cancel</Button>
+            <Button onClick={handleSendDialogClose} color="inherit">
+              Cancel
+            </Button>
             <Button type="submit" variant="contained">
               Send
             </Button>
           </DialogActions>
         </Box>
       </Dialog>
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Remove invitation?"
+        confirmLabel="Remove"
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => pendingDelete && handleDeleteInvitation(pendingDelete)}
+      >
+        Remove <strong>{pendingDelete}</strong> from this event? Their RSVP is
+        removed too.
+      </ConfirmDialog>
 
       {/* RSVP Wizard for editing */}
       <RSVPWizard

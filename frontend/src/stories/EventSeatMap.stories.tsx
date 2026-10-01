@@ -1,9 +1,22 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
+import Box from "@mui/material/Box";
 import moment from "moment";
 import EventSeatMap from "../components/EventSeatMap";
+import { sectionGap } from "../components/hl";
+import type { FloorPlanRoom } from "../components/seatFloorPlanModel";
 import { EventData, EventSeatingConfig, Room, Seat } from "../types/events";
 import { InvitationLiteData, RSVP } from "../types/invitations";
-import { mockApi, withRoute, withUser } from "./mockApi";
+import type { SeatReservation } from "../types/seat_reservations";
+import { designSeats, gamesRoom, mainHall, roomPhoto } from "./seatMapFixtures";
+import {
+  mockApi,
+  mockResponse,
+  withRoute,
+  withUser,
+  type MockRequest,
+} from "./mockApi";
+
+const ME = "sam@example.com";
 
 const stamp = moment.utc("2026-02-20T09:00:00Z");
 
@@ -126,6 +139,14 @@ const person = (
   lastModified: stamp,
 });
 
+interface Me {
+  handle: string;
+  response: RSVP | null;
+  attendance: number[] | null;
+  /** Seat id, `null` for the unspecified seat, `undefined` for no reservation. */
+  seatId?: number | null;
+}
+
 const register = (
   eventId: number,
   title: string,
@@ -133,14 +154,99 @@ const register = (
   rooms: Room[],
   seats: Seat[],
   invitations: InvitationLiteData[],
-) =>
+  me: Me = {
+    handle: "SamTheGamer",
+    response: RSVP.yes,
+    attendance: [1, 1, 1, 1, 1, 1, 1, 1],
+  },
+) => {
+  // In-memory state so claim / swap / release work in the story.
+  let reservation: SeatReservation | null =
+    me.seatId === undefined
+      ? null
+      : {
+          id: 1,
+          eventId,
+          seatId: me.seatId,
+          invitationEmail: ME,
+          attendanceBuckets: me.attendance ?? [],
+          createdAt: stamp,
+          lastModified: stamp,
+        };
+  const mine = (): InvitationLiteData => ({
+    eventId,
+    avatarUrl: null,
+    handle: me.handle,
+    response: me.response,
+    attendance: me.attendance,
+    seatId: reservation ? reservation.seatId : null,
+    lastModified: stamp,
+  });
+  const everyone = () =>
+    me.response === RSVP.yes || me.response === RSVP.maybe
+      ? [...invitations, mine()]
+      : invitations;
+  const save = (body: unknown) => {
+    const { seatId } = body as { seatId: number | null };
+    const clash = invitations.some(
+      (inv) => seatId !== null && inv.seatId === seatId,
+    );
+    if (clash)
+      return mockResponse(409, {
+        error: {
+          code: 409,
+          reason: "Conflict",
+          description:
+            "This seat is already reserved for one or more of the selected time buckets",
+        },
+      });
+    reservation = {
+      id: 1,
+      eventId,
+      seatId,
+      invitationEmail: ME,
+      attendanceBuckets: me.attendance ?? [],
+      createdAt: stamp,
+      lastModified: stamp,
+    };
+    return reservation;
+  };
   mockApi({
     [`GET /api/events/${eventId}`]: event(eventId, title),
     [`GET /api/events/${eventId}/seating-config`]: cfg,
     [`GET /api/events/${eventId}/rooms`]: rooms,
     [`GET /api/events/${eventId}/seats`]: seats,
-    [`GET /api/events/${eventId}/invitations`]: invitations,
+    [`GET /api/events/${eventId}/invitations`]: () => everyone(),
+    [`GET /api/events/${eventId}/invitations/:email`]: () => ({
+      ...mine(),
+      email: ME,
+      invitedAt: stamp,
+      respondedAt: me.response ? stamp : null,
+    }),
+    [`GET /api/events/${eventId}/seat-reservations/me`]: () =>
+      reservation ?? mockResponse(404, undefined),
+    [`POST /api/events/${eventId}/seat-reservations/check-availability`]:
+      () => ({
+        availableSeatIds: seats
+          .filter(
+            (s) =>
+              s.id !== reservation?.seatId &&
+              !invitations.some((inv) => inv.seatId === s.id),
+          )
+          .map((s) => s.id),
+      }),
+    [`POST /api/events/${eventId}/seat-reservations/me`]: ({
+      body,
+    }: MockRequest) => save(body),
+    [`PUT /api/events/${eventId}/seat-reservations/me`]: ({
+      body,
+    }: MockRequest) => save(body),
+    [`DELETE /api/events/${eventId}/seat-reservations/me`]: () => {
+      reservation = null;
+      return mockResponse(204, undefined);
+    },
   });
+};
 
 // --- 201: populated multi-room map -----------------------------------------
 const seats201 = [
@@ -336,22 +442,181 @@ register(
   ],
 );
 
+// --- 206-209: the HyperLAN design's rooms (grid layout, features, background)
+const designRooms = (eventId: number): FloorPlanRoom[] => [
+  mainHall(eventId),
+  gamesRoom(eventId, { backgroundUrl: roomPhoto }),
+];
+
+const squad = (eventId: number): InvitationLiteData[] => [
+  { ...person(eventId, "NoScope_Nia", "", "", RSVP.yes, 1), avatarUrl: null },
+  {
+    ...person(
+      eventId,
+      "CasualGamer",
+      "",
+      "",
+      RSVP.maybe,
+      5,
+      [1, 0, 1, 0, 0, 0, 0, 0],
+    ),
+    avatarUrl: null,
+  },
+  {
+    ...person(
+      eventId,
+      "LagWizard",
+      "",
+      "",
+      RSVP.yes,
+      6,
+      [0, 0, 1, 1, 1, 1, 1, 0],
+    ),
+    avatarUrl: null,
+  },
+  {
+    ...person(
+      eventId,
+      "SamTheSniper",
+      "",
+      "",
+      RSVP.yes,
+      9,
+      [0, 0, 0, 1, 1, 1, 1, 1],
+    ),
+    avatarUrl: null,
+  },
+  {
+    ...person(eventId, "Dan_the_Man", "", "", RSVP.yes, null),
+    avatarUrl: null,
+  },
+];
+
+const registerDesign = (eventId: number, me: Me) =>
+  register(
+    eventId,
+    "Autumn LAN 2026",
+    config(eventId),
+    designRooms(eventId),
+    designSeats(eventId),
+    squad(eventId),
+    me,
+  );
+
+registerDesign(206, {
+  handle: "ProGamer123",
+  response: RSVP.yes,
+  attendance: [1, 1, 1, 1, 1, 1, 1, 1],
+  seatId: 4,
+});
+registerDesign(207, {
+  handle: "ProGamer123",
+  response: RSVP.yes,
+  attendance: [1, 1, 1, 1, 1, 1, 1, 1],
+});
+registerDesign(208, {
+  handle: "ProGamer123",
+  response: null,
+  attendance: null,
+});
+register(
+  209,
+  "Grand Finals Weekend",
+  config(209, { allowUnspecifiedSeat: false }),
+  designRooms(209),
+  designSeats(209),
+  squad(209),
+  {
+    handle: "ProGamer123",
+    response: RSVP.maybe,
+    attendance: [0, 0, 1, 1, 1, 1, 0, 0],
+    seatId: 3,
+  },
+);
+
+// Loading forever / failing API
+const never = () => new Promise(() => {});
+const fail = () => mockResponse(500, {});
+mockApi(
+  Object.fromEntries(
+    [
+      "",
+      "/seating-config",
+      "/rooms",
+      "/seats",
+      "/invitations",
+      "/invitations/:email",
+    ].flatMap((path) => [
+      [`GET /api/events/210${path}`, never],
+      [`GET /api/events/211${path}`, fail],
+    ]),
+  ),
+);
+
+/** Stand-in for the app shell's <main>: padding, max width, section gap. */
+const withPageFrame: Decorator = (Story) => (
+  <Box
+    sx={{
+      maxWidth: 1400,
+      mx: "auto",
+      px: "clamp(14px, 3vw, 40px)",
+      py: "clamp(18px, 3vw, 40px)",
+      display: "flex",
+      flexDirection: "column",
+      gap: sectionGap,
+    }}
+  >
+    <Story />
+  </Box>
+);
+
 const meta = {
   title: "Components/EventSeatMap",
   component: EventSeatMap,
   parameters: { layout: "fullscreen" },
   tags: ["autodocs"],
+  decorators: [withPageFrame],
 } satisfies Meta<typeof EventSeatMap>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Two rooms with occupied and free seats, shared seats and unspecified attendees. */
+/** The design: you hold A4 (lime); tap a free desk to swap, or release it. */
+export const YourSeat: Story = {
+  decorators: [withRoute("/events/:id", "/events/206"), withUser()],
+};
+
+/** RSVP'd but no desk yet: pick one, then claim it (or bring your own desk). */
+export const NoSeatYet: Story = {
+  decorators: [withRoute("/events/:id", "/events/207"), withUser()],
+};
+
+/** Not RSVP'd: the plan is read-only and the panel points to the lobby. */
+export const LockedUntilRsvp: Story = {
+  decorators: [withRoute("/events/:id", "/events/208"), withUser()],
+};
+
+/** A specific seat is required (no release), maybe-RSVP with part-time attendance. */
+export const SeatRequired: Story = {
+  decorators: [withRoute("/events/:id", "/events/209"), withUser()],
+};
+
+/** Waiting for the API. */
+export const Loading: Story = {
+  decorators: [withRoute("/events/:id", "/events/210"), withUser()],
+};
+
+/** The API failed. */
+export const LoadError: Story = {
+  decorators: [withRoute("/events/:id", "/events/211"), withUser()],
+};
+
+/** Legacy rooms (x/y seats over an uploaded floorplan image), shared seats and unspecified attendees. */
 export const PopulatedMultiRoom: Story = {
   decorators: [withRoute("/events/:id", "/events/201"), withUser()],
 };
 
-/** Every seat taken: the room chips turn red and the free count is zero. */
+/** Every seat taken: the free counts are zero. */
 export const FullyBooked: Story = {
   decorators: [withRoute("/events/:id", "/events/204"), withUser()],
 };

@@ -1,24 +1,25 @@
 import * as React from "react";
-import { useEffect, useState, useContext } from "react";
-import {
-  Typography,
-  Box,
-  Stack,
-  Button,
-  Alert,
-  CircularProgress,
-  Tooltip,
-  Grid,
-  Card,
-  CardContent,
-  Chip,
-} from "@mui/material";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import { useEffect, useState, useContext, useMemo } from "react";
+import { Box, CircularProgress, Typography } from "@mui/material";
+import DeskSharp from "@mui/icons-material/DeskSharp";
+import CheckSharp from "@mui/icons-material/CheckSharp";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
-import { Room, Seat } from "../../types/events";
+import { Seat } from "../../types/events";
+import { InvitationLiteData } from "../../types/invitations";
 import { SeatAvailabilityResponse } from "../../types/seat_reservations";
-import RoomFloorplanView, { SeatDisplayData } from "../RoomFloorplanView";
+import { colors, fonts, hairline, tint } from "../hl";
+import {
+  SeatFloorPlan,
+  FloorPlanLegend,
+  type FloorPlanDesk,
+} from "../SeatFloorPlan";
+import {
+  ownDeskLabel,
+  roomCode,
+  sortRooms,
+  type FloorPlanRoom,
+  type FloorPlanSeat,
+} from "../seatFloorPlanModel";
 
 interface WizardSeatSelectorProps {
   eventId: number;
@@ -35,11 +36,12 @@ interface WizardSeatSelectorProps {
   disabled: boolean;
 }
 
-interface SeatWithAvailability extends Seat {
-  isAvailable: boolean;
-  isSelected: boolean;
-}
-
+/**
+ * The RSVP wizard's graphical seat picker: every room drawn as a floor plan
+ * (free / taken with avatar / your pick), plus the "Bring my own desk"
+ * (unspecified seat) option when the event allows it. Nothing is saved here;
+ * the wizard reserves the seat when the RSVP is confirmed.
+ */
 const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   eventId,
   attendanceBuckets,
@@ -54,25 +56,36 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
 
-  const [rooms, setRooms] = useState<Room[]>([]);
-  const [seats, setSeats] = useState<Seat[]>([]);
+  const [rooms, setRooms] = useState<FloorPlanRoom[]>([]);
+  const [seats, setSeats] = useState<FloorPlanSeat[]>([]);
+  const [occupants, setOccupants] = useState<InvitationLiteData[]>([]);
   const [availableSeats, setAvailableSeats] = useState<number[]>([]);
-  const [loading, setLoading] = useState(false);
+  // Keys of the requests that have finished, so a new event/attendance shows
+  // the spinner again without resetting state inside the effects.
+  const [seatsLoadedFor, setSeatsLoadedFor] = useState<number | null>(null);
+  const availabilityKey = attendanceBuckets
+    ? `${eventId}:${attendanceBuckets.join("")}`
+    : null;
+  const [availabilityLoadedFor, setAvailabilityLoadedFor] = useState<
+    string | null
+  >(null);
+  const loading = Boolean(eventId && token) && seatsLoadedFor !== eventId;
+  const availabilityLoaded = availabilityLoadedFor === availabilityKey;
+
+  const ownDesk = ownDeskLabel(unspecifiedSeatLabel);
 
   // Fetch rooms and seats
   useEffect(() => {
     if (!eventId || !token) return;
 
-    setLoading(true);
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: "Bearer " + token,
+    };
 
     // Fetch rooms
-    fetch(`/api/events/${eventId}/rooms`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
+    fetch(`/api/events/${eventId}/rooms`, { headers })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) return response.json();
@@ -87,13 +100,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       });
 
     // Fetch seats
-    fetch(`/api/events/${eventId}/seats`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
+    fetch(`/api/events/${eventId}/seats`, { headers })
       .then((response) => {
         if (response.status === 401) signOut();
         else if (response.ok) return response.json();
@@ -107,7 +114,18 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
         console.error("Error fetching seats:", error);
       })
       .finally(() => {
-        setLoading(false);
+        setSeatsLoadedFor(eventId);
+      });
+
+    // Who sits where, for the avatars on taken desks (optional extra).
+    Promise.resolve()
+      .then(() => fetch(`/api/events/${eventId}/invitations`, { headers }))
+      .then((response) => (response?.ok ? response.json() : null))
+      .then((data) => {
+        if (Array.isArray(data)) setOccupants(data);
+      })
+      .catch((error) => {
+        console.error("Error fetching seat occupants:", error);
       });
   }, [eventId, token, signOut]);
 
@@ -135,7 +153,10 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching seat availability:", error);
-      });
+      })
+      .finally(() =>
+        setAvailabilityLoadedFor(`${eventId}:${attendanceBuckets.join("")}`),
+      );
   }, [eventId, token, attendanceBuckets, signOut]);
 
   const handleSeatClick = async (seatId: number) => {
@@ -168,197 +189,175 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
   const handleUnspecifiedSeat = () => {
     if (disabled) return;
-    onSeatSelect(null, unspecifiedSeatLabel, undefined);
+    onSeatSelect(null, ownDesk, undefined);
   };
 
-  if (loading) {
+  const desksFor = useMemo(
+    () =>
+      (roomSeats: Seat[]): FloorPlanDesk[] =>
+        roomSeats.map((seat) => {
+          const isAvailable =
+            availableSeats.includes(seat.id) || seat.id === reservedSeatId;
+          const isSelected = selectedSeatId === seat.id;
+          const people =
+            seat.id === reservedSeatId
+              ? []
+              : occupants
+                  .filter((o) => o.seatId === seat.id)
+                  .map((o) => ({
+                    name: o.handle || "Someone",
+                    avatarUrl: o.avatarUrl,
+                  }));
+          return {
+            seat,
+            state: isSelected ? "selected" : isAvailable ? "free" : "taken",
+            occupants: people,
+            sub: isSelected ? "YOU" : undefined,
+            disabled: disabled || !isAvailable,
+          };
+        }),
+    [availableSeats, reservedSeatId, selectedSeatId, occupants, disabled],
+  );
+
+  const byoPressed = selectedSeatId === null;
+  const byoButton = allowUnspecifiedSeat && (
+    <Box
+      component="button"
+      type="button"
+      onClick={handleUnspecifiedSeat}
+      disabled={disabled}
+      aria-pressed={byoPressed}
+      sx={{
+        minHeight: 48,
+        px: 2,
+        display: "flex",
+        alignItems: "center",
+        gap: 1.25,
+        cursor: disabled ? "default" : "pointer",
+        textAlign: "left",
+        borderRadius: 0,
+        fontFamily: fonts.ui,
+        fontSize: 15,
+        border: `1px solid ${byoPressed ? colors.cyan : hairline.control}`,
+        backgroundColor: byoPressed ? tint("cyan", 0.14) : "transparent",
+        color: byoPressed ? colors.cyan : colors.text,
+        opacity: disabled ? 0.6 : 1,
+        "&:hover": disabled ? {} : { borderColor: colors.cyan },
+        "&:focus-visible": {
+          outline: `2px solid ${colors.cyan}`,
+          outlineOffset: "2px",
+        },
+        "& svg": { fontSize: 20, flex: "none" },
+      }}
+    >
+      <DeskSharp aria-hidden="true" />
+      <Box component="span" sx={{ flex: 1 }}>
+        {ownDesk}
+      </Box>
+      {byoPressed && <CheckSharp aria-hidden="true" />}
+    </Box>
+  );
+
+  if (loading || (attendanceBuckets && !availabilityLoaded && seats.length)) {
     return (
       <Box
+        role="status"
+        aria-label="Loading seats"
         sx={{
           display: "flex",
           justifyContent: "center",
           p: 3,
         }}
       >
-        <CircularProgress />
+        <CircularProgress aria-hidden="true" />
       </Box>
     );
   }
 
-  if (rooms.length === 0 || seats.length === 0) {
+  const orderedRooms = sortRooms(rooms).filter((room) =>
+    seats.some((s) => s.roomId === room.id),
+  );
+
+  if (orderedRooms.length === 0 || seats.length === 0) {
     return (
-      <Alert severity="info">
-        No seats are currently configured for this event.
-      </Alert>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box
+          role="status"
+          sx={{
+            p: 2,
+            border: `1px dashed ${hairline.control}`,
+            color: colors.textMuted,
+            fontSize: 15,
+          }}
+        >
+          No seats are currently configured for this event.
+        </Box>
+        {byoButton}
+      </Box>
     );
   }
 
-  const seatsWithAvailability: SeatWithAvailability[] = seats.map((seat) => ({
-    ...seat,
-    isAvailable: availableSeats.includes(seat.id) || seat.id === reservedSeatId,
-    isSelected: selectedSeatId === seat.id,
-  }));
-
-  const getRoomSeats = (roomId: number) => {
-    return seatsWithAvailability.filter((seat) => seat.roomId === roomId);
-  };
-
-  // Convert seats to SeatDisplayData for RoomFloorplanView
-  const convertToSeatDisplayData = (
-    seat: SeatWithAvailability,
-  ): SeatDisplayData => {
-    return {
-      seat,
-      occupants: [], // Wizard doesn't show other occupants, just availability
-      isOwnSeat: seat.isSelected,
-      isAvailable: seat.isAvailable,
-      onClick:
-        seat.isAvailable && !disabled
-          ? () => handleSeatClick(seat.id)
-          : undefined,
-      onKeyDown:
-        seat.isAvailable && !disabled
-          ? (e: React.KeyboardEvent<HTMLDivElement>) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleSeatClick(seat.id);
-              }
-            }
-          : undefined,
-    };
-  };
-
   return (
-    <Stack spacing={3}>
-      {allowUnspecifiedSeat && (
-        <Box>
-          <Button
-            variant={selectedSeatId === null ? "contained" : "outlined"}
-            onClick={handleUnspecifiedSeat}
-            disabled={disabled}
-            fullWidth
-          >
-            {selectedSeatId === null && <CheckCircleIcon sx={{ mr: 1 }} />}
-            {unspecifiedSeatLabel}
-          </Button>
-        </Box>
-      )}
-
-      {/* Legend */}
-      <Stack
-        direction="row"
-        spacing={2}
-        sx={{
-          flexWrap: "wrap",
-        }}
-      >
-        <Chip
-          icon={<EventSeatIcon />}
-          label="Available"
-          color="success"
-          variant="outlined"
-          size="small"
-        />
-        <Chip
-          icon={<CheckCircleIcon />}
-          label="Selected"
-          color="primary"
-          size="small"
-        />
-        <Chip
-          icon={<EventSeatIcon />}
-          label="Occupied"
-          color="default"
-          disabled
-          size="small"
-        />
-      </Stack>
-
-      {rooms.map((room) => {
-        const roomSeats = getRoomSeats(room.id);
-        if (roomSeats.length === 0) return null;
-
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {orderedRooms.map((room, index) => {
+        const roomSeats = seats.filter((s) => s.roomId === room.id);
+        const desks = desksFor(roomSeats);
+        const free = desks.filter((d) => d.state === "free").length;
+        const headingId = `wizard-room-${room.id}`;
         return (
-          <Card key={room.id} variant="outlined">
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                {room.name}
+          <Box
+            key={room.id}
+            component="section"
+            aria-labelledby={headingId}
+            sx={{ display: "flex", flexDirection: "column", gap: 0.75 }}
+          >
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 1.25,
+                fontFamily: fonts.mono,
+                fontSize: 11,
+                letterSpacing: "0.16em",
+                color: colors.textDim,
+                textTransform: "uppercase",
+              }}
+            >
+              <Box component="h3" id={headingId} sx={{ m: 0, font: "inherit" }}>
+                {roomCode(index)} · {room.name}
+              </Box>
+              <Box component="span" sx={{ color: colors.cyan, flex: "none" }}>
+                {free} FREE
+              </Box>
+            </Box>
+            {room.description && (
+              <Typography sx={{ fontSize: 13, color: colors.textMuted }}>
+                {room.description}
               </Typography>
-              {room.description && (
-                <Typography
-                  variant="body2"
-                  gutterBottom
-                  sx={{
-                    color: "text.secondary",
-                  }}
-                >
-                  {room.description}
-                </Typography>
-              )}
-
-              {/* Floorplan visualization using RoomFloorplanView */}
-              <RoomFloorplanView
-                room={room}
-                seats={roomSeats.map(convertToSeatDisplayData)}
-              />
-
-              {/* List view of seats */}
-              <Grid container spacing={1}>
-                {roomSeats.map((seat) => {
-                  const isDisabled = disabled || !seat.isAvailable;
-
-                  return (
-                    <Grid key={seat.id} size="auto">
-                      <Tooltip
-                        title={
-                          !seat.isAvailable
-                            ? "Not available for your attendance"
-                            : seat.isSelected
-                              ? "Selected"
-                              : "Click to select"
-                        }
-                      >
-                        <span>
-                          <Button
-                            variant={seat.isSelected ? "contained" : "outlined"}
-                            onClick={() => handleSeatClick(seat.id)}
-                            disabled={isDisabled}
-                            size="small"
-                            startIcon={
-                              seat.isSelected ? (
-                                <CheckCircleIcon />
-                              ) : (
-                                <EventSeatIcon />
-                              )
-                            }
-                            color={
-                              seat.isSelected
-                                ? "primary"
-                                : seat.isAvailable
-                                  ? "success"
-                                  : "inherit"
-                            }
-                            sx={{ minHeight: 44 }}
-                          >
-                            {seat.label}
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </Grid>
-                  );
-                })}
-              </Grid>
-            </CardContent>
-          </Card>
+            )}
+            <SeatFloorPlan
+              room={room}
+              desks={desks}
+              label={`${room.name} floor plan`}
+              onDeskSelect={disabled ? undefined : (s) => handleSeatClick(s.id)}
+            />
+          </Box>
         );
       })}
 
+      <FloorPlanLegend
+        size="sm"
+        items={[{ key: "selected", label: "Your pick" }, "free", "taken"]}
+      />
+
+      {byoButton}
+
       {selectedSeatId !== null && (
-        <Alert severity="info">
+        <Box role="status" sx={{ fontSize: 13, color: colors.textMuted }}>
           Seat will be reserved when you confirm your RSVP
-        </Alert>
+        </Box>
       )}
-    </Stack>
+    </Box>
   );
 };
 

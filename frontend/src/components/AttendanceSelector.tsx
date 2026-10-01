@@ -1,22 +1,9 @@
 import * as React from "react";
-import { useState } from "react";
-import { ToggleButtonGroup, ToggleButton, Tooltip, Badge } from "@mui/material";
-import WbTwilightIcon from "@mui/icons-material/WbTwilight";
-import WbSunnyIcon from "@mui/icons-material/WbSunny";
-import BedtimeIcon from "@mui/icons-material/Bedtime";
-import HotelIcon from "@mui/icons-material/Hotel";
-import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import Timeline from "@mui/lab/Timeline";
-import TimelineItem from "@mui/lab/TimelineItem";
-import TimelineSeparator from "@mui/lab/TimelineSeparator";
-import TimelineConnector from "@mui/lab/TimelineConnector";
-import TimelineContent from "@mui/lab/TimelineContent";
-import TimelineDot from "@mui/lab/TimelineDot";
-import TimelineOppositeContent from "@mui/lab/TimelineOppositeContent";
+import Box from "@mui/material/Box";
+import CheckSharp from "@mui/icons-material/CheckSharp";
 import moment from "moment";
 import { getAttendanceGrid, TIME_PERIODS } from "../utils/attendanceBuckets";
+import { colors, fonts, hairline, tint, tones, type HlTone } from "./hl";
 
 interface AttendanceSelectorProps {
   timeBegin: moment.Moment;
@@ -31,16 +18,35 @@ interface AttendanceSelectorProps {
     | "warning"
     | "standard"
     | undefined;
+  /** Omit for a read-only view. */
   onChange?: (value: number[]) => void;
+  /** Accessible name for the group of blocks. */
+  label?: string;
+  disabled?: boolean;
 }
 
-/** Icon component per slot, indexed by slot number. */
-const SLOT_ICONS = [WbTwilightIcon, WbSunnyIcon, BedtimeIcon, HotelIcon];
+const COLOUR_TONE: Record<string, HlTone> = {
+  primary: "lime",
+  success: "lime",
+  standard: "lime",
+  warning: "amber",
+  error: "pink",
+  secondary: "violet",
+  info: "cyan",
+};
 
-/** Stable ToggleButton value for a given day/slot pair. */
-const buttonValue = (dayNum: number, slot: number) => dayNum * 4 + slot;
+/** Hours shown under each block (UTC grid, rendered in local time). */
+const slotHours = (start: moment.Moment) => {
+  const s = moment(start).local();
+  return `${s.format("HH:mm")}–${moment(s).add(6, "hours").format("HH:mm")}`;
+};
 
-export default function InvitationResponse(props: AttendanceSelectorProps) {
+/**
+ * Attendance blocks for an event: one toggle tile per in-range 6-hour block
+ * ("SAT · Evening"), grouped by day. With `onChange` the tiles are toggle
+ * buttons (`aria-pressed`); without, a read-only summary.
+ */
+export default function AttendanceSelector(props: AttendanceSelectorProps) {
   // The UTC day/slot grid the API validates against. Deriving this from the
   // browser's local calendar makes the bucket count timezone-dependent, which
   // caused RSVPs to be rejected outright.
@@ -57,135 +63,127 @@ export default function InvitationResponse(props: AttendanceSelectorProps) {
     props.value && props.value.length > i ? props.value[i] : 1,
   );
 
-  const selectedButtonsFromAttendance = (current: number[]) => {
-    const selected: number[] = [];
-    grid.forEach((day, dayNum) => {
-      day.slots.forEach((slot) => {
-        if (slot.attendanceIndex === null) return;
-        if (current[slot.attendanceIndex] === 1) {
-          selected.push(buttonValue(dayNum, slot.slot));
-        }
-      });
-    });
-    return selected;
-  };
+  const tone = tones[COLOUR_TONE[props.colour ?? "primary"] ?? "lime"];
+  const interactive = Boolean(props.onChange) && !props.disabled;
 
-  const attendanceFromSelectedButtons = (selected: number[]) => {
-    const next = Array.from({ length: bucketCount }, () => 0);
-    grid.forEach((day, dayNum) => {
-      day.slots.forEach((slot) => {
-        if (slot.attendanceIndex === null) return;
-        if (selected.includes(buttonValue(dayNum, slot.slot))) {
-          next[slot.attendanceIndex] = 1;
-        }
-      });
-    });
-    return next;
-  };
-
-  const buttonColour = props.colour ? props.colour : "primary";
-
-  const [selectedButtons, setSelectedButtons] = useState(
-    selectedButtonsFromAttendance(attendance),
-  );
-
-  const handleButtonChange = (
-    _event: React.MouseEvent<HTMLElement>,
-    newSelectedButtons: number[],
-  ) => {
-    if (props.onChange) {
-      setSelectedButtons(newSelectedButtons);
-      props.onChange(attendanceFromSelectedButtons(newSelectedButtons));
-    }
-  };
-
-  const isSelected = (value: number) => selectedButtons.includes(value);
-
-  const slotIcon = (
-    value: number,
-    icon: React.ReactElement<unknown>,
-    label: string,
-    disabled: boolean,
-  ) => {
-    const selected = isSelected(value);
-    const showBadge = !disabled;
-    return (
-      <Tooltip title={label}>
-        <Badge
-          invisible={!showBadge}
-          badgeContent={
-            selected ? (
-              <CheckCircleIcon sx={{ fontSize: 14 }} />
-            ) : (
-              <CancelIcon sx={{ fontSize: 14 }} />
-            )
-          }
-          overlap="circular"
-          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-          sx={{
-            "& .MuiBadge-badge": {
-              color: selected ? "success.main" : "error.main",
-              backgroundColor: "transparent",
-              minWidth: "auto",
-              height: "auto",
-              padding: 0,
-            },
-          }}
-        >
-          {icon}
-        </Badge>
-      </Tooltip>
-    );
+  const toggle = (index: number) => {
+    if (!props.onChange) return;
+    const next = [...attendance];
+    next[index] = next[index] === 1 ? 0 : 1;
+    props.onChange(next);
   };
 
   return (
-    <Timeline>
-      {grid.map((day, dayNum) => (
-        <TimelineItem key={dayNum}>
-          <TimelineOppositeContent
-            align="right"
-            variant="body2"
-            sx={{
-              color: "text.secondary",
-              m: "auto 0",
-            }}
-          >
-            {day.dayStart.format("ddd Do")}
-          </TimelineOppositeContent>
-          <TimelineSeparator>
-            <TimelineConnector />
-            <TimelineDot color="primary" variant="outlined">
-              <CalendarTodayIcon />
-            </TimelineDot>
-            <TimelineConnector />
-          </TimelineSeparator>
-          <TimelineContent sx={{ py: "12px", px: 2 }}>
-            <ToggleButtonGroup
-              color={buttonColour}
-              value={selectedButtons}
-              onChange={handleButtonChange}
+    <Box
+      role="group"
+      aria-label={props.label ?? "Attendance blocks"}
+      sx={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(128px, 1fr))",
+        gap: 1,
+      }}
+    >
+      {grid.flatMap((day) =>
+        day.slots.map((slot) => {
+          if (slot.attendanceIndex === null) return null;
+          const index = slot.attendanceIndex;
+          const on = attendance[index] === 1;
+          const dayLabel = day.dayStart.format("ddd").toUpperCase();
+          const part = TIME_PERIODS[slot.slot];
+          const common = {
+            minHeight: 64,
+            p: "10px 12px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            gap: "2px",
+            textAlign: "left",
+            position: "relative",
+            font: "inherit",
+            border: `1px solid ${on ? tone.border : tint("cyan", 0.18)}`,
+            backgroundColor: on ? tone.fill : "rgba(6,7,11,0.5)",
+            color: on ? colors.text : colors.textMuted,
+          } as const;
+          const content = (
+            <>
+              <Box
+                component="span"
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 11,
+                  letterSpacing: "0.14em",
+                }}
+              >
+                {dayLabel}
+              </Box>
+              <Box component="span" sx={{ fontSize: 15, fontWeight: 600 }}>
+                {part}
+              </Box>
+              <Box
+                component="span"
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 10,
+                  color: colors.textMuted,
+                }}
+              >
+                {slotHours(slot.start)}
+              </Box>
+              {on && (
+                <CheckSharp
+                  aria-hidden="true"
+                  sx={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    fontSize: 18,
+                    color: tone.fg,
+                  }}
+                />
+              )}
+            </>
+          );
+          const key = `${day.dayStart.valueOf()}-${slot.slot}`;
+          if (!props.onChange) {
+            return (
+              <Box
+                key={key}
+                sx={common}
+                aria-label={`${dayLabel} ${part}: ${on ? "attending" : "not attending"}`}
+                role="img"
+              >
+                {content}
+              </Box>
+            );
+          }
+          return (
+            <Box
+              component="button"
+              type="button"
+              key={key}
+              aria-pressed={on}
+              aria-label={`${day.dayStart.format("dddd")} ${part.toLowerCase()} (${slotHours(slot.start)})`}
+              disabled={!interactive}
+              onClick={() => toggle(index)}
+              sx={{
+                ...common,
+                cursor: interactive ? "pointer" : "not-allowed",
+                "&:hover:not(:disabled)": {
+                  borderColor: on ? tone.border : hairline.strong,
+                },
+                "&:focus-visible": {
+                  outline: `2px solid ${colors.cyan}`,
+                  outlineOffset: 2,
+                },
+                "&:disabled": { opacity: 0.6 },
+              }}
             >
-              {day.slots.map((slot) => {
-                const Icon = SLOT_ICONS[slot.slot];
-                return (
-                  <ToggleButton
-                    key={slot.slot}
-                    value={buttonValue(dayNum, slot.slot)}
-                    disabled={!slot.inRange}
-                  >
-                    {slotIcon(
-                      buttonValue(dayNum, slot.slot),
-                      <Icon />,
-                      TIME_PERIODS[slot.slot],
-                      !slot.inRange,
-                    )}
-                  </ToggleButton>
-                );
-              })}
-            </ToggleButtonGroup>
-          </TimelineContent>
-        </TimelineItem>
-      ))}
-    </Timeline>
+              {content}
+            </Box>
+          );
+        }),
+      )}
+    </Box>
   );
 }

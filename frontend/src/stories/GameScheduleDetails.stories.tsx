@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { fn } from "storybook/test";
 import moment from "moment";
-import GameScheduleDetails from "../components/GameScheduleDetails";
+import GameScheduleDetails, {
+  TimingControls,
+} from "../components/GameScheduleDetails";
+import { colors, hairline } from "../components/hl";
+import { stubImages } from "./mockApi";
+
+stubImages();
 import { GameScheduleEntry } from "../types/game_schedule";
 import { GameSuggestion, GameVote } from "../types/game_suggestions";
 import { InvitationLiteData, RSVP } from "../types/invitations";
@@ -105,6 +111,20 @@ const commonProps = {
   eventEnd: EVENT_END,
 };
 
+const timing = (day: number, start: string, end: string): TimingControls => ({
+  days: ["FRI", "SAT", "SUN"].map((label, i) => ({
+    label,
+    active: i === day,
+    onPick: fn(),
+  })),
+  start,
+  end,
+  onStartEarlier: fn(),
+  onStartLater: fn(),
+  onEndEarlier: fn(),
+  onEndLater: fn(),
+});
+
 const meta = {
   title: "Components/GameScheduleDetails",
   component: GameScheduleDetails,
@@ -112,11 +132,29 @@ const meta = {
     layout: "padded",
   },
   tags: ["autodocs"],
+  // Shown as it sits in the schedule's 460px drawer.
+  decorators: [
+    (Story) => (
+      <div
+        style={{
+          width: "min(460px, 100%)",
+          height: 820,
+          display: "flex",
+          flexDirection: "column",
+          background: colors.surfaceSolid,
+          borderLeft: `1px solid ${hairline.strong}`,
+        }}
+      >
+        <Story />
+      </div>
+    ),
+  ],
   args: {
     scheduleEntry: scheduleEntry({}),
     onClose: fn(),
     onPin: fn(),
     onUnpin: fn(),
+    onRemove: fn(),
   },
 } satisfies Meta<typeof GameScheduleDetails>;
 
@@ -138,6 +176,8 @@ export const PinnedTopRankedAdmin: Story = {
     suggestion: counterStrike,
     rank: 1,
     isAdmin: true,
+    whenLabel: "SAT 14 NOV · 14:00 → 17:00",
+    timing: timing(1, "14:00", "17:00"),
   },
 };
 
@@ -157,6 +197,8 @@ export const SuggestedAdmin: Story = {
     suggestion: ageOfEmpires,
     rank: 2,
     isAdmin: true,
+    whenLabel: "SAT 14 NOV · 10:00 → 13:00",
+    timing: timing(1, "10:00", "13:00"),
   },
 };
 
@@ -177,6 +219,32 @@ export const MemberView: Story = {
     }),
     rank: 3,
     isAdmin: false,
+  },
+};
+
+/** Pinned by the host at 03:00: outside the auto-schedule window. */
+export const OffWindowAdmin: Story = {
+  args: {
+    ...commonProps,
+    scheduleEntry: scheduleEntry({
+      id: 5,
+      startTime: moment("2026-11-14T03:00:00"),
+      durationMinutes: 120,
+    }),
+    suggestion: suggestion({
+      appid: 550,
+      name: "Left 4 Dead 2",
+      votes: 1,
+      voters: [nightOwl],
+      suggester: nightOwl,
+      gamerOwned: [nightOwl, bigMike],
+      gamerUnknown: [fragQueen],
+    }),
+    rank: 4,
+    isAdmin: true,
+    outsideWindow: true,
+    whenLabel: "FRI 13 NOV · 03:00 → 05:00",
+    timing: timing(0, "03:00", "05:00"),
   },
 };
 

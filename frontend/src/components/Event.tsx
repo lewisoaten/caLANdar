@@ -1,17 +1,218 @@
 import * as React from "react";
 import moment from "moment";
-import { useEffect, useState, useContext } from "react";
-import { createPortal } from "react-dom";
-import { Container, Paper, Typography, Grid, Box, alpha } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { useCallback, useEffect, useState, useContext } from "react";
+import { Link as RouterLink, useParams } from "react-router-dom";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
+import EventBusySharp from "@mui/icons-material/EventBusySharp";
+import ErrorOutlineSharp from "@mui/icons-material/ErrorOutlineSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
-import { useParams } from "react-router-dom";
 import { dateParser } from "../utils";
 import { EventData, defaultEventData } from "../types/events";
 import { InvitationData, defaultInvitationData } from "../types/invitations";
 import EventGameSuggestions from "./EventGameSuggestions";
 import EventAttendeeList from "./EventAttendeeList";
 import { RSVPWizard, RSVPSummary } from "./RSVPWizard";
+import {
+  Countdown,
+  EmptyState,
+  Tag,
+  chamfer,
+  colors,
+  fonts,
+  srOnly,
+  tint,
+  useNow,
+} from "./hl";
+import {
+  eventPhase,
+  formatEventId,
+  formatEventRange,
+  splitTitleAccent,
+} from "./lobbyModel";
+
+type LoadState = "loading" | "ready" | "notFound" | "error";
+
+const heroFrame = {
+  position: "relative",
+  overflow: "hidden",
+  border: `1px solid ${tint("cyan", 0.22)}`,
+  minHeight: "clamp(340px, 42vw, 440px)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "flex-end",
+  clipPath: chamfer(28, "tr-bl"),
+} as const;
+
+function LobbyHero({ event }: { event: EventData }) {
+  const now = useNow(1000);
+  const phase = eventPhase(event.timeBegin, event.timeEnd, now);
+  const { head, accent } = splitTitleAccent(event.title);
+  const imageUrl = event.image
+    ? `data:image/jpeg;base64,${event.image}`
+    : "/static/lan_party_image.jpg";
+
+  return (
+    <Box component="section" aria-labelledby="lobby-title" sx={heroFrame}>
+      <Box
+        aria-hidden="true"
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage: `url("${imageUrl}")`,
+          backgroundSize: "cover",
+          backgroundPosition: "center 30%",
+          filter: "saturate(1.2) contrast(1.05)",
+        }}
+      />
+      <Box
+        aria-hidden="true"
+        sx={{
+          position: "absolute",
+          inset: 0,
+          background: `linear-gradient(180deg,rgba(6,7,11,0.25) 0%,rgba(6,7,11,0.7) 45%,${colors.bg} 100%),linear-gradient(90deg,rgba(6,7,11,0.85) 0%,rgba(6,7,11,0) 70%)`,
+        }}
+      />
+      <Box
+        aria-hidden="true"
+        sx={{
+          position: "absolute",
+          inset: 0,
+          backgroundImage:
+            "repeating-linear-gradient(0deg,rgba(255,255,255,0.025) 0 1px,transparent 1px 3px)",
+        }}
+      />
+      <Box
+        sx={{
+          position: "relative",
+          p: "clamp(20px, 3.5vw, 44px)",
+          display: "flex",
+          flexDirection: "column",
+          gap: "18px",
+        }}
+      >
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+          <Tag
+            variant="solid"
+            sx={{ height: 26, py: 0, px: "10px", letterSpacing: "0.14em" }}
+          >
+            {formatEventId(event.id)}
+          </Tag>
+          <Tag
+            tone="neutral"
+            sx={{
+              height: 26,
+              py: 0,
+              px: "10px",
+              color: colors.text,
+              borderColor: tint("text", 0.3),
+              backgroundColor: "rgba(6,7,11,0.5)",
+              fontWeight: 400,
+            }}
+          >
+            {formatEventRange(event.timeBegin, event.timeEnd)}
+          </Tag>
+          {phase === "live" && (
+            <Tag tone="lime" dot="pulse" sx={{ height: 26, py: 0 }}>
+              Live now
+            </Tag>
+          )}
+          {phase === "ended" && (
+            <Tag tone="neutral" sx={{ height: 26, py: 0 }}>
+              Ended
+            </Tag>
+          )}
+        </Box>
+        <Typography
+          id="lobby-title"
+          variant="h1"
+          sx={{
+            m: 0,
+            fontSize: "clamp(38px, 6.4vw, 80px)",
+            lineHeight: 0.92,
+            letterSpacing: "-0.01em",
+            textWrap: "balance",
+            maxWidth: "14ch",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {head}
+          {accent && (
+            <>
+              {" "}
+              <Box component="span" sx={{ color: colors.cyan }}>
+                {accent}
+              </Box>
+            </>
+          )}
+        </Typography>
+        {event.description && (
+          <Typography
+            component="p"
+            sx={{
+              m: 0,
+              maxWidth: "62ch",
+              fontSize: "clamp(15px, 1.4vw, 17px)",
+              lineHeight: 1.6,
+              color: colors.text2,
+              whiteSpace: "pre-wrap",
+              textWrap: "pretty",
+            }}
+          >
+            {event.description}
+          </Typography>
+        )}
+        {phase === "upcoming" && (
+          <Countdown
+            target={event.timeBegin}
+            now={now}
+            label="Time until doors open"
+          />
+        )}
+        {phase === "live" && (
+          <Typography
+            component="p"
+            sx={{
+              m: 0,
+              fontFamily: fonts.mono,
+              fontSize: 13,
+              letterSpacing: "0.12em",
+              color: colors.textMuted,
+            }}
+          >
+            ENDS IN{" "}
+            <Countdown
+              target={event.timeEnd}
+              now={now}
+              variant="inline"
+              label="Time until the event ends"
+            />
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function LobbySkeleton() {
+  return (
+    <Box
+      role="status"
+      aria-label="Loading event"
+      sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+    >
+      <Box sx={{ ...heroFrame, p: "clamp(20px, 3.5vw, 44px)", gap: 2 }}>
+        <Skeleton variant="rectangular" width={260} height={26} />
+        <Skeleton variant="rectangular" width="60%" height={72} />
+        <Skeleton variant="text" width="80%" />
+        <Skeleton variant="rectangular" width={380} height={70} />
+      </Box>
+      <Skeleton variant="rectangular" height={140} />
+    </Box>
+  );
+}
 
 const Event = () => {
   const { signOut } = useContext(UserDispatchContext);
@@ -19,23 +220,22 @@ const Event = () => {
   const token = userDetails?.token;
   const email = userDetails?.email;
   const [event, setEvent] = useState(defaultEventData);
-  const [loaded, setLoaded] = useState(false);
-  const [responded, setResponded] = useState(0);
+  const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
   const [invitation, setInvitation] = useState(defaultInvitationData);
+  const [invitationLoaded, setInvitationLoaded] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const theme = useTheme();
 
   const { id } = useParams();
+  const loaded = loadState === "ready";
 
-  // Initialize responded state when invitation is loaded
-  useEffect(() => {
-    if (invitation.response) {
-      // If invitation has a response, set responded to 1 to show attendees/suggestions
-      setResponded(1);
-    }
-  }, [invitation.response]);
+  // Non-zero once the viewer has responded (unlocks attendees/suggestions);
+  // bumps after every save so those lists refetch.
+  const responded = (invitation.response ? 1 : 0) + savedCount;
 
   useEffect(() => {
+    let cancelled = false;
     fetch(`/api/events/${id}`, {
       headers: {
         "Content-Type": "application/json",
@@ -44,19 +244,33 @@ const Event = () => {
       },
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok)
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as EventData);
+        if (response.status === 401) {
+          signOut();
+          return undefined;
+        }
+        if (response.status === 404 || response.status === 403) {
+          if (!cancelled) setLoadState("notFound");
+          return undefined;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as EventData);
       })
       .then((data) => {
-        if (data) {
+        if (data && !cancelled) {
           setEvent(data);
-          setLoaded(true);
+          setLoadState("ready");
         }
+      })
+      .catch((error) => {
+        console.error("Error fetching event:", error);
+        if (!cancelled) setLoadState("error");
       });
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, token, reloadKey, signOut]);
 
   // Fetch invitation data for attendance buckets
   useEffect(() => {
@@ -84,7 +298,8 @@ const Event = () => {
         })
         .catch((error) => {
           console.error("Error fetching invitation:", error);
-        });
+        })
+        .finally(() => setInvitationLoaded(true));
     };
 
     fetchInvitation();
@@ -100,252 +315,95 @@ const Event = () => {
     };
   }, [id, token, email, responded, signOut]);
 
-  // Cleanup: Reset Dashboard background when component unmounts
-  useEffect(() => {
-    // Make Dashboard's main area transparent to show background
-    const mainElement = document.querySelector("main");
-    if (mainElement instanceof HTMLElement) {
-      const originalBackground = mainElement.style.background;
-      mainElement.style.background = "transparent";
+  const openWizard = useCallback(() => setWizardOpen(true), []);
 
-      return () => {
-        // Restore original background on unmount
-        mainElement.style.background = originalBackground;
-      };
-    }
-  }, []);
+  if (loadState === "loading") return <LobbySkeleton />;
 
-  // Construct image URL (use default if none is provided)
-  const eventImageUrl = event.image
-    ? `data:image/jpeg;base64,${event.image}`
-    : "/static/lan_party_image.jpg";
+  if (loadState === "notFound" || loadState === "error") {
+    const notFound = loadState === "notFound";
+    return (
+      <>
+        <Typography variant="h1" sx={srOnly}>
+          {notFound ? "Event not found" : "Event unavailable"}
+        </Typography>
+        <EmptyState
+          variant="panel"
+          icon={notFound ? <EventBusySharp /> : <ErrorOutlineSharp />}
+          kicker={notFound ? "404" : "CONNECTION LOST"}
+          title={notFound ? "Event not found" : "Couldn't load this event"}
+          description={
+            notFound
+              ? "It may have been removed, or you haven't been invited to it."
+              : "Check your connection and try again."
+          }
+          action={
+            notFound ? (
+              <Button variant="outlined" component={RouterLink} to="/events">
+                Back to events
+              </Button>
+            ) : (
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setLoadState("loading");
+                  setReloadKey((k) => k + 1);
+                }}
+              >
+                Retry
+              </Button>
+            )
+          }
+        />
+      </>
+    );
+  }
 
-  // Check if user prefers reduced motion (reactive to changes)
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      : false,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const handler = (e: MediaQueryListEvent) =>
-      setPrefersReducedMotion(e.matches);
-    // Set initial value in case it changed since mount
-    setPrefersReducedMotion(mediaQuery.matches);
-    mediaQuery.addEventListener("change", handler);
-    return () => {
-      mediaQuery.removeEventListener("change", handler);
-    };
-  }, []);
-
-  // Preload the background image for performance
-  useEffect(() => {
-    const img = new Image();
-    img.src = eventImageUrl;
-  }, [eventImageUrl]);
-
-  // Frosted glass styles - extracted to avoid duplication
-  const frostedGlassSx = {
-    backdropFilter: "blur(12px)",
-    backgroundColor: alpha(theme.palette.background.paper, 0.4),
-    backgroundImage: "none !important", // Override theme gradient
-    border: `1px solid ${alpha(theme.palette.primary.main, 0.5)}`,
-    boxShadow: `0 0 24px -4px ${alpha(theme.palette.primary.main, 0.3)}`,
-    color: theme.palette.text.primary,
-    transition: prefersReducedMotion ? "none" : "all 0.3s ease-in-out",
-    "&:hover": {
-      border: `1px solid ${alpha(theme.palette.primary.main, 0.7)}`,
-      boxShadow: `0 0 32px -2px ${alpha(theme.palette.primary.main, 0.4)}`,
-    },
-    "&:focus-within": {
-      outline: `2px solid ${alpha(theme.palette.secondary.main, 0.8)}`,
-      outlineOffset: "2px",
-    },
-  };
+  const ended = event.timeEnd.isSameOrBefore(moment());
 
   return (
     <>
-      {/* Portal background layers to document body so they appear behind Dashboard */}
-      {createPortal(
-        <>
-          {/* Background image positioned at top, fading to solid color */}
-          <Box
-            sx={{
-              position: "fixed",
-              top: 0,
-              left: { xs: 0, sm: 240 },
-              right: 0,
-              height: "100%", // Image occupies full viewport
-              backgroundImage: `url("${eventImageUrl}")`,
-              backgroundSize: "contain", // Show full image without extreme zoom
-              backgroundPosition: "center top",
-              backgroundRepeat: "no-repeat",
-              filter: "blur(1px) saturate(1.05) brightness(0.9)",
-              zIndex: -2,
-              imageRendering: "auto",
-            }}
-            role="presentation"
-            aria-hidden="true"
-          />
+      <LobbyHero event={event} />
 
-          {/* Gradient overlay fading from image to solid background */}
-          <Box
-            sx={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: `linear-gradient(to bottom, ${alpha(
-                "#000",
-                0.5,
-              )} 0%, ${alpha("#000", 0.75)} 30%, ${alpha(
-                theme.palette.background.default,
-                0.95,
-              )} 50%, ${theme.palette.background.default} 70%)`,
-              zIndex: -1,
-            }}
-            role="presentation"
-            aria-hidden="true"
-          />
-        </>,
-        document.body,
+      {invitationLoaded ? (
+        <RSVPSummary
+          invitation={invitation}
+          event={event}
+          onEdit={openWizard}
+          disabled={ended}
+        />
+      ) : (
+        <Skeleton
+          variant="rectangular"
+          height={140}
+          aria-label="Loading your RSVP"
+        />
       )}
 
-      {/* Main content with frosted glass panels */}
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, position: "relative" }}>
-        <Grid container spacing={3}>
-          {/* Hero/Info Panel */}
-          <Grid size={{ xs: 12, md: 12, lg: 12 }}>
-            <Paper
-              sx={{
-                ...frostedGlassSx,
-                p: 3,
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              <Grid container spacing={2}>
-                <Grid size={6}>
-                  <Typography
-                    component="h2"
-                    variant="h4"
-                    sx={{
-                      color: theme.palette.text.secondary,
-                      fontWeight: 700,
-                    }}
-                    gutterBottom
-                  >
-                    {event.title}
-                  </Typography>
-                </Grid>
-                <Grid size={6}>
-                  <Paper
-                    variant="outlined"
-                    sx={{
-                      backdropFilter: "blur(8px)",
-                      backgroundColor: alpha(
-                        theme.palette.background.paper,
-                        0.3,
-                      ),
-                      backgroundImage: "none !important", // Override theme gradient
-                      border: `1px solid ${alpha(
-                        theme.palette.secondary.main,
-                        0.4,
-                      )}`,
-                      boxShadow: `0 0 16px -4px ${alpha(
-                        theme.palette.secondary.main,
-                        0.2,
-                      )}`,
-                    }}
-                  >
-                    <Typography
-                      component="h3"
-                      variant="h6"
-                      align="center"
-                      gutterBottom
-                      sx={{
-                        display: "block",
-                        color: theme.palette.secondary.main,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Gaming {event.timeBegin.fromNow()}!
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid size={12}>
-                  <Typography
-                    variant="body1"
-                    gutterBottom
-                    sx={{
-                      whiteSpace: "pre-wrap",
-                      color: theme.palette.text.primary,
-                      lineHeight: 1.7,
-                    }}
-                  >
-                    {event.description}
-                  </Typography>
-                </Grid>
-                <Grid size={12}>
-                  {loaded && (
-                    <RSVPSummary
-                      invitation={invitation}
-                      event={event}
-                      onEdit={() => setWizardOpen(true)}
-                      disabled={event.timeEnd.isSameOrBefore(moment())}
-                    />
-                  )}
-                </Grid>
-              </Grid>
-            </Paper>
-          </Grid>
-
-          {/* Attendees Panel */}
-          <Grid size={{ xs: 12, md: 6, lg: 6 }}>
-            <Paper
-              sx={{
-                ...frostedGlassSx,
-                p: 3,
-                display: "flex",
-                flexDirection: "column",
-                minHeight: "300px",
-              }}
-            >
-              {loaded && (
-                <EventAttendeeList event_id={event.id} responded={responded} />
-              )}
-            </Paper>
-          </Grid>
-
-          {/* Game Suggestions Panel */}
-          <Grid size={{ xs: 12, md: 6, lg: 6 }}>
-            <Paper
-              sx={{
-                ...frostedGlassSx,
-                p: 3,
-                display: "flex",
-                flexDirection: "column",
-                minHeight: "300px",
-              }}
-            >
-              {loaded && (
-                <EventGameSuggestions
-                  event_id={event.id}
-                  responded={responded}
-                  disabled={event.timeEnd.isSameOrBefore(moment())}
-                />
-              )}
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns:
+            "repeat(auto-fit, minmax(min(100%, 440px), 1fr))",
+          gap: "clamp(16px, 2vw, 24px)",
+          alignItems: "start",
+        }}
+      >
+        <EventAttendeeList
+          event_id={event.id}
+          responded={responded}
+          timeBegin={event.timeBegin}
+          timeEnd={event.timeEnd}
+          selfHandle={invitation.response ? invitation.handle : null}
+        />
+        <EventGameSuggestions
+          event_id={event.id}
+          responded={responded}
+          disabled={ended}
+        />
+      </Box>
 
       {/* The live activity ticker is rendered by the app shell (Dashboard). */}
 
-      {/* RSVP Wizard */}
       {loaded && (
         <RSVPWizard
           open={wizardOpen}
@@ -353,7 +411,7 @@ const Event = () => {
           event={event}
           initialData={invitation}
           onSaved={() => {
-            setResponded((prev) => prev + 1);
+            setSavedCount((prev) => prev + 1);
           }}
         />
       )}

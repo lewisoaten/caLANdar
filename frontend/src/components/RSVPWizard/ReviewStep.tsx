@@ -1,14 +1,12 @@
 import * as React from "react";
-import { Typography, Stack, Card, CardContent, Grid, Box } from "@mui/material";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import HelpIcon from "@mui/icons-material/Help";
-import PersonIcon from "@mui/icons-material/Person";
-import EventIcon from "@mui/icons-material/Event";
-import EventSeatIcon from "@mui/icons-material/EventSeat";
-import { RSVP } from "../../types/invitations";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import moment from "moment";
+import { RSVP } from "../../types/invitations";
 import { getAttendanceDescription } from "../../utils/attendanceDescription";
+import { colors, fonts, hairline, tones } from "../hl";
+import AttendanceStrip from "../AttendanceStrip";
+import { rsvpState } from "../lobbyModel";
 
 interface ReviewStepProps {
   response: RSVP | null;
@@ -21,150 +19,158 @@ interface ReviewStepProps {
   hasSeating: boolean;
 }
 
-export default function ReviewStep(props: ReviewStepProps) {
-  const getResponseIcon = (response: RSVP | null) => {
-    switch (response) {
-      case RSVP.yes:
-        return <CheckCircleIcon color="success" />;
-      case RSVP.maybe:
-        return <HelpIcon color="warning" />;
-      case RSVP.no:
-        return <CancelIcon color="error" />;
-      default:
-        return <HelpIcon />;
-    }
-  };
+const RESPONSE_TEXT: Record<
+  string,
+  { text: string; tone: keyof typeof tones }
+> = {
+  yes: { text: "I'm in", tone: "lime" },
+  maybe: { text: "Maybe", tone: "amber" },
+  no: { text: "Can't make it", tone: "pink" },
+  none: { text: "Not set", tone: "neutral" },
+};
 
-  const getResponseText = (response: RSVP | null) => {
-    switch (response) {
-      case RSVP.yes:
-        return "Yes";
-      case RSVP.maybe:
-        return "Maybe";
-      case RSVP.no:
-        return "No";
-      default:
-        return "Not set";
-    }
-  };
-
-  const getAttendanceText = (
-    attendance: number[] | null,
-    timeBegin: moment.Moment,
-    timeEnd: moment.Moment,
-  ) => {
-    return getAttendanceDescription(attendance, timeBegin, timeEnd);
-  };
-
+function Row({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <Stack spacing={3}>
-      <Typography variant="h6" component="h2">
-        Review your RSVP
-      </Typography>
-      <Typography
-        variant="body2"
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: { xs: "1fr", md: "140px 1fr" },
+        gap: { xs: 0.5, md: 2 },
+        alignItems: "baseline",
+        py: 1.5,
+        borderBottom: `1px solid ${hairline.faint}`,
+        "&:last-of-type": { borderBottom: 0 },
+      }}
+    >
+      <Box
+        component="dt"
         sx={{
-          color: "text.secondary",
+          fontFamily: fonts.mono,
+          fontSize: 11,
+          letterSpacing: "0.18em",
+          textTransform: "uppercase",
+          color: colors.textDim,
         }}
       >
-        Please review your response before confirming.
+        {label}
+      </Box>
+      <Box component="dd" sx={{ m: 0, minWidth: 0 }}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+/** Final step: summary of the RSVP before it's saved. */
+export default function ReviewStep(props: ReviewStepProps) {
+  const state = rsvpState(props.response);
+  const resp = RESPONSE_TEXT[state];
+  const going = props.response !== RSVP.no;
+
+  const seatText =
+    props.seatLabel !== null && props.seatLabel !== undefined
+      ? props.seatRoomName
+        ? `${props.seatLabel} · ${props.seatRoomName}`
+        : props.seatLabel
+      : "Not selected";
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <Typography
+        component="p"
+        sx={{ m: 0, fontSize: 15, color: colors.textMuted }}
+      >
+        Check it over, then lock it in.
       </Typography>
-
-      <Card variant="outlined">
-        <CardContent>
-          <Grid container spacing={2}>
-            <Grid size={12}>
+      <Box
+        component="dl"
+        sx={{
+          m: 0,
+          px: 2,
+          border: `1px solid ${hairline.panel}`,
+          backgroundColor: "rgba(6,7,11,0.5)",
+        }}
+      >
+        <Row label="Response">
+          <Box
+            component="span"
+            sx={{
+              fontSize: 18,
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+              color: tones[resp.tone].fg,
+            }}
+          >
+            {resp.text}
+          </Box>
+        </Row>
+        {going && (
+          <>
+            <Row label="Callsign">
               <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                }}
+                component="span"
+                sx={{ fontSize: 17, fontWeight: 600, overflowWrap: "anywhere" }}
               >
-                {getResponseIcon(props.response)}
-                <Typography variant="body1" component="span">
-                  <strong>Response:</strong> {getResponseText(props.response)}
-                </Typography>
+                {props.handle || "Not set"}
               </Box>
-            </Grid>
-
-            {props.response !== RSVP.no && (
-              <>
-                <Grid size={12}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                    }}
-                  >
-                    <PersonIcon color="primary" />
-                    <Typography variant="body1" component="span">
-                      <strong>Handle:</strong> {props.handle || "Not set"}
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                <Grid size={12}>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 1,
-                    }}
-                  >
-                    <EventIcon color="primary" />
-                    <Typography variant="body1" component="span">
-                      <strong>Attendance:</strong>{" "}
-                      {getAttendanceText(
-                        props.attendance,
-                        props.timeBegin,
-                        props.timeEnd,
-                      )}
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                {props.hasSeating && (
-                  <Grid size={12}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1,
-                      }}
-                    >
-                      <EventSeatIcon color="primary" />
-                      <Typography variant="body1" component="span">
-                        <strong>Seat:</strong>{" "}
-                        {props.seatLabel !== null &&
-                        props.seatLabel !== undefined
-                          ? props.seatRoomName
-                            ? `${props.seatRoomName} - ${props.seatLabel}`
-                            : props.seatLabel
-                          : "Not selected"}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                )}
-              </>
+            </Row>
+            <Row label="Attendance">
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <Box
+                  component="span"
+                  sx={{ fontSize: 15, color: colors.text2 }}
+                >
+                  {getAttendanceDescription(
+                    props.attendance,
+                    props.timeBegin,
+                    props.timeEnd,
+                  )}
+                </Box>
+                <Box aria-hidden="true">
+                  <AttendanceStrip
+                    attendance={props.attendance}
+                    timeBegin={props.timeBegin}
+                    timeEnd={props.timeEnd}
+                    tone={state === "maybe" ? "amber" : "lime"}
+                    size="lg"
+                  />
+                </Box>
+              </Box>
+            </Row>
+            {props.hasSeating && (
+              <Row label="Seat">
+                <Box
+                  component="span"
+                  sx={{
+                    fontFamily: fonts.mono,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color:
+                      props.seatLabel != null ? colors.cyan : colors.textMuted,
+                  }}
+                >
+                  {seatText}
+                </Box>
+              </Row>
             )}
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {props.response !== RSVP.no && (
+          </>
+        )}
+      </Box>
+      {going && (
         <Typography
-          variant="body2"
-          sx={{
-            color: "text.secondary",
-            fontStyle: "italic",
-          }}
+          component="p"
+          sx={{ m: 0, fontSize: 13, color: colors.textMuted }}
         >
-          After confirming, you&apos;ll be able to view attendees and suggest
-          games.
+          After confirming you&apos;ll see the squad and can vote on games.
         </Typography>
       )}
-    </Stack>
+    </Box>
   );
 }

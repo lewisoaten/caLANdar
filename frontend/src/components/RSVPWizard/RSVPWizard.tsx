@@ -1,18 +1,15 @@
 import * as React from "react";
-import { useState, useEffect, useContext, useCallback } from "react";
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  Stepper,
-  Step,
-  StepLabel,
-  Box,
-  LinearProgress,
-  Alert,
-} from "@mui/material";
+import { useState, useEffect, useContext, useCallback, useRef } from "react";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
+import LinearProgress from "@mui/material/LinearProgress";
+import Typography from "@mui/material/Typography";
+import CloseSharp from "@mui/icons-material/CloseSharp";
 import { useSnackbar } from "notistack";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
 import { EventData } from "../../types/events";
@@ -25,6 +22,46 @@ import GamerHandleStep from "./GamerHandleStep";
 import AttendanceStep from "./AttendanceStep";
 import SeatSelectionStep from "./SeatSelectionStep";
 import ReviewStep from "./ReviewStep";
+import { colors, effects, fonts, hairline, tint, useIsMobile } from "../hl";
+
+export type WizardStep =
+  "Response" | "Attendance" | "Handle" | "Seat" | "Review";
+
+/** Heading shown for each step. */
+export const STEP_TITLES: Record<WizardStep, string> = {
+  Response: "Are you coming?",
+  Attendance: "When are you there?",
+  Handle: "Your callsign",
+  Seat: "Pick a seat",
+  Review: "Review & lock in",
+};
+
+/**
+ * Steps for a response: response → attendance → callsign → seat (only when
+ * the event has seating) → review. A "no" skips straight to review.
+ */
+export const getWizardSteps = (
+  response: RSVP | null,
+  hasSeating: boolean,
+): WizardStep[] => {
+  if (response === RSVP.no) return ["Response", "Review"];
+  const steps: WizardStep[] = ["Response", "Attendance", "Handle"];
+  if (hasSeating) steps.push("Seat");
+  steps.push("Review");
+  return steps;
+};
+
+const srOnlyStyle: React.CSSProperties = {
+  position: "absolute",
+  width: 1,
+  height: 1,
+  margin: -1,
+  padding: 0,
+  border: 0,
+  overflow: "hidden",
+  clip: "rect(0 0 0 0)",
+  whiteSpace: "nowrap",
+};
 
 interface RSVPWizardProps {
   open: boolean;
@@ -44,6 +81,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       ? props.initialData.email
       : userDetails?.email;
   const { enqueueSnackbar } = useSnackbar();
+  const isMobile = useIsMobile();
+  const stepHeadingRef = useRef<HTMLHeadingElement | null>(null);
 
   // Wizard state
   const [activeStep, setActiveStep] = useState(0);
@@ -227,54 +266,34 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       });
   }, [props.open, props.event.id, token, email, hasSeating, signOut]);
 
-  // Define steps based on response
-  const getSteps = () => {
-    const baseSteps = ["Response", "Handle"];
+  // Define steps based on response (see STEP_TITLES for the order)
+  const steps = getWizardSteps(response, hasSeating);
+  const currentStep = steps[activeStep] ?? "Response";
 
-    if (response === RSVP.no) {
-      return ["Response", "Review"];
-    }
-
-    const steps = [...baseSteps, "Attendance"];
-
-    // Only add seat selection step if event has seating
-    if (hasSeating) {
-      steps.push("Seat");
-    }
-
-    steps.push("Review");
-    return steps;
-  };
-
-  const steps = getSteps();
+  // Move focus to the new step's heading so keyboard and screen-reader users
+  // land on (and hear) the new step. The callsign input focuses itself.
+  const previousStep = useRef(activeStep);
+  useEffect(() => {
+    if (previousStep.current === activeStep) return;
+    previousStep.current = activeStep;
+    if (currentStep !== "Handle") stepHeadingRef.current?.focus();
+  }, [activeStep, currentStep]);
 
   // Check if current step is valid
   const isStepValid = () => {
-    switch (activeStep) {
-      case 0: // Response step
+    switch (currentStep) {
+      case "Response":
         return response !== null;
-      case 1: // Handle step (or Review if response is No)
-        if (response === RSVP.no) {
-          return true; // Review step is always valid
-        }
-        return handleValid && handle.trim().length > 0;
-      case 2: // Attendance step (only if not No response)
-        if (response === RSVP.no) return true;
+      case "Attendance":
         return attendance !== null && attendance.some((v) => v === 1);
-      case 3: // Seat or Review step
-        // If this is the seat step and seat is required, check if user has selected a seat
-        if (steps[activeStep] === "Seat") {
-          // Seat is required if seating is enabled and unspecified seat is not allowed
-          const seatRequired = hasSeating && !allowUnspecifiedSeat;
-          if (seatRequired) {
-            // User must have selected a seat to proceed
-            return selectedSeatId !== null;
-          }
-          // If not required, seat selection is always valid
-          return true;
-        }
-        return true; // Seat selection is optional or this is review
-      case 4: // Final review step
+      case "Handle":
+        return handleValid && handle.trim().length > 0;
+      case "Seat":
+        // A seat is required if seating is enabled and "unspecified" (bring
+        // your own desk) is not allowed.
+        if (hasSeating && !allowUnspecifiedSeat) return selectedSeatId !== null;
+        return true;
+      case "Review":
         return true;
       default:
         return false;
@@ -295,15 +314,17 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   };
 
   const handleClose = () => {
+    // Closing is blocked while the RSVP is being saved.
+    if (saving) return;
     // Check if there are unsaved changes
     const hasChanges =
-      response !== props.initialData?.response ||
+      (response ?? null) !== (props.initialData?.response ?? null) ||
       handle !== (props.initialData?.handle || "") ||
-      JSON.stringify(attendance) !==
-        JSON.stringify(props.initialData?.attendance) ||
+      JSON.stringify(attendance ?? null) !==
+        JSON.stringify(props.initialData?.attendance ?? null) ||
       selectedSeatId !== reservedSeatId;
 
-    if (hasChanges && !saving) {
+    if (hasChanges) {
       setShowExitWarning(true);
     } else {
       props.onClose();
@@ -510,10 +531,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     setSelectedSeatRoomName(roomName || null);
   };
 
-  const renderStepContent = (step: number) => {
-    const currentStepName = steps[step];
-
-    switch (currentStepName) {
+  const renderStepContent = (stepName: WizardStep) => {
+    switch (stepName) {
       case "Response":
         return (
           <RSVPResponseStep
@@ -539,6 +558,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
             value={attendance}
             onChange={handleAttendanceChange}
             disabled={saving}
+            tone={response === RSVP.maybe ? "warning" : "success"}
           />
         );
       case "Seat":
@@ -569,95 +589,257 @@ export default function RSVPWizard(props: RSVPWizardProps) {
           />
         );
       default:
-        return <div>Unknown step</div>;
+        return null;
     }
   };
 
   const getPreviousResponseText = () => {
-    if (!props.initialData?.response) {
-      return "Not responded";
-    }
-    switch (props.initialData.response) {
+    switch (props.initialData?.response) {
       case RSVP.yes:
-        return "Yes";
+        return "I'm in";
       case RSVP.maybe:
         return "Maybe";
       case RSVP.no:
-        return "No";
+        return "Can't make it";
       default:
         return "Not responded";
     }
   };
+
+  const isLastStep = activeStep === steps.length - 1;
+  const stepValid = isStepValid();
 
   return (
     <>
       <Dialog
         open={props.open}
         onClose={handleClose}
-        maxWidth="md"
-        fullWidth
-        aria-labelledby="rsvp-wizard-title"
+        fullScreen={isMobile}
+        maxWidth={false}
+        aria-labelledby="rsvp-wizard-title rsvp-wizard-step-title"
+        slotProps={{
+          paper: {
+            "aria-busy": saving,
+            sx: {
+              width: "100%",
+              maxWidth: isMobile ? "none" : 640,
+              maxHeight: isMobile ? "none" : "calc(100vh - 32px)",
+              m: isMobile ? 0 : 2,
+              border: isMobile ? 0 : undefined,
+              boxShadow: isMobile
+                ? "none"
+                : `0 0 0 1px ${colors.bg}, ${effects.dialog}`,
+            },
+          },
+          backdrop: {
+            sx: {
+              backgroundColor: "rgba(3,4,8,0.78)",
+              backdropFilter: "blur(6px)",
+            },
+          },
+        }}
       >
-        <DialogTitle id="rsvp-wizard-title">
-          RSVP to {props.event.title}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mt: 2 }}>
-            <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-              {steps.map((label) => (
-                <Step key={label}>
-                  <StepLabel>{label}</StepLabel>
-                </Step>
-              ))}
-            </Stepper>
-
-            {saving && <LinearProgress sx={{ mb: 2 }} />}
-
-            <Box sx={{ minHeight: 300 }}>{renderStepContent(activeStep)}</Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Box sx={{ flex: "1 1 auto" }} />
-          <Button onClick={handleBack} disabled={activeStep === 0 || saving}>
-            Back
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleNext}
-            disabled={!isStepValid() || saving}
+        <Box
+          component="form"
+          noValidate
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            if (stepValid && !saving) handleNext();
+          }}
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            flex: "1 1 auto",
+          }}
+        >
+          <Box
+            sx={{
+              p: "20px 24px 16px",
+              pt: isMobile
+                ? "calc(16px + env(safe-area-inset-top, 0px))"
+                : "20px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.75,
+              borderBottom: `1px solid ${hairline.soft}`,
+              flex: "none",
+            }}
           >
-            {activeStep === steps.length - 1 ? "Confirm RSVP" : "Next"}
-          </Button>
-        </DialogActions>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 0.5,
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    fontFamily: fonts.mono,
+                    fontSize: 11,
+                    letterSpacing: "0.18em",
+                    color: colors.cyan,
+                  }}
+                >
+                  <span id="rsvp-wizard-title" style={srOnlyStyle}>
+                    RSVP to {props.event.title},
+                  </span>
+                  STEP {activeStep + 1} / {steps.length}
+                </Box>
+                <Typography
+                  id="rsvp-wizard-step-title"
+                  ref={stepHeadingRef}
+                  tabIndex={-1}
+                  component="h2"
+                  sx={{
+                    m: 0,
+                    fontSize: 24,
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    outline: "none",
+                  }}
+                >
+                  {STEP_TITLES[currentStep]}
+                </Typography>
+              </Box>
+              <IconButton
+                aria-label="Close"
+                onClick={handleClose}
+                disabled={saving}
+                sx={{
+                  width: 44,
+                  height: 44,
+                  flex: "none",
+                  border: `1px solid ${hairline.control}`,
+                }}
+              >
+                <CloseSharp />
+              </IconButton>
+            </Box>
+            <Box
+              aria-hidden="true"
+              sx={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+                gap: "4px",
+              }}
+            >
+              {steps.map((name, i) => (
+                <Box
+                  key={name}
+                  sx={{
+                    height: 4,
+                    backgroundColor:
+                      i <= activeStep ? colors.cyan : tint("cyan", 0.15),
+                    transition: "background-color .2s",
+                  }}
+                />
+              ))}
+            </Box>
+          </Box>
+
+          {saving && (
+            <LinearProgress
+              aria-label="Saving your RSVP"
+              sx={{ flex: "none" }}
+            />
+          )}
+
+          <DialogContent
+            sx={{
+              p: "22px 24px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 1.75,
+              minHeight: isMobile ? undefined : 200,
+            }}
+          >
+            {renderStepContent(currentStep)}
+          </DialogContent>
+
+          <DialogActions
+            sx={{
+              justifyContent: "space-between",
+              p: "16px 24px 22px",
+              pb: isMobile
+                ? "calc(16px + env(safe-area-inset-bottom, 0px))"
+                : "22px",
+              flex: "none",
+            }}
+          >
+            <Button
+              variant="outlined"
+              color="inherit"
+              onClick={handleBack}
+              disabled={activeStep === 0 || saving}
+            >
+              Back
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={!stepValid || saving}
+            >
+              {saving ? "Saving…" : isLastStep ? "Lock it in" : "Next"}
+            </Button>
+          </DialogActions>
+        </Box>
       </Dialog>
 
       {/* Exit warning dialog */}
       <Dialog
         open={showExitWarning}
         onClose={() => setShowExitWarning(false)}
-        maxWidth="sm"
+        maxWidth="xs"
+        fullWidth
+        aria-labelledby="rsvp-exit-title"
+        aria-describedby="rsvp-exit-description"
       >
-        <DialogTitle>Unsaved Changes</DialogTitle>
+        <DialogTitle id="rsvp-exit-title">Unsaved changes</DialogTitle>
         <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Your RSVP has not been saved yet.
-          </Alert>
-          <Box>
-            <strong>Current status:</strong> {getPreviousResponseText()}
-          </Box>
-          <Box sx={{ mt: 1 }}>
-            Are you sure you want to exit without saving your changes?
+          <Box
+            id="rsvp-exit-description"
+            sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
+          >
+            <Typography component="p" sx={{ m: 0, color: colors.textMuted }}>
+              Your RSVP hasn&apos;t been saved yet. Leave without saving your
+              changes?
+            </Typography>
+            <Typography
+              component="p"
+              sx={{
+                m: 0,
+                fontFamily: fonts.mono,
+                fontSize: 12,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: colors.textMuted,
+              }}
+            >
+              Current status:{" "}
+              <Box component="span" sx={{ color: colors.text }}>
+                {getPreviousResponseText()}
+              </Box>
+            </Typography>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowExitWarning(false)}>
-            Continue Editing
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={() => setShowExitWarning(false)}
+            autoFocus
+          >
+            Keep editing
           </Button>
           <Button onClick={handleForceClose} color="error" variant="outlined">
-            Exit Without Saving
+            Discard changes
           </Button>
         </DialogActions>
       </Dialog>

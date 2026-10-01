@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import GameOwners from "../components/GameOwners";
+import Box from "@mui/material/Box";
+import GameOwners, { OwnerChips } from "../components/GameOwners";
 import { Gamer } from "../types/game_suggestions";
 
 const gamers: Gamer[] = [
@@ -46,4 +47,16 @@ export const OwnersUnownedAndUnknown: Story = {
     gamerUnowned: gamers.slice(4, 7),
     gamerUnknown: gamers.slice(7),
   },
+};
+
+/** The chip list used on game cards and in the suggest dialog. */
+export const Chips: Story = {
+  args: { gamerOwned: gamers },
+  render: () => (
+    <Box sx={{ width: 320, display: "flex", flexDirection: "column", gap: 3 }}>
+      <OwnerChips gamers={gamers.slice(0, 5)} me={{ handle: "LagLord" }} />
+      <OwnerChips gamers={gamers} max={6} label="Owners (capped)" />
+      <OwnerChips gamers={gamers.slice(0, 4)} tone="lime" />
+    </Box>
+  ),
 };

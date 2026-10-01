@@ -16,7 +16,10 @@ import { MemoryRouter } from "react-router-dom";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import { UserProvider } from "../UserProvider";
 import { SnackbarProvider } from "notistack";
-import RSVPWizard from "../components/RSVPWizard/RSVPWizard";
+import RSVPWizard, {
+  getWizardSteps,
+} from "../components/RSVPWizard/RSVPWizard";
+import { RSVP } from "../types/invitations";
 import moment from "moment";
 import * as Sentry from "@sentry/react";
 import { ApiError } from "../utils/apiError";
@@ -78,6 +81,11 @@ beforeEach(() => {
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
+const yesButton = () => screen.getByRole("button", { name: /I'm in/i });
+const noButton = () => screen.getByRole("button", { name: /Can't make it/i });
+const yesButtonGone = () =>
+  screen.queryByRole("button", { name: /I'm in/i }) === null;
+
 const renderWizard = (props = {}) => {
   const defaultProps = {
     open: true,
@@ -111,16 +119,18 @@ describe("RSVPWizard", () => {
   test("shows response step initially", async () => {
     renderWizard();
     await waitFor(() => {
-      expect(screen.getByText(/Will you be attending/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Are you coming/i }),
+      ).toBeInTheDocument();
     });
   });
 
-  test("shows Yes, Maybe, No buttons", async () => {
+  test("shows I'm in, Maybe, Can't make it toggle buttons", async () => {
     renderWizard();
     await waitFor(() => {
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-      expect(screen.getByText("Maybe")).toBeInTheDocument();
-      expect(screen.getByText("No")).toBeInTheDocument();
+      expect(yesButton()).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("button", { name: /Maybe/ })).toBeInTheDocument();
+      expect(noButton()).toBeInTheDocument();
     });
   });
 
@@ -136,12 +146,9 @@ describe("RSVPWizard", () => {
     const user = userEvent.setup();
     renderWizard();
 
-    await waitFor(() => {
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(yesButton()).toBeInTheDocument());
 
-    const yesButton = screen.getByText("Yes");
-    await user.click(yesButton);
+    await user.click(yesButton());
 
     await waitFor(() => {
       const nextButton = screen.getByRole("button", { name: /Next/i });
@@ -149,23 +156,23 @@ describe("RSVPWizard", () => {
     });
   });
 
-  test("advances to handle step after selecting Yes", async () => {
+  test("advances to the attendance step after selecting Yes", async () => {
     const user = userEvent.setup();
     renderWizard();
 
-    await waitFor(() => {
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(yesButton()).toBeInTheDocument());
 
-    const yesButton = screen.getByText("Yes");
-    await user.click(yesButton);
+    await user.click(yesButton());
 
     const nextButton = screen.getByRole("button", { name: /Next/i });
     await user.click(nextButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/Enter your gamer handle/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /When are you there/i }),
+      ).toBeInTheDocument();
     });
+    expect(yesButtonGone()).toBe(true);
   });
 
   test("shows exit warning when closing with unsaved changes", async () => {
@@ -173,15 +180,11 @@ describe("RSVPWizard", () => {
     const onClose = vi.fn();
     renderWizard({ onClose });
 
-    await waitFor(() => {
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-    });
+    await waitFor(() => expect(yesButton()).toBeInTheDocument());
 
-    const yesButton = screen.getByText("Yes");
-    await user.click(yesButton);
+    await user.click(yesButton());
 
-    const cancelButton = screen.getByRole("button", { name: /Cancel/i });
-    await user.click(cancelButton);
+    await user.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => {
       expect(screen.getByText(/Unsaved Changes/i)).toBeInTheDocument();
@@ -195,11 +198,8 @@ describe("RSVPWizard", () => {
     renderWizard({ onSaved, onClose });
 
     // Select No
-    await waitFor(() => {
-      expect(screen.getByText("No")).toBeInTheDocument();
-    });
-    const noButton = screen.getByText("No");
-    await user.click(noButton);
+    await waitFor(() => expect(noButton()).toBeInTheDocument());
+    await user.click(noButton());
 
     // Advance to review
     const nextButton = screen.getByRole("button", { name: /Next/i });
@@ -207,12 +207,14 @@ describe("RSVPWizard", () => {
 
     // Should show review step
     await waitFor(() => {
-      expect(screen.getByText(/Review your RSVP/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Review & lock in/i }),
+      ).toBeInTheDocument();
     });
 
     // Confirm RSVP
     const confirmButton = screen.getByRole("button", {
-      name: /Confirm RSVP/i,
+      name: /Lock it in/i,
     });
     await user.click(confirmButton);
 
@@ -231,19 +233,19 @@ describe("RSVPWizard", () => {
     renderWizard();
 
     // Select Yes
-    await waitFor(() => {
-      expect(screen.getByText("Yes")).toBeInTheDocument();
-    });
-    const yesButton = screen.getByText("Yes");
-    await user.click(yesButton);
+    await waitFor(() => expect(yesButton()).toBeInTheDocument());
+    await user.click(yesButton());
 
-    // Advance to handle step
+    // Advance past attendance (defaults to every block) to the callsign step
     let nextButton = screen.getByRole("button", { name: /Next/i });
     await user.click(nextButton);
+    await user.click(screen.getByRole("button", { name: /Next/i }));
 
     // Should show handle step
     await waitFor(() => {
-      expect(screen.getByText(/Enter your gamer handle/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Your callsign/i }),
+      ).toBeInTheDocument();
     });
 
     // Next button should be disabled without handle
@@ -251,7 +253,7 @@ describe("RSVPWizard", () => {
     expect(nextButton).toBeDisabled();
 
     // Enter a handle
-    const handleInput = screen.getByLabelText(/Gamer Handle/i);
+    const handleInput = screen.getByRole("textbox", { name: /Callsign/i });
     await user.type(handleInput, "TestGamer");
 
     // Next button should be enabled
@@ -293,15 +295,20 @@ describe("RSVPWizard seat reservation failures", () => {
     const onSaved = vi.fn();
     renderWizard({ onSaved });
 
-    await waitFor(() => expect(screen.getByText("Yes")).toBeInTheDocument());
-    await user.click(screen.getByText("Yes"));
+    await waitFor(() => expect(yesButton()).toBeInTheDocument());
+    await user.click(yesButton());
+    // Response, then attendance (defaults to every block).
     await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.type(await screen.findByLabelText(/Gamer Handle/i), "Josh");
-    // Handle, attendance and seat steps, then confirm on the review step.
-    while (!screen.queryByRole("button", { name: /Confirm RSVP/i })) {
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.type(
+      await screen.findByRole("textbox", { name: /Callsign/i }),
+      "Josh",
+    );
+    // Callsign and seat steps, then confirm on the review step.
+    while (!screen.queryByRole("button", { name: /Lock it in/i })) {
       await user.click(screen.getByRole("button", { name: /Next/i }));
     }
-    await user.click(screen.getByRole("button", { name: /Confirm RSVP/i }));
+    await user.click(screen.getByRole("button", { name: /Lock it in/i }));
     return onSaved;
   };
 
@@ -376,5 +383,121 @@ describe("RSVPWizard seat reservation failures", () => {
       tags: { rsvp_step: "seat_reservation", http_status: "409" },
       extra: { status: 409 },
     });
+  });
+});
+
+describe("getWizardSteps", () => {
+  test("orders response, attendance, callsign, seat, review", () => {
+    expect(getWizardSteps(RSVP.yes, true)).toEqual([
+      "Response",
+      "Attendance",
+      "Handle",
+      "Seat",
+      "Review",
+    ]);
+  });
+
+  test("skips the seat step without seating", () => {
+    expect(getWizardSteps(RSVP.maybe, false)).toEqual([
+      "Response",
+      "Attendance",
+      "Handle",
+      "Review",
+    ]);
+    expect(getWizardSteps(null, false)).toHaveLength(4);
+  });
+
+  test("goes straight to review for a no", () => {
+    expect(getWizardSteps(RSVP.no, true)).toEqual(["Response", "Review"]);
+  });
+});
+
+describe("RSVPWizard dialog behaviour", () => {
+  test("is a labelled modal dialog showing the step count", async () => {
+    renderWizard();
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAccessibleName(
+      /RSVP to Test LAN Party.*Are you coming/i,
+    );
+    expect(screen.getByText(/STEP 1 \/ 4/)).toBeInTheDocument();
+  });
+
+  test("marks the chosen response as pressed", async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole("button", { name: /Maybe/ }));
+    expect(screen.getByRole("button", { name: /Maybe/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(yesButton()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("Escape with unsaved changes asks before closing", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWizard({ onClose });
+    await user.click(await screen.findByRole("button", { name: /I'm in/i }));
+    await user.keyboard("{Escape}");
+    expect(
+      await screen.findByRole("heading", { name: /Unsaved changes/i }),
+    ).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: /Discard changes/i }));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  test("closes straight away when nothing changed", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWizard({ onClose });
+    await user.click(await screen.findByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalled();
+    expect(screen.queryByText(/Unsaved changes/i)).not.toBeInTheDocument();
+  });
+
+  test("moves focus to the new step heading", async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole("button", { name: /I'm in/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: /When are you there/i }),
+      ).toHaveFocus(),
+    );
+  });
+
+  test("attendance blocks toggle and block Next when none are picked", async () => {
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole("button", { name: /I'm in/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(await screen.findByRole("button", { name: "Clear" }));
+    expect(screen.getByRole("button", { name: /Next/i })).toBeDisabled();
+    expect(
+      screen.getByText(/Pick at least one block to continue/),
+    ).toBeInTheDocument();
+    const blocks = screen
+      .getByRole("group", { name: "Attendance blocks" })
+      .querySelectorAll("button");
+    expect(blocks.length).toBeGreaterThan(0);
+    await user.click(blocks[0]);
+    expect(blocks[0]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Next/i })).toBeEnabled();
+  });
+
+  test("announces a saved RSVP to the rest of the app", async () => {
+    const user = userEvent.setup();
+    const listener = vi.fn();
+    window.addEventListener("calandar:rsvp-updated", listener);
+    renderWizard();
+    await user.click(
+      await screen.findByRole("button", { name: /Can't make it/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /Lock it in/i }));
+    await waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    window.removeEventListener("calandar:rsvp-updated", listener);
   });
 });

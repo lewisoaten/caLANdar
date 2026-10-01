@@ -1,7 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import EventSelection from "../components/EventSelection";
-import { mockApi, withUser, type MockRequest, stubImages } from "./mockApi";
+import { sectionGap } from "../components/hl";
+import {
+  mockApi,
+  mockResponse,
+  withUser,
+  type MockRequest,
+  stubImages,
+} from "./mockApi";
 
 const upcoming = [
   {
@@ -58,17 +65,64 @@ const past = [
   },
 ];
 
+// Which canned response `GET /api/events` returns (set per story).
+let scenario: "normal" | "empty" | "error" | "loading" = "normal";
+
+const rsvps: Record<string, "yes" | "maybe" | "no" | null> = {
+  "101": "yes",
+  "102": null,
+  "103": "maybe",
+  "104": "yes",
+  "105": "no",
+};
+
 mockApi({
   "GET /api/events": (req: MockRequest) => {
-    const all = req.query.get("filter") === "all";
+    if (scenario === "loading") return new Promise(() => {});
+    if (scenario === "error")
+      return mockResponse(500, {
+        error: { code: 500, reason: "Internal Server Error", description: "" },
+      });
+    const filter = req.query.get("filter");
+    const events =
+      scenario === "empty"
+        ? []
+        : filter === "all"
+          ? [...upcoming, ...past]
+          : filter === "past"
+            ? past
+            : upcoming;
     return {
-      events: all ? [...upcoming, ...past] : upcoming,
-      total: all ? 5 : 3,
+      events,
+      total: events.length,
       page: 1,
       limit: 20,
-      totalPages: all ? 3 : 1,
+      totalPages: 1,
     };
   },
+  "GET /api/events/:id/invitations/:email": (req: MockRequest) => ({
+    eventId: Number(req.params.id),
+    email: req.params.email,
+    avatarUrl: null,
+    handle: "Sam",
+    invitedAt: "2030-01-10T09:00:00Z",
+    respondedAt: null,
+    response: rsvps[req.params.id] ?? null,
+    attendance: null,
+    lastModified: "2030-01-10T09:00:00Z",
+  }),
+  "GET /api/events/:id/invitations": () =>
+    Array.from({ length: 10 }, (_, i) => ({
+      eventId: 101,
+      avatarUrl: null,
+      handle: `Player${i + 1}`,
+      response: i < 7 ? "yes" : i < 9 ? "maybe" : null,
+      attendance: null,
+      seatId: i < 6 ? i + 1 : null,
+      lastModified: "2030-01-10T09:00:00Z",
+    })),
+  "GET /api/events/:id/seats": () =>
+    Array.from({ length: 10 }, (_, i) => ({ id: i + 1, label: `A${i + 1}` })),
 });
 
 stubImages();
@@ -76,21 +130,68 @@ stubImages();
 const meta = {
   title: "Components/EventSelection",
   component: EventSelection,
-  parameters: { layout: "fullscreen" },
+  parameters: { layout: "padded" },
   tags: ["autodocs"],
-  decorators: [withUser({ token: "storybook-token" })],
+  decorators: [
+    withUser({ token: "storybook-token" }),
+    // The shell's <main> lays pages out as a column with the section gap.
+    (Story) => (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: sectionGap,
+          maxWidth: 1400,
+          margin: "0 auto",
+        }}
+      >
+        <Story />
+      </div>
+    ),
+  ],
+  beforeEach: () => {
+    scenario = "normal";
+  },
 } satisfies Meta<typeof EventSelection>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** Featured next event (RSVP'd yes, 7 going, 4 seats left) plus the grid. */
 export const UpcomingEvents: Story = {};
 
-export const IncludingOldEventsAndPagination: Story = {
+export const AllEvents: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await canvas.findByText("Summer LAN Party 2031");
-    await userEvent.click(canvas.getByRole("checkbox"));
+    await canvas.findByText("Winter Championship 2031");
+    await userEvent.click(canvas.getByRole("tab", { name: "All" }));
     await expect(await canvas.findByText("Autumn Frag Fest 2019")).toBeTruthy();
+  },
+};
+
+export const PastEvents: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByText("Winter Championship 2031");
+    await userEvent.click(canvas.getByRole("tab", { name: "Past" }));
+    await expect(await canvas.findByText("Spring Skirmish 2020")).toBeTruthy();
+  },
+};
+
+export const Loading: Story = {
+  beforeEach: () => {
+    scenario = "loading";
+  },
+};
+
+export const Empty: Story = {
+  beforeEach: () => {
+    scenario = "empty";
+  },
+};
+
+export const LoadError: Story = {
+  beforeEach: () => {
+    scenario = "error";
   },
 };

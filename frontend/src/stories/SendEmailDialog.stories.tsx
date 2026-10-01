@@ -17,9 +17,31 @@ const event = {
 };
 
 // The dialog posts on submit; answer with the API's 204 No Content.
+// Invitations feed the audience chip counts.
+const invitations = [
+  ["nightowl@example.com", "yes"],
+  ["fragqueen@example.com", "yes"],
+  ["bigmike@example.com", "maybe"],
+  ["casual@example.com", "no"],
+  ["newbie@example.com", null],
+  ["lurker@example.com", null],
+].map(([email, response]) => ({
+  eventId: 331,
+  email,
+  avatarUrl: null,
+  handle: null,
+  invitedAt: "2026-10-01T09:00:00Z",
+  respondedAt: null,
+  response,
+  attendance: null,
+  lastModified: "2026-10-01T09:00:00Z",
+}));
+
 mockApi({
   "POST /api/events/331/email": () => new Response(null, { status: 204 }),
   "POST /api/events/332/email": () => new Response(null, { status: 204 }),
+  "GET /api/events/331/invitations": invitations,
+  "GET /api/events/332/invitations": [],
 });
 
 const meta = {
@@ -40,7 +62,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Freshly opened: recipients default to "RSVP: Yes", subject and message empty. */
+/** Freshly opened: recipients default to "Going", subject and message empty. */
 export const Open: Story = {};
 
 /** Long event title in the intro copy. */
@@ -61,7 +83,7 @@ export const DraftReady: Story = {
     // The dialog renders in a portal outside the story canvas.
     const body = within(canvasElement.ownerDocument.body);
     await userEvent.type(
-      await body.findByLabelText(/Email Subject/),
+      await body.findByLabelText(/^Subject/),
       "Doors open at 18:00 on Friday",
     );
     await userEvent.type(
@@ -69,4 +91,10 @@ export const DraftReady: Story = {
       "Bring your own keyboard, mouse and headset. Power strips and network cables are on us. Pizza arrives at 20:00.",
     );
   },
+};
+
+/** Inline form, as on the Broadcast tab of Event management. */
+export const Inline: Story = {
+  args: { variant: "inline" },
+  parameters: { layout: "padded" },
 };

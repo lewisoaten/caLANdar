@@ -1,29 +1,39 @@
 import * as React from "react";
-import { useState, useEffect, useContext } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import LinearProgress from "@mui/material/LinearProgress";
+import PersonSearchSharp from "@mui/icons-material/PersonSearchSharp";
+import ManageSearchSharp from "@mui/icons-material/ManageSearchSharp";
+import ErrorOutlineSharp from "@mui/icons-material/ErrorOutlineSharp";
+import moment from "moment";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 import {
-  Container,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  TextField,
-  MenuItem,
-  Stack,
-  Typography,
-  CircularProgress,
-  Alert,
-} from "@mui/material";
-import { UserContext } from "../UserProvider";
-import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
-import moment, { Moment } from "moment";
+  EmptyState,
+  FilterChips,
+  HlPagination,
+  PageHeader,
+  SearchField,
+  UserAvatar,
+  colors,
+  useNow,
+  fonts,
+  hairline,
+  tones,
+} from "./hl";
+import { AdminSelect } from "./AdminSelect";
+import {
+  AUDIT_RANGES,
+  type AuditRange,
+  auditTone,
+  buildAuditChips,
+  formatAuditTime,
+  rangeToFromTimestamp,
+  useDebouncedValue,
+} from "./adminListUtils";
 
-interface AuditLogEntry {
+export interface AuditLogEntry {
   id: number;
   timestamp: string;
   userId: string | null;
@@ -33,6 +43,8 @@ interface AuditLogEntry {
   metadata: Record<string, unknown> | null;
   ipAddress: string | null;
   userAgent: string | null;
+  /** Gravatar of `userId`; null for system entries. */
+  avatarUrl?: string | null;
 }
 
 interface AuditLogsResponse {
@@ -42,24 +54,28 @@ interface AuditLogsResponse {
   offset: number;
 }
 
-const entityTypes = [
-  { value: "", label: "All" },
-  { value: "auth", label: "Authentication" },
-  { value: "event", label: "Events" },
-  { value: "event_seating_config", label: "Event Seating Config" },
-  { value: "invitation", label: "Invitations" },
-  { value: "email", label: "Emails" },
-  { value: "rsvp", label: "RSVPs" },
-  { value: "seat_reservation", label: "Seat Reservations" },
-  { value: "room", label: "Rooms" },
-  { value: "seat", label: "Seats" },
-  { value: "game_suggestion", label: "Game Suggestions" },
-  { value: "game_vote", label: "Game Votes" },
-  { value: "profile", label: "Profiles" },
-  { value: "steam_games", label: "Steam Games" },
-];
+export const AUDIT_PAGE_SIZE = 12;
 
-const getActionDescription = (log: AuditLogEntry): string => {
+/** Query string for `GET /api/audit-logs` (admin). `page` is 1-based. */
+export function buildAuditQuery(q: {
+  page: number;
+  userSearch: string;
+  entityTypes: string[];
+  fromTimestamp: string | null;
+}): string {
+  const params = new URLSearchParams({
+    as_admin: "true",
+    limit: String(AUDIT_PAGE_SIZE),
+    offset: String((q.page - 1) * AUDIT_PAGE_SIZE),
+  });
+  const search = q.userSearch.trim();
+  if (search) params.set("user_search", search);
+  if (q.entityTypes.length) params.set("entity_types", q.entityTypes.join(","));
+  if (q.fromTimestamp) params.set("from_timestamp", q.fromTimestamp);
+  return params.toString();
+}
+
+export const getActionDescription = (log: AuditLogEntry): string => {
   const parts = log.action.split(".");
   const entity = parts[0];
   const action = parts[1];
@@ -179,6 +195,8 @@ const getActionDescription = (log: AuditLogEntry): string => {
         description = `Updated room: ${name}`;
       } else if (action === "delete") {
         description = `Deleted room`;
+      } else if (action === "layout_update") {
+        description = `Updated room layout`;
       }
       break;
     case "seat":
@@ -213,17 +231,22 @@ const getActionDescription = (log: AuditLogEntry): string => {
       break;
     case "steam_games":
       if (action === "update") {
-        description = `Updated Steam games database`;
+        const added = log.metadata?.games_added as number | undefined;
+        description =
+          typeof added === "number"
+            ? `Updated Steam games database (+${added} games)`
+            : `Updated Steam games database`;
       }
       break;
     default:
       description = log.action;
   }
 
-  return description;
+  // A known entity with an action this list doesn't describe yet.
+  return description || log.action;
 };
 
-const getEntityTypeName = (entityType: string): string => {
+export const getEntityTypeName = (entityType: string): string => {
   const entityTypeMap: Record<string, string> = {
     auth: "Authentication",
     event: "Event",
@@ -243,218 +266,374 @@ const getEntityTypeName = (entityType: string): string => {
   return entityTypeMap[entityType] || entityType;
 };
 
+interface FetchResult {
+  key: string;
+  data?: AuditLogsResponse;
+  error?: string;
+}
+
+function AuditRow({ log, now }: { log: AuditLogEntry; now: number }) {
+  const tone = tones[auditTone(log.entityType)];
+  const who = log.userId || "System";
+  return (
+    <Box
+      component="li"
+      sx={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "baseline",
+        gap: "6px 16px",
+        p: "12px 20px",
+        borderBottom: `1px solid ${hairline.faint}`,
+        "&:last-of-type": { borderBottom: 0 },
+      }}
+    >
+      <Box
+        component="time"
+        dateTime={log.timestamp}
+        title={moment(log.timestamp).format("YYYY-MM-DD HH:mm:ss")}
+        sx={{
+          minWidth: 118,
+          flex: "none",
+          fontSize: 12,
+          color: colors.textDim,
+        }}
+      >
+        {formatAuditTime(log.timestamp, now)}
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          minWidth: 150,
+          width: { md: 200 },
+          flex: "none",
+          maxWidth: "100%",
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          overflowWrap: "anywhere",
+          color: tone.fg,
+        }}
+      >
+        {log.action}
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          flex: "1 1 260px",
+          minWidth: 0,
+          fontFamily: fonts.ui,
+          fontSize: 14,
+          lineHeight: 1.45,
+          color: colors.text,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {getActionDescription(log)}
+        {log.entityId && (
+          <Box
+            component="span"
+            sx={{
+              ml: 1,
+              fontFamily: fonts.mono,
+              fontSize: 11,
+              color: colors.textDim,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {getEntityTypeName(log.entityType)} #{log.entityId}
+          </Box>
+        )}
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          flex: "none",
+          maxWidth: "100%",
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          fontSize: 12,
+          color: colors.textMuted,
+          alignSelf: "center",
+          minWidth: 0,
+        }}
+      >
+        <UserAvatar
+          name={log.userId ?? null}
+          src={log.avatarUrl ?? null}
+          size={22}
+        />
+        <Box
+          component="span"
+          title={who}
+          sx={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {who}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
 const AuditLog = () => {
   const { token, isAdmin } = useContext(UserContext);
-  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { signOut } = useContext(UserDispatchContext);
 
-  // Filters
-  const [userId, setUserId] = useState("");
-  const [entityType, setEntityType] = useState("");
-  const [fromTimestamp, setFromTimestamp] = useState<Moment | null>(null);
-  const [toTimestamp, setToTimestamp] = useState<Moment | null>(null);
+  const [page, setPage] = useState(1);
+  const [searchText, setSearchText] = useState("");
+  const [range, setRange] = useState<{ id: AuditRange; from: string | null }>(
+    () => ({ id: "7", from: rangeToFromTimestamp("7") }),
+  );
+  const [chipId, setChipId] = useState("all");
+  const [presentTypes, setPresentTypes] = useState<string[] | null>(null);
+  const [reload, setReload] = useState(0);
+  const [result, setResult] = useState<FetchResult | null>(null);
+  const now = useNow(60_000);
+  const listTop = useRef<HTMLElement>(null);
 
-  const fetchLogs = async () => {
-    if (!token || !isAdmin) {
-      setError("Unauthorized: Admin access required");
-      return;
-    }
+  const userSearch = useDebouncedValue(searchText, 400, () => setPage(1));
+  const chips = buildAuditChips(presentTypes);
+  const chip = chips.find((c) => c.id === chipId) ?? chips[0];
+  const query = buildAuditQuery({
+    page,
+    userSearch,
+    entityTypes: chip.types,
+    fromTimestamp: range.from,
+  });
+  const key = `${query}#${reload}`;
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const params = new URLSearchParams();
-      params.append("_as_admin", "true");
-      params.append("limit", rowsPerPage.toString());
-      params.append("offset", (page * rowsPerPage).toString());
-
-      if (userId) params.append("user_id", userId);
-      if (entityType) params.append("entity_type", entityType);
-      if (fromTimestamp)
-        params.append("from_timestamp", fromTimestamp.toISOString());
-      if (toTimestamp) params.append("to_timestamp", toTimestamp.toISOString());
-
-      const response = await fetch(`/api/audit-logs?${params.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch audit logs: ${response.statusText}`);
+  // Entity types present in the log, for the chips.
+  useEffect(() => {
+    if (!token || !isAdmin) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(
+          "/api/audit-logs/entity-types?as_admin=true",
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!response.ok) return;
+        const types = (await response.json()) as unknown;
+        if (!cancelled && Array.isArray(types)) {
+          setPresentTypes(types.filter((t) => typeof t === "string"));
+        }
+      } catch (error) {
+        // Chips fall back to the full set of groups.
+        console.error("Couldn't load audit entity types", error);
       }
-
-      const data: AuditLogsResponse = await response.json();
-      setLogs(data.logs);
-      setTotalCount(data.totalCount);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, isAdmin]);
 
   useEffect(() => {
-    fetchLogs();
-  }, [
-    page,
-    rowsPerPage,
-    userId,
-    entityType,
-    fromTimestamp,
-    toTimestamp,
-    token,
-    isAdmin,
-  ]);
-
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
+    if (!token || !isAdmin) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/audit-logs?${query}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (cancelled) return;
+        if (response.status === 401) {
+          signOut();
+          return;
+        }
+        if (!response.ok) {
+          throw new Error(
+            `Failed to fetch audit logs: ${response.statusText || response.status}`,
+          );
+        }
+        const data = (await response.json()) as AuditLogsResponse;
+        if (!cancelled) setResult({ key, data });
+      } catch (err) {
+        if (!cancelled)
+          setResult((r) => ({
+            ...r,
+            key,
+            error: err instanceof Error ? err.message : "An error occurred",
+          }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [key, query, token, isAdmin, signOut]);
 
   if (!isAdmin) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Alert severity="error">
-          You do not have permission to view this page. Admin access required.
-        </Alert>
-      </Container>
+      <Alert severity="error">
+        You do not have permission to view this page. Admin access required.
+      </Alert>
     );
   }
 
-  return (
-    <LocalizationProvider dateAdapter={AdapterMoment}>
-      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Audit Log
-        </Typography>
+  const loading = result?.key !== key;
+  const data = result?.data;
+  const error = !loading ? result?.error : undefined;
+  const logs = data?.logs ?? [];
+  const total = data?.totalCount ?? 0;
+  const filtersActive =
+    chip.id !== "all" || range.id !== "all" || userSearch.trim() !== "";
 
-        <Paper sx={{ p: 2, mb: 2 }}>
-          <Stack
-            direction="row"
-            spacing={2}
+  const goToPage = (p: number) => {
+    setPage(p);
+    listTop.current?.scrollIntoView?.({ block: "start" });
+  };
+
+  return (
+    <>
+      <PageHeader kicker="Admin" kickerTone="amber" title="Audit log" />
+
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          gap: "10px",
+        }}
+      >
+        <SearchField
+          value={searchText}
+          onChange={setSearchText}
+          label="Filter by user email"
+          icon={<PersonSearchSharp aria-hidden="true" />}
+          sx={{ flex: "1 1 260px", maxWidth: 420 }}
+        />
+        <AdminSelect<AuditRange>
+          label="When"
+          ariaLabel="Time range"
+          value={range.id}
+          options={AUDIT_RANGES}
+          onChange={(id) => {
+            setRange({ id, from: rangeToFromTimestamp(id) });
+            setPage(1);
+          }}
+        />
+      </Box>
+
+      <FilterChips
+        label="Entity type"
+        value={chip.id}
+        onChange={(id) => {
+          setChipId(id);
+          setPage(1);
+        }}
+        options={chips.map((c) => ({ id: c.id, label: c.label }))}
+        sx={{ "& > *": { minHeight: 48 } }}
+      />
+
+      <Box
+        component="section"
+        ref={listTop}
+        aria-label="Log entries"
+        aria-busy={loading || undefined}
+        sx={{
+          position: "relative",
+          border: `1px solid ${hairline.panel}`,
+          backgroundColor: colors.surface,
+          fontFamily: fonts.mono,
+          scrollMarginTop: 80,
+        }}
+      >
+        {loading && data && (
+          <LinearProgress
+            aria-label="Loading log entries"
+            sx={{ position: "absolute", top: 0, left: 0, right: 0, height: 2 }}
+          />
+        )}
+        {error ? (
+          <EmptyState
+            icon={<ErrorOutlineSharp />}
+            title="Couldn't load the audit log"
+            description={error}
+            action={
+              <Button
+                variant="outlined"
+                onClick={() => setReload((n) => n + 1)}
+              >
+                Try again
+              </Button>
+            }
+            sx={{ fontFamily: fonts.ui }}
+          />
+        ) : !data ? (
+          <Box
+            role="status"
             sx={{
-              flexWrap: "wrap",
+              p: 5,
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+              textAlign: "center",
+              fontFamily: fonts.ui,
+              color: colors.textMuted,
             }}
           >
-            <TextField
-              label="User Email"
-              value={userId}
-              onChange={(e) => {
-                setUserId(e.target.value);
-                setPage(0);
-              }}
-              sx={{ minWidth: 200 }}
-              size="small"
-            />
-            <TextField
-              select
-              label="Entity Type"
-              value={entityType}
-              onChange={(e) => {
-                setEntityType(e.target.value);
-                setPage(0);
-              }}
-              sx={{ minWidth: 200 }}
-              size="small"
-            >
-              {entityTypes.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <DateTimePicker
-              label="From"
-              value={fromTimestamp}
-              onChange={(newValue) => {
-                setFromTimestamp(newValue);
-                setPage(0);
-              }}
-              slotProps={{ textField: { size: "small" } }}
-            />
-            <DateTimePicker
-              label="To"
-              value={toTimestamp}
-              onChange={(newValue) => {
-                setToTimestamp(newValue);
-                setPage(0);
-              }}
-              slotProps={{ textField: { size: "small" } }}
-            />
-          </Stack>
-        </Paper>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-
-        <Paper>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Timestamp</TableCell>
-                  <TableCell>User</TableCell>
-                  <TableCell>Action</TableCell>
-                  <TableCell>Entity Type</TableCell>
-                  <TableCell>Entity ID</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      <CircularProgress />
-                    </TableCell>
-                  </TableRow>
-                ) : logs.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      No audit logs found
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
-                        {moment(log.timestamp).format("YYYY-MM-DD HH:mm:ss")}
-                      </TableCell>
-                      <TableCell>{log.userId || "System"}</TableCell>
-                      <TableCell>{getActionDescription(log)}</TableCell>
-                      <TableCell>{getEntityTypeName(log.entityType)}</TableCell>
-                      <TableCell>{log.entityId || "-"}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[25, 50, 100]}
-            component="div"
-            count={totalCount}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
+            Loading audit log…
+            <LinearProgress aria-hidden="true" />
+          </Box>
+        ) : logs.length === 0 ? (
+          <EmptyState
+            icon={<ManageSearchSharp />}
+            title={
+              filtersActive
+                ? "No entries match those filters."
+                : "No audit logs found"
+            }
+            action={
+              filtersActive ? (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setSearchText("");
+                    setChipId("all");
+                    setRange({ id: "all", from: null });
+                    setPage(1);
+                  }}
+                >
+                  Show everything
+                </Button>
+              ) : undefined
+            }
+            sx={{ fontFamily: fonts.ui }}
           />
-        </Paper>
-      </Container>
-    </LocalizationProvider>
+        ) : (
+          <Box
+            component="ol"
+            sx={{
+              listStyle: "none",
+              m: 0,
+              p: 0,
+              opacity: loading ? 0.6 : 1,
+              transition: "opacity .15s",
+            }}
+          >
+            {logs.map((log) => (
+              <AuditRow key={log.id} log={log} now={now} />
+            ))}
+          </Box>
+        )}
+        {data && total > 0 && (
+          <Box sx={{ borderTop: `1px solid ${hairline.soft}`, p: "12px 20px" }}>
+            <HlPagination
+              label="Audit log pages"
+              page={page}
+              pageSize={AUDIT_PAGE_SIZE}
+              total={total}
+              onChange={goToPage}
+            />
+          </Box>
+        )}
+      </Box>
+    </>
   );
 };
 

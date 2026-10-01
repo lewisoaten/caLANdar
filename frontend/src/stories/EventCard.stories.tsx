@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import moment from "moment";
 import EventCard from "../components/EventCard";
 import { stubImages } from "./mockApi";
+import { RSVP } from "../types/invitations";
 
 const base = {
   id: 101,
@@ -31,6 +32,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Upcoming: Story = {
   args: {
+    rsvp: RSVP.yes,
     event: {
       ...base,
       title: "Summer LAN Party 2031",
@@ -39,6 +41,26 @@ export const Upcoming: Story = {
       timeBegin: moment("2031-07-18T18:00:00Z"),
       timeEnd: moment("2031-07-20T12:00:00Z"),
     },
+  },
+};
+
+export const RsvpNeeded: Story = {
+  args: { ...Upcoming.args, event: { ...Upcoming.args!.event! }, rsvp: null },
+};
+
+export const Maybe: Story = {
+  args: {
+    ...Upcoming.args,
+    event: { ...Upcoming.args!.event! },
+    rsvp: RSVP.maybe,
+  },
+};
+
+export const NotGoing: Story = {
+  args: {
+    ...Upcoming.args,
+    event: { ...Upcoming.args!.event! },
+    rsvp: RSVP.no,
   },
 };
 
@@ -53,6 +75,7 @@ export const PastEvent: Story = {
       timeBegin: moment("2019-12-06T17:00:00Z"),
       timeEnd: moment("2019-12-08T10:00:00Z"),
     },
+    rsvp: RSVP.yes,
   },
 };
 

@@ -1,16 +1,34 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { userEvent, within } from "storybook/test";
+import moment from "moment";
+import { Route, Routes } from "react-router-dom";
 import EventGameSchedule from "../components/EventGameSchedule";
-import { mockApi, withRoute, withUser } from "./mockApi";
+import Dashboard from "../components/Dashboard";
+import { sectionGap } from "../components/hl";
+import {
+  mockApi,
+  mockResponse,
+  stubImages,
+  withRoute,
+  withUser,
+  type MockRequest,
+} from "./mockApi";
+import { SHELL_EVENT_ID, atPath, mockShellApi, shellEvent } from "./shellMocks";
 
-// Fixed weekend: Friday 13 Nov 2026 18:00 to Sunday 15 Nov 2026 12:00.
+stubImages();
+
+// Fixed weekend: Friday 13 Nov 2026 18:00 to Sunday 15 Nov 2026 16:00.
 // Timestamps carry no timezone so they render identically everywhere.
-const event = (id: number, title: string) => ({
+const BEGIN = "2026-11-13T18:00:00";
+const END = "2026-11-15T16:00:00";
+
+const event = (id: number, title: string, begin = BEGIN, end = END) => ({
   id,
   title,
   description: "Three days of co-op, RTS and late-night shooters.",
   image: null,
-  timeBegin: "2026-11-13T18:00:00",
-  timeEnd: "2026-11-15T12:00:00",
+  timeBegin: begin,
+  timeEnd: end,
   createdAt: "2026-09-01T10:00:00",
   lastModified: "2026-10-20T09:30:00",
 });
@@ -22,15 +40,17 @@ const bigMike = gamer("BigMike_NI");
 const pixelPete = gamer("PixelPete");
 const lagLord = gamer("LagLord");
 const tankJoe = gamer("TankJoe");
+const squad = [nightOwl, fragQueen, bigMike, pixelPete, lagLord, tankJoe];
+
+type Gamer = ReturnType<typeof gamer>;
 
 const suggestion = (
   appid: number,
   name: string,
-  votes: number,
   requestedAt: string,
-  suggester: ReturnType<typeof gamer>,
-  voters: ReturnType<typeof gamer>[],
-  owned: ReturnType<typeof gamer>[],
+  suggester: Gamer,
+  voters: Gamer[],
+  owned: Gamer[],
   comment: string | null,
 ) => ({
   appid,
@@ -41,183 +61,109 @@ const suggestion = (
   requestedAt,
   suggestionLastModified: "2026-10-18T12:00:00",
   selfVote: "noVote",
-  votes,
+  votes: voters.length,
   voters,
   suggester,
   gamerOwned: owned,
   gamerUnowned: voters.filter((v) => !owned.includes(v)),
-  gamerUnknown: [],
+  gamerUnknown: squad.filter((g) => !owned.includes(g) && !voters.includes(g)),
 });
 
-const suggestions = [
+const baseSuggestions = () => [
   suggestion(
-    550,
-    "Left 4 Dead 2",
-    5,
+    730,
+    "Counter-Strike 2",
     "2026-10-01T09:00:00",
     nightOwl,
-    [nightOwl, fragQueen, bigMike, pixelPete, lagLord],
-    [nightOwl, fragQueen, bigMike, pixelPete],
-    "Friday night tradition. Bring snacks.",
+    [nightOwl, fragQueen, bigMike, pixelPete, tankJoe],
+    [nightOwl, fragQueen, bigMike, tankJoe],
+    "5v5 with subs rotating in.",
   ),
   suggestion(
     548430,
     "Deep Rock Galactic",
-    4,
     "2026-10-02T09:00:00",
     fragQueen,
-    [fragQueen, bigMike, tankJoe, nightOwl],
-    [fragQueen, bigMike, tankJoe],
-    "Rock and Stone!",
+    [fragQueen, bigMike, nightOwl],
+    [fragQueen, bigMike],
+    "Rock and Stone! Two squads of three.",
   ),
   suggestion(
-    730,
-    "Counter-Strike 2",
-    3,
+    427520,
+    "Factorio",
     "2026-10-03T09:00:00",
-    bigMike,
-    [bigMike, lagLord, tankJoe],
-    [bigMike, lagLord, tankJoe],
+    pixelPete,
+    [pixelPete, bigMike],
+    [pixelPete, bigMike, tankJoe],
     null,
   ),
   suggestion(
     813780,
     "Age of Empires II: Definitive Edition",
-    2,
     "2026-10-04T09:00:00",
     pixelPete,
-    [pixelPete, nightOwl],
     [pixelPete],
-    "Team games, 2v2v2.",
-  ),
-  suggestion(
-    553850,
-    "Helldivers 2",
-    2,
-    "2026-10-05T09:00:00",
-    tankJoe,
-    [tankJoe, fragQueen],
-    [tankJoe, fragQueen],
-    null,
+    [pixelPete],
+    "Classic 3v3 on Arabia.",
   ),
   suggestion(
     252950,
     "Rocket League",
-    1,
-    "2026-10-06T09:00:00",
+    "2026-10-05T09:00:00",
     lagLord,
     [lagLord],
-    [lagLord],
+    [lagLord, fragQueen],
     null,
-  ),
-  suggestion(
-    976730,
-    "Halo: The Master Chief Collection",
-    1,
-    "2026-10-07T09:00:00",
-    bigMike,
-    [bigMike],
-    [bigMike],
-    "Sunday morning wind-down.",
   ),
 ];
 
+let nextId = 100;
 const entry = (
-  id: number,
   eventId: number,
   gameId: number,
   gameName: string,
   startTime: string,
   durationMinutes: number,
   isPinned: boolean,
-  isSuggested: boolean,
 ) => ({
-  id,
+  id: isPinned ? nextId++ : 0,
   eventId,
   gameId,
   gameName,
   startTime,
   durationMinutes,
   isPinned,
-  isSuggested,
+  isSuggested: !isPinned,
   createdAt: "2026-10-10T10:00:00",
   lastModified: "2026-10-10T10:00:00",
 });
 
-const scheduleFor = (eventId: number) => [
-  entry(
-    1,
-    eventId,
-    550,
-    "Left 4 Dead 2",
-    "2026-11-13T19:00:00",
-    120,
-    true,
-    false,
-  ),
-  entry(
-    2,
-    eventId,
-    548430,
-    "Deep Rock Galactic",
-    "2026-11-13T21:30:00",
-    150,
-    true,
-    false,
-  ),
-  entry(
-    3,
-    eventId,
-    813780,
-    "Age of Empires II: Definitive Edition",
-    "2026-11-14T10:00:00",
-    180,
-    false,
-    true,
-  ),
-  entry(
-    4,
-    eventId,
-    730,
-    "Counter-Strike 2",
-    "2026-11-14T14:00:00",
-    180,
-    true,
-    false,
-  ),
-  entry(
-    5,
-    eventId,
-    553850,
-    "Helldivers 2",
-    "2026-11-14T18:30:00",
-    120,
-    false,
-    true,
-  ),
-  entry(
-    6,
-    eventId,
-    252950,
-    "Rocket League",
-    "2026-11-14T21:00:00",
-    90,
-    false,
-    true,
-  ),
-  entry(
-    7,
-    eventId,
-    976730,
-    "Halo: The Master Chief Collection",
-    "2026-11-15T10:00:00",
-    120,
-    false,
-    true,
-  ),
-];
+/** Sessions relative to the local midnight of the event's first day. */
+const scheduleFor = (eventId: number, firstDay = "2026-11-13") => {
+  const at = (dayOffset: number, h: number) =>
+    moment(firstDay)
+      .add(dayOffset, "days")
+      .add(h * 60, "minutes")
+      .format("YYYY-MM-DDTHH:mm:ss");
+  return [
+    entry(eventId, 730, "Counter-Strike 2", at(0, 18.5), 120, true),
+    entry(eventId, 548430, "Deep Rock Galactic", at(0, 21), 150, true),
+    entry(eventId, 427520, "Factorio", at(1, 10), 180, false),
+    entry(
+      eventId,
+      813780,
+      "Age of Empires II: Definitive Edition",
+      at(1, 14),
+      180,
+      true,
+    ),
+    entry(eventId, 730, "Counter-Strike 2", at(1, 19), 180, false),
+    entry(eventId, 252950, "Rocket League", at(2, 11), 90, false),
+  ];
+};
 
-// Attendance buckets: Fri eve, Sat night/morning/afternoon/eve, Sun night/morning/afternoon.
+// Attendance buckets (UTC grid): Fri eve, Sat night/morning/afternoon/eve,
+// Sun night/morning/afternoon.
 const invite = (
   eventId: number,
   handle: string,
@@ -234,78 +180,281 @@ const invite = (
 });
 
 const invitationsFor = (eventId: number) => [
-  invite(eventId, "NightOwl", "yes", [1, 1, 1, 1, 1, 1, 1, 0]),
+  invite(eventId, "NightOwl", "yes", [1, 1, 1, 1, 1, 1, 1, 1]),
   invite(eventId, "FragQueen", "yes", [1, 0, 1, 1, 1, 0, 1, 0]),
   invite(eventId, "BigMike_NI", "yes", [1, 1, 1, 1, 1, 1, 0, 0]),
   invite(eventId, "PixelPete", "yes", [0, 0, 1, 1, 1, 0, 0, 0]),
-  invite(eventId, "LagLord", "maybe", [0, 0, 0, 1, 1, 0, 0, 0]),
+  invite(eventId, "LagLord", "maybe", [0, 0, 0, 1, 1, 0, 1, 1]),
   invite(eventId, "TankJoe", "yes", [1, 0, 0, 1, 1, 1, 1, 0]),
 ];
 
-// Each story owns an event id so the page-global fetch mocks never clash.
+const steamCatalog = [
+  [892970, "Valheim"],
+  [105600, "Terraria"],
+  [550, "Left 4 Dead 2"],
+  [570, "Dota 2"],
+  [440, "Team Fortress 2"],
+  [620, "Portal 2"],
+  [1086940, "Baldur's Gate 3"],
+  [413150, "Stardew Valley"],
+  [294100, "RimWorld"],
+  [322330, "Don't Starve Together"],
+  [553850, "HELLDIVERS 2"],
+  [1966720, "Lethal Company"],
+  [632360, "Risk of Rain 2"],
+].map(([appid, name]) => ({
+  appid,
+  name,
+  last_modified: "2026-09-01T00:00:00",
+  rank: null,
+}));
+
 mockApi({
-  // 301: populated schedule, member view
-  "GET /api/events/301": event(301, "Autumn LAN: Rock and Stone"),
-  "GET /api/events/301/game_schedule": scheduleFor(301),
-  "GET /api/events/301/suggested_games": suggestions,
-  "GET /api/events/301/invitations": invitationsFor(301),
-  // 302: populated schedule, admin view
-  "GET /api/events/302": event(302, "Autumn LAN: Rock and Stone"),
-  "GET /api/events/302/game_schedule": scheduleFor(302),
-  "GET /api/events/302/suggested_games": suggestions,
-  "GET /api/events/302/invitations": invitationsFor(302),
-  // 303: empty schedule, admin view
-  "GET /api/events/303": event(303, "Autumn LAN: Rock and Stone"),
-  "GET /api/events/303/game_schedule": [],
-  "GET /api/events/303/suggested_games": suggestions,
-  "GET /api/events/303/invitations": invitationsFor(303),
-  // 304: empty schedule, member view
-  "GET /api/events/304": event(304, "Autumn LAN: Rock and Stone"),
-  "GET /api/events/304/game_schedule": [],
-  "GET /api/events/304/suggested_games": [],
-  "GET /api/events/304/invitations": [],
+  "GET /api/steam-game": ({ query }: MockRequest) => {
+    const q = (query.get("query") ?? "").toLowerCase();
+    return steamCatalog.filter((g) => String(g.name).toLowerCase().includes(q));
+  },
+  "GET /api/steam-game-update-v2/stats": {
+    gamesCached: 48297,
+    lastRefreshed: "2026-09-27T10:00:00",
+  },
 });
+
+/**
+ * Register a stateful fake schedule API for one event id: moves, pins,
+ * removals, adds and suggestions all persist while the story is open.
+ */
+function mockScheduleApi(
+  id: number,
+  options: {
+    event?: ReturnType<typeof event>;
+    schedule?: ReturnType<typeof entry>[];
+    suggestions?: ReturnType<typeof suggestion>[];
+    invitations?: ReturnType<typeof invite>[];
+    scheduleError?: boolean;
+  } = {},
+) {
+  let schedule = options.schedule ?? scheduleFor(id);
+  let suggestions = options.suggestions ?? baseSuggestions();
+  const invitations = options.invitations ?? invitationsFor(id);
+  const base = `/api/events/${id}`;
+  const nameOf = (gameId: number) =>
+    suggestions.find((g) => g.appid === gameId)?.name ??
+    String(steamCatalog.find((g) => g.appid === gameId)?.name ?? "Game");
+  type Body = { gameId: number; startTime: string; durationMinutes: number };
+  const create = (b: Body) => {
+    const e = {
+      ...entry(
+        id,
+        b.gameId,
+        nameOf(b.gameId),
+        b.startTime,
+        b.durationMinutes,
+        true,
+      ),
+    };
+    // Pinning a game drops its auto-planned slots (as the scheduler does).
+    schedule = [
+      ...schedule.filter((s) => s.isPinned || s.gameId !== b.gameId),
+      e,
+    ];
+    return e;
+  };
+  mockApi({
+    [`GET ${base}`]: options.event ?? event(id, "Autumn LAN 2026"),
+    [`GET ${base}/game_schedule`]: () =>
+      options.scheduleError
+        ? mockResponse(500, { error: { description: "boom" } })
+        : schedule,
+    [`POST ${base}/game_schedule`]: ({ body }: MockRequest) =>
+      create(body as Body),
+    [`POST ${base}/game_schedule/pin`]: ({ body }: MockRequest) =>
+      create(body as Body),
+    [`POST ${base}/game_schedule/recalculate`]: () =>
+      schedule.filter((s) => !s.isPinned),
+    [`PATCH ${base}/game_schedule/:sid`]: ({ params, body }: MockRequest) => {
+      const b = body as Body;
+      schedule = schedule.map((s) =>
+        s.id === Number(params.sid)
+          ? { ...s, startTime: b.startTime, durationMinutes: b.durationMinutes }
+          : s,
+      );
+      return schedule.find((s) => s.id === Number(params.sid));
+    },
+    [`DELETE ${base}/game_schedule/:sid`]: ({ params }: MockRequest) => {
+      schedule = schedule.filter((s) => s.id !== Number(params.sid));
+      return null;
+    },
+    [`GET ${base}/suggested_games`]: () => suggestions,
+    [`POST ${base}/suggested_games`]: ({ body }: MockRequest) => {
+      const { appid } = body as { appid: number };
+      const s = suggestion(
+        appid,
+        nameOf(appid),
+        "2026-10-20T09:00:00",
+        nightOwl,
+        [nightOwl],
+        [],
+        null,
+      );
+      suggestions = [...suggestions, s];
+      return s;
+    },
+    [`GET ${base}/invitations`]: invitations,
+  });
+}
+
+// Each story owns an event id so the page-global fetch mocks never clash.
+mockScheduleApi(301); // populated, member
+mockScheduleApi(302); // populated, admin
+mockScheduleApi(303, { schedule: [] }); // empty, admin
+mockScheduleApi(304, { schedule: [], suggestions: [], invitations: [] }); // empty, member
+mockScheduleApi(305, { scheduleError: true }); // schedule fails to load
+mockScheduleApi(306); // details open
+mockScheduleApi(307); // add dialog
+mockScheduleApi(308); // add dialog, catalogue search
+mockApi({ "GET /api/events/309": mockResponse(500, null) }); // event error
 
 const meta = {
   title: "Components/EventGameSchedule",
   component: EventGameSchedule,
   parameters: {
-    layout: "fullscreen",
+    layout: "padded",
   },
+  decorators: [
+    // The shell's <main> lays pages out as a column with the section gap.
+    (Story) => (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: sectionGap,
+          maxWidth: 1400,
+          margin: "0 auto",
+        }}
+      >
+        <Story />
+      </div>
+    ),
+  ],
   tags: ["autodocs"],
 } satisfies Meta<typeof EventGameSchedule>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Member view of a weekend with pinned games and suggested (grey) games. */
+const route = (id: number) =>
+  withRoute("/events/:id/schedule", `/events/${id}/schedule`);
+
+/** Member view: read-only timeline, day cards, details on tap. */
 export const PopulatedMember: Story = {
-  decorators: [
-    withRoute("/events/:id", "/events/301"),
-    withUser({ isAdmin: false }),
-  ],
+  decorators: [route(301), withUser({ isAdmin: false })],
 };
 
-/** Admin view: drag handles, recalculate button and the add-game FAB. */
+/**
+ * Admin view: drag blocks (also across days), resize from the edges, arrow
+ * keys to nudge; Recalculate and Add to schedule in the header.
+ */
 export const PopulatedAdmin: Story = {
-  decorators: [
-    withRoute("/events/:id", "/events/302"),
-    withUser({ isAdmin: true }),
-  ],
+  decorators: [route(302), withUser({ isAdmin: true })],
 };
 
-/** Admin with nothing scheduled yet: prompts to add games from the menu. */
+/** Admin with nothing scheduled yet. */
 export const EmptyAdmin: Story = {
-  decorators: [
-    withRoute("/events/:id", "/events/303"),
-    withUser({ isAdmin: true }),
-  ],
+  decorators: [route(303), withUser({ isAdmin: true })],
 };
 
 /** Member view before any games have been scheduled. */
 export const EmptyMember: Story = {
+  decorators: [route(304), withUser({ isAdmin: false })],
+};
+
+/** The schedule request fails: the timeline offers a retry. */
+export const ScheduleLoadError: Story = {
+  decorators: [route(305), withUser({ isAdmin: true })],
+};
+
+/** The event itself fails to load. */
+export const EventLoadError: Story = {
+  decorators: [route(309), withUser({ isAdmin: false })],
+};
+
+/** Session details drawer (admin): timing controls, squad, owners, voters. */
+export const SessionDetails: Story = {
+  decorators: [route(306), withUser({ isAdmin: true })],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const block = await canvas.findByRole("button", {
+      name: /^Counter-Strike 2, Friday 18:30/,
+    });
+    await userEvent.click(block);
+  },
+};
+
+/** Add to schedule: pick a game (suggested first, then the Steam cache). */
+export const AddToSchedule: Story = {
+  decorators: [route(307), withUser({ isAdmin: true })],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: /Add to schedule/ }),
+    );
+  },
+};
+
+/** Add to schedule, second step for a game nobody has suggested yet. */
+export const AddUnsuggestedGame: Story = {
+  decorators: [route(308), withUser({ isAdmin: true })],
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole("button", { name: /Add to schedule/ }),
+    );
+    const body = within(canvasElement.ownerDocument.body);
+    await userEvent.type(
+      await body.findByRole("searchbox", { name: "Search games" }),
+      "val",
+    );
+    await userEvent.click(
+      await body.findByRole("button", { name: /Valheim/ }, { timeout: 3000 }),
+    );
+  },
+};
+
+/** The page inside the app shell (sidebar, breadcrumb, ticker). */
+export const InShell: Story = {
+  parameters: { layout: "fullscreen", router: false },
+  render: () => (
+    <Dashboard>
+      <Routes>
+        <Route path="/events/:id/schedule" element={<EventGameSchedule />} />
+      </Routes>
+    </Dashboard>
+  ),
   decorators: [
-    withRoute("/events/:id", "/events/304"),
-    withUser({ isAdmin: false }),
+    (Story) => {
+      mockShellApi("yes");
+      const firstDay = moment(shellEvent.timeBegin).format("YYYY-MM-DD");
+      mockScheduleApi(SHELL_EVENT_ID, {
+        event: {
+          ...event(SHELL_EVENT_ID, shellEvent.title),
+          timeBegin: shellEvent.timeBegin,
+          timeEnd: shellEvent.timeEnd,
+        },
+        schedule: scheduleFor(SHELL_EVENT_ID, firstDay).map((s, i) =>
+          i === 0
+            ? {
+                ...s,
+                startTime: moment(firstDay)
+                  .add(19, "h")
+                  .format("YYYY-MM-DDTHH:mm:ss"),
+              }
+            : s,
+        ),
+      });
+      return <Story />;
+    },
+    withUser({ isAdmin: true }),
+    atPath(`/events/${SHELL_EVENT_ID}/schedule`),
   ],
 };

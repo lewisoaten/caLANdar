@@ -130,12 +130,12 @@ export const AllSeatsAvailable: Story = {
   args: { room, seats: free() },
 };
 
-/** Occupied seats show the attendee avatar; maybe-RSVPs get an amber ring. */
+/** Occupied seats are violet tiles with the attendee's avatar and handle. */
 export const SomeSeatsOccupied: Story = {
   args: { room, seats: occupied() },
 };
 
-/** Interactive selection: own seat, available seats and unavailable (grey) seats. */
+/** Interactive selection: your seat (lime), available seats and unavailable (taken) seats. */
 export const SeatSelection: Story = {
   args: {
     room,
@@ -149,7 +149,7 @@ export const SeatSelection: Story = {
   },
 };
 
-/** Several people sharing one seat show as stacked avatars. */
+/** Several people sharing one seat: first handle plus a "+N" count. */
 export const SharedSeats: Story = {
   args: {
     room,
