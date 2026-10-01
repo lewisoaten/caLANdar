@@ -243,6 +243,8 @@ const RoomEditor = () => {
         setPending({});
         setCur(0);
         setSel(null);
+        setLinking(null);
+        setLinkNotes([]);
         setPhase("ready");
       })
       .catch((e) => {
@@ -473,6 +475,7 @@ const RoomEditor = () => {
     setFocus({ col: 0, row: 0 });
     setTool("seat");
     setLinking(null);
+    setLinkNotes([]);
     setStatus(null);
     announce(`Added ${r.name}. Seat tool selected.`);
   };
@@ -485,6 +488,9 @@ const RoomEditor = () => {
     setRooms((rs) => rs.filter((_, i) => i !== cur));
     setCur((c) => Math.max(0, c - 1));
     setSel(null);
+    // Room-scoped state must not leak into the room that takes its place.
+    setLinking(null);
+    setLinkNotes([]);
     setConfirm(null);
     setStatus(null);
     announce(`Deleted ${room.name.trim() || "room"}. Save to apply.`);

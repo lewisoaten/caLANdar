@@ -741,6 +741,53 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       expect(cell(/^Seat A1, reserved/)).not.toHaveAttribute("data-candidate");
     });
 
+    it("does not carry seat picking over when the room is deleted", async () => {
+      withFeatures([{ col: 3, row: 2, kind: "screen", group: 0 }]);
+      renderEditor();
+      // A new room with a screen at the same square as Main Hall's, and a
+      // seat beside it to link to.
+      fireEvent.click(await screen.findByRole("button", { name: "Add room" }));
+      fireEvent.click(screen.getByRole("button", { name: "Screen" }));
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Empty square, column 4, row 3/,
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Seat" }));
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Empty square, column 5, row 3/,
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Select" }));
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Screen, column 4, row 3/,
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pick the seat on the grid" }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Delete room" }));
+      // The confirm dialog repeats the label; its button is the second one.
+      const confirmDelete = await screen.findAllByRole("button", {
+        name: "Delete room",
+      });
+      fireEvent.click(confirmDelete[confirmDelete.length - 1]);
+      // Main Hall takes over: its screen at the same square is not mid-pick.
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Screen, column 4, row 3/,
+        }),
+      );
+      expect(
+        screen.queryByRole("button", { name: "Cancel picking a seat" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Pick the seat on the grid" }),
+      ).toBeInTheDocument();
+    });
+
     it("shows a merged shape's label and an icon-only single square", async () => {
       withFeatures([
         { col: 5, row: 0, kind: "screen", group: 0 },
