@@ -7,8 +7,8 @@ use sqlx::PgPool;
 use crate::{
     controllers::{
         room::{
-            cell_in_grid, validate_background_opacity, validate_background_style,
-            validate_features, validate_grid_rows, GRID_COLS,
+            cell_in_grid, cell_name, feature_groups, touches, validate_background_opacity,
+            validate_background_style, validate_features, validate_grid_rows, GRID_COLS,
         },
         seat::{normalise_seat_description, normalise_seat_identifier_for},
         Error,
@@ -19,7 +19,7 @@ use crate::{
             LayoutSeat, LayoutSeatSubmit, RoomLayout, RoomLayoutResponse, RoomLayoutSubmit,
             SeatReservedBy,
         },
-        rooms::Room,
+        rooms::{Room, RoomFeature},
     },
 };
 
@@ -38,10 +38,66 @@ pub struct ExistingLayout {
     pub seat_rooms: HashMap<i32, i32>,
     /// seat id -> saved identifier (legacy labels may be kept unchanged)
     pub seat_labels: HashMap<i32, String>,
+    /// room id -> grid cells of its saved seats (a screen linked to one of
+    /// these that is deleted by the save just loses its link)
+    pub room_seat_cells: HashMap<i32, HashSet<(i32, i32)>>,
 }
 
-/// Validate a submitted layout against what exists, normalising desk
-/// identifiers and descriptions in place.
+/// Drop the seat link of every screen whose linked cell is not in `seats`.
+/// Returns how many groups lost their link.
+pub fn clear_stale_links(features: &mut [RoomFeature], seats: &HashSet<(i32, i32)>) -> usize {
+    let mut cleared = HashSet::new();
+    for feature in features.iter_mut() {
+        if feature.link().is_some_and(|link| !seats.contains(&link)) {
+            feature.link_col = None;
+            feature.link_row = None;
+            cleared.insert(feature.group);
+        }
+    }
+    cleared.len()
+}
+
+/// Check each linked screen against the room's submitted seats: the link must
+/// point at a seat touching the screen (side or corner). A link to a seat this
+/// save deletes is cleared rather than rejected.
+fn validate_links(
+    features: &mut [RoomFeature],
+    seats: &HashMap<(i32, i32), String>,
+    deleted_seat_cells: Option<&HashSet<(i32, i32)>>,
+) -> Result<(), String> {
+    let mut stale = HashSet::new();
+    for (group, squares) in feature_groups(features) {
+        let Some(link) = squares[0].link() else {
+            continue;
+        };
+        let first = cell_name(squares[0].col, squares[0].row);
+        let Some(label) = seats.get(&link) else {
+            if deleted_seat_cells.is_some_and(|cells| cells.contains(&link)) {
+                stale.insert(link);
+                continue;
+            }
+            return Err(format!(
+                "screen at {first} is linked to {}, where there is no seat",
+                cell_name(link.0, link.1)
+            ));
+        };
+        if !squares.iter().any(|f| touches((f.col, f.row), link)) {
+            return Err(format!(
+                "screen at {first} (group {group}) is linked to seat {label} at {}, which does not touch it by a side or corner",
+                cell_name(link.0, link.1)
+            ));
+        }
+    }
+    if !stale.is_empty() {
+        let keep: HashSet<(i32, i32)> = seats.keys().copied().collect();
+        clear_stale_links(features, &keep);
+    }
+    Ok(())
+}
+
+/// Validate a submitted layout against what exists, normalising seat
+/// identifiers and descriptions in place (and clearing screen links to seats
+/// the save deletes).
 pub fn validate_layout(
     submit: &mut RoomLayoutSubmit,
     existing: &ExistingLayout,
@@ -82,40 +138,43 @@ pub fn validate_layout(
             room.features.iter().map(|f| (f.col, f.row)).collect();
         let mut labels = HashSet::new();
 
-        for desk in &mut room.seats {
-            let saved = desk
+        let mut seat_cells = HashMap::new();
+
+        for seat in &mut room.seats {
+            let saved = seat
                 .id
                 .and_then(|id| existing.seat_labels.get(&id))
                 .map(String::as_str);
-            desk.label = normalise_seat_identifier_for(&desk.label, saved)
+            seat.label = normalise_seat_identifier_for(&seat.label, saved)
                 .map_err(|e| format!("{room_label}: {e}"))?;
-            desk.description = normalise_seat_description(desk.description.as_deref())
-                .map_err(|e| format!("{room_label}: desk {}: {e}", desk.label))?;
+            seat.description = normalise_seat_description(seat.description.as_deref())
+                .map_err(|e| format!("{room_label}: seat {}: {e}", seat.label))?;
             // Identifiers are unique per room regardless of case.
-            if !labels.insert(desk.label.to_lowercase()) {
+            if !labels.insert(seat.label.to_lowercase()) {
                 return Err(format!(
-                    "{room_label}: another desk already uses label {}",
-                    desk.label
+                    "{room_label}: another seat already uses label {}",
+                    seat.label
                 ));
             }
-            if !cell_in_grid(desk.grid_col, desk.grid_row, Some(room.grid_rows)) {
+            if !cell_in_grid(seat.grid_col, seat.grid_row, Some(room.grid_rows)) {
                 return Err(format!(
-                    "{room_label}: desk {} at column {}, row {} is outside the grid",
-                    desk.label, desk.grid_col, desk.grid_row
+                    "{room_label}: seat {} at column {}, row {} is outside the grid",
+                    seat.label, seat.grid_col, seat.grid_row
                 ));
             }
-            if !occupied.insert((desk.grid_col, desk.grid_row)) {
+            if !occupied.insert((seat.grid_col, seat.grid_row)) {
                 return Err(format!(
-                    "{room_label}: desk {} overlaps another item at column {}, row {}",
-                    desk.label, desk.grid_col, desk.grid_row
+                    "{room_label}: seat {} overlaps another item at column {}, row {}",
+                    seat.label, seat.grid_col, seat.grid_row
                 ));
             }
-            if let Some(seat_id) = desk.id {
+            seat_cells.insert((seat.grid_col, seat.grid_row), seat.label.clone());
+            if let Some(seat_id) = seat.id {
                 match (room.id, existing.seat_rooms.get(&seat_id)) {
                     (Some(room_id), Some(seat_room)) if *seat_room == room_id => {}
                     _ => {
                         return Err(format!(
-                            "{room_label}: seat {seat_id} does not belong to this room (omit id to create a desk)"
+                            "{room_label}: seat {seat_id} does not belong to this room (omit id to create a seat)"
                         ))
                     }
                 }
@@ -124,6 +183,10 @@ pub fn validate_layout(
                 }
             }
         }
+
+        let deleted = room.id.and_then(|id| existing.room_seat_cells.get(&id));
+        validate_links(&mut room.features, &seat_cells, deleted)
+            .map_err(|e| format!("{room_label}: {e}"))?;
     }
     Ok(())
 }
@@ -179,10 +242,15 @@ pub async fn get_layout(pool: &PgPool, event_id: i32) -> Result<RoomLayoutRespon
             .into_iter()
             .map(|r| {
                 let seats = seats_by_room.remove(&r.id).unwrap_or_default();
-                RoomLayout {
-                    room: Room::from(r),
-                    seats,
-                }
+                let mut room = Room::from(r);
+                // A link whose seat was deleted or moved elsewhere (e.g. with the
+                // seat endpoints) is simply dropped.
+                let cells: HashSet<(i32, i32)> = seats
+                    .iter()
+                    .filter_map(|s| s.grid_col.zip(s.grid_row))
+                    .collect();
+                clear_stale_links(&mut room.features, &cells);
+                RoomLayout { room, seats }
             })
             .collect(),
     })
@@ -209,6 +277,14 @@ pub async fn save_layout(
             .iter()
             .map(|s| (s.id, s.label.clone()))
             .collect(),
+        room_seat_cells: current_seats.iter().fold(HashMap::new(), |mut map, s| {
+            if let Some(cell) = s.grid_col.zip(s.grid_row) {
+                map.entry(s.room_id)
+                    .or_insert_with(HashSet::new)
+                    .insert(cell);
+            }
+            map
+        }),
     };
     validate_layout(&mut submit, &existing).map_err(Error::BadInput)?;
 
@@ -269,7 +345,7 @@ pub async fn save_layout(
             })
             .collect();
         return Err(Error::Conflict(format!(
-            "{} reserved desk{} would be removed: {}. Resend with releaseReserved=true to go ahead.",
+            "{} reserved seat{} would be removed: {}. Resend with releaseReserved=true to go ahead.",
             affected.len(),
             if affected.len() == 1 { "" } else { "s" },
             list.join(", ")
@@ -333,8 +409,8 @@ pub async fn save_layout(
             .map_err(db)?
         };
 
-        for desk in &layout_room.seats {
-            save_desk(&mut tx, event_id, room_id, layout_room.grid_rows, desk)
+        for seat in &layout_room.seats {
+            save_seat(&mut tx, event_id, room_id, layout_room.grid_rows, seat)
                 .await
                 .map_err(db)?;
             saved_seats += 1;
@@ -366,21 +442,21 @@ pub async fn save_layout(
     get_layout(pool, event_id).await
 }
 
-async fn save_desk(
+async fn save_seat(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     event_id: i32,
     room_id: i32,
     grid_rows: i32,
-    desk: &LayoutSeatSubmit,
+    seat: &LayoutSeatSubmit,
 ) -> Result<(), sqlx::Error> {
-    let (x, y) = grid_to_xy(desk.grid_col, desk.grid_row, grid_rows);
-    let grid = (Some(desk.grid_col), Some(desk.grid_row));
-    if let Some(seat_id) = desk.id {
+    let (x, y) = grid_to_xy(seat.grid_col, seat.grid_row, grid_rows);
+    let grid = (Some(seat.grid_col), Some(seat.grid_row));
+    if let Some(seat_id) = seat.id {
         seat::update(
             &mut **tx,
             seat_id,
-            desk.label.clone(),
-            desk.description.clone(),
+            seat.label.clone(),
+            seat.description.clone(),
             x,
             y,
             grid,
@@ -391,8 +467,8 @@ async fn save_desk(
             &mut **tx,
             event_id,
             room_id,
-            desk.label.clone(),
-            desk.description.clone(),
+            seat.label.clone(),
+            seat.description.clone(),
             x,
             y,
             grid,
@@ -405,9 +481,9 @@ async fn save_desk(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::routes::{room_layout::RoomLayoutRoomSubmit, rooms::RoomFeature};
+    use crate::routes::room_layout::RoomLayoutRoomSubmit;
 
-    fn desk(id: Option<i32>, label: &str, col: i32, row: i32) -> LayoutSeatSubmit {
+    fn seat(id: Option<i32>, label: &str, col: i32, row: i32) -> LayoutSeatSubmit {
         LayoutSeatSubmit {
             id,
             label: label.to_string(),
@@ -428,6 +504,7 @@ mod tests {
                 col: 5,
                 row: 7,
                 kind: "entrance".to_string(),
+                ..RoomFeature::default()
             }],
             background_style: None,
             background_opacity: None,
@@ -444,6 +521,19 @@ mod tests {
                 (11, "Window seat 12".to_string()),
                 (20, "C1".to_string()),
             ]),
+            // Seat 10 sits at column 3, row 3 of room 1.
+            room_seat_cells: HashMap::from([(1, HashSet::from([(2, 2)]))]),
+        }
+    }
+
+    fn screen(col: i32, row: i32, group: i32, link: Option<(i32, i32)>) -> RoomFeature {
+        RoomFeature {
+            col,
+            row,
+            kind: "screen".to_string(),
+            group: Some(group),
+            link_col: link.map(|l| l.0),
+            link_row: link.map(|l| l.1),
         }
     }
 
@@ -465,18 +555,18 @@ mod tests {
         let mut layout = submit(vec![
             room(
                 Some(1),
-                vec![desk(Some(10), " a1 ", 2, 2), desk(None, "Desk-12", 4, 2)],
+                vec![seat(Some(10), " a1 ", 2, 2), seat(None, "Seat-12", 4, 2)],
             ),
-            room(None, vec![desk(None, "C1", 0, 0)]),
+            room(None, vec![seat(None, "C1", 0, 0)]),
         ]);
-        layout.rooms[0].seats[0].description = Some("  Window desk  ".to_string());
+        layout.rooms[0].seats[0].description = Some("  Window seat  ".to_string());
         layout.rooms[0].seats[1].description = Some("   ".to_string());
         assert_eq!(validate_layout(&mut layout, &existing()), Ok(()));
         assert_eq!(layout.rooms[0].seats[0].label, "a1");
-        assert_eq!(layout.rooms[0].seats[1].label, "Desk-12");
+        assert_eq!(layout.rooms[0].seats[1].label, "Seat-12");
         assert_eq!(
             layout.rooms[0].seats[0].description.as_deref(),
-            Some("Window desk")
+            Some("Window seat")
         );
         assert_eq!(layout.rooms[0].seats[1].description, None);
     }
@@ -486,28 +576,28 @@ mod tests {
         // Seat 11 was saved as "Window seat 12" before the identifier rules.
         let mut kept = submit(vec![room(
             Some(1),
-            vec![desk(Some(11), "Window seat 12", 3, 3)],
+            vec![seat(Some(11), "Window seat 12", 3, 3)],
         )]);
         assert_eq!(validate_layout(&mut kept, &existing()), Ok(()));
         assert_eq!(kept.rooms[0].seats[0].label, "Window seat 12");
 
         let mut renamed = submit(vec![room(
             Some(1),
-            vec![desk(Some(11), "Window seat 13", 3, 3)],
+            vec![seat(Some(11), "Window seat 13", 3, 3)],
         )]);
         assert!(validate_layout(&mut renamed, &existing()).is_err());
 
-        // A new desk can't use a legacy-style label.
+        // A new seat can't use a legacy-style label.
         let mut fresh = submit(vec![room(
             Some(1),
-            vec![desk(None, "Window seat 12", 3, 3)],
+            vec![seat(None, "Window seat 12", 3, 3)],
         )]);
         assert!(validate_layout(&mut fresh, &existing()).is_err());
 
-        let mut too_long = submit(vec![room(None, vec![desk(None, "ABCDEFGHI", 0, 0)])]);
+        let mut too_long = submit(vec![room(None, vec![seat(None, "ABCDEFGHI", 0, 0)])]);
         assert!(validate_layout(&mut too_long, &existing()).is_err());
 
-        let mut long_text = submit(vec![room(None, vec![desk(None, "A1", 0, 0)])]);
+        let mut long_text = submit(vec![room(None, vec![seat(None, "A1", 0, 0)])]);
         long_text.rooms[0].seats[0].description = Some("x".repeat(121));
         assert!(validate_layout(&mut long_text, &existing()).is_err());
     }
@@ -516,23 +606,23 @@ mod tests {
     fn rejects_duplicate_labels_overlaps_and_out_of_grid_cells() {
         let mut dup = submit(vec![room(
             None,
-            vec![desk(None, "A1", 0, 0), desk(None, "a1", 1, 0)],
+            vec![seat(None, "A1", 0, 0), seat(None, "a1", 1, 0)],
         )]);
         assert!(validate_layout(&mut dup, &existing()).is_err());
 
         let mut overlap = submit(vec![room(
             None,
-            vec![desk(None, "A1", 0, 0), desk(None, "A2", 0, 0)],
+            vec![seat(None, "A1", 0, 0), seat(None, "A2", 0, 0)],
         )]);
         assert!(validate_layout(&mut overlap, &existing()).is_err());
 
-        let mut on_feature = submit(vec![room(None, vec![desk(None, "A1", 5, 7)])]);
+        let mut on_feature = submit(vec![room(None, vec![seat(None, "A1", 5, 7)])]);
         assert!(validate_layout(&mut on_feature, &existing()).is_err());
 
-        let mut outside = submit(vec![room(None, vec![desk(None, "A1", 12, 0)])]);
+        let mut outside = submit(vec![room(None, vec![seat(None, "A1", 12, 0)])]);
         assert!(validate_layout(&mut outside, &existing()).is_err());
 
-        let mut below = submit(vec![room(None, vec![desk(None, "A1", 0, 8)])]);
+        let mut below = submit(vec![room(None, vec![seat(None, "A1", 0, 8)])]);
         assert!(validate_layout(&mut below, &existing()).is_err());
     }
 
@@ -542,11 +632,11 @@ mod tests {
         assert!(validate_layout(&mut unknown_room, &existing()).is_err());
 
         // Seat 20 belongs to room 2, not room 1.
-        let mut wrong_room = submit(vec![room(Some(1), vec![desk(Some(20), "A1", 0, 0)])]);
+        let mut wrong_room = submit(vec![room(Some(1), vec![seat(Some(20), "A1", 0, 0)])]);
         assert!(validate_layout(&mut wrong_room, &existing()).is_err());
 
         // Existing seat ids can't be attached to a new room.
-        let mut new_room = submit(vec![room(None, vec![desk(Some(10), "A1", 0, 0)])]);
+        let mut new_room = submit(vec![room(None, vec![seat(Some(10), "A1", 0, 0)])]);
         assert!(validate_layout(&mut new_room, &existing()).is_err());
 
         let mut twice = submit(vec![room(Some(1), vec![]), room(Some(1), vec![])]);
@@ -566,5 +656,67 @@ mod tests {
         let mut style = submit(vec![room(None, vec![])]);
         style.rooms[0].background_style = Some("sepia".to_string());
         assert!(validate_layout(&mut style, &existing()).is_err());
+    }
+
+    #[test]
+    fn accepts_screens_linked_by_a_side_or_a_corner() {
+        let mut layout = submit(vec![room(
+            Some(1),
+            vec![seat(Some(10), "A1", 2, 2), seat(None, "A2", 5, 2)],
+        )]);
+        layout.rooms[0].features.extend([
+            // Diagonal: (1,1) touches A1 at (2,2) by a corner.
+            screen(1, 1, 1, Some((2, 2))),
+            // Side: an L-shaped screen whose (5,1) square sits above A2.
+            screen(4, 0, 2, Some((5, 2))),
+            screen(5, 0, 2, Some((5, 2))),
+            screen(5, 1, 2, Some((5, 2))),
+            // Dual monitors: a second screen for A2.
+            screen(6, 2, 3, Some((5, 2))),
+        ]);
+        assert_eq!(validate_layout(&mut layout, &existing()), Ok(()));
+        assert!(layout.rooms[0]
+            .features
+            .iter()
+            .skip(1)
+            .all(|f| f.link().is_some()));
+    }
+
+    #[test]
+    fn rejects_links_to_missing_or_distant_seats() {
+        let mut far = submit(vec![room(None, vec![seat(None, "A1", 2, 2)])]);
+        far.rooms[0].features.push(screen(0, 0, 1, Some((2, 2))));
+        let err = validate_layout(&mut far, &existing()).expect_err("should be rejected");
+        assert!(err.contains("does not touch it"), "{err}");
+        assert!(err.contains("seat A1"), "{err}");
+
+        let mut empty = submit(vec![room(None, vec![seat(None, "A1", 2, 2)])]);
+        empty.rooms[0].features.push(screen(3, 3, 1, Some((4, 4))));
+        let err = validate_layout(&mut empty, &existing()).expect_err("should be rejected");
+        assert!(err.contains("no seat"), "{err}");
+    }
+
+    #[test]
+    fn drops_links_to_seats_the_save_deletes() {
+        // Seat 10 at (2,2) is left out of the save, so it is deleted.
+        let mut layout = submit(vec![room(Some(1), vec![])]);
+        layout.rooms[0].features.push(screen(1, 1, 1, Some((2, 2))));
+        assert_eq!(validate_layout(&mut layout, &existing()), Ok(()));
+        assert_eq!(layout.rooms[0].features[1].link(), None);
+    }
+
+    #[test]
+    fn clears_stale_links_only() {
+        let mut features = vec![
+            screen(0, 0, 1, Some((1, 1))),
+            screen(1, 0, 1, Some((1, 1))),
+            screen(4, 0, 2, Some((5, 1))),
+            screen(8, 0, 3, None),
+        ];
+        let seats = HashSet::from([(5, 1)]);
+        assert_eq!(clear_stale_links(&mut features, &seats), 1);
+        assert_eq!(features[0].link(), None);
+        assert_eq!(features[1].link(), None);
+        assert_eq!(features[2].link(), Some((5, 1)));
     }
 }

@@ -7,10 +7,10 @@ import theme from "../theme";
 import {
   SeatFloorPlan,
   FloorPlanLegend,
-  deskAriaLabel,
-  deskSubLabel,
-  deskTitle,
-  type FloorPlanDesk,
+  seatAriaLabel,
+  seatSubLabel,
+  seatTitle,
+  type SeatTile,
 } from "../components/SeatFloorPlan";
 import type {
   FloorPlanRoom,
@@ -59,7 +59,7 @@ const seat = (
   lastModified: stamp,
 });
 
-const desks = (): FloorPlanDesk[] => [
+const tiles = (): SeatTile[] => [
   {
     seat: seat(1, "A1", 2, 2, "Front row"),
     state: "taken",
@@ -76,52 +76,52 @@ const renderPlan = (props: Partial<Parameters<typeof SeatFloorPlan>[0]> = {}) =>
     <ThemeProvider theme={theme}>
       <SeatFloorPlan
         room={room}
-        desks={desks()}
+        seats={tiles()}
         label="Main Hall floor plan"
-        onDeskSelect={vi.fn()}
+        onSeatSelect={vi.fn()}
         {...props}
       />
     </ThemeProvider>,
   );
 
-describe("desk labels", () => {
+describe("seat labels", () => {
   it("describes each state", () => {
-    const [taken, free, selected, mine] = desks();
-    expect(deskAriaLabel(taken)).toBe("A1, Front row, taken by NoScope_Nia");
-    expect(deskAriaLabel(free)).toBe("A2, free");
-    expect(deskAriaLabel(selected)).toBe("A3, selected");
-    expect(deskAriaLabel(mine)).toBe("A4, your seat");
+    const [taken, free, selected, mine] = tiles();
+    expect(seatAriaLabel(taken)).toBe("A1, Front row, taken by NoScope_Nia");
+    expect(seatAriaLabel(free)).toBe("A2, free");
+    expect(seatAriaLabel(selected)).toBe("A3, selected");
+    expect(seatAriaLabel(mine)).toBe("A4, your seat");
     expect(
-      deskAriaLabel({ ...free, occupants: [{ name: "A" }, { name: null }] }),
+      seatAriaLabel({ ...free, occupants: [{ name: "A" }, { name: null }] }),
     ).toBe("A2, free, shared with A and No callsign yet at other times");
   });
 
   it("puts identifier, description and occupants in the tooltip", () => {
-    const [taken, free] = desks();
-    expect(deskTitle(taken)).toBe("A1 · Front row · NoScope_Nia");
-    expect(deskTitle(free)).toBe("A2");
+    const [taken, free] = tiles();
+    expect(seatTitle(taken)).toBe("A1 · Front row · NoScope_Nia");
+    expect(seatTitle(free)).toBe("A2");
   });
 
   it("picks the tile's second line", () => {
-    const [taken, free, selected, mine] = desks();
-    expect(deskSubLabel(taken)).toBe("NoScope_Nia");
+    const [taken, free, selected, mine] = tiles();
+    expect(seatSubLabel(taken)).toBe("NoScope_Nia");
     expect(
-      deskSubLabel({
+      seatSubLabel({
         ...taken,
         occupants: [{ name: "X" }, { name: "Y" }, { name: "Z" }],
       }),
     ).toBe("X +2");
-    expect(deskSubLabel(free)).toBe("FREE");
-    expect(deskSubLabel({ ...free, occupants: [{ name: "X" }] })).toBe(
+    expect(seatSubLabel(free)).toBe("FREE");
+    expect(seatSubLabel({ ...free, occupants: [{ name: "X" }] })).toBe(
       "SHARED",
     );
-    expect(deskSubLabel(selected)).toBe("SELECTED");
-    expect(deskSubLabel(mine)).toBe("YOU");
+    expect(seatSubLabel(selected)).toBe("SELECTED");
+    expect(seatSubLabel(mine)).toBe("YOU");
   });
 });
 
 describe("SeatFloorPlan", () => {
-  it("renders a labelled group of desk buttons in reading order", () => {
+  it("renders a labelled group of seat buttons in reading order", () => {
     renderPlan();
     const group = screen.getByRole("group", { name: "Main Hall floor plan" });
     const buttons = within(group).getAllByRole("button");
@@ -137,9 +137,9 @@ describe("SeatFloorPlan", () => {
   });
 
   it("keeps long legacy labels inside their square, full text in the title", () => {
-    const [, free] = desks();
+    const [, free] = tiles();
     renderPlan({
-      desks: [
+      seats: [
         {
           ...free,
           seat: {
@@ -150,20 +150,20 @@ describe("SeatFloorPlan", () => {
         },
       ],
     });
-    const desk = screen.getByRole("button", {
+    const tile = screen.getByRole("button", {
       name: "Window seat 12, By the window, free",
     });
-    expect(desk).toHaveAttribute("title", "Window seat 12 · By the window");
-    const label = within(desk).getByText("Window seat 12");
+    expect(tile).toHaveAttribute("title", "Window seat 12 · By the window");
+    const label = within(tile).getByText("Window seat 12");
     expect(label).toHaveStyle({
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
     });
-    expect(desk).toHaveStyle({ overflow: "hidden", minWidth: "0" });
+    expect(tile).toHaveStyle({ overflow: "hidden", minWidth: "0" });
   });
 
-  it("disables taken desks and exposes the selection with aria-pressed", () => {
+  it("disables taken seats and exposes the selection with aria-pressed", () => {
     renderPlan();
     expect(screen.getByRole("button", { name: /^A1, .*taken/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "A2, free" })).toHaveAttribute(
@@ -179,36 +179,36 @@ describe("SeatFloorPlan", () => {
   });
 
   it("selects with click, Enter and Space", async () => {
-    const onDeskSelect = vi.fn();
+    const onSeatSelect = vi.fn();
     const user = userEvent.setup();
-    renderPlan({ onDeskSelect });
+    renderPlan({ onSeatSelect });
 
     await user.click(screen.getByRole("button", { name: "A2, free" }));
-    expect(onDeskSelect).toHaveBeenLastCalledWith(
+    expect(onSeatSelect).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 2 }),
     );
 
     screen.getByRole("button", { name: "B1, free" }).focus();
     await user.keyboard("{Enter}");
-    expect(onDeskSelect).toHaveBeenLastCalledWith(
+    expect(onSeatSelect).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 5 }),
     );
 
     screen.getByRole("button", { name: "A3, selected" }).focus();
     await user.keyboard(" ");
-    expect(onDeskSelect).toHaveBeenLastCalledWith(
+    expect(onSeatSelect).toHaveBeenLastCalledWith(
       expect.objectContaining({ id: 3 }),
     );
   });
 
-  it("never selects a taken desk", async () => {
-    const onDeskSelect = vi.fn();
-    renderPlan({ onDeskSelect });
+  it("never selects a taken seat", async () => {
+    const onSeatSelect = vi.fn();
+    renderPlan({ onSeatSelect });
     await userEvent.click(screen.getByRole("button", { name: /^A1, .*taken/ }));
-    expect(onDeskSelect).not.toHaveBeenCalled();
+    expect(onSeatSelect).not.toHaveBeenCalled();
   });
 
-  it("moves focus to the nearest desk with the arrow keys, skipping taken ones", async () => {
+  it("moves focus to the nearest seat with the arrow keys, skipping taken ones", async () => {
     const user = userEvent.setup();
     renderPlan();
     screen.getByRole("button", { name: "A2, free" }).focus();
@@ -232,21 +232,122 @@ describe("SeatFloorPlan", () => {
     expect(img).toHaveStyle({ opacity: "0.5" });
   });
 
-  it("backs every desk with an opaque fill so labels stay readable over the plan", () => {
-    renderPlan({ onDeskSelect: undefined });
+  it("backs every seat with an opaque fill so labels stay readable over the plan", () => {
+    renderPlan({ onSeatSelect: undefined });
     for (const name of [/^A1, .*taken/, "A2, free", "A3, selected", /A4/]) {
-      const desk = screen.getByRole("button", { name });
-      const bg = getComputedStyle(desk).backgroundColor;
+      const tile = screen.getByRole("button", { name });
+      const bg = getComputedStyle(tile).backgroundColor;
       // An opaque colour (not rgba(..., <1) / transparent).
       expect(bg).toMatch(/^(rgb\(|#)/);
-      expect(desk).not.toHaveStyle({ opacity: "0.7" });
+      expect(tile).not.toHaveStyle({ opacity: "0.7" });
     }
   });
 
-  it("is read-only without onDeskSelect", async () => {
-    renderPlan({ onDeskSelect: undefined, selectable: false });
+  it("is read-only without onSeatSelect", async () => {
+    renderPlan({ onSeatSelect: undefined, selectable: false });
     const free = screen.getByRole("button", { name: "A2, free" });
     expect(free).not.toHaveAttribute("aria-pressed");
+  });
+});
+
+describe("screens and entrances", () => {
+  const plan = (features: FloorPlanRoom["features"], seats: SeatTile[] = []) =>
+    render(
+      <ThemeProvider theme={theme}>
+        <SeatFloorPlan
+          room={{ ...room, features, backgroundUrl: null }}
+          seats={seats}
+          label="Plan"
+          onSeatSelect={vi.fn()}
+        />
+      </ThemeProvider>,
+    );
+  const squares = (container: HTMLElement, kind: string) =>
+    container.querySelectorAll(`[data-feature="${kind}"]`);
+  it("draws a legacy run as one shape and saved neighbours as separate ones", () => {
+    const { container } = plan([
+      { col: 0, row: 0, kind: "screen" },
+      { col: 1, row: 0, kind: "screen" },
+      { col: 4, row: 0, kind: "screen", group: 0 },
+      { col: 5, row: 0, kind: "screen", group: 1 },
+    ]);
+    expect(squares(container, "screen")).toHaveLength(4);
+    // One label per shape: the legacy pair, then two single screens.
+    expect(container.querySelectorAll("[data-feature-label]")).toHaveLength(3);
+  });
+
+  it("shows icon and text on 2+ squares, the icon alone on one", () => {
+    const { container } = plan([
+      { col: 0, row: 3, kind: "entrance", group: 0 },
+      { col: 0, row: 4, kind: "entrance", group: 0 },
+      { col: 1, row: 4, kind: "entrance", group: 0 },
+      { col: 6, row: 0, kind: "screen", group: 1 },
+    ]);
+    const [door, single] = [
+      ...container.querySelectorAll("[data-feature-label]"),
+    ].sort((a, b) =>
+      (a.getAttribute("data-feature-label") ?? "").localeCompare(
+        b.getAttribute("data-feature-label") ?? "",
+      ),
+    ) as HTMLElement[];
+    expect(door.querySelector("svg")).not.toBeNull();
+    expect(door).toHaveTextContent("Entrance");
+    expect(single.querySelector("svg")).not.toBeNull();
+    // The single square's name is for screen readers only.
+    expect(within(single).getByText("Screen")).toHaveStyle({
+      position: "absolute",
+      width: "1px",
+    });
+  });
+
+  it("shows a linked screen as free, taken or yours with its seat", () => {
+    const features = [
+      // A2 (4,2) has a two-square screen above it, linked by a side.
+      { col: 4, row: 1, kind: "screen", group: 0, linkCol: 4, linkRow: 2 },
+      { col: 5, row: 1, kind: "screen", group: 0, linkCol: 4, linkRow: 2 },
+      // A1 (2,2): a screen at its top-left corner.
+      { col: 1, row: 1, kind: "screen", group: 1, linkCol: 2, linkRow: 2 },
+      // A4 (9,2): yours.
+      { col: 10, row: 3, kind: "screen", group: 2, linkCol: 9, linkRow: 2 },
+      // Not linked.
+      { col: 0, row: 6, kind: "screen", group: 3 },
+    ];
+    const { container } = plan(features, tiles());
+    const look = (col: number, row: number) =>
+      container
+        .querySelector(`[data-square="${col},${row}"]`)
+        ?.getAttribute("data-look");
+    expect(look(4, 1)).toBe("free");
+    expect(look(5, 1)).toBe("free");
+    expect(look(1, 1)).toBe("taken");
+    expect(look(10, 3)).toBe("mine");
+    expect(look(0, 6)).toBe("plain");
+    // The linked seats say so; screens add no tab stops.
+    expect(
+      screen.getByRole("button", { name: "A2, with screen, free" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "A1, Front row, with screen, taken by NoScope_Nia",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "A4, with screen, your seat" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "B1, free" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(5);
+  });
+
+  it("ignores a link to a cell without a seat", () => {
+    const { container } = plan(
+      [{ col: 0, row: 0, kind: "screen", group: 0, linkCol: 1, linkRow: 1 }],
+      tiles(),
+    );
+    expect(
+      container.querySelector("[data-feature]")?.getAttribute("data-look"),
+    ).toBe("plain");
   });
 });
 
@@ -263,5 +364,12 @@ describe("FloorPlanLegend", () => {
         .getAllByRole("listitem")
         .map((li) => li.textContent),
     ).toEqual(["Your seat", "Free", "Occupied"]);
+  });
+
+  it("has a linked-screen entry", () => {
+    render(<FloorPlanLegend items={["linkedScreen"]} />);
+    expect(screen.getByRole("listitem").textContent).toBe(
+      "Screen: free / taken with its seat",
+    );
   });
 });

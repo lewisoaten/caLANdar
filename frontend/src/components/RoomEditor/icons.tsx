@@ -1,9 +1,11 @@
 import * as React from "react";
 import SvgIcon, { type SvgIconProps } from "@mui/material/SvgIcon";
-import DeskSharp from "@mui/icons-material/DeskSharp";
+import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
 import TvSharp from "@mui/icons-material/TvSharp";
 import DoorFrontSharp from "@mui/icons-material/DoorFrontSharp";
 import OpenWithSharp from "@mui/icons-material/OpenWithSharp";
+import CallMergeSharp from "@mui/icons-material/CallMergeSharp";
+import CallSplitSharp from "@mui/icons-material/CallSplitSharp";
 import type { Tool } from "./layout";
 
 /** Material Symbols "arrow_selector_tool" (not in @mui/icons-material). */
@@ -27,8 +29,10 @@ export function EraseToolIcon(props: SvgIconProps) {
 export const TOOL_ICONS: Record<Tool, React.ComponentType<SvgIconProps>> = {
   select: SelectToolIcon,
   move: OpenWithSharp,
-  desk: DeskSharp,
+  seat: EventSeatSharp,
   screen: TvSharp,
   entrance: DoorFrontSharp,
+  merge: CallMergeSharp,
+  split: CallSplitSharp,
   erase: EraseToolIcon,
 };

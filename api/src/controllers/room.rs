@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, HashSet};
+
 use sqlx::PgPool;
 
 use crate::{
@@ -70,9 +72,60 @@ pub fn cell_in_grid(col: i32, row: i32, grid_rows: Option<i32>) -> bool {
     (0..GRID_COLS).contains(&col) && row >= 0 && grid_rows.is_none_or(|rows| row < rows)
 }
 
-pub fn validate_features(features: &[RoomFeature], grid_rows: Option<i32>) -> Result<(), String> {
-    let mut seen = std::collections::HashSet::new();
+/// Human position of a cell ("column 4, row 2", 1-based like the editor).
+pub fn cell_name(col: i32, row: i32) -> String {
+    format!("column {}, row {}", col + 1, row + 1)
+}
+
+/// Whether two cells touch by a side or a corner (the 8-neighbourhood).
+pub const fn touches(a: (i32, i32), b: (i32, i32)) -> bool {
+    (a.0 - b.0).abs() <= 1 && (a.1 - b.1).abs() <= 1 && !(a.0 == b.0 && a.1 == b.1)
+}
+
+/// The squares of each explicit group (`group` set), in submission order.
+pub fn feature_groups(features: &[RoomFeature]) -> BTreeMap<i32, Vec<&RoomFeature>> {
+    let mut groups: BTreeMap<i32, Vec<&RoomFeature>> = BTreeMap::new();
     for feature in features {
+        if let Some(group) = feature.group {
+            groups.entry(group).or_default().push(feature);
+        }
+    }
+    groups
+}
+
+/// Whether the cells form one shape joined by sides (no diagonal-only joins).
+fn orthogonally_connected(cells: &[(i32, i32)]) -> bool {
+    let Some(&start) = cells.first() else {
+        return true;
+    };
+    let all: HashSet<(i32, i32)> = cells.iter().copied().collect();
+    let mut seen = HashSet::from([start]);
+    let mut stack = vec![start];
+    while let Some((col, row)) = stack.pop() {
+        for next in [
+            (col - 1, row),
+            (col + 1, row),
+            (col, row - 1),
+            (col, row + 1),
+        ] {
+            if all.contains(&next) && seen.insert(next) {
+                stack.push(next);
+            }
+        }
+    }
+    seen.len() == all.len()
+}
+
+/// Shape rules for room features (used by every endpoint that stores them).
+///
+/// Seats are not known here, so a screen link is only checked for its shape:
+/// both coordinates or neither, inside the grid, not on a feature square, the
+/// same on every square of the group, and only on grouped screens. The layout
+/// endpoint additionally requires the target to be a neighbouring seat.
+pub fn validate_features(features: &[RoomFeature], grid_rows: Option<i32>) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    for feature in features {
+        let at = cell_name(feature.col, feature.row);
         if feature.kind != "screen" && feature.kind != "entrance" {
             return Err(format!(
                 "Feature kind must be \"screen\" or \"entrance\", got \"{}\"",
@@ -90,6 +143,66 @@ pub fn validate_features(features: &[RoomFeature], grid_rows: Option<i32>) -> Re
                 "More than one feature at column {}, row {}",
                 feature.col, feature.row
             ));
+        }
+        if feature.group.is_some_and(|g| g < 0) {
+            return Err(format!("Feature at {at}: group must be 0 or more"));
+        }
+        match (feature.link_col, feature.link_row) {
+            (None, None) => {}
+            (Some(col), Some(row)) => {
+                if feature.kind != "screen" {
+                    return Err(format!(
+                        "Feature at {at}: only screens can be linked to a seat"
+                    ));
+                }
+                if feature.group.is_none() {
+                    return Err(format!("Feature at {at}: a linked screen needs a group"));
+                }
+                if !cell_in_grid(col, row, grid_rows) {
+                    return Err(format!(
+                        "Screen at {at}: linked seat at column {}, row {} is outside the grid",
+                        col + 1,
+                        row + 1
+                    ));
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "Feature at {at}: send both linkCol and linkRow, or neither"
+                ))
+            }
+        }
+    }
+
+    for (group, squares) in feature_groups(features) {
+        let first = squares[0];
+        if let Some(other) = squares.iter().find(|f| f.kind != first.kind) {
+            return Err(format!(
+                "Group {group} mixes {} and {} squares (at {}): a group is one kind",
+                first.kind,
+                other.kind,
+                cell_name(other.col, other.row)
+            ));
+        }
+        if let Some(other) = squares.iter().find(|f| f.link() != first.link()) {
+            return Err(format!(
+                "Group {group}: every square must link to the same seat (see {})",
+                cell_name(other.col, other.row)
+            ));
+        }
+        let cells: Vec<(i32, i32)> = squares.iter().map(|f| (f.col, f.row)).collect();
+        if !orthogonally_connected(&cells) {
+            return Err(format!(
+                "Group {group}: its squares must join by their sides into one shape"
+            ));
+        }
+        if let Some(link) = first.link() {
+            if seen.contains(&link) {
+                return Err(format!(
+                    "Group {group}: the linked cell {} is a screen or entrance, not a seat",
+                    cell_name(link.0, link.1)
+                ));
+            }
         }
     }
     Ok(())
@@ -442,6 +555,22 @@ mod tests {
             col,
             row,
             kind: kind.to_string(),
+            ..RoomFeature::default()
+        }
+    }
+
+    fn grouped(col: i32, row: i32, kind: &str, group: i32) -> RoomFeature {
+        RoomFeature {
+            group: Some(group),
+            ..feature(col, row, kind)
+        }
+    }
+
+    fn linked(col: i32, row: i32, group: i32, link: (i32, i32)) -> RoomFeature {
+        RoomFeature {
+            link_col: Some(link.0),
+            link_row: Some(link.1),
+            ..grouped(col, row, "screen", group)
         }
     }
 
@@ -494,5 +623,92 @@ mod tests {
             Some(8)
         )
         .is_err());
+    }
+
+    #[test]
+    fn accepts_groups_of_any_connected_shape() {
+        // An L-shaped door, two separate screens side by side, legacy squares.
+        let features = [
+            grouped(0, 0, "entrance", 0),
+            grouped(0, 1, "entrance", 0),
+            grouped(1, 1, "entrance", 0),
+            grouped(4, 0, "screen", 1),
+            grouped(5, 0, "screen", 2),
+            feature(8, 0, "screen"),
+            feature(9, 0, "screen"),
+        ];
+        assert_eq!(validate_features(&features, Some(8)), Ok(()));
+    }
+
+    #[test]
+    fn rejects_bad_groups() {
+        let mixed = [grouped(0, 0, "screen", 0), grouped(1, 0, "entrance", 0)];
+        let err = validate_features(&mixed, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("one kind"), "{err}");
+
+        // Diagonal-only contact is not a shape.
+        let diagonal = [grouped(0, 0, "screen", 3), grouped(1, 1, "screen", 3)];
+        let err = validate_features(&diagonal, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("join by their sides"), "{err}");
+
+        let apart = [grouped(0, 0, "screen", 3), grouped(2, 0, "screen", 3)];
+        assert!(validate_features(&apart, Some(8)).is_err());
+
+        let negative = [grouped(0, 0, "screen", -1)];
+        assert!(validate_features(&negative, Some(8)).is_err());
+    }
+
+    #[test]
+    fn checks_the_shape_of_screen_links() {
+        assert_eq!(
+            validate_features(&[linked(3, 0, 0, (2, 1)), linked(4, 0, 0, (2, 1))], Some(8)),
+            Ok(())
+        );
+        // Every square of a group links to the same seat.
+        let differ = [linked(3, 0, 0, (2, 1)), linked(4, 0, 0, (5, 1))];
+        let err = validate_features(&differ, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("same seat"), "{err}");
+        let partly = [linked(3, 0, 0, (2, 1)), grouped(4, 0, "screen", 0)];
+        assert!(validate_features(&partly, Some(8)).is_err());
+
+        // Both coordinates or neither.
+        let half = [RoomFeature {
+            link_col: Some(2),
+            ..grouped(3, 0, "screen", 0)
+        }];
+        let err = validate_features(&half, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("both linkCol and linkRow"), "{err}");
+
+        // Only grouped screens link.
+        let door = [RoomFeature {
+            link_col: Some(1),
+            link_row: Some(1),
+            ..grouped(0, 0, "entrance", 0)
+        }];
+        let err = validate_features(&door, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("only screens"), "{err}");
+        let ungrouped = [RoomFeature {
+            link_col: Some(1),
+            link_row: Some(1),
+            ..feature(0, 0, "screen")
+        }];
+        assert!(validate_features(&ungrouped, Some(8)).is_err());
+
+        // Inside the grid, and not onto another feature square.
+        let outside = [linked(0, 7, 0, (0, 8))];
+        assert!(validate_features(&outside, Some(8)).is_err());
+        let onto_feature = [linked(0, 0, 0, (1, 0)), grouped(1, 0, "screen", 1)];
+        let err = validate_features(&onto_feature, Some(8)).expect_err("should be rejected");
+        assert!(err.contains("not a seat"), "{err}");
+    }
+
+    #[test]
+    fn touches_sides_and_corners_only() {
+        assert!(touches((3, 3), (4, 3)));
+        assert!(touches((3, 3), (2, 2)));
+        assert!(touches((3, 3), (4, 4)));
+        assert!(!touches((3, 3), (3, 3)));
+        assert!(!touches((3, 3), (5, 3)));
+        assert!(!touches((3, 3), (4, 5)));
     }
 }

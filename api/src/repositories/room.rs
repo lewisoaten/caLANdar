@@ -13,7 +13,7 @@ pub struct Room {
     pub created_at: DateTime<Utc>,
     pub last_modified: DateTime<Utc>,
     pub grid_rows: Option<i32>,
-    /// JSON array of `{col, row, kind}` objects.
+    /// JSON array of `{col, row, kind, group?, linkCol?, linkRow?}` objects.
     pub features: JsonValue,
     pub background_style: String,
     pub background_opacity: f64,

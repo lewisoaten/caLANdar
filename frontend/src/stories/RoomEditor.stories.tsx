@@ -93,7 +93,7 @@ const autumn = (eventId: number): ApiLayout => ({
       eventId,
       1,
       "Main Hall",
-      "Two rows of desks, wired networking",
+      "Two rows of seats, wired networking",
       8,
       [
         ...screens(0),
@@ -147,7 +147,7 @@ function saveHandler(eventId: number, state: { layout: ApiLayout }) {
         error: {
           code: 409,
           reason: "Conflict",
-          description: `${lost.length} reserved desk${lost.length === 1 ? "" : "s"} would be removed. Resend with releaseReserved=true to go ahead.`,
+          description: `${lost.length} reserved seat${lost.length === 1 ? "" : "s"} would be removed. Resend with releaseReserved=true to go ahead.`,
         },
       });
     state.layout = {
@@ -276,10 +276,10 @@ registerEvent(1006, "Label Stress LAN", {
       [
         {
           ...seat("Window seat 12", 1, 2, 6),
-          description: "Window desk next to the fridge",
+          description: "Window seat next to the fridge",
         },
         seat("ABCDEFGH", 2, 2, 6),
-        seat("Desk-12", 3, 2, 6, who("NoScope_Nia")),
+        seat("Seat-12", 3, 2, 6, who("NoScope_Nia")),
         {
           ...seat("WWWWWWWW", 4, 2, 6),
           description: "Widest possible identifier",
@@ -287,6 +287,58 @@ registerEvent(1006, "Label Stress LAN", {
         seat("A1", 5, 2, 6),
         seat("Legacy seat with a long name", 6, 2, 6, who("CasualGamer")),
         seat("x.y_z-9", 7, 2, 6),
+      ],
+    ),
+  ],
+});
+
+// 1007: grouped shapes. An L-shaped door, two touching screens that stay two
+// screens, and screens linked to seats by a side and by a corner (one seat
+// with two screens: dual monitors).
+const linked = (
+  col: number,
+  row: number,
+  group: number,
+  link?: [number, number],
+): ApiFeature => ({
+  col,
+  row,
+  kind: "screen",
+  group,
+  ...(link ? { linkCol: link[0], linkRow: link[1] } : {}),
+});
+registerEvent(1007, "Shapes LAN", {
+  rooms: [
+    baseRoom(
+      1007,
+      1,
+      "Main Hall",
+      "Merged, separate and linked screens",
+      7,
+      [
+        // L-shaped door in the bottom-left corner.
+        { col: 0, row: 5, kind: "entrance", group: 0 },
+        { col: 0, row: 6, kind: "entrance", group: 0 },
+        { col: 1, row: 6, kind: "entrance", group: 0 },
+        // Two separate screens side by side.
+        linked(4, 0, 1),
+        linked(5, 0, 2),
+        // A two-square screen above A1, linked by a side.
+        linked(1, 1, 3, [1, 2]),
+        linked(2, 1, 3, [1, 2]),
+        // A2 (reserved) has two screens: one by its side, one at a corner.
+        linked(5, 2, 4, [4, 2]),
+        linked(3, 3, 5, [4, 2]),
+        // A merged wall screen across the top right.
+        linked(8, 0, 6),
+        linked(9, 0, 6),
+        linked(10, 0, 6),
+      ],
+      [
+        seat("A1", 1, 2, 7),
+        seat("A2", 4, 2, 7, who("NoScope_Nia")),
+        seat("A3", 8, 2, 7),
+        seat("B1", 4, 5, 7),
       ],
     ),
   ],
@@ -306,7 +358,7 @@ const at = (eventId: number) => [
   withRoute("/admin/events/:id/rooms", `/admin/events/${eventId}/rooms`),
 ];
 
-/** Two rooms with reserved desks (violet with the reserver's avatar). */
+/** Two rooms with reserved seats (violet with the reserver's avatar). */
 export const Default: Story = { decorators: at(1001) };
 
 /** Main hall with an uploaded background plan in the Retro style. */
@@ -338,5 +390,18 @@ export const NotAdmin: Story = {
 /** Narrow screens: the grid keeps a 528px minimum and scrolls sideways. */
 export const Mobile: Story = {
   decorators: at(1001),
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
+
+/**
+ * Shapes: an L-shaped door, two touching screens kept separate, a merged
+ * wall screen and screens linked to seats (chain badges + amber connector).
+ * Select a screen to merge, split or link it; try the Merge and Split tools.
+ */
+export const ShapesAndLinks: Story = { decorators: at(1007) };
+
+/** The shapes room on a phone (Merge / Split work by tap and touch drag). */
+export const ShapesAndLinksMobile: Story = {
+  decorators: at(1007),
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };

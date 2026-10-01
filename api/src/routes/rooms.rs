@@ -60,8 +60,12 @@ pub struct Room {
     pub background_opacity: f64,
 }
 
-/// A non-desk cell on the room grid.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// A non-seat cell on the room grid (one square of a screen or entrance).
+///
+/// Squares that share a `group` (and `kind`) are one merged shape: an L-shaped
+/// door, a wide screen. Squares without a `group` (rooms saved before groups)
+/// are drawn as horizontal runs of the same kind.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct RoomFeature {
     /// Column, 0 to 11.
@@ -70,6 +74,28 @@ pub struct RoomFeature {
     pub row: i32,
     /// "screen" or "entrance".
     pub kind: String,
+    /// Optional shape id, 0 or more and unique per room. All squares of a group
+    /// have the same kind and are joined by their sides. Omitted for legacy squares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<i32>,
+    /// Screens only: grid column of the seat this screen belongs to. The seat must
+    /// touch the screen (side or corner); its reservation marks the screen as taken.
+    /// Sent with `linkRow` (both or neither) and identical on every square of the group.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_col: Option<i32>,
+    /// Screens only: grid row of the linked seat (see `linkCol`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_row: Option<i32>,
+}
+
+impl RoomFeature {
+    /// The linked seat's cell, if both coordinates are set.
+    pub const fn link(&self) -> Option<(i32, i32)> {
+        match (self.link_col, self.link_row) {
+            (Some(col), Some(row)) => Some((col, row)),
+            _ => None,
+        }
+    }
 }
 
 impl SchemaExample for Room {
@@ -84,11 +110,23 @@ impl SchemaExample for Room {
             created_at: Utc::now(),
             last_modified: Utc::now(),
             grid_rows: Some(8),
-            features: vec![RoomFeature {
-                col: 5,
-                row: 7,
-                kind: "entrance".to_string(),
-            }],
+            features: vec![
+                RoomFeature {
+                    col: 5,
+                    row: 7,
+                    kind: "entrance".to_string(),
+                    group: Some(0),
+                    ..RoomFeature::default()
+                },
+                RoomFeature {
+                    col: 4,
+                    row: 0,
+                    kind: "screen".to_string(),
+                    group: Some(1),
+                    link_col: Some(4),
+                    link_row: Some(1),
+                },
+            ],
             background_url: Some(
                 "/api/room-backgrounds/0123456789abcdef0123456789abcdef".to_string(),
             ),

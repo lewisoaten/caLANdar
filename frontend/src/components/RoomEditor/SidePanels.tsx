@@ -11,6 +11,9 @@ import SwapHorizSharp from "@mui/icons-material/SwapHorizSharp";
 import DeleteSharp from "@mui/icons-material/DeleteSharp";
 import AddSharp from "@mui/icons-material/AddSharp";
 import RemoveSharp from "@mui/icons-material/RemoveSharp";
+import CallMergeSharp from "@mui/icons-material/CallMergeSharp";
+import CallSplitSharp from "@mui/icons-material/CallSplitSharp";
+import LinkSharp from "@mui/icons-material/LinkSharp";
 import {
   Kicker,
   StatCell,
@@ -33,8 +36,10 @@ import {
   isValidIdentifier,
   minRows,
   reserverName,
+  seatStats,
   type BackgroundStyle,
-  type DeskCell,
+  type FeatureKind,
+  type SeatCell,
   type EditorRoom,
 } from "./layout";
 
@@ -162,13 +167,7 @@ export function RoomPanel({
   onDeleteRoom,
 }: RoomPanelProps) {
   const id = useId();
-  let desks = 0;
-  let reserved = 0;
-  for (const c of Object.values(room.cells))
-    if (c.t === "desk") {
-      desks++;
-      if (c.reservedBy) reserved++;
-    }
+  const { seats, reserved } = seatStats(room);
   const lowest = minRows(room);
   const errorId = `${id}-bg-error`;
   const bgNoteId = `${id}-bg-note`;
@@ -290,7 +289,7 @@ export function RoomPanel({
               id={bgNoteId}
               sx={{ fontSize: 12, color: colors.textMuted }}
             >
-              Shown behind the grid so desks line up with the real room. PNG,
+              Shown behind the grid so seats line up with the real room. PNG,
               JPEG, WebP or GIF, up to 5 MB.
             </Box>
           </FilePicker>
@@ -434,7 +433,7 @@ export function RoomPanel({
       </Box>
 
       <StatGrid columns={2}>
-        <StatCell value={desks} label="Desks" tone="cyan" size="lg" />
+        <StatCell value={seats} label="Seats" tone="cyan" size="lg" />
         <StatCell value={reserved} label="Reserved" tone="violet" size="lg" />
       </StatGrid>
 
@@ -444,16 +443,18 @@ export function RoomPanel({
         </Button>
       ) : (
         <Box sx={{ fontSize: 13, lineHeight: 1.5, color: colors.textMuted }}>
-          Rooms with reserved desks can’t be deleted. Remove those desks first.
+          Rooms with reserved seats can’t be deleted. Remove those seats first.
         </Box>
       )}
     </Box>
   );
 }
 
-export interface DeskPanelProps {
-  desk: DeskCell | null;
+export interface SeatPanelProps {
+  seat: SeatCell | null;
   duplicate: boolean;
+  /** Screens linked to this seat. */
+  screens?: number;
   onRename: (label: string) => void;
   onDescribe: (description: string) => void;
   onRemove: () => void;
@@ -490,52 +491,54 @@ const helpRowSx = {
   color: colors.textMuted,
 } as const;
 
-export function DeskPanel({
-  desk,
+export function SeatPanel({
+  seat,
   duplicate,
+  screens = 0,
   onRename,
   onDescribe,
   onRemove,
-}: DeskPanelProps) {
+}: SeatPanelProps) {
   const id = useId();
-  const legacy = !!desk?.label && !isValidIdentifier(desk.label);
+  const legacy = !!seat?.label && !isValidIdentifier(seat.label);
   const described = [
     `${id}-help`,
     `${id}-count`,
     duplicate ? `${id}-dup` : "",
-    desk && !desk.label ? `${id}-empty` : "",
+    seat && !seat.label ? `${id}-empty` : "",
     legacy ? `${id}-legacy` : "",
   ]
     .filter(Boolean)
     .join(" ");
-  const description = desk?.description ?? "";
+  const description = seat?.description ?? "";
   return (
     <Box component="section" aria-labelledby={`${id}-title`} sx={panelSx}>
       <Kicker component="h2" id={`${id}-title`}>
-        Selected desk
+        Selected seat
       </Kicker>
-      {!desk ? (
+      {!seat ? (
         <Box sx={{ fontSize: 14, lineHeight: 1.5, color: colors.textMuted }}>
-          Use Select and tap a desk to rename it, describe it or remove it.
+          Use Select and tap a seat to rename it, describe it or remove it, or a
+          screen or entrance to merge, split or link it.
         </Box>
       ) : (
         <>
           <Field label="Identifier" id={`${id}-label`}>
             <OutlinedInput
               id={`${id}-label`}
-              value={desk.label}
+              value={seat.label}
               onChange={(e) => onRename(e.target.value)}
-              error={duplicate || !desk.label}
+              error={duplicate || !seat.label}
               inputProps={{
                 // Legacy labels may be longer; they can still be shortened.
-                maxLength: Math.max(MAX_LABEL_LENGTH, desk.label.length),
+                maxLength: Math.max(MAX_LABEL_LENGTH, seat.label.length),
                 spellCheck: false,
                 autoComplete: "off",
                 // Identifiers keep their case: no sentence-casing on phones.
                 autoCapitalize: "none",
                 autoCorrect: "off",
                 "aria-describedby": described,
-                "aria-invalid": duplicate || !desk.label,
+                "aria-invalid": duplicate || !seat.label,
               }}
               sx={{
                 ...inputSx,
@@ -548,27 +551,27 @@ export function DeskPanel({
             />
             <Box sx={helpRowSx}>
               <Box component="span" id={`${id}-help`}>
-                Shown on the desk. Letters, digits, - _ and ., up to{" "}
+                Shown on the seat. Letters, digits, - _ and ., up to{" "}
                 {MAX_LABEL_LENGTH} characters.
               </Box>
               <Counter
                 id={`${id}-count`}
-                n={desk.label.length}
+                n={seat.label.length}
                 max={MAX_LABEL_LENGTH}
               />
             </Box>
           </Field>
           {duplicate && (
             <Box id={`${id}-dup`} sx={{ fontSize: 13, color: colors.pinkText }}>
-              Another desk in this room already uses that identifier.
+              Another seat in this room already uses that identifier.
             </Box>
           )}
-          {!desk.label && (
+          {!seat.label && (
             <Box
               id={`${id}-empty`}
               sx={{ fontSize: 13, color: colors.pinkText }}
             >
-              The desk needs an identifier.
+              The seat needs an identifier.
             </Box>
           )}
           {legacy && (
@@ -585,12 +588,12 @@ export function DeskPanel({
               id={`${id}-about`}
               value={description}
               onChange={(e) => onDescribe(e.target.value)}
-              placeholder="e.g. Window desk next to the fridge"
+              placeholder="e.g. Window seat next to the fridge"
               multiline
               minRows={2}
               inputProps={{
                 // No maxLength: it counts UTF-16 units, the API counts code
-                // points. `describeDesk` clips by code point instead.
+                // points. `describeSeat` clips by code point instead.
                 "aria-describedby": `${id}-about-help ${id}-about-count`,
               }}
               sx={{ ...inputSx, fontSize: 15, alignItems: "flex-start" }}
@@ -606,7 +609,7 @@ export function DeskPanel({
               />
             </Box>
           </Field>
-          {desk.reservedBy && (
+          {seat.reservedBy && (
             <Box
               sx={{
                 display: "flex",
@@ -618,8 +621,8 @@ export function DeskPanel({
               }}
             >
               <UserAvatar
-                name={reserverName(desk.reservedBy)}
-                src={desk.reservedBy.avatarUrl}
+                name={reserverName(seat.reservedBy)}
+                src={seat.reservedBy.avatarUrl}
                 size={32}
               />
               <Box
@@ -638,7 +641,7 @@ export function DeskPanel({
                     overflowWrap: "anywhere",
                   }}
                 >
-                  {reserverName(desk.reservedBy)}
+                  {reserverName(seat.reservedBy)}
                 </Box>
                 <Box
                   component="span"
@@ -649,9 +652,28 @@ export function DeskPanel({
                     color: colors.violetText,
                   }}
                 >
-                  RESERVED THIS DESK
+                  RESERVED THIS SEAT
                 </Box>
               </Box>
+            </Box>
+          )}
+          {screens > 0 && (
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: 13,
+                color: colors.textMuted,
+              }}
+            >
+              <LinkSharp
+                aria-hidden
+                sx={{ fontSize: 16, color: colors.amber }}
+              />
+              {screens === 1
+                ? "A screen is linked to this seat."
+                : `${screens} screens are linked to this seat.`}
             </Box>
           )}
           <Button
@@ -660,10 +682,158 @@ export function DeskPanel({
             onClick={onRemove}
             startIcon={<DeleteSharp aria-hidden />}
           >
-            Remove desk
+            Remove seat
           </Button>
         </>
       )}
+    </Box>
+  );
+}
+
+export interface FeaturePanelProps {
+  kind: FeatureKind;
+  /** Squares in the shape. */
+  squares: number;
+  /** Another shape of the same type touches this one. */
+  canMerge: boolean;
+  onMergeAdjacent: () => void;
+  onSplitAll: () => void;
+  /** Screens: seats it may link to (key + accessible text). */
+  seats: { key: string; label: string }[];
+  /** Screens: the linked seat's key, or null. */
+  linked: string | null;
+  onLink: (seatKey: string | null) => void;
+  /** Screens: pick the seat on the grid instead. */
+  linking: boolean;
+  onPickOnGrid: () => void;
+  onRemove: () => void;
+}
+
+const panelButtonSx = {
+  justifyContent: "flex-start",
+  textAlign: "left",
+} as const;
+
+/** Side panel for a selected screen or entrance shape. */
+export function FeaturePanel({
+  kind,
+  squares,
+  canMerge,
+  onMergeAdjacent,
+  onSplitAll,
+  seats,
+  linked,
+  onLink,
+  linking,
+  onPickOnGrid,
+  onRemove,
+}: FeaturePanelProps) {
+  const id = useId();
+  const name = kind === "screen" ? "screen" : "entrance";
+  const screen = kind === "screen";
+  return (
+    <Box component="section" aria-labelledby={`${id}-title`} sx={panelSx}>
+      <Kicker component="h2" id={`${id}-title`}>
+        Selected {name}
+      </Kicker>
+      <Box sx={{ fontSize: 14, lineHeight: 1.5, color: colors.textMuted }}>
+        {squares === 1
+          ? `A single-square ${name}.`
+          : `One ${name} of ${squares} squares.`}
+      </Box>
+      <Box sx={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+        <Button
+          variant="outlined"
+          onClick={onMergeAdjacent}
+          disabled={!canMerge}
+          aria-describedby={canMerge ? undefined : `${id}-merge-note`}
+          startIcon={<CallMergeSharp aria-hidden />}
+          sx={panelButtonSx}
+        >
+          Merge with adjacent squares of the same type
+        </Button>
+        {!canMerge && (
+          <Box
+            id={`${id}-merge-note`}
+            sx={{ fontSize: 12, lineHeight: 1.45, color: colors.textMuted }}
+          >
+            No other {name} squares touch this one by a side.
+          </Box>
+        )}
+        <Button
+          variant="outlined"
+          onClick={onSplitAll}
+          disabled={squares < 2}
+          startIcon={<CallSplitSharp aria-hidden />}
+          sx={panelButtonSx}
+        >
+          Split into single squares
+        </Button>
+      </Box>
+      {screen && (
+        <Field label="Linked seat" id={`${id}-link`}>
+          <Box
+            component="select"
+            id={`${id}-link`}
+            value={linked ?? ""}
+            disabled={seats.length === 0 && !linked}
+            aria-describedby={`${id}-link-help`}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+              onLink(e.target.value || null)
+            }
+            sx={{
+              minHeight: 46,
+              padding: "0 12px",
+              fontFamily: fonts.ui,
+              fontSize: 16,
+              color: colors.text,
+              backgroundColor: "rgba(6,7,11,0.6)",
+              border: `1px solid ${tint("cyan", 0.3)}`,
+              borderRadius: "4px",
+              "&:focus-visible": {
+                outline: `2px solid ${colors.cyan}`,
+                outlineOffset: "2px",
+              },
+              "&:disabled": { color: colors.textMuted },
+              "& option": { backgroundColor: colors.surfaceSolid },
+            }}
+          >
+            <option value="">None</option>
+            {seats.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </Box>
+          <Box
+            id={`${id}-link-help`}
+            sx={{ fontSize: 12, lineHeight: 1.45, color: colors.textMuted }}
+          >
+            {seats.length === 0
+              ? "No seat touches this screen. Put a seat next to it (side or corner) to link them."
+              : "Seats touching this screen by a side or corner. When the seat is reserved, the seat map shows the screen as taken."}
+          </Box>
+          {seats.length > 0 && (
+            <Button
+              variant={linking ? "contained" : "outlined"}
+              onClick={onPickOnGrid}
+              aria-pressed={linking}
+              startIcon={<LinkSharp aria-hidden />}
+              sx={panelButtonSx}
+            >
+              {linking ? "Cancel picking a seat" : "Pick the seat on the grid"}
+            </Button>
+          )}
+        </Field>
+      )}
+      <Button
+        variant="outlined"
+        color="error"
+        onClick={onRemove}
+        startIcon={<DeleteSharp aria-hidden />}
+      >
+        Remove {name}
+      </Button>
     </Box>
   );
 }
@@ -695,13 +865,13 @@ export function GridLegend() {
         color: colors.textMuted,
       }}
     >
-      {item({ border: `1px solid ${colors.cyan}` }, "Desk")}
+      {item({ border: `1px solid ${colors.cyan}` }, "Seat")}
       {item(
         {
           background: tint("violet", 0.25),
           border: "1px solid rgba(165,139,255,0.6)",
         },
-        "Reserved desk",
+        "Reserved seat",
       )}
       {item({ background: tint("violet", 0.4) }, "Screen / feature")}
       {item(
@@ -710,6 +880,14 @@ export function GridLegend() {
           border: `1px solid ${tint("lime", 0.6)}`,
         },
         "Entrance",
+      )}
+      {item(
+        {
+          height: 2,
+          alignSelf: "center",
+          background: colors.amber,
+        },
+        "Screen linked to a seat",
       )}
       {item({ border: `1px dashed ${colors.pink}` }, "Duplicate label")}
     </Box>

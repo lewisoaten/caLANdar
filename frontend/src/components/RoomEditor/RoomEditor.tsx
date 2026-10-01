@@ -21,6 +21,7 @@ import ArrowBackSharp from "@mui/icons-material/ArrowBackSharp";
 import AddSharp from "@mui/icons-material/AddSharp";
 import ErrorOutlineSharp from "@mui/icons-material/ErrorOutlineSharp";
 import LockSharp from "@mui/icons-material/LockSharp";
+import LinkOffSharp from "@mui/icons-material/LinkOffSharp";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
 import { ApiError, userFacingReason } from "../../utils/apiError";
 import {
@@ -39,18 +40,28 @@ import {
   TOOL_LABELS,
   TOOL_SHORTCUTS,
   applyTool,
-  describeDesk,
+  canMergeAdjacent,
+  describeSeat,
   fromLayout,
-  isDesk,
+  groupKeys,
+  isFeature,
+  isSeat,
   isDuplicateLabel,
   isReserved,
+  linkCandidates,
+  linkedSeat,
+  mergeAdjacent,
+  mergePath,
   moveItem,
   newRoom,
   parseKey,
-  removeCell,
+  removeShape,
   removedReservations,
-  renameDesk,
+  renameSeat,
   reserverName,
+  screensLinkedTo,
+  setScreenLink,
+  splitAll,
   snapshot,
   toSubmit,
   toolForShortcut,
@@ -70,14 +81,14 @@ import {
   uploadErrorMessage,
 } from "./api";
 import { EditorGrid } from "./EditorGrid";
-import { DeskPanel, GridLegend, RoomPanel } from "./SidePanels";
+import { FeaturePanel, GridLegend, RoomPanel, SeatPanel } from "./SidePanels";
 import { TOOL_ICONS } from "./icons";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
 type PendingBackground = { file: File; preview: string } | "remove";
 
 type Confirm =
-  | { kind: "desk"; key: string }
+  | { kind: "seat"; key: string }
   | { kind: "room" }
   | { kind: "conflict"; message: string }
   | { kind: "leave"; to: string }
@@ -158,7 +169,7 @@ const Page = ({ children }: { children: React.ReactNode }) => (
   </Box>
 );
 
-/** Admin page: edit an event's rooms as 12-column grids of desks and features. */
+/** Admin page: edit an event's rooms as 12-column grids of seats and features. */
 const RoomEditor = () => {
   const { id } = useParams();
   const eventId = Number(id);
@@ -188,6 +199,10 @@ const RoomEditor = () => {
   const savingRef = useRef(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  /** Screen being linked to a seat on the grid (its square's key). */
+  const [linking, setLinking] = useState<string | null>(null);
+  /** Screen links the last edit cleared (shown as a note under the hint). */
+  const [linkNotes, setLinkNotes] = useState<string[]>([]);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const toolRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pendingRef = useRef(pending);
@@ -267,23 +282,41 @@ const RoomEditor = () => {
     window.setTimeout(() => setAnnouncement(text), 30);
   };
 
-  const updateRoom = (next: EditorRoom) => {
+  const updateRoom = (next: EditorRoom, notes: string[] = []) => {
     if (savingRef.current) return;
     setRooms((rs) => rs.map((r, i) => (i === cur ? next : r)));
+    setLinkNotes(notes);
     if (status?.tone !== "error") setStatus(null);
   };
 
   const selectRoom = (index: number, focusTab = false) => {
     setCur(index);
     setSel(null);
+    setLinking(null);
+    setLinkNotes([]);
     setFocus({ col: 0, row: 0 });
     if (focusTab) tabRefs.current[rooms[index]?.key]?.focus();
   };
 
   const pickTool = (t: Tool, fromKeyboardShortcut = false) => {
     setTool(t);
+    setLinking(null);
     if (fromKeyboardShortcut)
       announce(`${TOOL_LABELS[t]} tool. ${TOOL_HINTS[t]}`);
+  };
+
+  const selectedText = (key: string) => {
+    if (!room) return "";
+    const c = room.cells[key];
+    if (isSeat(c))
+      return `Selected seat ${c.label}${c.reservedBy ? `, reserved by ${reserverName(c.reservedBy)}` : ""}.`;
+    if (isFeature(c)) {
+      const n = groupKeys(room, key).length;
+      const link = linkedSeat(room, key);
+      const seat = link ? room.cells[link] : undefined;
+      return `Selected ${c.t}${n > 1 ? ` of ${n} squares` : ""}${isSeat(seat) ? `, linked to seat ${seat.label}` : ""}. Its settings are in the side panel.`;
+    }
+    return "";
   };
 
   const activate = (key: string) => {
@@ -292,64 +325,142 @@ const RoomEditor = () => {
     if (out.type === "select") {
       setSel(out.sel);
       if (out.announce) announce(out.announce);
-      else if (out.sel) {
-        const c = room.cells[out.sel];
-        if (isDesk(c))
-          announce(
-            `Selected desk ${c.label}${c.reservedBy ? `, reserved by ${reserverName(c.reservedBy)}` : ""}`,
-          );
-      }
+      else if (out.sel) announce(selectedText(out.sel));
     } else if (out.type === "update") {
-      updateRoom(out.room);
+      updateRoom(out.room, out.notes);
       setSel(out.sel);
       announce(out.announce);
     } else if (out.type === "confirm") {
       setSel(out.key);
-      setConfirm({ kind: "desk", key: out.key });
+      setConfirm({ kind: "seat", key: out.key });
     }
   };
 
-  /** Drag-and-drop or keyboard move of a desk / feature strip. */
+  /** Drag-and-drop or keyboard move of a seat / feature shape. */
   const move = (from: string, to: { col: number; row: number }) => {
     if (!room || savingRef.current) return;
+    const wasSelected = sel != null && moveGroupHas(from, sel);
     const out = moveItem(room, from, to);
     if (!out.ok) {
       announce(out.announce);
       return;
     }
-    updateRoom(out.room);
-    if (isDesk(out.room.cells[out.key])) setSel(out.key);
-    else if (sel && !isDesk(out.room.cells[sel])) setSel(null);
+    updateRoom(out.room, out.notes);
+    if (isSeat(out.room.cells[out.key]) || wasSelected) setSel(out.key);
+    else if (sel && !out.room.cells[sel]) setSel(null);
     setFocus(parseKey(out.key));
     announce(out.announce);
   };
+
+  /** Whether `key` is part of the item (seat or shape) at `from`. */
+  const moveGroupHas = (from: string, key: string) =>
+    !!room &&
+    (from === key ||
+      (isFeature(room.cells[from]) && groupKeys(room, from).includes(key)));
 
   const erase = (key: string) => {
     if (!room || !room.cells[key] || savingRef.current) return;
     const out = applyTool(room, "erase", key, sel);
     if (out.type === "update") {
-      updateRoom(out.room);
+      updateRoom(out.room, out.notes);
       setSel(out.sel);
       announce(out.announce);
     } else if (out.type === "confirm") {
       setSel(out.key);
-      setConfirm({ kind: "desk", key: out.key });
+      setConfirm({ kind: "seat", key: out.key });
     }
   };
 
   const removeSelected = () => {
     if (!room || !sel) return;
-    if (isReserved(room.cells[sel])) setConfirm({ kind: "desk", key: sel });
+    if (isReserved(room.cells[sel])) setConfirm({ kind: "seat", key: sel });
     else erase(sel);
   };
 
-  const forceRemoveDesk = (key: string) => {
+  const forceRemoveSeat = (key: string) => {
     if (!room || savingRef.current) return;
     const c = room.cells[key];
-    updateRoom(removeCell(room, key));
+    const out = removeShape(room, key);
+    updateRoom(out.room, out.notes);
     setSel(null);
     setConfirm(null);
-    if (isDesk(c)) announce(`Removed desk ${c.label}`);
+    if (isSeat(c))
+      announce([`Removed seat ${c.label}.`, ...out.notes].join(" "));
+  };
+
+  /** Apply a merge / split / link result to the current room. */
+  const applyShapeEdit = (
+    r:
+      | { ok: true; room: EditorRoom; announce: string; notes: string[] }
+      | {
+          ok: false;
+          announce: string;
+        },
+    nextSel: string | null = sel,
+  ) => {
+    if (r.ok) {
+      updateRoom(r.room, r.notes);
+      setSel(nextSel);
+    }
+    announce(r.announce);
+  };
+
+  const mergeAlong = (keys: string[]) => {
+    if (!room || savingRef.current) return;
+    applyShapeEdit(mergePath(room, keys), keys[0]);
+  };
+
+  const removeSelectedShape = () => {
+    if (!room || !sel || savingRef.current) return;
+    const c = room.cells[sel];
+    if (!isFeature(c)) return;
+    const n = groupKeys(room, sel).length;
+    const out = removeShape(room, sel);
+    updateRoom(out.room, out.notes);
+    setSel(null);
+    setLinking(null);
+    announce(`Removed the ${c.t}${n > 1 ? ` (${n} squares)` : ""}.`);
+  };
+
+  const link = (seatKey: string | null) => {
+    if (!room || !sel || savingRef.current) return;
+    applyShapeEdit(setScreenLink(room, sel, seatKey));
+  };
+
+  const startLinking = () => {
+    if (!room || !sel) return;
+    if (linking) {
+      setLinking(null);
+      announce("Stopped picking a seat.");
+      return;
+    }
+    const options = linkCandidates(room, sel);
+    if (!options.length) {
+      announce("No seat touches this screen.");
+      return;
+    }
+    setLinking(sel);
+    setFocus(parseKey(options[0]));
+    const names = options
+      .map((k) => {
+        const c = room.cells[k];
+        return isSeat(c) ? c.label : "";
+      })
+      .join(", ");
+    announce(
+      `Pick the seat for this screen: ${names}. They are highlighted on the grid. Escape cancels.`,
+    );
+  };
+
+  const pickLinkedSeat = (seatKey: string | null) => {
+    const screenKey = linking;
+    setLinking(null);
+    if (!room || !screenKey) return;
+    if (!seatKey) {
+      announce("Linking cancelled.");
+      return;
+    }
+    applyShapeEdit(setScreenLink(room, screenKey, seatKey), screenKey);
   };
 
   const addRoom = () => {
@@ -360,9 +471,10 @@ const RoomEditor = () => {
     setCur(rooms.length);
     setSel(null);
     setFocus({ col: 0, row: 0 });
-    setTool("desk");
+    setTool("seat");
+    setLinking(null);
     setStatus(null);
-    announce(`Added ${r.name}. Desk tool selected.`);
+    announce(`Added ${r.name}. Seat tool selected.`);
   };
 
   const deleteRoom = () => {
@@ -505,7 +617,7 @@ const RoomEditor = () => {
           kind: "conflict",
           message:
             e.description ??
-            "Some reserved desks would be removed by this save.",
+            "Some reserved seats would be removed by this save.",
         });
       } else {
         setStatus({
@@ -560,10 +672,10 @@ const RoomEditor = () => {
   };
 
   // Render ------------------------------------------------------------------
-  const selDesk =
-    room && sel && isDesk(room.cells[sel]) ? room.cells[sel] : null;
-  const confirmDesk =
-    confirm?.kind === "desk" && room ? room.cells[confirm.key] : undefined;
+  const selCell = room && sel ? room.cells[sel] : undefined;
+  const selSeat = isSeat(selCell) ? selCell : null;
+  const confirmSeat =
+    confirm?.kind === "seat" && room ? room.cells[confirm.key] : undefined;
   const hintId = `${uid}-hint`;
   const kbdId = `${uid}-kbd`;
   const title = eventTitle || (phase === "loading" ? "" : `Event ${id}`);
@@ -802,7 +914,7 @@ const RoomEditor = () => {
               {rooms.map((r, i) => {
                 const on = i === cur;
                 const n = Object.values(r.cells).filter(
-                  (c) => c.t === "desk",
+                  (c) => c.t === "seat",
                 ).length;
                 return (
                   <Box
@@ -852,7 +964,7 @@ const RoomEditor = () => {
                       </Box>
                       {n}
                       <Box component="span" sx={srOnly}>
-                        {n === 1 ? " desk" : " desks"}
+                        {n === 1 ? " seat" : " seats"}
                       </Box>
                     </Box>
                   </Box>
@@ -875,7 +987,7 @@ const RoomEditor = () => {
           <EmptyState
             variant="panel"
             title="No rooms yet"
-            description="Add a room, then drop desks, screens and entrances on its grid. Attendees pick their seats from this plan."
+            description="Add a room, then drop seats, screens and entrances on its grid. Attendees pick their seats from this plan."
             action={
               <Button
                 variant="contained"
@@ -986,13 +1098,36 @@ const RoomEditor = () => {
                   {TOOL_LABELS[tool]} tool:{" "}
                 </Box>
                 {TOOL_HINTS[tool]}
+                {linkNotes.length > 0 && (
+                  <Box
+                    data-testid="link-note"
+                    sx={{
+                      mt: "8px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "8px",
+                      fontSize: 13,
+                      lineHeight: 1.45,
+                      color: colors.amber,
+                    }}
+                  >
+                    <LinkOffSharp
+                      aria-hidden
+                      sx={{ fontSize: 17, mt: "1px" }}
+                    />
+                    <span>{linkNotes.join(" ")}</span>
+                  </Box>
+                )}
               </Box>
               <Box id={kbdId} sx={srOnly}>
                 Use the arrow keys to move between squares and Enter or Space to
-                use the tool. Delete clears a square. To move a desk, screen or
+                use the tool. Delete clears a square. To move a seat, screen or
                 entrance, press M on it, use the arrow keys to choose where it
-                goes, then Enter to drop it or Escape to cancel. Tool shortcuts:
-                V select, M move, D desk, S screen, E entrance, X erase.
+                goes, then Enter to drop it or Escape to cancel. To merge, use
+                the Merge tool: press Enter on a square, then on a touching
+                square of the same type. Select a screen to link it to a seat in
+                the side panel. Tool shortcuts: V select, M move, D seat, S
+                screen, E entrance, G merge, U split, X erase.
               </Box>
               <EditorGrid
                 room={room}
@@ -1005,6 +1140,16 @@ const RoomEditor = () => {
                 onToolShortcut={(t) => pickTool(t, true)}
                 onMove={move}
                 onAnnounce={announce}
+                onMergePath={mergeAlong}
+                linking={
+                  linking && room.cells[linking]
+                    ? {
+                        screen: linking,
+                        candidates: linkCandidates(room, linking),
+                      }
+                    : null
+                }
+                onLinkPick={pickLinkedSeat}
                 describedBy={`${hintId} ${kbdId}`}
                 background={(() => {
                   const src = backgroundSrc(room);
@@ -1045,15 +1190,43 @@ const RoomEditor = () => {
                 onRemoveBackground={removeBackground}
                 onDeleteRoom={() => setConfirm({ kind: "room" })}
               />
-              <DeskPanel
-                desk={selDesk}
-                duplicate={!!sel && isDuplicateLabel(room, sel)}
-                onRename={(v) => sel && updateRoom(renameDesk(room, sel, v))}
-                onDescribe={(v) =>
-                  sel && updateRoom(describeDesk(room, sel, v))
-                }
-                onRemove={removeSelected}
-              />
+              {isFeature(selCell) && sel ? (
+                <FeaturePanel
+                  kind={selCell.t}
+                  squares={groupKeys(room, sel).length}
+                  canMerge={canMergeAdjacent(room, sel)}
+                  onMergeAdjacent={() =>
+                    applyShapeEdit(mergeAdjacent(room, sel))
+                  }
+                  onSplitAll={() => applyShapeEdit(splitAll(room, sel))}
+                  seats={linkCandidates(room, sel).map((k) => {
+                    const c = room.cells[k];
+                    const about = isSeat(c) && c.description?.trim();
+                    return {
+                      key: k,
+                      label: isSeat(c)
+                        ? `${c.label || "(no label)"}${about ? ` – ${about}` : ""}`
+                        : k,
+                    };
+                  })}
+                  linked={linkedSeat(room, sel)}
+                  onLink={link}
+                  linking={linking != null}
+                  onPickOnGrid={startLinking}
+                  onRemove={removeSelectedShape}
+                />
+              ) : (
+                <SeatPanel
+                  seat={selSeat}
+                  duplicate={!!sel && isDuplicateLabel(room, sel)}
+                  screens={sel ? screensLinkedTo(room, sel).length : 0}
+                  onRename={(v) => sel && updateRoom(renameSeat(room, sel, v))}
+                  onDescribe={(v) =>
+                    sel && updateRoom(describeSeat(room, sel, v))
+                  }
+                  onRemove={removeSelected}
+                />
+              )}
             </Box>
           </Box>
         )}
@@ -1064,24 +1237,24 @@ const RoomEditor = () => {
       </Box>
 
       <ConfirmDialog
-        open={confirm?.kind === "desk"}
-        title={`Remove desk ${isDesk(confirmDesk) ? confirmDesk.label : ""}?`}
+        open={confirm?.kind === "seat"}
+        title={`Remove seat ${isSeat(confirmSeat) ? confirmSeat.label : ""}?`}
         body={
-          isDesk(confirmDesk) && confirmDesk.reservedBy
-            ? `${reserverName(confirmDesk.reservedBy)} will lose their seat and will need to pick another. This happens when you save.`
-            : "This desk is removed when you save."
+          isSeat(confirmSeat) && confirmSeat.reservedBy
+            ? `${reserverName(confirmSeat.reservedBy)} will lose their seat and will need to pick another. This happens when you save.`
+            : "This seat is removed when you save."
         }
         cancelLabel="Keep"
         confirmLabel="Remove anyway"
         onCancel={() => setConfirm(null)}
         onConfirm={() =>
-          confirm?.kind === "desk" && forceRemoveDesk(confirm.key)
+          confirm?.kind === "seat" && forceRemoveSeat(confirm.key)
         }
       />
       <ConfirmDialog
         open={confirm?.kind === "room"}
         title={`Delete ${room?.name.trim() || "this room"}?`}
-        body="The room and its desks are removed when you save."
+        body="The room and its seats are removed when you save."
         cancelLabel="Keep room"
         confirmLabel="Delete room"
         onCancel={() => setConfirm(null)}
@@ -1089,7 +1262,7 @@ const RoomEditor = () => {
       />
       <ConfirmDialog
         open={confirm?.kind === "conflict"}
-        title="Remove reserved desks?"
+        title="Remove reserved seats?"
         body={
           <>
             {confirm?.kind === "conflict" && confirm.message}

@@ -5,7 +5,7 @@ import Box from "@mui/material/Box";
 import {
   SeatFloorPlan,
   FloorPlanLegend,
-  type FloorPlanDesk,
+  type SeatTile,
 } from "../components/SeatFloorPlan";
 import type { FloorPlanSeat } from "../components/seatFloorPlanModel";
 import {
@@ -25,7 +25,7 @@ const taken: Record<string, string> = {
   B2: "LagWizard",
 };
 
-const designDesks = (selected?: string): FloorPlanDesk[] =>
+const designTiles = (selected?: string): SeatTile[] =>
   hall.map((seat) => ({
     seat,
     state:
@@ -44,16 +44,16 @@ const designDesks = (selected?: string): FloorPlanDesk[] =>
           : [],
   }));
 
-/** Click a free desk to select it; click again to clear. */
+/** Click a free seat to select it; click again to clear. */
 function Interactive() {
   const [selected, setSelected] = React.useState<string | undefined>("A3");
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
       <SeatFloorPlan
         room={mainHall(1)}
-        desks={designDesks(selected)}
+        seats={designTiles(selected)}
         label="Main Hall floor plan"
-        onDeskSelect={(seat) =>
+        onSeatSelect={(seat) =>
           setSelected((cur) => (cur === seat.label ? undefined : seat.label))
         }
       />
@@ -96,7 +96,7 @@ const meta = {
       </Box>
     ),
   ],
-  args: { onDeskSelect: fn() },
+  args: { onSeatSelect: fn() },
 } satisfies Meta<typeof SeatFloorPlan>;
 
 export default meta;
@@ -106,14 +106,14 @@ type Story = StoryObj<typeof meta>;
 export const AllStates: Story = {
   args: {
     room: mainHall(1),
-    desks: designDesks("A3"),
+    seats: designTiles("A3"),
     label: "Main Hall floor plan",
   },
 };
 
-/** Stateful: select and deselect desks with the mouse or keyboard (arrows move between desks). */
+/** Stateful: select and deselect seats with the mouse or keyboard (arrows move between seats). */
 export const Selectable: Story = {
-  args: { room: mainHall(1), desks: [], label: "Main Hall floor plan" },
+  args: { room: mainHall(1), seats: [], label: "Main Hall floor plan" },
   render: () => <Interactive />,
 };
 
@@ -121,7 +121,7 @@ export const Selectable: Story = {
 export const RetroBackground: Story = {
   args: {
     room: mainHall(1, { backgroundUrl: roomPhoto, backgroundOpacity: 0.7 }),
-    desks: designDesks(),
+    seats: designTiles(),
     label: "Main Hall floor plan",
   },
 };
@@ -134,7 +134,7 @@ export const OriginalBackground: Story = {
       backgroundStyle: "original",
       backgroundOpacity: 0.4,
     }),
-    desks: designDesks(),
+    seats: designTiles(),
     label: "Main Hall floor plan",
   },
 };
@@ -143,7 +143,7 @@ export const OriginalBackground: Story = {
 export const SmallRoom: Story = {
   args: {
     room: gamesRoom(1),
-    desks: seats
+    seats: seats
       .filter((s) => s.roomId === 2)
       .map((seat, i) => ({
         seat,
@@ -162,7 +162,7 @@ export const LegacySeats: Story = {
       id: 3,
       name: "Old Hall",
     },
-    desks: legacySeats.map((seat, i) => ({
+    seats: legacySeats.map((seat, i) => ({
       seat,
       state: i % 3 === 0 ? "taken" : "free",
       occupants:
@@ -172,14 +172,14 @@ export const LegacySeats: Story = {
   },
 };
 
-/** Read-only (no selection handler): every desk is inert. */
+/** Read-only (no selection handler): every seat is inert. */
 export const ReadOnly: Story = {
   args: {
     room: mainHall(1),
-    desks: designDesks().map((d) => ({ ...d, disabled: true })),
+    seats: designTiles().map((d) => ({ ...d, disabled: true })),
     label: "Main Hall floor plan",
     selectable: false,
-    onDeskSelect: undefined,
+    onSeatSelect: undefined,
   },
 };
 
@@ -187,7 +187,7 @@ const longLabels = [
   "Window seat 12",
   "ABCDEFGH",
   "WWWWWWWW",
-  "Desk-12",
+  "Seat-12",
   "A1",
   "Legacy seat with a long name",
 ];
@@ -200,11 +200,11 @@ const longLabels = [
 export const LongLabels: Story = {
   args: {
     room: mainHall(1),
-    desks: hall.slice(0, longLabels.length).map((seat, i) => ({
+    seats: hall.slice(0, longLabels.length).map((seat, i) => ({
       seat: {
         ...seat,
         label: longLabels[i],
-        description: i === 0 ? "Window desk next to the fridge" : null,
+        description: i === 0 ? "Window seat next to the fridge" : null,
       },
       state:
         i === 2 ? "taken" : i === 3 ? "mine" : i === 4 ? "selected" : "free",
@@ -222,5 +222,74 @@ export const LongLabels: Story = {
 /** The long labels on a phone (the plan scrolls sideways at 44px cells). */
 export const LongLabelsMobile: Story = {
   ...LongLabels,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
+
+const screenAt = (
+  col: number,
+  row: number,
+  group: number,
+  link?: [number, number],
+) => ({
+  col,
+  row,
+  kind: "screen" as const,
+  group,
+  ...(link ? { linkCol: link[0], linkRow: link[1] } : {}),
+});
+
+/** Main Hall with grouped shapes and screens linked to seats. */
+const shapesHall = mainHall(1, {
+  features: [
+    // Two touching screens that stay separate.
+    screenAt(3, 0, 0),
+    screenAt(4, 0, 1),
+    // A1 (taken): a two-square screen linked by a side, with the avatar.
+    screenAt(1, 1, 2, [2, 2]),
+    screenAt(2, 1, 2, [2, 2]),
+    // A2 (free): a screen at its corner.
+    screenAt(5, 3, 3, [4, 2]),
+    // A3 (selected): a screen at its corner.
+    screenAt(8, 3, 4, [7, 2]),
+    // A4 (yours): a two-square screen above it.
+    screenAt(9, 1, 5, [9, 2]),
+    screenAt(10, 1, 5, [9, 2]),
+    // B2 (taken): one square only, so just the icon.
+    screenAt(3, 6, 6, [4, 5]),
+    // An L-shaped door and a two-square entrance.
+    { col: 0, row: 6, kind: "entrance", group: 7 },
+    { col: 0, row: 7, kind: "entrance", group: 7 },
+    { col: 1, row: 7, kind: "entrance", group: 7 },
+    { col: 5, row: 7, kind: "entrance", group: 8 },
+    { col: 6, row: 7, kind: "entrance", group: 8 },
+  ],
+});
+
+/**
+ * Screens linked to seats show the seat's state: dashed while it is free,
+ * violet (with the occupant's avatar on 2+ squares) when taken, lime when
+ * it is yours. Unlinked screens keep the plain look; the L-shaped door and
+ * the two touching screens are drawn as saved. Linked seats are announced
+ * "with screen".
+ */
+export const LinkedScreens: Story = {
+  args: {
+    room: shapesHall,
+    seats: designTiles("A3"),
+    label: "Main Hall floor plan",
+  },
+  render: (args) => (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+      <SeatFloorPlan {...args} />
+      <FloorPlanLegend
+        items={["mine", "free", "taken", "selected", "linkedScreen"]}
+      />
+    </Box>
+  ),
+};
+
+/** The linked screens on a phone. */
+export const LinkedScreensMobile: Story = {
+  ...LinkedScreens,
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };

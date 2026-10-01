@@ -116,13 +116,13 @@ describe("RoomEditor", { timeout: 20000 }, () => {
   it("renders the room tabs, toolbar and grid from the layout", async () => {
     renderEditor();
     const tab = await screen.findByRole("tab", { name: /Main Hall/ });
-    expect(tab.textContent).toBe("Main Hall, 1 desk");
+    expect(tab.textContent).toBe("Main Hall, 1 seat");
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Room editor",
     );
     expect(screen.getAllByRole("gridcell")).toHaveLength(48);
-    expect(cell(/Desk A1, reserved by NoScope_Nia/)).toBeInTheDocument();
+    expect(cell(/Seat A1, reserved by NoScope_Nia/)).toBeInTheDocument();
     expect(cell(/^Screen, column 4, row 1/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select" })).toHaveAttribute(
       "aria-pressed",
@@ -133,15 +133,15 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     ).toBeInTheDocument();
   });
 
-  it("drops auto-labelled desks with the keyboard and saves the layout", async () => {
+  it("drops auto-labelled seats with the keyboard and saves the layout", async () => {
     renderEditor();
     const grid = await screen.findByRole("grid");
     const first = within(grid).getByRole("gridcell", {
       name: "Empty square, column 1, row 1",
     });
-    // Switch tool with the shortcut, move right and down, drop a desk.
+    // Switch tool with the shortcut, move right and down, drop a seat.
     fireEvent.keyDown(first, { key: "d" });
-    expect(screen.getByRole("button", { name: "Desk" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Seat" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -149,7 +149,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     const below = cell(/Empty square, column 1, row 2/);
     await waitFor(() => expect(below).toHaveFocus());
     fireEvent.keyDown(below, { key: "Enter" });
-    expect(cell(/^Desk B1, column 1, row 2/)).toHaveAttribute(
+    expect(cell(/^Seat B1, column 1, row 2/)).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -167,11 +167,11 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     ]);
   });
 
-  it("confirms before removing a reserved desk and then releases it on save", async () => {
+  it("confirms before removing a reserved seat and then releases it on save", async () => {
     renderEditor();
-    const reserved = await screen.findByRole("gridcell", { name: /Desk A1/ });
+    const reserved = await screen.findByRole("gridcell", { name: /Seat A1/ });
     fireEvent.click(reserved);
-    fireEvent.click(screen.getByRole("button", { name: "Remove desk" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove seat" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(
       "NoScope_Nia will lose their seat and will need to pick another",
@@ -180,7 +180,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       within(dialog).getByRole("button", { name: "Remove anyway" }),
     );
     await waitFor(() =>
-      expect(screen.queryByRole("gridcell", { name: /Desk A1/ })).toBeNull(),
+      expect(screen.queryByRole("gridcell", { name: /Seat A1/ })).toBeNull(),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Save rooms" }));
     await screen.findByText("Saved · seat map updated");
@@ -190,7 +190,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
 
   it("warns about duplicate labels and blocks saving", async () => {
     renderEditor();
-    fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Seat" }));
     fireEvent.click(cell(/Empty square, column 6, row 3/));
     const label = screen.getByLabelText("Identifier");
     // Sanitised as typed; identifiers clash regardless of case.
@@ -199,12 +199,12 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     expect(label).toHaveAttribute("aria-invalid", "true");
     expect(
       screen.getByText(
-        "Another desk in this room already uses that identifier.",
+        "Another seat in this room already uses that identifier.",
       ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "more than one desk is labelled A1",
+      "more than one seat is labelled A1",
     );
     expect(puts).toHaveLength(0);
   });
@@ -235,7 +235,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     expect(await screen.findByText("Event page")).toBeInTheDocument();
   });
 
-  it("asks to release reserved desks on a 409 and retries with releaseReserved", async () => {
+  it("asks to release reserved seats on a 409 and retries with releaseReserved", async () => {
     const base = globalThis.fetch;
     let attempt = 0;
     vi.stubGlobal(
@@ -254,7 +254,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
                 error: {
                   code: 409,
                   reason: "Conflict",
-                  description: "Desk A1 was reserved by NoScope_Nia meanwhile.",
+                  description: "Seat A1 was reserved by NoScope_Nia meanwhile.",
                 },
               }),
               { status: 409 },
@@ -265,12 +265,12 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       }),
     );
     renderEditor();
-    fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Seat" }));
     fireEvent.click(cell(/Empty square, column 6, row 3/));
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(
-      "Desk A1 was reserved by NoScope_Nia meanwhile.",
+      "Seat A1 was reserved by NoScope_Nia meanwhile.",
     );
     expect(puts[0].releaseReserved).toBe(false);
     fireEvent.click(
@@ -338,7 +338,7 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       }),
     );
     renderEditor();
-    fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Seat" }));
     fireEvent.click(cell(/Empty square, column 6, row 3/));
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     await waitFor(() =>
@@ -361,26 +361,26 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       "false",
     );
   });
-  it("moves a reserved desk with the keyboard (M, arrows, Enter) and saves it", async () => {
+  it("moves a reserved seat with the keyboard (M, arrows, Enter) and saves it", async () => {
     renderEditor();
-    const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
-    fireEvent.keyDown(desk, { key: "m" });
-    await screen.findByText(/^Picked up desk A1\./);
-    fireEvent.keyDown(desk, { key: "ArrowRight" });
+    const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
+    fireEvent.keyDown(tile, { key: "m" });
+    await screen.findByText(/^Picked up seat A1\./);
+    fireEvent.keyDown(tile, { key: "ArrowRight" });
     const target = cell(/Empty square, column 4, row 3/);
     await waitFor(() => expect(target).toHaveFocus());
     expect(target).toHaveAttribute("data-drop", "ok");
-    expect(desk).toHaveAttribute("data-drop", "source");
+    expect(tile).toHaveAttribute("data-drop", "source");
     await screen.findByText("column 4, row 3, free.");
     fireEvent.keyDown(target, { key: "ArrowRight" });
     const next = cell(/Empty square, column 5, row 3/);
     await waitFor(() => expect(next).toHaveFocus());
     fireEvent.keyDown(next, { key: "Enter" });
-    const moved = cell(/^Desk A1, reserved by NoScope_Nia, column 5, row 3/);
+    const moved = cell(/^Seat A1, reserved by NoScope_Nia, column 5, row 3/);
     expect(moved).toHaveAttribute("aria-selected", "true");
     expect(cell(/Empty square, column 3, row 3/)).toBeInTheDocument();
     await screen.findByText(
-      "Moved desk A1 to column 5, row 3. NoScope_Nia's reservation moves with it.",
+      "Moved seat A1 to column 5, row 3. NoScope_Nia's reservation moves with it.",
     );
     expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
 
@@ -394,20 +394,20 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       { id: 10, label: "A1", description: null, gridCol: 4, gridRow: 2 },
     ]);
     expect(
-      cell(/^Desk A1, reserved by NoScope_Nia, column 5, row 3/),
+      cell(/^Seat A1, reserved by NoScope_Nia, column 5, row 3/),
     ).toBeInTheDocument();
   });
 
   it("cancels a keyboard move with Escape", async () => {
     renderEditor();
-    const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
-    fireEvent.keyDown(desk, { key: "M" });
-    fireEvent.keyDown(desk, { key: "ArrowUp" });
+    const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
+    fireEvent.keyDown(tile, { key: "M" });
+    fireEvent.keyDown(tile, { key: "ArrowUp" });
     const up = cell(/Empty square, column 3, row 2/);
     await waitFor(() => expect(up).toHaveFocus());
     fireEvent.keyDown(up, { key: "Escape" });
-    await screen.findByText("Move cancelled. The desk A1 stays put.");
-    expect(cell(/^Desk A1, .*column 3, row 3/)).toBeInTheDocument();
+    await screen.findByText("Move cancelled. The seat A1 stays put.");
+    expect(cell(/^Seat A1, .*column 3, row 3/)).toBeInTheDocument();
     expect(up).not.toHaveAttribute("data-drop");
     expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
@@ -434,11 +434,11 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       fireEvent.pointerMove(target, { pointerId: 1, clientX: x, clientY: 10 });
     };
 
-    it("drags a desk to an empty square, with a cyan drop preview", async () => {
+    it("drags a seat to an empty square, with a cyan drop preview", async () => {
       renderEditor();
-      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+      const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
       const target = cell(/Empty square, column 8, row 4/);
-      press(desk);
+      press(tile);
       // Under the 4px threshold it is still a click, not a drag.
       moveTo(target, 12);
       expect(target).not.toHaveAttribute("data-drop");
@@ -447,33 +447,33 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       fireEvent.pointerUp(target, { pointerId: 1, clientX: 40, clientY: 10 });
       fireEvent.click(target);
       expect(
-        cell(/^Desk A1, reserved by NoScope_Nia, column 8, row 4/),
+        cell(/^Seat A1, reserved by NoScope_Nia, column 8, row 4/),
       ).toHaveAttribute("aria-selected", "true");
       expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
     });
 
     it("previews an occupied square in pink and refuses the drop", async () => {
       renderEditor();
-      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+      const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
       const screenCell = cell(/^Screen, column 4, row 1/);
-      press(desk);
+      press(tile);
       moveTo(screenCell, 60);
       expect(screenCell).toHaveAttribute("data-drop", "bad");
       fireEvent.pointerUp(screenCell, { pointerId: 1 });
       await screen.findByText(
-        "Can't move it there. The screen is in the way. Desks can only swap places with other desks.",
+        "Can't move it there. The screen is in the way. Seats can only swap places with other seats.",
       );
-      expect(cell(/^Desk A1, .*column 3, row 3/)).toBeInTheDocument();
+      expect(cell(/^Seat A1, .*column 3, row 3/)).toBeInTheDocument();
       expect(screen.queryByText("Unsaved changes")).toBeNull();
     });
 
     it("a plain click still selects (no drag)", async () => {
       renderEditor();
-      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
-      press(desk);
-      fireEvent.pointerUp(desk, { pointerId: 1 });
-      fireEvent.click(desk);
-      expect(desk).toHaveAttribute("aria-selected", "true");
+      const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
+      press(tile);
+      fireEvent.pointerUp(tile, { pointerId: 1 });
+      fireEvent.click(tile);
+      expect(tile).toHaveAttribute("aria-selected", "true");
       expect(screen.getByLabelText("Identifier")).toHaveValue("A1");
     });
 
@@ -481,27 +481,27 @@ describe("RoomEditor", { timeout: 20000 }, () => {
       vi.useFakeTimers({ shouldAdvanceTime: true });
       try {
         renderEditor();
-        const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+        const tile = await screen.findByRole("gridcell", { name: /^Seat A1/ });
         const target = cell(/Empty square, column 1, row 1/);
         // A quick swipe is a scroll: nothing is picked up.
-        press(desk, 10, "touch");
+        press(tile, 10, "touch");
         moveTo(target, 60);
         expect(target).not.toHaveAttribute("data-drop");
         fireEvent.pointerUp(target, { pointerId: 1 });
         // Press and hold, then drag.
-        press(desk, 10, "touch");
+        press(tile, 10, "touch");
         vi.advanceTimersByTime(400);
         moveTo(target, 60);
         expect(target).toHaveAttribute("data-drop", "ok");
         fireEvent.pointerUp(target, { pointerId: 1 });
-        expect(cell(/^Desk A1, .*column 1, row 1/)).toBeInTheDocument();
+        expect(cell(/^Seat A1, .*column 1, row 1/)).toBeInTheDocument();
       } finally {
         vi.useRealTimers();
       }
     });
   });
 
-  it("moves a whole screen strip with the Move tool (tap, then tap)", async () => {
+  it("moves a whole screen with the Move tool (tap, then tap)", async () => {
     renderEditor();
     fireEvent.click(await screen.findByRole("button", { name: "Move" }));
     expect(screen.getByRole("button", { name: "Move" })).toHaveAttribute(
@@ -516,28 +516,246 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     await screen.findByText("Saved · seat map updated");
     expect(puts[0].rooms[0].features).toEqual([
-      { col: 8, row: 1, kind: "screen" },
+      { col: 8, row: 1, kind: "screen", group: 0 },
     ]);
   });
 
-  it("edits a desk's description with a counter and saves it trimmed", async () => {
+  it("edits a seat's description with a counter and saves it trimmed", async () => {
     renderEditor();
-    fireEvent.click(await screen.findByRole("gridcell", { name: /^Desk A1/ }));
+    fireEvent.click(await screen.findByRole("gridcell", { name: /^Seat A1/ }));
     const about = screen.getByLabelText("Description (optional)");
     fireEvent.change(about, {
-      target: { value: "  Window desk next to the fridge " },
+      target: { value: "  Window seat next to the fridge " },
     });
     expect(screen.getByText(/^33\/120/)).toBeInTheDocument();
     expect(
-      cell(/^Desk A1, Window desk next to the fridge, reserved by NoScope_Nia/),
+      cell(/^Seat A1, Window seat next to the fridge, reserved by NoScope_Nia/),
     ).toHaveAttribute(
       "title",
-      "A1 · Window desk next to the fridge · Reserved by NoScope_Nia",
+      "A1 · Window seat next to the fridge · Reserved by NoScope_Nia",
     );
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     await screen.findByText("Saved · seat map updated");
     expect(puts[0].rooms[0].seats[0].description).toBe(
-      "Window desk next to the fridge",
+      "Window seat next to the fridge",
     );
+  });
+
+  describe("screens and entrances", () => {
+    /** Serve a layout with these features (A1 sits at column 3, row 3). */
+    const withFeatures = (features: ApiLayout["rooms"][0]["features"]) => {
+      const base = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (
+            url.startsWith("/api/events/7/room-layout") &&
+            init?.method !== "PUT"
+          ) {
+            const l = layout();
+            l.rooms[0].features = features;
+            return new Response(JSON.stringify(l));
+          }
+          return base(url, init);
+        }),
+      );
+    };
+
+    it("merges two separate screens with the Merge tool and saves one group", async () => {
+      withFeatures([
+        { col: 5, row: 0, kind: "screen", group: 0 },
+        { col: 6, row: 0, kind: "screen", group: 1 },
+      ]);
+      renderEditor();
+      await screen.findByRole("gridcell", { name: /^Screen, column 6, row 1/ });
+      // Two touching squares, still two screens.
+      expect(cell(/^Screen, column 7, row 1/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+      fireEvent.click(cell(/^Screen, column 6, row 1/));
+      expect(cell(/^Screen, column 7, row 1/)).toHaveAttribute(
+        "data-candidate",
+        "merge",
+      );
+      fireEvent.click(cell(/^Screen, column 7, row 1/));
+      await screen.findByText("Merged into one screen (2 squares).");
+      expect(cell(/^Screen, 2 squares, column 6, row 1/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+      await screen.findByText("Saved · seat map updated");
+      expect(puts[0].rooms[0].features).toEqual([
+        { col: 5, row: 0, kind: "screen", group: 0 },
+        { col: 6, row: 0, kind: "screen", group: 0 },
+      ]);
+    });
+
+    it("merges an L-shaped door with the keyboard and splits it again", async () => {
+      withFeatures([
+        { col: 0, row: 2, kind: "entrance", group: 0 },
+        { col: 0, row: 3, kind: "entrance", group: 1 },
+        { col: 1, row: 3, kind: "entrance", group: 2 },
+      ]);
+      renderEditor();
+      const top = await screen.findByRole("gridcell", {
+        name: /^Entrance, column 1, row 3/,
+      });
+      fireEvent.keyDown(top, { key: "g" });
+      expect(screen.getByRole("button", { name: "Merge" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      fireEvent.keyDown(top, { key: "Enter" });
+      fireEvent.keyDown(cell(/^Entrance, column 1, row 4/), { key: "Enter" });
+      fireEvent.keyDown(cell(/^Entrance, column 2, row 4/), { key: "Enter" });
+      await screen.findByText("Merged into one entrance (3 squares).");
+      expect(cell(/^Entrance, 3 squares, column 2, row 4/)).toBeInTheDocument();
+      // The side panel offers to split it.
+      fireEvent.click(
+        screen.getByRole("button", { name: "Split into single squares" }),
+      );
+      await screen.findByText("Split into 3 single-square entrances.");
+      expect(cell(/^Entrance, column 1, row 4/)).toBeInTheDocument();
+      // ...and to merge it back in one go.
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Merge with adjacent squares of the same type",
+        }),
+      );
+      expect(cell(/^Entrance, 3 squares, column 1, row 3/)).toBeInTheDocument();
+      // The Split tool detaches the corner square.
+      fireEvent.click(screen.getByRole("button", { name: "Split" }));
+      fireEvent.click(cell(/^Entrance, 3 squares, column 1, row 4/));
+      await screen.findByText(
+        /^Split off the square at column 1, row 4\. The rest is now 2 separate entrances\./,
+      );
+    });
+
+    it("merges by dragging across squares", async () => {
+      withFeatures([
+        { col: 5, row: 0, kind: "screen", group: 0 },
+        { col: 6, row: 0, kind: "screen", group: 1 },
+        { col: 7, row: 0, kind: "screen", group: 2 },
+      ]);
+      let hit: Element | null = null;
+      document.elementFromPoint = vi.fn(() => hit);
+      renderEditor();
+      const first = await screen.findByRole("gridcell", {
+        name: /^Screen, column 6, row 1/,
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+      fireEvent.pointerDown(first, {
+        pointerId: 3,
+        isPrimary: true,
+        button: 0,
+        pointerType: "touch",
+      });
+      for (const col of [7, 8]) {
+        hit = cell(new RegExp(`^Screen, column ${col}, row 1`));
+        fireEvent.pointerMove(hit, { pointerId: 3 });
+      }
+      fireEvent.pointerUp(hit!, { pointerId: 3 });
+      await screen.findByText("Merged into one screen (3 squares).");
+    });
+
+    it("links a screen to a neighbouring seat and saves the link", async () => {
+      // A screen at A1's top-left corner, and one far away.
+      withFeatures([
+        { col: 1, row: 1, kind: "screen", group: 0 },
+        { col: 9, row: 0, kind: "screen", group: 1 },
+      ]);
+      renderEditor();
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Screen, column 2, row 2/,
+        }),
+      );
+      const select = screen.getByLabelText("Linked seat");
+      expect(
+        within(select)
+          .getAllByRole("option")
+          .map((o) => o.textContent),
+      ).toEqual(["None", "A1"]);
+      fireEvent.change(select, { target: { value: "2,2" } });
+      await screen.findByText(/^Screen linked to seat A1\./);
+      expect(
+        cell(/^Screen, linked to seat A1, column 2, row 2/),
+      ).toBeInTheDocument();
+      expect(
+        cell(/^Seat A1, with screen, reserved by NoScope_Nia/),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+      await screen.findByText("Saved · seat map updated");
+      // Groups are renumbered in reading order on save.
+      expect(puts[0].rooms[0].features).toEqual([
+        { col: 9, row: 0, kind: "screen", group: 0 },
+        { col: 1, row: 1, kind: "screen", group: 1, linkCol: 2, linkRow: 2 },
+      ]);
+      // The far screen has nothing to link to.
+      fireEvent.click(cell(/^Screen, column 10, row 1/));
+      expect(screen.getByLabelText("Linked seat")).toBeDisabled();
+    });
+
+    it("picks the seat on the grid with the keyboard, and clears the link when the seat moves away", async () => {
+      withFeatures([{ col: 3, row: 2, kind: "screen", group: 0 }]);
+      renderEditor();
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Screen, column 4, row 3/,
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pick the seat on the grid" }),
+      );
+      await screen.findByText(/^Pick the seat for this screen: A1\./);
+      const seat = cell(/^Seat A1, .*can be linked/);
+      expect(seat).toHaveAttribute("data-candidate", "link");
+      await waitFor(() => expect(seat).toHaveFocus());
+      fireEvent.keyDown(seat, { key: "Enter" });
+      await screen.findByText(/^Screen linked to seat A1\./);
+      // Move A1 far away: the link goes, with a note.
+      const linked = cell(/^Seat A1, with screen/);
+      fireEvent.keyDown(linked, { key: "m" });
+      fireEvent.keyDown(linked, { key: "Home" });
+      const target = cell(/Empty square, column 1, row 3/);
+      await waitFor(() => expect(target).toHaveFocus());
+      fireEvent.keyDown(target, { key: "Enter" });
+      expect(await screen.findByTestId("link-note")).toHaveTextContent(
+        "The screen at column 4, row 3 no longer touches seat A1, so its link was cleared.",
+      );
+      expect(cell(/^Screen, column 4, row 3/)).toBeInTheDocument();
+    });
+
+    it("cancels picking a seat with Escape", async () => {
+      withFeatures([{ col: 3, row: 2, kind: "screen", group: 0 }]);
+      renderEditor();
+      fireEvent.click(
+        await screen.findByRole("gridcell", {
+          name: /^Screen, column 4, row 3/,
+        }),
+      );
+      fireEvent.click(
+        screen.getByRole("button", { name: "Pick the seat on the grid" }),
+      );
+      const seat = cell(/^Seat A1, .*can be linked/);
+      await waitFor(() => expect(seat).toHaveFocus());
+      fireEvent.keyDown(seat, { key: "Escape" });
+      await screen.findByText("Linking cancelled.");
+      expect(cell(/^Seat A1, reserved/)).not.toHaveAttribute("data-candidate");
+    });
+
+    it("shows a merged shape's label and an icon-only single square", async () => {
+      withFeatures([
+        { col: 5, row: 0, kind: "screen", group: 0 },
+        { col: 6, row: 0, kind: "screen", group: 0 },
+        { col: 9, row: 0, kind: "entrance", group: 1 },
+      ]);
+      const { container } = renderEditor();
+      await screen.findAllByRole("gridcell", { name: /^Screen, 2 squares/ });
+      const labels = container.querySelectorAll("[data-shape-label]");
+      expect(labels).toHaveLength(1);
+      expect(labels[0]).toHaveTextContent("Screen");
+      expect(labels[0].querySelector("svg")).not.toBeNull();
+      expect(
+        cell(/^Entrance, column 10, row 1/).querySelector("svg"),
+      ).not.toBeNull();
+    });
   });
 });

@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-/// Who has reserved a desk.
+/// Who has reserved a seat.
 #[derive(Clone, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct SeatReservedBy {
@@ -32,16 +32,16 @@ pub struct SeatReservedBy {
     pub avatar_url: String,
 }
 
-/// A desk in the room layout.
+/// A seat in the room layout.
 #[derive(Clone, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct LayoutSeat {
     pub id: i32,
-    /// Seat identifier shown on the desk (up to 8 characters; older seats may be longer).
+    /// Seat identifier shown on the seat (up to 8 characters; older seats may be longer).
     pub label: String,
-    /// Optional free-text description, e.g. "Window desk next to the fridge".
+    /// Optional free-text description, e.g. "Window seat next to the fridge".
     pub description: Option<String>,
-    /// Null for desks placed with the legacy editor; derive from `x`/`y`.
+    /// Null for seats placed with the legacy editor; derive from `x`/`y`.
     pub grid_col: Option<i32>,
     pub grid_row: Option<i32>,
     pub x: f64,
@@ -49,7 +49,7 @@ pub struct LayoutSeat {
     pub reserved_by: Option<SeatReservedBy>,
 }
 
-/// A room with its desks.
+/// A room with its seats.
 #[derive(Clone, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct RoomLayout {
@@ -65,12 +65,12 @@ pub struct RoomLayoutResponse {
     pub rooms: Vec<RoomLayout>,
 }
 
-/// A desk to save. Omit `id` to create it.
+/// A seat to save. Omit `id` to create it.
 #[derive(Clone, Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct LayoutSeatSubmit {
     pub id: Option<i32>,
-    /// Seat identifier shown on the desk: 1-8 characters of A-Z, a-z, 0-9, `-`, `_`
+    /// Seat identifier shown on the seat: 1-8 characters of A-Z, a-z, 0-9, `-`, `_`
     /// and `.` (trimmed), unique within the room ignoring case. An existing seat may
     /// keep a label saved before these rules if it is sent back unchanged.
     pub label: String,
@@ -96,6 +96,9 @@ pub struct RoomLayoutRoomSubmit {
     pub sort_order: Option<i32>,
     /// 1 to 50.
     pub grid_rows: i32,
+    /// Screen and entrance squares. Squares sharing a `group` form one shape; a
+    /// linked screen's `linkCol`/`linkRow` must be a seat of this room that touches
+    /// the screen by a side or corner (a link to a seat this save deletes is dropped).
     #[serde(default)]
     pub features: Vec<RoomFeature>,
     /// "retro" | "original"; omitted keeps the stored value.
@@ -108,11 +111,11 @@ pub struct RoomLayoutRoomSubmit {
     pub seats: Vec<LayoutSeatSubmit>,
 }
 
-/// The complete room layout for an event. Rooms and desks that are not listed are deleted.
+/// The complete room layout for an event. Rooms and seats that are not listed are deleted.
 #[derive(Clone, Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct RoomLayoutSubmit {
-    /// Allow removing reserved desks; their reservations lose the seat (seatId = null).
+    /// Allow removing reserved seats; their reservations lose the seat (seatId = null).
     #[serde(default)]
     pub release_reserved: bool,
     pub rooms: Vec<RoomLayoutRoomSubmit>,
@@ -120,7 +123,9 @@ pub struct RoomLayoutSubmit {
 
 custom_errors!(RoomLayoutGetError, Unauthorized, InternalServerError);
 
-/// Get the event's rooms with their desks and who reserved them (admin only).
+/// Get the event's rooms with their seats and who reserved them (admin only).
+///
+/// Screen links (`linkCol`/`linkRow`) whose seat no longer exists are left out.
 #[openapi(tag = "Rooms")]
 #[get("/events/<event_id>/room-layout?<_as_admin>", format = "json")]
 pub async fn get(
@@ -147,7 +152,7 @@ custom_errors!(
 
 /// Replace the event's whole room layout in one transaction (admin only).
 ///
-/// Rooms and desks not listed are deleted. Removing reserved desks fails with 409
+/// Rooms and seats not listed are deleted. Removing reserved seats fails with 409
 /// unless `releaseReserved` is true, in which case those reservations lose their seat.
 #[openapi(tag = "Rooms")]
 #[put(

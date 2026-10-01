@@ -1,10 +1,10 @@
 /**
  * Pure layout helpers for the graphical floor plan (`SeatFloorPlan`).
  *
- * A room is a grid of `GRID_COLS` (12) columns x `gridRows` rows. Desks are
- * seats with integer `gridCol`/`gridRow`; screens and entrances are room
- * `features`. Seats created by the old free-form editor have no grid cell and
- * are placed from their relative `x`/`y` (see the API contract, section 6).
+ * A room is a grid of `GRID_COLS` (12) columns x `gridRows` rows. Seats have
+ * integer `gridCol`/`gridRow`; screens and entrances are room `features`.
+ * Seats created by the old free-form editor have no grid cell and are placed
+ * from their relative `x`/`y` (see the API contract, section 6).
  */
 import type { Room, Seat } from "../types/events";
 
@@ -14,10 +14,18 @@ export const DEFAULT_GRID_ROWS = 8;
 
 export type RoomFeatureKind = "screen" | "entrance";
 
+/**
+ * One square of a screen or entrance. Squares with the same `group` (and kind)
+ * are one shape; a screen may be linked to the seat at `linkCol`/`linkRow`.
+ * Squares without a `group` come from rooms saved before groups existed.
+ */
 export interface RoomFeature {
   col: number;
   row: number;
   kind: RoomFeatureKind | string;
+  group?: number | null;
+  linkCol?: number | null;
+  linkRow?: number | null;
 }
 
 export type BackgroundStyle = "retro" | "original";
@@ -42,19 +50,22 @@ export interface GridCell {
   row: number;
 }
 
-/** A horizontal run of identical feature cells, drawn as one strip. */
-export interface FeatureStrip {
+/** A screen or entrance: one or more squares joined by their sides. */
+export interface FeatureGroup {
+  /** Shape id (the saved `group`, or a fresh one for legacy squares). */
+  id: number;
   kind: RoomFeatureKind;
-  row: number;
-  col: number;
-  span: number;
+  /** Squares in reading order. */
+  cells: GridCell[];
+  /** Screens only: the cell of the seat this screen belongs to. */
+  link: GridCell | null;
 }
 
 export interface RoomLayout {
   rows: number;
   /** Seat id -> grid cell. Every seat passed in gets a cell. */
   cells: Map<number, GridCell>;
-  strips: FeatureStrip[];
+  groups: FeatureGroup[];
 }
 
 const clamp = (n: number, lo: number, hi: number) =>
@@ -77,7 +88,7 @@ export function legacyCell(x: number, y: number, rows: number): GridCell {
   };
 }
 
-/** Number of grid rows to draw for a room so every desk and feature fits. */
+/** Number of grid rows to draw for a room so every seat and feature fits. */
 export function gridRowsFor(
   room: FloorPlanRoom,
   seats: FloorPlanSeat[],
@@ -123,42 +134,204 @@ function nearestFree(
   return best;
 }
 
-/** Merge adjacent same-kind feature cells on a row into strips. */
-export function featureStrips(
+const byReading = (a: GridCell, b: GridCell) => a.row - b.row || a.col - b.col;
+
+/** Split cells into the shapes they form when joined by sides (not corners). */
+export function connectedParts(cells: GridCell[]): GridCell[][] {
+  const left = new Map(cells.map((c) => [key(c.col, c.row), c]));
+  const parts: GridCell[][] = [];
+  for (const start of [...cells].sort(byReading)) {
+    if (!left.has(key(start.col, start.row))) continue;
+    left.delete(key(start.col, start.row));
+    const part: GridCell[] = [start];
+    for (let i = 0; i < part.length; i++) {
+      const { col, row } = part[i];
+      for (const [c, r] of [
+        [col - 1, row],
+        [col + 1, row],
+        [col, row - 1],
+        [col, row + 1],
+      ]) {
+        const next = left.get(key(c, r));
+        if (!next) continue;
+        left.delete(key(c, r));
+        part.push(next);
+      }
+    }
+    parts.push(part.sort(byReading));
+  }
+  return parts;
+}
+
+/** Whether two cells touch by a side or a corner. */
+export const touches = (a: GridCell, b: GridCell) =>
+  Math.abs(a.col - b.col) <= 1 &&
+  Math.abs(a.row - b.row) <= 1 &&
+  !(a.col === b.col && a.row === b.row);
+
+/** Whether `target` touches any square of `cells` (side or corner). */
+export const touchesAny = (cells: GridCell[], target: GridCell) =>
+  cells.some((c) => touches(c, target));
+
+/**
+ * The room's screens and entrances as shapes. Squares sharing a `group` and
+ * kind are one shape (split again if they are not joined by sides). Squares
+ * without a `group` (rooms saved before groups) keep the old look: each
+ * horizontal run of the same kind is one shape. Unknown kinds, bad cells and
+ * cells outside `rows` (when given) are ignored; a cell listed twice counts
+ * once. Groups come back in reading order of their first square.
+ */
+export function deriveFeatureGroups(
   features: RoomFeature[] | null | undefined,
-  rows: number,
-): FeatureStrip[] {
-  const byCell = new Map<string, RoomFeatureKind>();
+  rows?: number,
+): FeatureGroup[] {
+  const seen = new Set<string>();
+  const explicit = new Map<
+    string,
+    {
+      kind: RoomFeatureKind;
+      id: number;
+      cells: GridCell[];
+      link: GridCell | null;
+    }
+  >();
+  const legacy = new Map<string, RoomFeatureKind>();
   for (const f of features ?? []) {
     if (!isFeatureKind(f.kind) || !isInt(f.col) || !isInt(f.row)) continue;
-    if (f.col < 0 || f.col >= GRID_COLS || f.row < 0 || f.row >= rows) continue;
-    byCell.set(key(f.col, f.row), f.kind);
+    if (f.col < 0 || f.col >= GRID_COLS || f.row < 0) continue;
+    if (rows !== undefined && f.row >= rows) continue;
+    const k = key(f.col, f.row);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (isInt(f.group) && f.group >= 0) {
+      const bucket = `${f.group}:${f.kind}`;
+      let g = explicit.get(bucket);
+      if (!g) {
+        g = { kind: f.kind, id: f.group, cells: [], link: null };
+        explicit.set(bucket, g);
+      }
+      g.cells.push({ col: f.col, row: f.row });
+      if (
+        !g.link &&
+        f.kind === "screen" &&
+        isInt(f.linkCol) &&
+        isInt(f.linkRow)
+      )
+        g.link = { col: f.linkCol, row: f.linkRow };
+    } else legacy.set(k, f.kind);
   }
-  const strips: FeatureStrip[] = [];
-  for (let row = 0; row < rows; row++) {
-    let col = 0;
-    while (col < GRID_COLS) {
-      const kind = byCell.get(key(col, row));
-      if (!kind) {
-        col++;
-        continue;
-      }
-      let span = 1;
-      while (
-        col + span < GRID_COLS &&
-        byCell.get(key(col + span, row)) === kind
-      ) {
-        span++;
-      }
-      strips.push({ kind, row, col, span });
-      col += span;
+
+  const out: FeatureGroup[] = [];
+  const used = new Set<number>();
+  let nextId = 0;
+  for (const g of explicit.values()) nextId = Math.max(nextId, g.id + 1);
+  const fresh = () => nextId++;
+
+  for (const g of explicit.values())
+    for (const cells of connectedParts(g.cells)) {
+      const id = used.has(g.id) ? fresh() : g.id;
+      used.add(id);
+      out.push({ id, kind: g.kind, cells, link: g.link });
     }
+
+  const cells = [...legacy.keys()]
+    .map((k) => {
+      const [col, row] = k.split(",").map(Number);
+      return { col, row };
+    })
+    .sort(byReading);
+  const done = new Set<string>();
+  for (const start of cells) {
+    if (done.has(key(start.col, start.row))) continue;
+    const kind = legacy.get(key(start.col, start.row))!;
+    const run: GridCell[] = [];
+    for (
+      let col = start.col;
+      col < GRID_COLS && legacy.get(key(col, start.row)) === kind;
+      col++
+    ) {
+      run.push({ col, row: start.row });
+      done.add(key(col, start.row));
+    }
+    out.push({ id: fresh(), kind, cells: run, link: null });
   }
-  return strips;
+
+  return out.sort((a, b) => byReading(a.cells[0], b.cells[0]) || a.id - b.id);
+}
+
+/** The longest straight run of squares in a shape (where its label goes). */
+export interface LabelRun {
+  col: number;
+  row: number;
+  span: number;
+  vertical: boolean;
 }
 
 /**
- * Lay out a room: grid size, one cell per seat and the feature strips.
+ * Where a shape's label sits: its longest horizontal run (the first one in
+ * reading order on a tie), or its longest vertical run when that is longer
+ * (a door drawn down a wall).
+ */
+export function labelRun(cells: GridCell[]): LabelRun {
+  const set = new Set(cells.map((c) => key(c.col, c.row)));
+  let best: LabelRun = { ...cells[0], span: 1, vertical: false };
+  for (const c of [...cells].sort(byReading)) {
+    if (!set.has(key(c.col - 1, c.row))) {
+      let span = 1;
+      while (set.has(key(c.col + span, c.row))) span++;
+      if (span > best.span) best = { ...c, span, vertical: false };
+    }
+  }
+  for (const c of [...cells].sort(byReading)) {
+    if (!set.has(key(c.col, c.row - 1))) {
+      let span = 1;
+      while (set.has(key(c.col, c.row + span))) span++;
+      if (span > best.span) best = { ...c, span, vertical: true };
+    }
+  }
+  return best;
+}
+
+/**
+ * How one square of a shape is drawn so the shape reads as one piece: an
+ * outline only on its outer edges, plus bridges over the grid gap towards
+ * neighbouring squares of the same shape. A bridge down widens over the gap
+ * corner only when the 2x2 block is complete, so L shapes keep a clean inner
+ * corner. `bridgeRight`/`bridgeDown` say which of the bridge's edges are part
+ * of the outline.
+ */
+export interface SquareEdges {
+  top: boolean;
+  right: boolean;
+  bottom: boolean;
+  left: boolean;
+  bridgeRight: { top: boolean; bottom: boolean } | null;
+  bridgeDown: { left: boolean; right: boolean; wide: boolean } | null;
+}
+
+export function squareEdges(cells: GridCell[], cell: GridCell): SquareEdges {
+  const set = new Set(cells.map((c) => key(c.col, c.row)));
+  const has = (dc: number, dr: number) =>
+    set.has(key(cell.col + dc, cell.row + dr));
+  const right = has(1, 0);
+  const down = has(0, 1);
+  const wide = right && down && has(1, 1);
+  return {
+    top: !has(0, -1),
+    right: !right,
+    bottom: !down,
+    left: !has(-1, 0),
+    bridgeRight: right
+      ? { top: !(has(0, -1) && has(1, -1)), bottom: !(down && has(1, 1)) }
+      : null,
+    bridgeDown: down
+      ? { left: !(has(-1, 0) && has(-1, 1)), right: !wide, wide }
+      : null,
+  };
+}
+
+/**
+ * Lay out a room: grid size, one cell per seat and the feature shapes.
  * Seats with a valid, unique grid cell keep it; the rest (legacy seats, or
  * duplicates) go to the nearest free cell to where they belong.
  */
@@ -167,11 +340,9 @@ export function layoutRoom(
   seats: FloorPlanSeat[],
 ): RoomLayout {
   const rows = gridRowsFor(room, seats);
-  const strips = featureStrips(room.features, rows);
+  const groups = deriveFeatureGroups(room.features, rows);
   const taken = new Set<string>();
-  for (const s of strips) {
-    for (let c = s.col; c < s.col + s.span; c++) taken.add(key(c, s.row));
-  }
+  for (const g of groups) for (const c of g.cells) taken.add(key(c.col, c.row));
 
   const cells = new Map<number, GridCell>();
   const pending: FloorPlanSeat[] = [];
@@ -212,30 +383,48 @@ export function layoutRoom(
     taken.add(key(cell.col, cell.row));
   }
 
-  return { rows, cells, strips };
+  return { rows, cells, groups };
+}
+
+/**
+ * Linked screens resolved to seats: screen group id -> seat id, for links
+ * that point at a seat's cell and touch the screen. Stale links (no seat
+ * there any more, or no longer next to it) are ignored.
+ */
+export function screenSeatLinks(layout: RoomLayout): Map<number, number> {
+  const seatAt = new Map<string, number>();
+  for (const [id, c] of layout.cells) seatAt.set(key(c.col, c.row), id);
+  const out = new Map<number, number>();
+  for (const g of layout.groups) {
+    if (g.kind !== "screen" || !g.link) continue;
+    const seatId = seatAt.get(key(g.link.col, g.link.row));
+    if (seatId !== undefined && touchesAny(g.cells, g.link))
+      out.set(g.id, seatId);
+  }
+  return out;
 }
 
 export type ArrowKey = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 
-export interface NavDesk extends GridCell {
+export interface NavSeat extends GridCell {
   id: number;
 }
 
 /**
- * The desk to move focus to when pressing an arrow key on `fromId`: the
- * closest desk in that direction (primary axis first, then the cross axis).
+ * The seat to move focus to when pressing an arrow key on `fromId`: the
+ * closest seat in that direction (primary axis first, then the cross axis).
  * `null` when there is none.
  */
-export function nextDeskInDirection(
-  desks: NavDesk[],
+export function nextSeatInDirection(
+  seats: NavSeat[],
   fromId: number,
   direction: ArrowKey,
 ): number | null {
-  const from = desks.find((d) => d.id === fromId);
+  const from = seats.find((d) => d.id === fromId);
   if (!from) return null;
   let best: number | null = null;
   let bestScore = Infinity;
-  for (const d of desks) {
+  for (const d of seats) {
     if (d.id === fromId) continue;
     const dx = d.col - from.col;
     const dy = d.row - from.row;
@@ -306,7 +495,7 @@ export const sortRooms = <T extends Pick<Room, "sortOrder" | "id">>(
   rooms: T[],
 ): T[] => [...rooms].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 
-/** Order seats by their cell in reading order (the desks' tab order). */
+/** Order seats by their cell in reading order (the seats' tab order). */
 export function sortByCell<T extends { id: number }>(
   items: T[],
   cells: Map<number, GridCell>,
@@ -325,10 +514,15 @@ export function joinNames(names: string[]): string {
 }
 
 /** Wording used for the "unspecified seat" option when the event keeps the default label. */
-export const OWN_DESK_DEFAULT = "Bring my own desk";
+export const OWN_SEAT_DEFAULT = "Bring my own seat";
 
-/** The configured unspecified-seat label, or "Bring my own desk" for the default/empty one. */
-export const ownDeskLabel = (label: string | null | undefined) =>
+/** The configured unspecified-seat label, or "Bring my own seat" for the default/empty one. */
+export const ownSeatLabel = (label: string | null | undefined) =>
   label && label.trim() && label.trim().toLowerCase() !== "unspecified seat"
     ? label.trim()
-    : OWN_DESK_DEFAULT;
+    : OWN_SEAT_DEFAULT;
+
+/** @deprecated Use `ownSeatLabel` (kept while callers move over). */
+export const ownDeskLabel = ownSeatLabel;
+/** @deprecated Use `nextSeatInDirection`. */
+export const nextDeskInDirection = nextSeatInDirection;
