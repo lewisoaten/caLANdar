@@ -473,7 +473,11 @@ const EventSeatMap: React.FC = () => {
   ).length;
   const ownDesk = ownDeskLabel(seatingConfig.unspecifiedSeatLabel);
   const unspecifiedInvitations = invitations.filter(
-    (inv) => inv.seatId === null && isGoing(inv.response),
+    (inv) =>
+      inv.seatId === null &&
+      isGoing(inv.response) &&
+      // You only count as "own desk" once you've actually reserved it.
+      !(isMe(inv) && !reservation),
   );
 
   const tabs = (

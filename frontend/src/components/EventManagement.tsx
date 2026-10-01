@@ -492,7 +492,7 @@ const EventManagement = () => {
             icon={t.icon}
             iconPosition="start"
             sx={{
-              px: "18px",
+              px: { xs: "12px", md: "18px" },
               fontSize: 14,
               letterSpacing: "0.12em",
               gap: 1,

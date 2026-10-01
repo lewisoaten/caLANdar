@@ -104,8 +104,14 @@ beforeEach(() => {
         ]);
       if (method === "GET" && path === "/api/events/7/invitations")
         return json([]);
-      if (method === "GET" && path.startsWith("/api/steam-game"))
-        return json([]);
+      if (method === "GET" && path === "/api/steam-game")
+        return json([
+          { appid: 892970, name: "Valheim", last_modified: stamp, rank: null },
+        ]);
+      if (method === "POST" && path === "/api/events/7/suggested_games")
+        return json(
+          suggestion((body as { appid: number }).appid, "Valheim", 1),
+        );
       if (method === "PATCH") {
         const id = Number(path.split("/").pop());
         const cur = schedule.find((e) => e.id === id)!;
@@ -392,5 +398,40 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     expect(
       await screen.findByText("Team Fortress 2 pinned to SAT 15:00."),
     ).toBeInTheDocument();
+  });
+
+  it("suggests, votes and schedules a game from the Steam cache", async () => {
+    const user = userEvent.setup();
+    renderPage(true);
+    await block(/^Counter-Strike 2/);
+    await user.click(screen.getByRole("button", { name: /Add to schedule/ }));
+    await user.type(
+      await screen.findByRole("searchbox", { name: "Search games" }),
+      "val",
+    );
+    expect(
+      await screen.findByText("No suggested games match."),
+    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Valheim/ }));
+    expect(
+      await screen.findByText(/Not suggested yet\. Adding it suggests it/),
+    ).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Suggest, vote & schedule" }),
+    );
+    await waitFor(() =>
+      expect(
+        calls.find((c) => c.url.endsWith("/game_schedule?as_admin=true")),
+      ).toBeTruthy(),
+    );
+    const suggestIdx = calls.findIndex(
+      (c) => c.method === "POST" && c.url === "/api/events/7/suggested_games",
+    );
+    const scheduleIdx = calls.findIndex((c) =>
+      c.url.endsWith("/game_schedule?as_admin=true"),
+    );
+    expect(suggestIdx).toBeGreaterThan(-1);
+    expect(suggestIdx).toBeLessThan(scheduleIdx);
+    expect(calls[suggestIdx].body).toEqual({ appid: 892970, comment: null });
   });
 });

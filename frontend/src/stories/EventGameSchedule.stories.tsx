@@ -384,7 +384,8 @@ export const SessionDetails: Story = {
   decorators: [route(306), withUser({ isAdmin: true })],
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const block = await canvas.findByRole("button", {
+    // The timeline block (the day card has the same name).
+    const [block] = await canvas.findAllByRole("button", {
       name: /^Counter-Strike 2, Friday 18:30/,
     });
     await userEvent.click(block);
