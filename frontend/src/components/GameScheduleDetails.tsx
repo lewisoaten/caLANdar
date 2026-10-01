@@ -26,6 +26,7 @@ import {
   tint,
 } from "./hl";
 import { fmtDur, squadOf, whoIsAround } from "./schedule/scheduleModel";
+import GameCoverImage from "./GameCoverImage";
 
 export interface TimingControls {
   /** Day buttons (FRI / SAT / SUN). */
@@ -65,9 +66,6 @@ export interface GameScheduleDetailsProps {
   /** Id for the heading, so a surrounding dialog can reference it. */
   titleId?: string;
 }
-
-const coverUrl = (appid: number) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 
 type ChipTone = "lime" | "pink" | "cyan" | "neutral" | "neutralDim";
 
@@ -468,18 +466,11 @@ export default function GameScheduleDetails({
         }}
       >
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.75 }}>
-          <Box
-            component="img"
-            src={coverUrl(scheduleEntry.gameId)}
-            alt=""
-            sx={{
-              width: "100%",
-              aspectRatio: "460 / 215",
-              objectFit: "cover",
-              display: "block",
-              backgroundColor: colors.surface2,
-              border: `1px solid ${tint("cyan", 0.2)}`,
-            }}
+          <GameCoverImage
+            appid={scheduleEntry.gameId}
+            name={scheduleEntry.gameName}
+            loading="eager"
+            sx={{ border: `1px solid ${tint("cyan", 0.2)}` }}
           />
           <Typography
             component="h2"

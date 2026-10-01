@@ -290,6 +290,7 @@ fn build_rocket(
                 routes::games::steam_game_update_v2,
                 routes::games::steam_game_cache_stats,
                 routes::games::get_steam_game,
+                routes::games::get_steam_game_cover,
                 routes::event_games::get_all,
                 routes::event_games::get_all_suggested,
                 routes::event_games::post,

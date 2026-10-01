@@ -139,9 +139,60 @@ pub async fn get_steam_game(
     }
 }
 
+/// Where a game's Steam store header image lives.
+#[derive(Serialize, JsonSchema, Debug)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct SteamGameCover {
+    /// An https Steam CDN URL, or null when Steam has no header image.
+    pub header_url: Option<String>,
+}
+
+custom_errors!(SteamGameCoverError, Unauthorized, BadRequest, BadGateway);
+
+/// A Steam appid from a path segment: a positive integer.
+fn parse_appid(raw: &str) -> Option<u32> {
+    if raw.is_empty() || !raw.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse::<u32>().ok().filter(|id| *id > 0)
+}
+
+fn steam_cover_error(e: Error) -> SteamGameCoverError {
+    match e {
+        Error::Upstream(msg) => SteamGameCoverError::BadGateway(msg),
+        _ => SteamGameCoverError::BadGateway(game::COVER_STEAM_UNAVAILABLE.to_string()),
+    }
+}
+
+#[openapi(tag = "Games")]
+#[get("/steam-game/<appid>/cover")]
+/// The Steam store header image for a game. Newer games have no image at
+/// the legacy `header.jpg` path; this looks up the real one (cached).
+pub async fn get_steam_game_cover(
+    appid: &str,
+    _user: User,
+) -> Result<Json<SteamGameCover>, SteamGameCoverError> {
+    let appid = parse_appid(appid).ok_or_else(|| {
+        SteamGameCoverError::BadRequest("appid must be a positive integer".to_string())
+    })?;
+    game::steam_cover(appid)
+        .await
+        .map(|header_url| Json(SteamGameCover { header_url }))
+        .map_err(steam_cover_error)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{update_game_error, Error, UpdateGameError};
+    use super::{parse_appid, update_game_error, Error, UpdateGameError};
+
+    #[test]
+    fn appid_must_be_a_positive_integer() {
+        assert_eq!(parse_appid("3949040"), Some(3_949_040));
+        assert_eq!(parse_appid("1"), Some(1));
+        for bad in ["0", "", "-1", "+1", "1.5", "abc", " 1", "99999999999"] {
+            assert_eq!(parse_appid(bad), None, "{bad}");
+        }
+    }
     use crate::controllers::game::{REFRESH_SAVE_FAILED, REFRESH_STEAM_UNAVAILABLE};
 
     #[test]

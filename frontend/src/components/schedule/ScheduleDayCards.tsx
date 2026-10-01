@@ -14,6 +14,7 @@ import {
   isOutsideWindow,
   spanLong,
 } from "./scheduleModel";
+import GameCoverImage from "../GameCoverImage";
 
 export interface ScheduleDayCardsProps {
   days: LanDay[];
@@ -23,9 +24,6 @@ export interface ScheduleDayCardsProps {
   squadSize: number;
   onOpen: (key: string) => void;
 }
-
-const coverUrl = (appid: number) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 
 const tagSx = (color: string) => ({
   fontFamily: fonts.mono,
@@ -262,19 +260,11 @@ function SessionCard({
             component="span"
             sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
           >
-            <Box
-              component="img"
-              src={coverUrl(s.entry.gameId)}
-              alt=""
-              loading="lazy"
-              sx={{
-                width: 84,
-                height: 39,
-                flex: "none",
-                objectFit: "cover",
-                backgroundColor: colors.surface2,
-                display: "block",
-              }}
+            <GameCoverImage
+              appid={s.entry.gameId}
+              name={s.entry.gameName}
+              width={84}
+              height={39}
             />
             <Box
               component="span"

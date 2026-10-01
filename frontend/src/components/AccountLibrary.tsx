@@ -15,7 +15,7 @@ import {
   srOnly,
   tint,
 } from "./hl";
-import { steamCoverUrl } from "./GamesList";
+import GameCoverImage from "./GameCoverImage";
 
 export type LibrarySort = "playtime" | "name";
 
@@ -35,7 +35,6 @@ export function playtimePercent(minutes: number, max: number): number {
 }
 
 function Row({ game, max }: { game: UserGame; max: number }) {
-  const [failed, setFailed] = React.useState(false);
   const pct = playtimePercent(game.playtimeForever, max);
   const hours = formatLibraryHours(game.playtimeForever);
   return (
@@ -50,31 +49,12 @@ function Row({ game, max }: { game: UserGame; max: number }) {
         borderBottom: `1px solid ${hairline.faint}`,
       }}
     >
-      <Box
-        sx={{
-          width: 76,
-          height: 35,
-          flex: "none",
-          backgroundColor: colors.surface2,
-          overflow: "hidden",
-        }}
-      >
-        {!failed && (
-          <Box
-            component="img"
-            src={steamCoverUrl(game.appid)}
-            alt=""
-            loading="lazy"
-            onError={() => setFailed(true)}
-            sx={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-        )}
-      </Box>
+      <GameCoverImage
+        appid={game.appid}
+        name={game.name}
+        width={76}
+        height={35}
+      />
       <Box
         sx={{
           flex: 1,

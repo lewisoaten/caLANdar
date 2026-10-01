@@ -43,6 +43,7 @@ import {
   spanLong,
   whenShort,
 } from "./scheduleModel";
+import GameCoverImage from "../GameCoverImage";
 
 export interface AddRequest {
   gameId: number;
@@ -78,9 +79,6 @@ export interface AddToScheduleDialogProps {
   token?: string;
   onConfirm: (req: AddRequest) => Promise<boolean>;
 }
-
-const coverUrl = (appid: number) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 
 const START_OPTIONS = Array.from(
   { length: 48 },
@@ -157,20 +155,7 @@ function GameRow({
           },
         }}
       >
-        <Box
-          component="img"
-          src={coverUrl(appid)}
-          alt=""
-          loading="lazy"
-          sx={{
-            width: 76,
-            height: 35,
-            flex: "none",
-            objectFit: "cover",
-            backgroundColor: colors.surface2,
-            display: "block",
-          }}
-        />
+        <GameCoverImage appid={appid} name={name} width={76} height={35} />
         <Box
           component="span"
           sx={{
@@ -663,19 +648,13 @@ export function AddToScheduleDialog({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
-            <Box
-              component="img"
-              src={coverUrl(picked.appid)}
-              alt=""
-              sx={{
-                width: 120,
-                height: 56,
-                flex: "none",
-                objectFit: "cover",
-                backgroundColor: colors.surface2,
-                display: "block",
-                border: `1px solid ${tint("cyan", 0.2)}`,
-              }}
+            <GameCoverImage
+              appid={picked.appid}
+              name={picked.name}
+              width={120}
+              height={56}
+              loading="eager"
+              sx={{ border: `1px solid ${tint("cyan", 0.2)}` }}
             />
             <Box
               sx={{

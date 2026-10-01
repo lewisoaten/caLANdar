@@ -26,6 +26,7 @@ import {
 } from "./hl";
 import { OwnerChips, type OwnerIdentity } from "./GameOwners";
 import { rankSuggestions } from "./lobbyModel";
+import GameCoverImage from "./GameCoverImage";
 
 /** A game in the squad library plus its place in the event's vote, if any. */
 export interface SquadGame extends EventGame {
@@ -50,9 +51,6 @@ export const VOTE_FILTERS: ReadonlyArray<{ id: VoteFilter; label: string }> = [
 
 /** Cards per page. */
 export const GAMES_PAGE_SIZE = 24;
-
-export const steamCoverUrl = (appid: number) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 
 /** `1,641 H PLAYED` from minutes (`null` when never played). */
 export function formatPlayedHours(minutes: number): string | null {
@@ -189,46 +187,18 @@ function Segmented<T extends string>({
   );
 }
 
-function Cover({ appid, badge }: { appid: number; badge?: string | null }) {
-  const [failed, setFailed] = React.useState(false);
+function Cover({
+  appid,
+  name,
+  badge,
+}: {
+  appid: number;
+  name?: string;
+  badge?: string | null;
+}) {
   return (
-    <Box
-      sx={{
-        position: "relative",
-        aspectRatio: "460 / 215",
-        backgroundColor: colors.surface2,
-        overflow: "hidden",
-      }}
-    >
-      {!failed && (
-        <Box
-          component="img"
-          src={steamCoverUrl(appid)}
-          alt=""
-          loading="lazy"
-          onError={() => setFailed(true)}
-          sx={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-          }}
-        />
-      )}
-      {failed && (
-        <SportsEsportsSharp
-          aria-hidden="true"
-          sx={{
-            position: "absolute",
-            inset: 0,
-            m: "auto",
-            fontSize: 40,
-            color: colors.disabled,
-          }}
-        />
-      )}
+    <Box sx={{ position: "relative" }}>
+      <GameCoverImage appid={appid} name={name} />
       {badge && (
         <Box
           component="span"
@@ -307,7 +277,7 @@ export const GameCard = React.memo(function GameCard({
         "&:hover, &:focus-within": { borderColor: tint("cyan", 0.5) },
       }}
     >
-      <Cover appid={game.appid} badge={hours} />
+      <Cover appid={game.appid} name={game.name} badge={hours} />
       <Box
         sx={{
           flex: 1,

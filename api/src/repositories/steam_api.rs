@@ -365,9 +365,146 @@ pub async fn resolve_vanity_url(
     })
 }
 
+/// Hosts Steam serves store artwork from. A host is accepted when it equals
+/// one of these or is a subdomain of one (`shared.akamai.steamstatic.com`).
+/// The generic `akamaihd.net` is deliberately absent: any Akamai customer
+/// can serve from it, so only Steam's own `steamcdn-a` host is allowed.
+const STEAM_CDN_HOSTS: [&str; 2] = ["steamstatic.com", "steamcdn-a.akamaihd.net"];
+
+/// Timeout for one store `appdetails` lookup.
+const APPDETAILS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// `raw` as an https URL on a Steam CDN host, without query or fragment,
+/// or `None` when it is anything else.
+pub fn steam_cdn_image_url(raw: &str) -> Option<String> {
+    let mut url = reqwest::Url::parse(raw).ok()?;
+    if url.scheme() != "https" || url.port().is_some() || !url.username().is_empty() {
+        return None;
+    }
+    let host = url.host_str()?.to_ascii_lowercase();
+    let allowed = STEAM_CDN_HOSTS.iter().any(|allowed| {
+        host == *allowed
+            || host
+                .strip_suffix(allowed)
+                .is_some_and(|prefix| prefix.ends_with('.'))
+    });
+    if !allowed {
+        return None;
+    }
+    url.set_query(None);
+    url.set_fragment(None);
+    Some(url.into())
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+struct AppDetailsEntry {
+    success: bool,
+    data: Option<AppDetailsData>,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+struct AppDetailsData {
+    header_image: Option<String>,
+}
+
+/// The validated `header_image` from a store `appdetails` response body.
+fn header_image_from_appdetails(appid: u32, body: &str) -> Result<Option<String>, String> {
+    let mut parsed: std::collections::HashMap<String, AppDetailsEntry> =
+        serde_json::from_str(body).map_err(|e| format!("unparseable appdetails: {e}"))?;
+    Ok(parsed
+        .remove(&appid.to_string())
+        .filter(|entry| entry.success)
+        .and_then(|entry| entry.data)
+        .and_then(|data| data.header_image)
+        .and_then(|raw| steam_cdn_image_url(&raw)))
+}
+
+/// Look up a game's store header image. Newer games have no image at the
+/// legacy `steam/apps/<appid>/header.jpg` path; the store API knows the
+/// hashed path. `Ok(None)` when Steam has no (acceptable) image for it.
+pub async fn get_header_image(appid: u32) -> Result<Option<String>, String> {
+    let request_url =
+        format!("https://store.steampowered.com/api/appdetails?appids={appid}&filters=basic");
+    let client = reqwest::Client::builder()
+        .timeout(APPDETAILS_TIMEOUT)
+        .build()
+        .map_err(|e| format!("client: {}", e.without_url()))?;
+    let response = client
+        .get(&request_url)
+        .send()
+        .await
+        .map_err(|e| format!("request: {}", e.without_url()))?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(format!("status {status}"));
+    }
+    let body = response
+        .text()
+        .await
+        .map_err(|e| format!("body: {}", e.without_url()))?;
+    header_image_from_appdetails(appid, &body)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::snippet;
+    use super::{header_image_from_appdetails, snippet, steam_cdn_image_url};
+
+    #[test]
+    fn accepts_steam_cdn_hosts_and_strips_query() {
+        assert_eq!(
+            steam_cdn_image_url(
+                "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3949040/abc/header.jpg?t=1789134289"
+            )
+            .as_deref(),
+            Some("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3949040/abc/header.jpg")
+        );
+        assert!(steam_cdn_image_url("https://fastly.steamstatic.com/a.jpg#x").is_some());
+        assert!(steam_cdn_image_url("https://steamstatic.com/a.jpg").is_some());
+        assert!(steam_cdn_image_url("https://steamcdn-a.akamaihd.net/a.jpg").is_some());
+        assert!(steam_cdn_image_url("https://CDN.Cloudflare.SteamStatic.com/a.jpg").is_some());
+    }
+
+    #[test]
+    fn rejects_other_hosts_and_schemes() {
+        for url in [
+            "http://shared.akamai.steamstatic.com/a.jpg",
+            "https://evilsteamstatic.com/a.jpg",
+            "https://steamstatic.com.evil.example/a.jpg",
+            "https://evil.akamaihd.net/a.jpg",
+            "https://evil-steamcdn-a.akamaihd.net/a.jpg",
+            "https://user@shared.akamai.steamstatic.com/a.jpg",
+            "https://shared.akamai.steamstatic.com:8443/a.jpg",
+            "javascript:alert(1)",
+            "data:image/png;base64,AAAA",
+            "//shared.akamai.steamstatic.com/a.jpg",
+            "not a url",
+            "",
+        ] {
+            assert_eq!(steam_cdn_image_url(url), None, "{url}");
+        }
+    }
+
+    #[test]
+    fn parses_appdetails() {
+        let hit = r#"{"42":{"success":true,"data":{"header_image":"https://shared.akamai.steamstatic.com/h.jpg?t=1"}}}"#;
+        assert_eq!(
+            header_image_from_appdetails(42, hit)
+                .ok()
+                .flatten()
+                .as_deref(),
+            Some("https://shared.akamai.steamstatic.com/h.jpg")
+        );
+        let miss = r#"{"42":{"success":false}}"#;
+        assert_eq!(header_image_from_appdetails(42, miss).ok(), Some(None));
+        let foreign =
+            r#"{"42":{"success":true,"data":{"header_image":"https://evil.example/h.jpg"}}}"#;
+        assert_eq!(header_image_from_appdetails(42, foreign).ok(), Some(None));
+        let other_app = r#"{"7":{"success":true,"data":{"header_image":"https://shared.akamai.steamstatic.com/h.jpg"}}}"#;
+        assert_eq!(header_image_from_appdetails(42, other_app).ok(), Some(None));
+        assert!(header_image_from_appdetails(42, "<html>").is_err());
+    }
 
     #[test]
     fn snippet_cuts_on_char_boundaries() {

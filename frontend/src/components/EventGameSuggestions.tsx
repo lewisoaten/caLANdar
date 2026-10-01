@@ -41,6 +41,7 @@ import {
 } from "./hl";
 import { rankSuggestions } from "./lobbyModel";
 import { RSVP } from "../types/invitations";
+import GameCoverImage from "./GameCoverImage";
 
 const COMMENT_MAX_LENGTH = 500;
 
@@ -59,9 +60,6 @@ interface EventGameSuggestionsProps {
 }
 
 type Status = "loading" | "ready" | "error";
-
-const steamCover = (appid: number) =>
-  `https://cdn.cloudflare.steamstatic.com/steam/apps/${appid}/header.jpg`;
 
 function RankBadge({
   rank,
@@ -573,17 +571,12 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.75 }}>
                 <RankBadge rank={rank} trophyRank={trophyRank} />
-                <Box
-                  component="img"
-                  src={steamCover(game.appid)}
-                  alt=""
-                  loading="lazy"
+                <GameCoverImage
+                  appid={game.appid}
+                  name={game.name}
+                  width={92}
+                  height={43}
                   sx={{
-                    width: 92,
-                    height: 43,
-                    flex: "none",
-                    objectFit: "cover",
-                    backgroundColor: colors.surface2,
                     border: `1px solid ${tint("cyan", 0.15)}`,
                     display: { xs: "none", sm: "block" },
                   }}
@@ -865,18 +858,11 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   {...rest}
                   sx={{ gap: 1.5, minHeight: 44 }}
                 >
-                  <Box
-                    component="img"
-                    src={steamCover(option.appid)}
-                    alt=""
-                    loading="lazy"
-                    sx={{
-                      width: 60,
-                      height: 28,
-                      objectFit: "cover",
-                      flex: "none",
-                      backgroundColor: colors.surface2,
-                    }}
+                  <GameCoverImage
+                    appid={option.appid}
+                    name={option.name}
+                    width={60}
+                    height={28}
                   />
                   <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
                     {option.name}
