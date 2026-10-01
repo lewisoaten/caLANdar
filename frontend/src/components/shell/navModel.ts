@@ -23,6 +23,8 @@ export interface ShellRoute {
   section: ShellSection;
   /** Event id from `/events/:id/...` or `/admin/events/:id`. */
   eventId?: string;
+  /** True on the admin room editor, `/admin/events/:id/rooms`. */
+  rooms?: boolean;
 }
 
 /** The four per-event pages (they get the event sub-nav and live ticker). */
@@ -59,8 +61,13 @@ export function parseRoute(pathname: string): ShellRoute {
   }
   if (path === "/account") return { section: "account" };
   if (path === "/admin/events") return { section: "adminEvents" };
-  const admin = /^\/admin\/events\/([^/]+)$/.exec(path);
-  if (admin) return { section: "adminEvent", eventId: admin[1] };
+  const admin = /^\/admin\/events\/([^/]+)(?:\/rooms)?$/.exec(path);
+  if (admin)
+    return {
+      section: "adminEvent",
+      eventId: admin[1],
+      ...(path.endsWith("/rooms") ? { rooms: true } : {}),
+    };
   if (path === "/admin/gamers") return { section: "gamers" };
   if (path === "/admin/audit") return { section: "audit" };
   return { section: "unknown" };
@@ -115,7 +122,11 @@ export function buildBreadcrumb(
     return [
       { label: "ADMIN" },
       { label: "EVENTS", to: "/admin/events" },
-      { label: title },
+      {
+        label: title,
+        to: route.rooms ? `/admin/events/${route.eventId}` : undefined,
+      },
+      ...(route.rooms ? [{ label: "ROOMS" }] : []),
     ];
   if (s === "adminEvents" || s === "gamers" || s === "audit")
     return [{ label: "ADMIN" }, { label: LABELS[s].toUpperCase() }];

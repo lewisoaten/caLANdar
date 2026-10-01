@@ -95,6 +95,7 @@ export function FilterChips<T extends string = string>(
             }}
           >
             <span>{o.label}</span>
+            {o.count !== undefined && " "}
             {o.count !== undefined && (
               <Box
                 component="span"

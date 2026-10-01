@@ -34,6 +34,16 @@ describe("parseRoute", () => {
   });
 });
 
+describe("room editor route", () => {
+  it("is the admin event page with the rooms flag", () => {
+    expect(parseRoute("/admin/events/7/rooms")).toEqual({
+      section: "adminEvent",
+      eventId: "7",
+      rooms: true,
+    });
+  });
+});
+
 describe("breadcrumb", () => {
   test("event pages", () => {
     const crumbs = buildBreadcrumb(parseRoute("/events/7"), "Autumn LAN 2026");

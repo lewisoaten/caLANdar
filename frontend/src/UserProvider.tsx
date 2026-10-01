@@ -75,7 +75,6 @@ function UserProvider({ children }: Props) {
       if (response.status === 200) {
         return response.json();
       } else {
-        alert("Invalid email");
         throw new Error("Invalid email");
       }
     });
@@ -101,7 +100,6 @@ function UserProvider({ children }: Props) {
         if (response.status === 200) {
           return response.json();
         } else {
-          alert("Invalid verification token");
           throw new Error("Invalid verification token");
         }
       })
