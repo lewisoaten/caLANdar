@@ -19,7 +19,7 @@ import {
   projectFloorPoint,
   projectPlanPoint,
   type AuthScene,
-  type DeskState,
+  type SeatState,
 } from "./authArtModel";
 
 type Pt = [number, number];
@@ -456,9 +456,9 @@ export function floorMotion() {
 // ---------------------------------------------------------------------------
 // Floor plan
 
-const deskTone = (
+const seatTone = (
   p: ArtPalette,
-): Record<DeskState, { stroke: string; fill: string; monitor: string }> => ({
+): Record<SeatState, { stroke: string; fill: string; monitor: string }> => ({
   lime: { stroke: p.lime, fill: p.tint("lime", 0.16), monitor: p.lime },
   violet: {
     stroke: p.violetLight,
@@ -566,17 +566,17 @@ export function planGeometry(scene: AuthScene, p: ArtPalette): PlanGeometry {
     });
   Object.entries(packets).forEach(([fill, d]) => add(d, fill));
 
-  // Desks, merged per tone: glow, body, outline, monitor.
-  const tone = deskTone(p);
-  const by = (fn: (d: AuthScene["desks"][number]) => string, pick: string) => {
+  // Seats, merged per tone: glow, body, outline, monitor.
+  const tone = seatTone(p);
+  const by = (fn: (d: AuthScene["seats"][number]) => string, pick: string) => {
     const acc = new Map<string, string>();
-    for (const desk of scene.desks) {
-      const k = (tone[desk.state] as Record<string, string>)[pick];
-      acc.set(k, (acc.get(k) ?? "") + fn(desk));
+    for (const seat of scene.seats) {
+      const k = (tone[seat.state] as Record<string, string>)[pick];
+      acc.set(k, (acc.get(k) ?? "") + fn(seat));
     }
     return acc;
   };
-  const sw = (state: DeskState) => (state === "you" ? 4 : 2.5);
+  const sw = (state: SeatState) => (state === "you" ? 4 : 2.5);
   for (const [fill, d] of by(
     (k) =>
       k.state === "empty"
@@ -632,7 +632,7 @@ export function planGeometry(scene: AuthScene, p: ArtPalette): PlanGeometry {
   rings.forEach((d, c) => add(d, c, 0.5));
   dots.forEach((d, c) => add(d, c));
 
-  // Your desk: target brackets.
+  // Your seat: target brackets.
   const y = scene.you;
   const [x0, y0, x1, y1, l] = [
     y.x - 14,
@@ -673,7 +673,7 @@ export function planGeometry(scene: AuthScene, p: ArtPalette): PlanGeometry {
 }
 
 // ---------------------------------------------------------------------------
-// The beacon over "your desk"
+// The beacon over "your seat"
 
 export const BEAM_HEIGHT = 300;
 
@@ -730,7 +730,7 @@ export function beaconGeometry(scene: AuthScene) {
   const base = projectPlanPoint(cx, cy, h0);
   const top = projectPlanPoint(cx, cy, h1);
 
-  // Pulse ring around the desk: the projected circle as an ellipse.
+  // Pulse ring around the seat: the projected circle as an ellipse.
   const c = projectPlanPoint(cx, cy);
   const ex = projectPlanPoint(cx + 40, cy);
   const n = projectPlanPoint(cx, cy - 40);

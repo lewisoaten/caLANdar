@@ -7,7 +7,7 @@ import moment from "moment";
 import { RSVP } from "../types/invitations";
 import { getAttendanceGrid, TIME_PERIODS } from "../utils/attendanceBuckets";
 import type { HlTone } from "./hl";
-import { ownDeskLabel } from "./seatFloorPlanModel";
+import { ownSeatLabel } from "./seatFloorPlanModel";
 
 /** `EVT-001` style tag for an event id. */
 export const formatEventId = (id: number): string =>
@@ -81,7 +81,7 @@ export const RSVP_STATUS: Record<RsvpState, RsvpStatusCopy> = {
   },
   none: {
     text: "RSVP needed",
-    sub: "You're invited. Pick your slots and claim a desk before they go.",
+    sub: "You're invited. Pick your slots and claim a seat before they go.",
     tone: "cyan",
     tag: "INVITED",
     cta: "RSVP now",
@@ -164,18 +164,18 @@ export function summariseSquad<
 export interface SquadSeating {
   hasSeating: boolean;
   allowUnspecifiedSeat: boolean;
-  /** The event's configured label for a floating (no fixed desk) seat. */
+  /** The event's configured label for a floating (no fixed seat) seat. */
   unspecifiedSeatLabel: string;
-  /** Desk labels by seat id. */
+  /** Seat labels by seat id. */
   labels: Map<number, string>;
 }
 
 export interface SquadSeat {
   /**
-   * `desk` a reserved desk, `floating` a reservation without a desk,
+   * `seat` a reserved seat, `floating` a reservation without a seat,
    * `unseated` going but no reservation yet, `none` not going.
    */
-  kind: "desk" | "floating" | "unseated" | "none";
+  kind: "seat" | "floating" | "unseated" | "none";
   text: string;
 }
 
@@ -199,14 +199,14 @@ export function squadSeatText(
   if (st === "no" || st === "none") return { kind: "none", text: "none" };
   if (guest.seatId !== null)
     return {
-      kind: "desk",
+      kind: "seat",
       text: seating.labels.get(guest.seatId) ?? "Reserved",
     };
   const floating =
     guest.hasSeatReservation ??
     (seating.allowUnspecifiedSeat ? true : undefined);
   return floating
-    ? { kind: "floating", text: ownDeskLabel(seating.unspecifiedSeatLabel) }
+    ? { kind: "floating", text: ownSeatLabel(seating.unspecifiedSeatLabel) }
     : { kind: "unseated", text: "No seat yet" };
 }
 

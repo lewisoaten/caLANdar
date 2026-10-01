@@ -165,7 +165,7 @@ function ThemeShowcase() {
       <Section label="Selection">
         <FormControlLabel
           control={<Checkbox defaultChecked />}
-          label="Bring my own desk"
+          label="Bring my own seat"
         />
         <FormControlLabel control={<Checkbox />} label="Unchecked" />
         <FormControlLabel control={<Radio checked />} label="Yes" />

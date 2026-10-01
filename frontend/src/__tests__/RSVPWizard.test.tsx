@@ -323,7 +323,7 @@ describe("RSVPWizard seat reservation failures", () => {
     directLookups = [];
   });
 
-  test("keeps 'bring my own desk' after attendance changes and never 404s", async () => {
+  test("keeps 'bring my own seat' after attendance changes and never 404s", async () => {
     let posted: unknown = null;
     server.use(
       ...seatingHandlers(() => new HttpResponse(null, { status: 201 })),

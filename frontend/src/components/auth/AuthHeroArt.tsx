@@ -26,8 +26,8 @@ import {
 /*
  * Generated hero artwork for the signed-out pages: a synthwave horizon with a
  * striped sun and server-tower skyline, a scrolling neon grid floor, and the
- * seat-map floor plan hovering above it (desk pods, circuit traces, data
- * packets and a beacon over "your desk"), finished with HUD readouts,
+ * seat-map floor plan hovering above it (seat pods, circuit traces, data
+ * packets and a beacon over "your seat"), finished with HUD readouts,
  * scanlines, film grain and a vignette.
  *
  * Built for cheap frames (it is the first thing a phone sees):
@@ -36,7 +36,7 @@ import {
  *   the still frame rasterises once.
  * - Only `transform`/`opacity` animate (Web Animations, so they stay on the
  *   compositor; see `motionPlan`), each on its own small layer. 'full'
- *   (desktop) runs grid scroll, desk pulse, two packets, tag bob, beam flicker
+ *   (desktop) runs grid scroll, seat pulse, two packets, tag bob, beam flicker
  *   and five twinkling stars; 'lite' (phones, low-power devices, Save-Data)
  *   runs just the grid scroll and the pulse; 'still' runs nothing.
  * - Every layer stays about screen-sized, including the moving grid (see
@@ -75,7 +75,7 @@ const GLOW_V = glowBand(0.35, 1 + 14, 60);
 type GlowBand = ReturnType<typeof glowBand>;
 
 export interface AuthHeroArtProps {
-  /** Seed for the generated layout (stars, skyline, desks, traces). */
+  /** Seed for the generated layout (stars, skyline, seats, traces). */
   seed?: number;
   /** Show the HUD readouts (hidden in the compact mobile banner). */
   hud?: boolean;
@@ -652,7 +652,7 @@ export function AuthHeroArt({
           className="hlAuthArt-tag"
           style={{ left: beacon.label.x, top: beacon.label.y }}
         >
-          <span className="hlAuthArt-tagKicker">{"// YOUR DESK"}</span>
+          <span className="hlAuthArt-tagKicker">{"// YOUR SEAT"}</span>
           <span className="hlAuthArt-tagId">{scene.you.id}</span>
         </div>
       </div>

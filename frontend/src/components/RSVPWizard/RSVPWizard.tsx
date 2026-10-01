@@ -23,7 +23,7 @@ import AttendanceStep from "./AttendanceStep";
 import SeatSelectionStep from "./SeatSelectionStep";
 import ReviewStep from "./ReviewStep";
 import { colors, effects, fonts, hairline, tint, useIsMobile } from "../hl";
-import { ownDeskLabel } from "../seatFloorPlanModel";
+import { ownSeatLabel } from "../seatFloorPlanModel";
 import {
   SessionExpiredError,
   fetchReservation,
@@ -165,8 +165,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
   }, [props.event.id, token, signOut]);
 
   // The label the wizard shows for a floating (unspecified) reservation:
-  // the event's configured label, or "Bring my own desk" for the default.
-  const ownDesk = ownDeskLabel(unspecifiedSeatLabel);
+  // the event's configured label, or "Bring my own seat" for the default.
+  const ownSeat = ownSeatLabel(unspecifiedSeatLabel);
 
   // Load the guest's existing seat reservation into the wizard state.
   useEffect(() => {
@@ -190,12 +190,12 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         );
         if (signal.aborted) return;
         if (!reservation.exists || reservation.seatId === null) {
-          // None yet, or a floating one: preselect "bring my own desk" when
+          // None yet, or a floating one: preselect "bring my own seat" when
           // the event allows it.
           setSelectedSeatId(null);
           setReservedSeatId(null);
           setSelectedSeatLabel(
-            reservation.exists || allowUnspecifiedSeat ? ownDesk : null,
+            reservation.exists || allowUnspecifiedSeat ? ownSeat : null,
           );
           setSelectedSeatRoomName(null);
           return;
@@ -247,7 +247,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
         return handleValid && handle.trim().length > 0;
       case "Seat":
         // A seat is required if seating is enabled and "unspecified" (bring
-        // your own desk) is not allowed.
+        // your own seat) is not allowed.
         if (hasSeating && !allowUnspecifiedSeat) return selectedSeatId !== null;
         return true;
       case "Review":
@@ -458,12 +458,12 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     }
   };
 
-  // Changing attendance drops any desk pick (it may not be free for the new
-  // slots) back to the default: "bring my own desk" when allowed, else none.
+  // Changing attendance drops any seat pick (it may not be free for the new
+  // slots) back to the default: "bring my own seat" when allowed, else none.
   const handleAttendanceChange = (newAttendance: number[] | null) => {
     setAttendance(newAttendance);
     setSelectedSeatId(null);
-    setSelectedSeatLabel(allowUnspecifiedSeat ? ownDesk : null);
+    setSelectedSeatLabel(allowUnspecifiedSeat ? ownSeat : null);
     setSelectedSeatRoomName(null);
   };
 

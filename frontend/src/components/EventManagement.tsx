@@ -56,7 +56,7 @@ export function tabFromParam(value: string | null): ManageTab {
 export const roomEditorPath = (eventId: number | string) =>
   `/admin/events/${eventId}/rooms`;
 
-/** Seating tab: the event's rooms with desk counts, linking to the editor. */
+/** Seating tab: the event's rooms with seat counts, linking to the editor. */
 function RoomsPanel({ eventId }: { eventId: number }) {
   const { signOut } = useContext(UserDispatchContext);
   const token = useContext(UserContext)?.token;
@@ -179,7 +179,7 @@ function RoomsPanel({ eventId }: { eventId: number }) {
         <EmptyState
           icon={<MeetingRoomSharp />}
           title="No rooms yet"
-          description="Draw the floor plan so attendees can pick a desk."
+          description="Draw the floor plan so attendees can pick a seat."
           action={
             <Button
               component={RouterLink}

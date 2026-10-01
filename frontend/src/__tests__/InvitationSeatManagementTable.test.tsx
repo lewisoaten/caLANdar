@@ -89,7 +89,7 @@ const server = setupServer(
       eventId: 7,
       hasSeating: true,
       allowUnspecifiedSeat: true,
-      unspecifiedSeatLabel: "Floating / no desk",
+      unspecifiedSeatLabel: "Floating / no seat",
       createdAt: STAMP,
       lastModified: STAMP,
     }),
@@ -117,7 +117,7 @@ describe("InvitationSeatManagementTable", () => {
     renderAsAdmin(<InvitationSeatManagementTable event={event} as_admin />);
     expect(await row("Nia")).toHaveTextContent("Seat A2, Main Hall");
     const dan = await row("Dan");
-    expect(dan).toHaveTextContent("Seat: Floating / no desk");
+    expect(dan).toHaveTextContent("Seat: Floating / no seat");
     expect(dan).not.toHaveTextContent(/unspecified/i);
     expect(await row("Kai")).toHaveTextContent("No seat yet");
   });

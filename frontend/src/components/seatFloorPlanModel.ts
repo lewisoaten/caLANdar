@@ -521,8 +521,3 @@ export const ownSeatLabel = (label: string | null | undefined) =>
   label && label.trim() && label.trim().toLowerCase() !== "unspecified seat"
     ? label.trim()
     : OWN_SEAT_DEFAULT;
-
-/** @deprecated Use `ownSeatLabel` (kept while callers move over). */
-export const ownDeskLabel = ownSeatLabel;
-/** @deprecated Use `nextSeatInDirection`. */
-export const nextDeskInDirection = nextSeatInDirection;

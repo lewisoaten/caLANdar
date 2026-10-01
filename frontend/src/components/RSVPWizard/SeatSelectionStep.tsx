@@ -20,7 +20,7 @@ interface SeatSelectionStepProps {
   ) => void;
 }
 
-/** Step: pick a desk on the floor plan (the picker itself is WizardSeatSelector). */
+/** Step: pick a seat on the floor plan (the picker itself is WizardSeatSelector). */
 export default function SeatSelectionStep(props: SeatSelectionStepProps) {
   if (!props.hasSeating) {
     return null;
@@ -35,8 +35,8 @@ export default function SeatSelectionStep(props: SeatSelectionStepProps) {
         sx={{ m: 0, fontSize: 15, color: colors.textMuted }}
       >
         {isOptional
-          ? "Tap a free desk on the floor plan, or bring your own. You can move later on the seat map."
-          : "Tap a free desk on the floor plan. This event needs everyone to pick a seat; you can move later on the seat map."}
+          ? "Tap a free seat on the floor plan, or bring your own. You can move later on the seat map."
+          : "Tap a free seat on the floor plan. This event needs everyone to pick a seat; you can move later on the seat map."}
       </Typography>
       <WizardSeatSelector
         eventId={props.eventId}

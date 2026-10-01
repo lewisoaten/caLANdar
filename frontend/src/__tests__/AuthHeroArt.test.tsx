@@ -140,20 +140,20 @@ describe("authArtModel", () => {
     const b = mulberry32(42);
     expect([a(), a(), a()]).toEqual([b(), b(), b()]);
     expect(generateAuthScene(2026)).toEqual(generateAuthScene(2026));
-    expect(generateAuthScene(7).desks).not.toEqual(
-      generateAuthScene(2026).desks,
+    expect(generateAuthScene(7).seats).not.toEqual(
+      generateAuthScene(2026).seats,
     );
   });
 
-  test("lays out a seat-map floor plan with exactly one claimed desk", () => {
+  test("lays out a seat-map floor plan with exactly one claimed seat", () => {
     const scene = generateAuthScene();
-    expect(scene.desks).toHaveLength(96);
-    expect(scene.desks.filter((d) => d.state === "you")).toEqual([scene.you]);
-    expect(new Set(scene.desks.map((d) => d.id)).size).toBe(96);
+    expect(scene.seats).toHaveLength(96);
+    expect(scene.seats.filter((d) => d.state === "you")).toEqual([scene.you]);
+    expect(new Set(scene.seats.map((d) => d.id)).size).toBe(96);
     expect(scene.online).toBeGreaterThan(0);
     expect(scene.online).toBeLessThanOrEqual(scene.total);
     expect(scene.pings).toHaveLength(8);
-    for (const d of scene.desks) {
+    for (const d of scene.seats) {
       expect(d.x).toBeGreaterThanOrEqual(0);
       expect(d.x + d.w).toBeLessThanOrEqual(RIG.planWidth);
       expect(d.y + d.h).toBeLessThanOrEqual(RIG.planDepth);

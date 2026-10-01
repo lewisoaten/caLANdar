@@ -29,7 +29,7 @@ pub struct Seat {
     /// The room ID this seat belongs to.
     pub room_id: i32,
 
-    /// The seat identifier shown on the desk (up to 8 characters; older seats may be longer).
+    /// The seat identifier shown on the seat (up to 8 characters; older seats may be longer).
     pub label: String,
 
     /// Optional free-text description of the seat (up to 120 characters).

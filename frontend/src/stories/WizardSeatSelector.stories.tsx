@@ -97,19 +97,19 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Step 4 of the RSVP wizard: both rooms as floor plans plus "Bring my own desk". */
+/** Step 4 of the RSVP wizard: both rooms as floor plans plus "Bring my own seat". */
 export const PickASeat: Story = {};
 
-/** A desk already picked (cyan + glow, "Your pick"). */
+/** A seat already picked (cyan + glow, "Your pick"). */
 export const SeatPicked: Story = { args: { eventId: 262, selectedSeatId: 3 } };
 
-/** Seat required: no "Bring my own desk" option. */
+/** Seat required: no "Bring my own seat" option. */
 export const SeatRequired: Story = {
   args: { eventId: 262, allowUnspecifiedSeat: false, selectedSeatId: 4 },
 };
 
 /** A custom label for the unspecified seat option. */
-export const CustomOwnDeskLabel: Story = {
+export const CustomOwnSeatLabel: Story = {
   args: { unspecifiedSeatLabel: "Somewhere near a plug socket" },
 };
 

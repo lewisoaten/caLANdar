@@ -34,12 +34,13 @@ import {
 import {
   SeatFloorPlan,
   FloorPlanLegend,
-  type DeskState,
-  type FloorPlanDesk,
+  hasLinkedScreens,
+  type SeatState,
+  type SeatTile,
 } from "./SeatFloorPlan";
 import {
   layoutRoom,
-  ownDeskLabel,
+  ownSeatLabel,
   roomCode,
   sortByCell,
   sortRooms,
@@ -92,9 +93,9 @@ interface SeatMapData {
   seats: FloorPlanSeat[];
 }
 
-interface DeskInfo extends FloorPlanDesk {
+interface SeatInfo extends SeatTile {
   seat: FloorPlanSeat;
-  /** Everyone booked on the desk (any time), for the "who's where" list. */
+  /** Everyone booked on the seat (any time), for the "who's where" list. */
   people: InvitationLiteData[];
 }
 
@@ -366,12 +367,12 @@ const EventSeatMap: React.FC = () => {
     [myInvitation, email],
   );
 
-  const deskFor = useCallback(
-    (seat: FloorPlanSeat): DeskInfo => {
+  const seatFor = useCallback(
+    (seat: FloorPlanSeat): SeatInfo => {
       const people = invitations.filter((inv) => inv.seatId === seat.id);
       const others = people.filter((inv) => !isMe(inv));
       const mine = reservation?.seatId === seat.id;
-      let state: DeskState;
+      let state: SeatState;
       if (mine) state = "mine";
       else if (selectedSeatId === seat.id) state = "selected";
       else if (canPick) {
@@ -403,25 +404,25 @@ const EventSeatMap: React.FC = () => {
     ],
   );
 
-  const desksByRoom = useMemo(() => {
-    const map = new Map<number, DeskInfo[]>();
+  const seatsByRoom = useMemo(() => {
+    const map = new Map<number, SeatInfo[]>();
     for (const room of orderedRooms) {
       const roomSeats = seats.filter((s) => s.roomId === room.id);
       const { cells } = layoutRoom(room, roomSeats);
       map.set(
         room.id,
-        sortByCell(roomSeats, cells).map((s) => deskFor(s)),
+        sortByCell(roomSeats, cells).map((s) => seatFor(s)),
       );
     }
     return map;
-  }, [orderedRooms, seats, deskFor]);
+  }, [orderedRooms, seats, seatFor]);
 
   const selectedSeat = seats.find((s) => s.id === selectedSeatId) ?? null;
   const mySeat = seats.find((s) => s.id === reservation?.seatId) ?? null;
   const roomName = (seat: Seat | null) =>
     rooms.find((r) => r.id === seat?.roomId)?.name ?? "";
 
-  const handleDeskSelect = (seat: FloorPlanSeat) => {
+  const handleSeatPick = (seat: FloorPlanSeat) => {
     if (seat.id === reservation?.seatId) {
       setSelectedSeatId(null);
       return;
@@ -551,15 +552,15 @@ const EventSeatMap: React.FC = () => {
     );
   }
 
-  const activeDesks = desksByRoom.get(activeRoom.id) ?? [];
+  const activeSeats = seatsByRoom.get(activeRoom.id) ?? [];
   const freeCount = (roomId: number) =>
-    (desksByRoom.get(roomId) ?? []).filter((d) => d.state === "free").length;
+    (seatsByRoom.get(roomId) ?? []).filter((d) => d.state === "free").length;
   const activeIndex = orderedRooms.findIndex((r) => r.id === activeRoom.id);
 
   const occupiedSeats = seats.filter((s) =>
     invitations.some((inv) => inv.seatId === s.id),
   ).length;
-  const ownDesk = ownDeskLabel(seatingConfig.unspecifiedSeatLabel);
+  const ownSeat = ownSeatLabel(seatingConfig.unspecifiedSeatLabel);
   const unspecifiedInvitations = invitations.filter(
     (inv) =>
       inv.seatId === null &&
@@ -675,12 +676,12 @@ const EventSeatMap: React.FC = () => {
     title = "RSVP first";
     sub = myInvitation
       ? "Seats open up once you RSVP yes or maybe."
-      : "Only invited guests can claim a desk.";
+      : "Only invited guests can claim a seat.";
     if (myInvitation) actions.push(lobbyButton);
   } else if (!hasTimes) {
     kicker = "LOCKED";
     title = "Set your times";
-    sub = "Pick the times you'll be there in the lobby, then claim a desk.";
+    sub = "Pick the times you'll be there in the lobby, then claim a seat.";
     actions.push(lobbyButton);
   } else if (selectedSeat) {
     kicker = "SELECTED";
@@ -729,12 +730,12 @@ const EventSeatMap: React.FC = () => {
   } else if (reservation) {
     kicker = "YOUR SEAT";
     titleTone = "lime";
-    title = mySeat ? `${mySeat.label} · ${roomName(mySeat)}` : ownDesk;
+    title = mySeat ? `${mySeat.label} · ${roomName(mySeat)}` : ownSeat;
     sub = mySeat
       ? canRelease
-        ? "Tap another free desk to move."
-        : "This event needs everyone at a desk: tap another free desk to move."
-      : "Tap a free desk on the plan to claim one instead.";
+        ? "Tap another free seat to move."
+        : "This event needs everyone at a seat: tap another free seat to move."
+      : "Tap a free seat on the plan to claim one instead.";
     if (canRelease) {
       actions.push(
         <Button
@@ -750,20 +751,20 @@ const EventSeatMap: React.FC = () => {
     }
   } else {
     kicker = "NO SEAT YET";
-    title = "Pick a desk";
+    title = "Pick a seat";
     sub = availabilityError
-      ? "Desks can be picked once we know which are free for your times."
+      ? "Seats can be picked once we know which are free for your times."
       : availableSeatIds === null
-        ? "Checking which desks are free for your times…"
-        : "Tap any free desk on the plan to select it.";
+        ? "Checking which seats are free for your times…"
+        : "Tap any free seat on the plan to select it.";
   }
 
-  const showOwnDesk =
+  const showOwnSeat =
     seatingConfig.allowUnspecifiedSeat &&
     canPick &&
     !selectedSeat &&
     !(reservation && reservation.seatId === null);
-  if (showOwnDesk) {
+  if (showOwnSeat) {
     actions.push(
       <Button
         key="byo"
@@ -774,7 +775,7 @@ const EventSeatMap: React.FC = () => {
         onClick={() => reserve(null)}
         sx={{ justifyContent: "flex-start" }}
       >
-        {ownDesk}
+        {ownSeat}
       </Button>,
     );
   }
@@ -789,7 +790,7 @@ const EventSeatMap: React.FC = () => {
     borderBottom: `1px solid ${hairline.faint}`,
     "&:last-of-type": { borderBottom: 0 },
   } as const;
-  const labelTone: Record<DeskState, string> = {
+  const labelTone: Record<SeatState, string> = {
     mine: colors.lime,
     taken: colors.violetText,
     selected: colors.cyan,
@@ -846,7 +847,7 @@ const EventSeatMap: React.FC = () => {
                 color: colors.cyan,
               }}
             >
-              {freeCount(activeRoom.id)} / {activeDesks.length} FREE
+              {freeCount(activeRoom.id)} / {activeSeats.length} FREE
             </Box>
           </Box>
           {activeRoom.description && (
@@ -858,13 +859,24 @@ const EventSeatMap: React.FC = () => {
           )}
           <SeatFloorPlan
             room={activeRoom}
-            desks={activeDesks}
+            seats={activeSeats}
             label={`${activeRoom.name} floor plan`}
-            onDeskSelect={canPick ? handleDeskSelect : undefined}
+            onSeatSelect={canPick ? handleSeatPick : undefined}
             minCellSize={48}
           />
           <FloorPlanLegend
-            items={["mine", "free", "taken", "selected"]}
+            items={[
+              "mine",
+              "free",
+              "taken",
+              "selected",
+              ...(hasLinkedScreens(
+                activeRoom,
+                activeSeats.map((t) => t.seat),
+              )
+                ? (["linkedScreen"] as const)
+                : []),
+            ]}
             sx={{ pt: 0.5 }}
           />
         </Box>
@@ -964,13 +976,13 @@ const EventSeatMap: React.FC = () => {
               {activeRoom.name} · Who&apos;s where
             </Kicker>
             <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
-              {activeDesks.map((desk) => {
-                const people = desk.people;
+              {activeSeats.map((entry) => {
+                const people = entry.people;
                 return (
-                  <Box component="li" key={desk.seat.id} sx={listRowSx}>
+                  <Box component="li" key={entry.seat.id} sx={listRowSx}>
                     <Box
                       component="span"
-                      title={desk.seat.label}
+                      title={entry.seat.label}
                       sx={{
                         // Fits an 8-character identifier; longer legacy
                         // labels are cut (full text in the title).
@@ -982,10 +994,10 @@ const EventSeatMap: React.FC = () => {
                         fontFamily: fonts.mono,
                         fontSize: 13,
                         fontWeight: 700,
-                        color: labelTone[desk.state],
+                        color: labelTone[entry.state],
                       }}
                     >
-                      {desk.seat.label}
+                      {entry.seat.label}
                     </Box>
                     <Box
                       sx={{
@@ -1001,7 +1013,7 @@ const EventSeatMap: React.FC = () => {
                           component="span"
                           sx={{ fontSize: 14, color: colors.textMuted }}
                         >
-                          {desk.state === "selected" ? "Selected" : "Free"}
+                          {entry.state === "selected" ? "Selected" : "Free"}
                         </Box>
                       ) : (
                         people.map((inv, i) => (
@@ -1048,12 +1060,12 @@ const EventSeatMap: React.FC = () => {
                           </Box>
                         ))
                       )}
-                      {desk.seat.description && (
+                      {entry.seat.description && (
                         <Box
                           component="span"
                           sx={{ fontSize: 12, color: colors.textMuted }}
                         >
-                          {desk.seat.description}
+                          {entry.seat.description}
                         </Box>
                       )}
                     </Box>
@@ -1083,7 +1095,7 @@ const EventSeatMap: React.FC = () => {
                     borderBottom: `1px solid ${hairline.soft}`,
                   }}
                 >
-                  {ownDesk} · {unspecifiedInvitations.length}
+                  {ownSeat} · {unspecifiedInvitations.length}
                 </Kicker>
                 <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
                   {unspecifiedInvitations.map((inv, i) => (
@@ -1118,7 +1130,7 @@ const EventSeatMap: React.FC = () => {
             )}
 
           <StatGrid columns={seatingConfig.allowUnspecifiedSeat ? 4 : 3}>
-            <StatCell value={seats.length} label="DESKS" tone="cyan" />
+            <StatCell value={seats.length} label="SEATS" tone="cyan" />
             <StatCell value={occupiedSeats} label="TAKEN" tone="violet" />
             <StatCell
               value={seats.length - occupiedSeats}
@@ -1128,7 +1140,7 @@ const EventSeatMap: React.FC = () => {
             {seatingConfig.allowUnspecifiedSeat && (
               <StatCell
                 value={unspecifiedInvitations.length}
-                label="OWN DESK"
+                label="OWN SEAT"
               />
             )}
           </StatGrid>

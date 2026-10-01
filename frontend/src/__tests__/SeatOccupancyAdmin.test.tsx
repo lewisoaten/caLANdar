@@ -42,7 +42,7 @@ const config = (hasSeating: boolean) => ({
   eventId: 1,
   hasSeating,
   allowUnspecifiedSeat: true,
-  unspecifiedSeatLabel: "Bring my own desk",
+  unspecifiedSeatLabel: "Bring my own seat",
   createdAt: STAMP,
   lastModified: STAMP,
 });
@@ -157,9 +157,9 @@ describe("SeatOccupancyAdmin", () => {
       name: "Seat assignments",
     });
     expect(await within(region).findByText("Total seats")).toBeInTheDocument();
-    const desks = within(region).getByRole("list", { name: "Main Hall desks" });
-    expect(within(desks).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(desks).getByText(/, taken/)).toBeInTheDocument();
+    const seats = within(region).getByRole("list", { name: "Main Hall seats" });
+    expect(within(seats).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(seats).getByText(/, taken/)).toBeInTheDocument();
     expect(within(region).getByText("NoScope_Nia")).toBeInTheDocument();
     expect(
       within(region).getByRole("list", { name: "Unspecified seat attendees" }),
@@ -233,7 +233,7 @@ describe("SeatOccupancyAdmin", () => {
     await u.click(within(dialog).getByRole("combobox", { name: "New seat" }));
     expect(await screen.findAllByRole("option")).not.toHaveLength(0);
     expect(
-      screen.queryByRole("option", { name: "Bring my own desk" }),
+      screen.queryByRole("option", { name: "Bring my own seat" }),
     ).not.toBeInTheDocument();
   });
 

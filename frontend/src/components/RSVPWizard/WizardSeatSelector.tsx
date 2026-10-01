@@ -12,10 +12,11 @@ import { displayCallsign } from "../../utils/callsign";
 import {
   SeatFloorPlan,
   FloorPlanLegend,
-  type FloorPlanDesk,
+  hasLinkedScreens,
+  type SeatTile,
 } from "../SeatFloorPlan";
 import {
-  ownDeskLabel,
+  ownSeatLabel,
   roomCode,
   sortRooms,
   type FloorPlanRoom,
@@ -39,7 +40,7 @@ interface WizardSeatSelectorProps {
 
 /**
  * The RSVP wizard's graphical seat picker: every room drawn as a floor plan
- * (free / taken with avatar / your pick), plus the "Bring my own desk"
+ * (free / taken with avatar / your pick), plus the "Bring my own seat"
  * (unspecified seat) option when the event allows it. Nothing is saved here;
  * the wizard reserves the seat when the RSVP is confirmed.
  */
@@ -80,7 +81,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   const loading = Boolean(eventId && token) && seatsLoadedFor !== eventId;
   const availabilityLoaded = availabilityLoadedFor === availabilityKey;
 
-  const ownDesk = ownDeskLabel(unspecifiedSeatLabel);
+  const ownSeat = ownSeatLabel(unspecifiedSeatLabel);
 
   // Fetch rooms and seats
   useEffect(() => {
@@ -131,7 +132,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
         setSeatsLoadedFor(eventId);
       });
 
-    // Who sits where, for the avatars on taken desks (optional extra).
+    // Who sits where, for the avatars on taken seats (optional extra).
     Promise.resolve()
       .then(() => fetch(`/api/events/${eventId}/invitations`, { headers }))
       .then((response) => (response?.ok ? response.json() : null))
@@ -172,7 +173,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       })
       .catch((error) => {
         console.error("Error fetching seat availability:", error);
-        // Without availability every desk would read as taken: show an
+        // Without availability every seat would read as taken: show an
         // error with a retry instead of a misleading plan.
         setAvailabilityFailedFor(`${eventId}:${attendanceBuckets.join("")}`);
       })
@@ -211,12 +212,12 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
   const handleUnspecifiedSeat = () => {
     if (disabled) return;
-    onSeatSelect(null, ownDesk, undefined);
+    onSeatSelect(null, ownSeat, undefined);
   };
 
-  const desksFor = useMemo(
+  const seatsFor = useMemo(
     () =>
-      (roomSeats: Seat[]): FloorPlanDesk[] =>
+      (roomSeats: Seat[]): SeatTile[] =>
         roomSeats.map((seat) => {
           const isAvailable =
             availableSeats.includes(seat.id) || seat.id === reservedSeatId;
@@ -274,7 +275,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
     >
       <DeskSharp aria-hidden="true" />
       <Box component="span" sx={{ flex: 1 }}>
-        {ownDesk}
+        {ownSeat}
       </Box>
       {byoPressed && <CheckSharp aria-hidden="true" />}
     </Box>
@@ -317,10 +318,10 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
           }}
         >
           <Box component="span" sx={{ flex: "1 1 220px" }}>
-            Couldn&apos;t check which desks are free.{" "}
+            Couldn&apos;t check which seats are free.{" "}
             {allowUnspecifiedSeat
-              ? "Try again, or bring your own desk."
-              : "Try again to pick your desk."}
+              ? "Try again, or bring your own seat."
+              : "Try again to pick your seat."}
           </Box>
           <Button
             variant="outlined"
@@ -369,8 +370,8 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
     <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
       {orderedRooms.map((room, index) => {
         const roomSeats = seats.filter((s) => s.roomId === room.id);
-        const desks = desksFor(roomSeats);
-        const free = desks.filter((d) => d.state === "free").length;
+        const planSeats = seatsFor(roomSeats);
+        const free = planSeats.filter((d) => d.state === "free").length;
         const headingId = `wizard-room-${room.id}`;
         return (
           <Box
@@ -405,9 +406,9 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
             )}
             <SeatFloorPlan
               room={room}
-              desks={desks}
+              seats={planSeats}
               label={`${room.name} floor plan`}
-              onDeskSelect={disabled ? undefined : (s) => handleSeatClick(s.id)}
+              onSeatSelect={disabled ? undefined : (s) => handleSeatClick(s.id)}
             />
           </Box>
         );
@@ -415,7 +416,21 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
       <FloorPlanLegend
         size="sm"
-        items={[{ key: "selected", label: "Your pick" }, "free", "taken"]}
+        items={[
+          { key: "selected", label: "Your pick" },
+          "free",
+          "taken",
+          ...(orderedRooms.some((room) =>
+            hasLinkedScreens(
+              room,
+              seatsFor(seats.filter((s) => s.roomId === room.id)).map(
+                (t) => t.seat,
+              ),
+            ),
+          )
+            ? (["linkedScreen"] as const)
+            : []),
+        ]}
       />
 
       {byoButton}

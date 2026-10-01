@@ -105,7 +105,7 @@ export default function AuthLayout({
           >
             Plan the LAN.{" "}
             <Box component="span" sx={{ color: colors.cyan }}>
-              Claim your desk.
+              Claim your seat.
             </Box>
           </Typography>
           <Typography

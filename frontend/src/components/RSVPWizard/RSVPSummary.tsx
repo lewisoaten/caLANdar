@@ -26,7 +26,7 @@ import {
   type HlTone,
 } from "../hl";
 import AttendanceStrip from "../AttendanceStrip";
-import { ownDeskLabel } from "../seatFloorPlanModel";
+import { ownSeatLabel } from "../seatFloorPlanModel";
 import {
   SessionExpiredError,
   fetchReservation,
@@ -120,7 +120,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
           setSeatLabel(null);
           setSeatRoomName(null);
         } else if (reservation.seatId === null) {
-          setSeatLabel(ownDeskLabel(cfg.unspecifiedSeatLabel));
+          setSeatLabel(ownSeatLabel(cfg.unspecifiedSeatLabel));
           setSeatRoomName(null);
         } else {
           const seat = await fetchSeatLabel(

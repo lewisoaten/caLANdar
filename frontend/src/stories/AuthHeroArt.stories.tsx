@@ -7,7 +7,7 @@ import { AuthHeroArt } from "../components/auth/AuthHeroArt";
  * The generated artwork behind the signed-out pages (Sign in, Verify email).
  * Pure SVG + CSS, seeded, decorative (aria-hidden). The scene is pre-projected
  * into a few static layers; motion is compositor-only Web Animations.
- * `mode`: 'auto' picks 'full' on desktop and 'lite' (grid scroll + desk pulse)
+ * `mode`: 'auto' picks 'full' on desktop and 'lite' (grid scroll + seat pulse)
  * on phones and low-power devices; 'still' is the static frame, which is also
  * what prefers-reduced-motion always gets. Motion pauses while the tab is
  * hidden, the art is off-screen, or a field is focused on a small screen.
@@ -67,7 +67,7 @@ export const MobileBanner: Story = {
   },
 };
 
-/** A different seed rearranges stars, skyline, desks and traces. */
+/** A different seed rearranges stars, skyline, seats and traces. */
 export const OtherSeed: Story = { args: { seed: 7 } };
 
 /** Desktop motion set, forced (packets, beam flicker, tag bob, twinkles). */
@@ -81,7 +81,7 @@ export const Full: Story = {
   },
 };
 
-/** Phone motion set: only the grid scroll and the desk pulse. */
+/** Phone motion set: only the grid scroll and the seat pulse. */
 export const Lite: Story = {
   args: { mode: "lite" },
   parameters: { frame: { width: 390, height: 300 } },

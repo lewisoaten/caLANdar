@@ -23,13 +23,13 @@ const stamp = moment.utc("2026-02-20T09:00:00Z");
 const svgUri = (svg: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 
-// A simple 4:3 floorplan: outer walls, a desk under every seat, an entrance.
-const floorplan = (title: string, desks: Array<[number, number]>) =>
+// A simple 4:3 floorplan: outer walls, a seat under every seat, an entrance.
+const floorplan = (title: string, seats: Array<[number, number]>) =>
   svgUri(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600">` +
       `<rect width="800" height="600" fill="#e9edf2"/>` +
       `<rect x="24" y="24" width="752" height="552" rx="10" fill="#f8fafc" stroke="#475569" stroke-width="6"/>` +
-      desks
+      seats
         .map(
           ([x, y]) =>
             `<rect x="${x * 800 - 38}" y="${y * 600 - 20}" width="76" height="40" rx="6" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/>`,
@@ -581,12 +581,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The design: you hold A4 (lime); tap a free desk to swap, or release it. */
+/** The design: you hold A4 (lime); tap a free seat to swap, or release it. */
 export const YourSeat: Story = {
   decorators: [withRoute("/events/:id", "/events/206"), withUser()],
 };
 
-/** RSVP'd but no desk yet: pick one, then claim it (or bring your own desk). */
+/** RSVP'd but no seat yet: pick one, then claim it (or bring your own seat). */
 export const NoSeatYet: Story = {
   decorators: [withRoute("/events/:id", "/events/207"), withUser()],
 };

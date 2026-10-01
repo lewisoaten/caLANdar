@@ -8,7 +8,7 @@ use std::hash::{Hash, Hasher};
 
 use crate::repositories::{audit_log, event_seating_config};
 
-/// What seat reservation audit entries record when no desk was chosen.
+/// What seat reservation audit entries record when no seat was chosen.
 const UNSPECIFIED_SEAT: &str = "unspecified seat";
 
 #[derive(Debug, Clone)]
@@ -485,8 +485,8 @@ async fn format_seat_reservation_event(
 
     let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
-    // Reservations without a desk are logged as "unspecified seat"; say what
-    // the event actually calls that option (e.g. "Floating / no desk").
+    // Reservations without a seat are logged as "unspecified seat"; say what
+    // the event actually calls that option (e.g. "Floating / no seat").
     let unspecified_label = if seat == UNSPECIFIED_SEAT {
         event_seating_config::get(pool, event_id)
             .await
@@ -512,7 +512,7 @@ async fn format_seat_reservation_event(
 }
 
 /// Ticker text for a seat reservation. `unspecified_label` is the event's
-/// configured name for "no desk", used when `seat` is [`UNSPECIFIED_SEAT`].
+/// configured name for "no seat", used when `seat` is [`UNSPECIFIED_SEAT`].
 #[allow(clippy::literal_string_with_formatting_args)]
 fn seat_reservation_message<T: Hash>(
     name: &str,
@@ -551,11 +551,11 @@ mod tests {
             let msg = seat_reservation_message(
                 "Nia",
                 UNSPECIFIED_SEAT,
-                Some("Floating / no desk"),
+                Some("Floating / no seat"),
                 &seed,
             );
             assert!(msg.starts_with("Nia "), "{msg}");
-            assert!(msg.contains("Floating / no desk"), "{msg}");
+            assert!(msg.contains("Floating / no seat"), "{msg}");
             assert!(!msg.contains(UNSPECIFIED_SEAT), "{msg}");
         }
     }

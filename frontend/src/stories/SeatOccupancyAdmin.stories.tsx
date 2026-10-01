@@ -15,7 +15,7 @@ const register = (
         {
           id: id * 10 + 1,
           name: "Main Hall",
-          description: "Two rows of desks, wired networking",
+          description: "Two rows of seats, wired networking",
           sortOrder: 0,
         },
         {
@@ -52,7 +52,7 @@ const register = (
           eventId: id,
           hasSeating,
           allowUnspecifiedSeat: true,
-          unspecifiedSeatLabel: "Bring my own desk",
+          unspecifiedSeatLabel: "Bring my own seat",
           createdAt: STAMP,
           lastModified: STAMP,
         },
@@ -116,7 +116,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Two rooms, three assigned desks and one "bring my own desk". */
+/** Two rooms, three assigned seats and one "bring my own seat". */
 export const Default: Story = { args: { eventId: 611 } };
 
 /** Seating turned off for the event. */

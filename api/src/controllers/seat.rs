@@ -6,7 +6,7 @@ use crate::{
     routes::seats::{Seat, SeatSubmit},
 };
 
-/// Maximum length of a seat identifier (the short label drawn on the desk).
+/// Maximum length of a seat identifier (the short label drawn on the seat).
 pub const MAX_IDENTIFIER_LEN: usize = 8;
 /// Maximum length of a seat's free-text description.
 pub const MAX_DESCRIPTION_LEN: usize = 120;
@@ -333,8 +333,8 @@ mod tests {
         assert_eq!(normalise_seat_description(None), Ok(None));
         assert_eq!(normalise_seat_description(Some("   ")), Ok(None));
         assert_eq!(
-            normalise_seat_description(Some("  Window desk next to the fridge ")),
-            Ok(Some("Window desk next to the fridge".to_string()))
+            normalise_seat_description(Some("  Window seat next to the fridge ")),
+            Ok(Some("Window seat next to the fridge".to_string()))
         );
         let max = "é".repeat(MAX_DESCRIPTION_LEN);
         assert_eq!(

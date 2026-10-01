@@ -115,7 +115,7 @@ describe("squadSeatText", () => {
   const seating = {
     hasSeating: true,
     allowUnspecifiedSeat: true,
-    unspecifiedSeatLabel: "Floating / no desk",
+    unspecifiedSeatLabel: "Floating / no seat",
     labels: new Map([[3, "A3"]]),
   };
   const guest = (
@@ -130,9 +130,9 @@ describe("squadSeatText", () => {
     ).toBeNull();
   });
 
-  test("shows the desk label", () => {
+  test("shows the seat label", () => {
     expect(squadSeatText(guest(3, true), seating)).toEqual({
-      kind: "desk",
+      kind: "seat",
       text: "A3",
     });
   });
@@ -140,7 +140,7 @@ describe("squadSeatText", () => {
   test("uses the event's label for a floating reservation", () => {
     expect(squadSeatText(guest(null, true), seating)).toEqual({
       kind: "floating",
-      text: "Floating / no desk",
+      text: "Floating / no seat",
     });
   });
 

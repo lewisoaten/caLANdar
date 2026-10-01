@@ -63,7 +63,7 @@ export const mainHall = (
   id: 1,
   eventId,
   name: "Main Hall",
-  description: "Two rows of desks, wired 1GbE",
+  description: "Two rows of seats, wired 1GbE",
   image: null,
   sortOrder: 0,
   createdAt: stamp,

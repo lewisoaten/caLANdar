@@ -168,7 +168,7 @@ describe("WizardSeatSelector reserved seat handling", () => {
     expect(seatButton).not.toBeDisabled();
   });
 
-  it("shows who has taken an unavailable desk", async () => {
+  it("shows who has taken an unavailable seat", async () => {
     renderSelector(null);
 
     expect(
@@ -178,7 +178,7 @@ describe("WizardSeatSelector reserved seat handling", () => {
     ).toBeDisabled();
   });
 
-  it("selects a free desk with its label and room", async () => {
+  it("selects a free seat with its label and room", async () => {
     mockAvailability = { availableSeatIds: [10] };
     const onSeatSelect = vi.fn();
     renderSelector(null, { onSeatSelect });
@@ -189,7 +189,7 @@ describe("WizardSeatSelector reserved seat handling", () => {
     expect(onSeatSelect).toHaveBeenCalledWith(10, "Seat 10", "Main Hall");
   });
 
-  it("deselects the picked desk when pressed again", async () => {
+  it("deselects the picked seat when pressed again", async () => {
     mockAvailability = { availableSeatIds: [10] };
     const onSeatSelect = vi.fn();
     renderSelector(null, { onSeatSelect, selectedSeatId: 10 });
@@ -202,7 +202,7 @@ describe("WizardSeatSelector reserved seat handling", () => {
     expect(onSeatSelect).toHaveBeenCalledWith(null);
   });
 
-  it("offers Bring my own desk when unspecified seats are allowed", async () => {
+  it("offers Bring my own seat when unspecified seats are allowed", async () => {
     const onSeatSelect = vi.fn();
     renderSelector(null, {
       allowUnspecifiedSeat: true,
@@ -211,41 +211,41 @@ describe("WizardSeatSelector reserved seat handling", () => {
     });
 
     const byo = await screen.findByRole("button", {
-      name: /Bring my own desk/,
+      name: /Bring my own seat/,
     });
     expect(byo).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(byo);
     expect(onSeatSelect).toHaveBeenCalledWith(
       null,
-      "Bring my own desk",
+      "Bring my own seat",
       undefined,
     );
   });
 
-  it("hides Bring my own desk when a specific seat is required", async () => {
+  it("hides Bring my own seat when a specific seat is required", async () => {
     renderSelector(null);
 
     await screen.findByRole("button", { name: /Seat 10/ });
     expect(
-      screen.queryByRole("button", { name: /Bring my own desk/ }),
+      screen.queryByRole("button", { name: /Bring my own seat/ }),
     ).not.toBeInTheDocument();
   });
 
-  it("shows an error with a retry instead of marking every desk taken", async () => {
+  it("shows an error with a retry instead of marking every seat taken", async () => {
     availabilityFailures = 1;
     mockAvailability = { availableSeatIds: [10] };
     vi.spyOn(console, "error").mockImplementation(() => {});
     renderSelector(null, { allowUnspecifiedSeat: true });
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      /Couldn't check which desks are free/,
+      /Couldn't check which seats are free/,
     );
     expect(
       screen.queryByRole("button", { name: /Seat 10/ }),
     ).not.toBeInTheDocument();
     // Bring-your-own stays available while the plan is unavailable.
     expect(
-      screen.getByRole("button", { name: /Bring my own desk/ }),
+      screen.getByRole("button", { name: /Bring my own seat/ }),
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));

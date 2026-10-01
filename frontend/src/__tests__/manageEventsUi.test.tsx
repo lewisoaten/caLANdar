@@ -271,7 +271,7 @@ describe("EventManagement", () => {
           eventId: 7,
           hasSeating: true,
           allowUnspecifiedSeat: true,
-          unspecifiedSeatLabel: "Bring my own desk",
+          unspecifiedSeatLabel: "Bring my own seat",
           createdAt: "2026-01-01T00:00:00Z",
           lastModified: "2026-01-01T00:00:00Z",
         }),

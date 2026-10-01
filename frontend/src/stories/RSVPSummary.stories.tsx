@@ -6,7 +6,7 @@ import { RSVP } from "../types/invitations";
 import { withUser } from "./mockApi";
 import { lobbyTimes, mockLobbyApi } from "./lobbyMocks";
 
-// 951: seat A4 reserved; 952: own desk (unspecified); 953: no seating.
+// 951: seat A4 reserved; 952: own seat (unspecified); 953: no seating.
 mockLobbyApi(951);
 mockLobbyApi(952, { seatId: null });
 mockLobbyApi(953, { hasSeating: false });
@@ -84,7 +84,7 @@ export const RespondedNo: Story = {
   },
 };
 
-export const OwnDesk: Story = {
+export const OwnSeat: Story = {
   args: {
     event: mockEvent(952),
     invitation: invitation(RSVP.yes, "ProGamer123", [1, 1, 1, 1, 1, 1, 1, 1]),

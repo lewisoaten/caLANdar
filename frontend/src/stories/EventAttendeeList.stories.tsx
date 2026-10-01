@@ -95,7 +95,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The lobby squad with seat labels, a BYO desk and the viewer highlighted. */
+/** The lobby squad with seat labels, a BYO seat and the viewer highlighted. */
 export const WithSeats: Story = {
   args: { event_id: 310, responded: 1, selfHandle: "ProGamer123" },
 };

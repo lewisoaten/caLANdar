@@ -213,7 +213,7 @@ export function useSeatReservation({
           eventId,
           message:
             userFacingReason(error) ??
-            "Couldn't check which desks are free. Check your connection and try again.",
+            "Couldn't check which seats are free. Check your connection and try again.",
         });
       });
     return () => controller.abort();

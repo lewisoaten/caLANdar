@@ -221,14 +221,14 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({
       )}
       <ToggleRow
         label="Seat map enabled"
-        description="Attendees pick desks from the floor plan."
+        description="Attendees pick seats from the floor plan."
         checked={config.hasSeating}
         disabled={!loaded}
         onChange={(e) => change({ hasSeating: e.target.checked })}
       />
       <ToggleRow
         label='Allow "no seat" option'
-        description="For people bringing their own desk or dropping in."
+        description="For people bringing their own seat or dropping in."
         checked={config.allowUnspecifiedSeat}
         disabled={!loaded || !config.hasSeating}
         onChange={(e) => change({ allowUnspecifiedSeat: e.target.checked })}
@@ -267,7 +267,7 @@ const EventSeatingConfig: React.FC<EventSeatingConfigProps> = ({
           helperText={
             labelMissing
               ? "Enter a label for the no-seat option."
-              : "Shown to attendees instead of a desk, e.g. Bring my own desk."
+              : "Shown to attendees instead of a seat, e.g. Bring my own seat."
           }
           sx={{ "& .MuiOutlinedInput-root": { minHeight: 44 } }}
         />

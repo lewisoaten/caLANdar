@@ -349,7 +349,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
                   sx={{
                     flex: "0 1 auto",
                     // Narrow on phones so long callsigns keep their room;
-                    // labels wrap between words ("Floating / no desk").
+                    // labels wrap between words ("Floating / no seat").
                     maxWidth: { xs: "30%", sm: "40%" },
                     textAlign: "right",
                     overflowWrap: "break-word",
@@ -357,7 +357,7 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
                     fontSize: 13,
                     fontWeight: 500,
                     color:
-                      seat.kind === "desk" ? colors.text : colors.textMuted,
+                      seat.kind === "seat" ? colors.text : colors.textMuted,
                   }}
                 >
                   <Box component="span" sx={srOnly}>

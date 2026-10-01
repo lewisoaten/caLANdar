@@ -284,7 +284,7 @@ export default function InvitationSeatManagementTable(
   const [reservations, setReservations] = useState<SeatReservation[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
-  // What this event calls a reservation without a desk ("Floating / BYO").
+  // What this event calls a reservation without a seat ("Floating / BYO").
   const [unspecifiedLabel, setUnspecifiedLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -440,7 +440,7 @@ export default function InvitationSeatManagementTable(
     if (!attendee.seatId) {
       if (!attendee.reservationId)
         return { label: "—", room: null, spoken: "No seat yet" };
-      const label = unspecifiedLabel ?? "No desk";
+      const label = unspecifiedLabel ?? "No seat";
       return { label, room: null, spoken: `Seat: ${label}` };
     }
     const seat = seats.find((s) => s.id === attendee.seatId);

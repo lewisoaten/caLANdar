@@ -56,8 +56,8 @@ export const Maybe: Story = { decorators: inShell({ response: "maybe" }) };
 /** Declined: squad and vote stay visible, "Update RSVP" CTA. */
 export const NotGoing: Story = { decorators: inShell({ response: "no" }) };
 
-/** Bring-your-own-desk (unspecified seat). */
-export const OwnDesk: Story = { decorators: inShell({ seatId: null }) };
+/** Bring-your-own-seat (unspecified seat). */
+export const OwnSeat: Story = { decorators: inShell({ seatId: null }) };
 
 /** No seating configured for the event: no seat column or seat step. */
 export const NoSeating: Story = {

@@ -47,23 +47,12 @@ export interface SeatTile {
   disabled?: boolean;
 }
 
-/** @deprecated Use `SeatState`. */
-export type DeskState = SeatState;
-/** @deprecated Use `SeatOccupant`. */
-export type DeskOccupant = SeatOccupant;
-/** @deprecated Use `SeatTile`. */
-export type FloorPlanDesk = SeatTile;
-
 export interface SeatFloorPlanProps {
   room: FloorPlanRoom;
   /** The room's seats and their state. */
   seats?: SeatTile[];
-  /** @deprecated Use `seats`. */
-  desks?: SeatTile[];
   /** Called when a selectable seat is activated (click, Enter or Space). */
   onSeatSelect?: (seat: FloorPlanSeat) => void;
-  /** @deprecated Use `onSeatSelect`. */
-  onDeskSelect?: (seat: FloorPlanSeat) => void;
   /** Accessible name for the plan, e.g. "Main Hall floor plan". */
   label: string;
   /**
@@ -147,13 +136,6 @@ export function seatSubLabel(tile: SeatTile): string {
       return occupants.length > 0 ? "SHARED" : "FREE";
   }
 }
-
-/** @deprecated Use `seatAriaLabel`. */
-export const deskAriaLabel = seatAriaLabel;
-/** @deprecated Use `seatTitle`. */
-export const deskTitle = seatTitle;
-/** @deprecated Use `seatSubLabel`. */
-export const deskSubLabel = seatSubLabel;
 
 /** Base of the plan, under seats and features so a background never shows through them. */
 const GRID_BASE = "#0a0d15";
@@ -474,22 +456,17 @@ function BackgroundLayers({ room }: { room: FloorPlanRoom }) {
  * A screen linked to a seat shows that seat's state (free, taken, yours);
  * screens are decorative, the linked seat's name says "with screen".
  */
+const NO_SEATS: SeatTile[] = [];
+
 export function SeatFloorPlan({
   room,
-  seats: seatsProp,
-  desks,
-  onSeatSelect: onSeatSelectProp,
-  onDeskSelect,
+  seats: tiles = NO_SEATS,
+  onSeatSelect,
   label,
   selectable = true,
   minCellSize = 44,
   sx,
 }: SeatFloorPlanProps) {
-  const tiles = React.useMemo(
-    () => seatsProp ?? desks ?? [],
-    [seatsProp, desks],
-  );
-  const onSeatSelect = onSeatSelectProp ?? onDeskSelect;
   const seats = React.useMemo(() => tiles.map((d) => d.seat), [tiles]);
   const layout = React.useMemo(() => layoutRoom(room, seats), [room, seats]);
   const ordered = React.useMemo(

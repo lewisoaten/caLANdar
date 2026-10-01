@@ -16,7 +16,7 @@ const row = (extra: Partial<InvitationLiteData>): InvitationLiteData => ({
 });
 
 describe("reservationFromSquad", () => {
-  test("finds the viewer's desk", () => {
+  test("finds the viewer's seat", () => {
     expect(
       reservationFromSquad([
         row({ isSelf: false, seatId: 4, hasSeatReservation: true }),

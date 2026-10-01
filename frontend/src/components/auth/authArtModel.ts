@@ -82,9 +82,9 @@ export function projectPlanPoint(
   );
 }
 
-export type DeskState = "lime" | "violet" | "empty" | "you";
+export type SeatState = "lime" | "violet" | "empty" | "you";
 
-export interface Desk {
+export interface Seat {
   id: string;
   x: number;
   y: number;
@@ -92,7 +92,7 @@ export interface Desk {
   h: number;
   /** Which long edge carries the monitor. */
   monitor: "top" | "bottom";
-  state: DeskState;
+  state: SeatState;
 }
 
 export interface Star {
@@ -129,12 +129,12 @@ export interface AuthScene {
   seed: number;
   stars: Star[];
   towers: Tower[];
-  desks: Desk[];
+  seats: Seat[];
   traces: Trace[];
   nodes: Node[];
   stage: { x: number; y: number; w: number; h: number };
-  /** The highlighted "your desk". */
-  you: Desk;
+  /** The highlighted "your seat". */
+  you: Seat;
   online: number;
   total: number;
   /** Latency values cycled by the HUD ticker (ms). */
@@ -184,13 +184,13 @@ export function generateAuthScene(seed = 2026): AuthScene {
     x += w + (rnd() < 0.25 ? Math.floor(rnd() * 14) : 2);
   }
 
-  // Floor plan: three columns of desk pods, four rows deep, like the seat map.
-  const desks: Desk[] = [];
-  const deskW = 66;
-  const deskH = 60;
+  // Floor plan: three columns of seat pods, four rows deep, like the seat map.
+  const seats: Seat[] = [];
+  const seatW = 66;
+  const seatH = 60;
   const gap = 8;
   const perRow = 4;
-  const podW = perRow * deskW + (perRow - 1) * gap;
+  const podW = perRow * seatW + (perRow - 1) * gap;
   const colX = [40, (RIG.planWidth - podW) / 2, RIG.planWidth - 40 - podW];
   const rowY = [300, 600, 900, 1200];
   const rows = "ABCDEFGHJKLM";
@@ -199,14 +199,14 @@ export function generateAuthScene(seed = 2026): AuthScene {
       for (let side = 0; side < 2; side++) {
         for (let i = 0; i < perRow; i++) {
           const roll = rnd();
-          const state: DeskState =
+          const state: SeatState =
             roll < 0.46 ? "lime" : roll < 0.66 ? "violet" : "empty";
-          desks.push({
+          seats.push({
             id: `${rows[r * 3 + c]}-${String(side * perRow + i + 1).padStart(2, "0")}`,
-            x: px + i * (deskW + gap),
-            y: py + side * (deskH + 12),
-            w: deskW,
-            h: deskH,
+            x: px + i * (seatW + gap),
+            y: py + side * (seatH + 12),
+            w: seatW,
+            h: seatH,
             monitor: side === 0 ? "bottom" : "top",
             state,
           });
@@ -214,10 +214,10 @@ export function generateAuthScene(seed = 2026): AuthScene {
       }
     });
   });
-  // "Your desk": near-ish, off-centre, so the beacon reads well.
-  const youIndex = desks.findIndex((d) => d.id === "J-02");
-  const you = { ...desks[youIndex], state: "you" as const };
-  desks[youIndex] = you;
+  // "Your seat": near-ish, off-centre, so the beacon reads well.
+  const youIndex = seats.findIndex((d) => d.id === "J-02");
+  const you = { ...seats[youIndex], state: "you" as const };
+  seats[youIndex] = you;
 
   const stage = { x: RIG.planWidth / 2 - 300, y: 60, w: 600, h: 70 };
 
@@ -246,7 +246,7 @@ export function generateAuthScene(seed = 2026): AuthScene {
     });
   });
   rowY.forEach((py) => {
-    const cy = py + deskH + 6;
+    const cy = py + seatH + 6;
     colX.forEach((px, c) => {
       const toLeft = c === 2 || (c === 1 && rnd() < 0.5);
       const ax = toLeft ? aisles[c === 2 ? 1 : 0] : aisles[c === 0 ? 0 : 1];
@@ -275,15 +275,15 @@ export function generateAuthScene(seed = 2026): AuthScene {
     delay: 0,
   });
 
-  const total = desks.length;
-  const online = desks.filter((d) => d.state !== "empty").length;
+  const total = seats.length;
+  const online = seats.filter((d) => d.state !== "empty").length;
   const pings = Array.from({ length: 8 }, () => 6 + Math.floor(rnd() * 18));
 
   return {
     seed,
     stars,
     towers,
-    desks,
+    seats,
     traces,
     nodes,
     stage,

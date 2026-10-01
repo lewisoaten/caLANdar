@@ -217,9 +217,9 @@ describe("EventSeatMap", () => {
     const who = screen.getByRole("heading", { name: /Who's where/i });
     expect(who).toBeInTheDocument();
     expect(screen.getAllByText("NoScope_Nia").length).toBeGreaterThan(0);
-    // Attendees without a desk are listed under the own-desk label.
+    // Attendees without a seat are listed under the own-seat label.
     expect(
-      screen.getByRole("heading", { name: "Bring my own desk · 1" }),
+      screen.getByRole("heading", { name: "Bring my own seat · 1" }),
     ).toBeInTheDocument();
   });
 
@@ -238,7 +238,7 @@ describe("EventSeatMap", () => {
     expect(screen.getByRole("button", { name: "C1, free" })).toBeEnabled();
   });
 
-  it("claims a selected desk", async () => {
+  it("claims a selected seat", async () => {
     const user = userEvent.setup();
     routes["POST /api/events/1/seat-reservations/me"] = () =>
       json(reservation(2));
@@ -265,31 +265,31 @@ describe("EventSeatMap", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows a desk's description on the tile, when selected and in who's where", async () => {
+  it("shows a seat's description on the tile, when selected and in who's where", async () => {
     const user = userEvent.setup();
     routes["GET /api/events/1/seats"] = () =>
       json(
         seats.map((s) =>
           s.id === 2
-            ? { ...s, description: "Window desk next to the fridge" }
+            ? { ...s, description: "Window seat next to the fridge" }
             : s,
         ),
       );
     renderMap();
     await plan();
-    const desk = await screen.findByRole("button", {
-      name: "A2, Window desk next to the fridge, free",
+    const seat = await screen.findByRole("button", {
+      name: "A2, Window seat next to the fridge, free",
     });
-    expect(desk).toHaveAttribute(
+    expect(seat).toHaveAttribute(
       "title",
-      "A2 · Window desk next to the fridge",
+      "A2 · Window seat next to the fridge",
     );
-    await user.click(desk);
+    await user.click(seat);
     expect(
-      screen.getByText("You selected A2 — Window desk next to the fridge"),
+      screen.getByText("You selected A2 — Window seat next to the fridge"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText("Window desk next to the fridge").length,
+      screen.getAllByText("Window seat next to the fridge").length,
     ).toBeGreaterThan(0);
   });
 
@@ -319,7 +319,7 @@ describe("EventSeatMap", () => {
     expect(calls.some((c) => c.method === "PUT")).toBe(true);
 
     await user.click(screen.getByRole("button", { name: "Release seat" }));
-    expect(await screen.findByText("Pick a desk")).toBeInTheDocument();
+    expect(await screen.findByText("Pick a seat")).toBeInTheDocument();
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
   });
 
@@ -356,7 +356,7 @@ describe("EventSeatMap", () => {
     renderMap();
     await plan();
     expect(
-      await screen.findByText(/needs everyone at a desk/),
+      await screen.findByText(/needs everyone at a seat/),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Release seat" }),
@@ -406,14 +406,14 @@ describe("EventSeatMap", () => {
     expect(await plan()).toBeInTheDocument();
   });
 
-  it("shows a failed free-desk check with a retry instead of silently locking desks", async () => {
+  it("shows a failed free-seat check with a retry instead of silently locking seats", async () => {
     const user = userEvent.setup();
     routes["POST /api/events/1/seat-reservations/check-availability"] = () =>
       json({}, 500);
     renderMap();
     await plan();
     expect(
-      await screen.findByText(/Couldn't check which desks are free/),
+      await screen.findByText(/Couldn't check which seats are free/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "A2, free" })).toBeDisabled();
     routes["POST /api/events/1/seat-reservations/check-availability"] = () =>
@@ -423,7 +423,7 @@ describe("EventSeatMap", () => {
       expect(screen.getByRole("button", { name: "A2, free" })).toBeEnabled(),
     );
     expect(
-      screen.queryByText(/Couldn't check which desks are free/),
+      screen.queryByText(/Couldn't check which seats are free/),
     ).not.toBeInTheDocument();
   });
 
@@ -444,7 +444,7 @@ describe("EventSeatMap", () => {
         {
           eventId: 1,
           avatarUrl: null,
-          handle: "NoDeskYet",
+          handle: "NoSeatYet",
           response: "maybe",
           attendance: [1, 0],
           seatId: null,
@@ -457,12 +457,12 @@ describe("EventSeatMap", () => {
       json(reservation(null));
     renderMap();
     await plan();
-    // Only the guest who reserved the floating seat counts as "own desk".
+    // Only the guest who reserved the floating seat counts as "own seat".
     expect(
-      await screen.findByRole("heading", { name: "Bring my own desk · 1" }),
+      await screen.findByRole("heading", { name: "Bring my own seat · 1" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/ProGamer123\s*\(you\)/)).toBeInTheDocument();
-    expect(screen.queryByText("NoDeskYet")).not.toBeInTheDocument();
+    expect(screen.queryByText("NoSeatYet")).not.toBeInTheDocument();
   });
 
   it("waits for data before rendering", async () => {

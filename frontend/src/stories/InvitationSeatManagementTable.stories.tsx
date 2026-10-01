@@ -170,7 +170,7 @@ const reservationsFor = (id: number) => [
     "pete.pixel@example.com",
     [0, 0, 1, 1, 1, 0, 0, 0],
   ),
-  // Floating: shown with the event's configured "no desk" label.
+  // Floating: shown with the event's configured "no seat" label.
   reservation(id, 5, null, "laglord@example.com", [0, 0, 0, 1, 1, 0, 0, 0]),
 ];
 
@@ -211,7 +211,7 @@ const seatingConfig = (id: number, hasSeating: boolean) => ({
   eventId: id,
   hasSeating,
   allowUnspecifiedSeat: hasSeating,
-  unspecifiedSeatLabel: "Floating / no desk",
+  unspecifiedSeatLabel: "Floating / no seat",
   createdAt: "2026-09-02T10:00:00",
   lastModified: "2026-09-02T10:00:00",
 });

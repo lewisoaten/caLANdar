@@ -64,7 +64,7 @@ function lite(
     seatId,
     // The viewer in every lobby story is ProGamer123.
     isSelf: handle === "ProGamer123",
-    // Dan_the_Man is floating (reservation without a desk).
+    // Dan_the_Man is floating (reservation without a seat).
     hasSeatReservation: seatId !== null || handle === "Dan_the_Man",
     lastModified: iso(base - DAY),
   };
@@ -291,7 +291,7 @@ export function mockLobbyApi(eventId: number, opts: LobbyMockOptions = {}) {
       eventId,
       hasSeating,
       allowUnspecifiedSeat: true,
-      unspecifiedSeatLabel: "Bring my own desk",
+      unspecifiedSeatLabel: "Bring my own seat",
       createdAt: iso(base),
       lastModified: iso(base),
     },

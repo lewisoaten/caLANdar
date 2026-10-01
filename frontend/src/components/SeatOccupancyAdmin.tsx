@@ -553,7 +553,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
         <EmptyState
           icon={<EventSeatSharp />}
           title="Seating is off"
-          description="Seating is not enabled for this event. Turn on the seat map above to let attendees pick desks."
+          description="Seating is not enabled for this event. Turn on the seat map above to let attendees pick seats."
         />
       </Panel>
     );
@@ -647,7 +647,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       padding="none"
       actions={
         <Box component="span" sx={{ fontSize: 13, color: colors.textMuted }}>
-          Move or clear anyone&apos;s desk.
+          Move or clear anyone&apos;s seat.
         </Box>
       }
     >
@@ -670,7 +670,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
           <StatCell
             size="lg"
             value={unspecifiedReservations.length}
-            label="No desk"
+            label="No seat"
             tone="amber"
           />
           <StatCell
@@ -737,12 +737,12 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                 )}
                 {roomSeats.length === 0 ? (
                   <Typography sx={{ fontSize: 13, color: colors.textMuted }}>
-                    No desks in this room yet.
+                    No seats in this room yet.
                   </Typography>
                 ) : (
                   <Box
                     component="ul"
-                    aria-label={`${room.name} desks`}
+                    aria-label={`${room.name} seats`}
                     sx={{
                       m: 0,
                       p: 0,
@@ -801,13 +801,13 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       )}
 
       {/* Seat assignment list */}
-      {subHeading("Assigned desks", assigned.length)}
+      {subHeading("Assigned seats", assigned.length)}
       {assigned.length === 0 ? (
         <Box sx={{ p: "16px 20px", color: colors.textMuted, fontSize: 14 }}>
           No seat reservations found.
         </Box>
       ) : (
-        <Box component="ul" aria-label="Assigned desks" sx={{ m: 0, p: 0 }}>
+        <Box component="ul" aria-label="Assigned seats" sx={{ m: 0, p: 0 }}>
           {assigned.map((reservation) => (
             <Box component="li" key={reservation.id} sx={rowSx}>
               {attendeeCell(reservation)}

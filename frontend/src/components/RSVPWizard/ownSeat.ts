@@ -12,9 +12,9 @@
 import { InvitationLiteData } from "../../types/invitations";
 
 export interface ReservationLookup {
-  /** Whether the guest holds any reservation (a desk or a floating one). */
+  /** Whether the guest holds any reservation (a seat or a floating one). */
   exists: boolean;
-  /** The reserved desk, or null for none / a floating reservation. */
+  /** The reserved seat, or null for none / a floating reservation. */
   seatId: number | null;
 }
 
@@ -95,7 +95,7 @@ export async function fetchReservation(
   return { exists: true, seatId: data?.seatId ?? null };
 }
 
-/** A desk's label and room name, for showing a reservation. */
+/** A seat's label and room name, for showing a reservation. */
 export async function fetchSeatLabel(
   eventId: number,
   seatId: number,
