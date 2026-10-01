@@ -5,6 +5,7 @@ import TvSharp from "@mui/icons-material/TvSharp";
 import DoorFrontSharp from "@mui/icons-material/DoorFrontSharp";
 import { UserAvatar, colors, effects, fonts, srOnly, tint } from "./hl";
 import { displayCallsign } from "../utils/callsign";
+import { seatHeading, seatSpokenName } from "../utils/seatName";
 import {
   GRID_COLS,
   joinNames,
@@ -77,9 +78,8 @@ const PAD = 6;
 export function seatAriaLabel(tile: SeatTile, withScreen = false): string {
   const { seat, state, occupants = [] } = tile;
   const names = joinNames(occupants.map(who));
-  // "A1, Window seat next to the fridge, free"
-  const about = seat.description?.trim();
-  const name = `${about ? `${seat.label}, ${about}` : seat.label}${withScreen ? ", with screen" : ""}`;
+  // "S1, Wall sofa (S), Window seat next to the fridge, free"
+  const name = `${seatSpokenName(seat)}${withScreen ? ", with screen" : ""}`;
   switch (state) {
     case "mine":
       return `${name}, your seat`;
@@ -92,11 +92,11 @@ export function seatAriaLabel(tile: SeatTile, withScreen = false): string {
   }
 }
 
-/** Tooltip of a seat: identifier, description and who sits there. */
+/** Tooltip of a seat: name and identifier, description and who sits there. */
 export function seatTitle(tile: SeatTile, withScreen = false): string {
   const occupants = tile.occupants ?? [];
   return [
-    tile.seat.label,
+    seatHeading(tile.seat),
     tile.seat.description?.trim(),
     withScreen ? "With screen" : "",
     tile.state === "taken" && occupants.length > 0

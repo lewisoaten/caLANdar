@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        UPDATE seat\n        SET\n            label = $2,\n            description = $3,\n            x = $4,\n            y = $5,\n            grid_col = COALESCE($6, grid_col),\n            grid_row = COALESCE($7, grid_row),\n            last_modified = NOW()\n        WHERE id = $1\n        RETURNING\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        ",
+  "query": "\n        SELECT\n            id,\n            event_id,\n            room_id,\n            label,\n            name,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        FROM seat\n        WHERE event_id = $1\n        ORDER BY room_id, label\n        ",
   "describe": {
     "columns": [
       {
@@ -25,48 +25,47 @@
       },
       {
         "ordinal": 4,
-        "name": "description",
+        "name": "name",
         "type_info": "Text"
       },
       {
         "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
         "name": "x",
         "type_info": "Float8"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "y",
         "type_info": "Float8"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_modified",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "grid_col",
         "type_info": "Int4"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "grid_row",
         "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
-        "Int4",
-        "Varchar",
-        "Text",
-        "Float8",
-        "Float8",
-        "Int4",
         "Int4"
       ]
     },
@@ -76,6 +75,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -84,5 +84,5 @@
       true
     ]
   },
-  "hash": "b5baae0591a76cd86e0f78854413715dc1e85ac4f4ba1d5a9cdb2e0f709e6918"
+  "hash": "4fa869d6117905075ef143ed361be0bf8339dc8db8d03e0a83c6994d02387d86"
 }

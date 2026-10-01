@@ -39,6 +39,9 @@ pub struct LayoutSeat {
     pub id: i32,
     /// Seat identifier shown on the seat (up to 8 characters; older seats may be longer).
     pub label: String,
+    /// Optional human-readable name, e.g. "Wall sofa (S)" (up to 60 characters),
+    /// shown instead of the identifier wherever the seat is mentioned.
+    pub name: Option<String>,
     /// Optional free-text description, e.g. "Window seat next to the fridge".
     pub description: Option<String>,
     /// Null for seats placed with the legacy editor; derive from `x`/`y`.
@@ -74,6 +77,10 @@ pub struct LayoutSeatSubmit {
     /// and `.` (trimmed), unique within the room ignoring case. An existing seat may
     /// keep a label saved before these rules if it is sent back unchanged.
     pub label: String,
+    /// Optional name, e.g. "Wall sofa (S)": 1-60 characters of printable text (no
+    /// control characters; trimmed; blank or omitted clears it).
+    #[serde(default)]
+    pub name: Option<String>,
     /// Optional free text, at most 120 characters (trimmed; blank clears it).
     #[serde(default)]
     pub description: Option<String>,

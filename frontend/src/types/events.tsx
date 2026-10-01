@@ -110,7 +110,10 @@ export type Seat = {
   id: number;
   eventId: number;
   roomId: number;
+  /** Identifier drawn on the seat, e.g. "S1". */
   label: string;
+  /** Optional human-readable name, e.g. "Wall sofa (S)" (see seatDisplayName). */
+  name?: string | null;
   description: string | null;
   x: number;
   y: number;
@@ -123,6 +126,7 @@ export const defaultSeat: Seat = {
   eventId: 0,
   roomId: 0,
   label: "",
+  name: null,
   description: null,
   x: 0.5,
   y: 0.5,
@@ -133,6 +137,7 @@ export const defaultSeat: Seat = {
 export type SeatSubmit = {
   roomId: number;
   label: string;
+  name?: string | null;
   description: string | null;
   x: number;
   y: number;

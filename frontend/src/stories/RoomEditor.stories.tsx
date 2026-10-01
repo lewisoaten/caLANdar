@@ -263,7 +263,8 @@ registerEvent(1005, "Spring LAN 2025", {
 
 // 1006: long identifiers and legacy labels that predate the 8-character
 // limit ("Window seat 12"): tiles stay one square, the text is cut with an
-// ellipsis and the full label + description are in the tooltip.
+// ellipsis and the full label + description are in the tooltip. The legacy
+// labels raise the "Convert all to names" banner; WS12 already has a name.
 registerEvent(1006, "Label Stress LAN", {
   rooms: [
     baseRoom(
@@ -287,6 +288,16 @@ registerEvent(1006, "Label Stress LAN", {
         seat("A1", 5, 2, 6),
         seat("Legacy seat with a long name", 6, 2, 6, who("CasualGamer")),
         seat("x.y_z-9", 7, 2, 6),
+        // Old-editor labels like the ones in the Lounge: the banner above
+        // the grid offers to convert them to names.
+        { ...seat("WALL SOFA (S)", 1, 4, 6), description: "Facing the TV" },
+        seat("WALL SOFA (N)", 2, 4, 6, who("ZoeZoom")),
+        // Already converted: a name plus a short identifier.
+        {
+          ...seat("WS12", 4, 4, 6),
+          name: "Window seat 12",
+          description: "Next to the radiator",
+        },
       ],
     ),
   ],
@@ -373,7 +384,11 @@ export const LoadError: Story = { decorators: at(1004) };
 /** A room saved by the old editor: seats placed from x/y, legacy image shown. */
 export const LegacyRoom: Story = { decorators: at(1005) };
 
-/** Long identifiers and legacy labels stay inside their squares (ellipsis + tooltip). */
+/**
+ * Long identifiers and legacy labels stay inside their squares (ellipsis +
+ * tooltip); the banner above the grid converts the legacy labels to names
+ * (select a legacy seat for its own "Use as name"). WS12 already has a name.
+ */
 export const LongLabels: Story = { decorators: at(1006) };
 
 /** The long labels on a phone. */

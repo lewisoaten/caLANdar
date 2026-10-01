@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        SELECT\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        FROM seat\n        WHERE event_id = $1\n        ORDER BY room_id, label\n        ",
+  "query": "\n        INSERT INTO seat (\n            event_id,\n            room_id,\n            label,\n            name,\n            description,\n            x,\n            y,\n            grid_col,\n            grid_row\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)\n        RETURNING\n            id,\n            event_id,\n            room_id,\n            label,\n            name,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        ",
   "describe": {
     "columns": [
       {
@@ -25,42 +25,55 @@
       },
       {
         "ordinal": 4,
-        "name": "description",
+        "name": "name",
         "type_info": "Text"
       },
       {
         "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
         "name": "x",
         "type_info": "Float8"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "y",
         "type_info": "Float8"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_modified",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "grid_col",
         "type_info": "Int4"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "grid_row",
         "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
+        "Int4",
+        "Int4",
+        "Varchar",
+        "Text",
+        "Text",
+        "Float8",
+        "Float8",
+        "Int4",
         "Int4"
       ]
     },
@@ -70,6 +83,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -78,5 +92,5 @@
       true
     ]
   },
-  "hash": "6bf1eb2f4d11e1781b39934480941375c51696e6ac713d6a158062828b0ce9a2"
+  "hash": "6fb95ff499e8e3edcea3672eadabf2e794c74cbf701aa011ad23b953497219ef"
 }

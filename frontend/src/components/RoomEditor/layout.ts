@@ -38,6 +38,8 @@ export interface ApiReservedBy {
 export interface ApiLayoutSeat {
   id: number;
   label: string;
+  /** Human-readable name, e.g. "Wall sofa (S)"; absent from older APIs. */
+  name?: string | null;
   description: string | null;
   gridCol: number | null;
   gridRow: number | null;
@@ -71,6 +73,7 @@ export interface ApiLayout {
 export interface LayoutSeatSubmit {
   id?: number;
   label: string;
+  name: string | null;
   description: string | null;
   gridCol: number;
   gridRow: number;
@@ -112,6 +115,8 @@ export const codePointLength = (text: string) => Array.from(text).length;
 export const clipCodePoints = (text: string, max: number) =>
   Array.from(text).slice(0, max).join("");
 
+/** Optional seat name, e.g. "Wall sofa (S)": shown instead of the identifier. */
+export const MAX_NAME_LENGTH = 60;
 /** Optional free-text seat description, e.g. "Window seat next to the fridge". */
 export const MAX_DESCRIPTION_LENGTH = 120;
 export const DEFAULT_OPACITY = 60;
@@ -133,6 +138,8 @@ export interface SeatCell {
   label: string;
   /** Saved seat id; absent for seats added since the last save. */
   seatId?: number;
+  /** Human-readable name; the identifier is shown when it is blank. */
+  name?: string | null;
   description?: string | null;
   reservedBy?: ApiReservedBy | null;
 }
@@ -262,6 +269,7 @@ export function fromLayout(layout: ApiLayout, keys: string[] = []) {
         t: "seat",
         label: seat.label,
         seatId: seat.id,
+        name: seat.name ?? null,
         description: seat.description,
         reservedBy: seat.reservedBy,
       };
@@ -329,6 +337,7 @@ export function toSubmit(
           seats.push({
             ...(cell.seatId != null ? { id: cell.seatId } : {}),
             label: cell.label,
+            name: cell.name?.trim() || null,
             description: cell.description?.trim() || null,
             gridCol: col,
             gridRow: row,
@@ -965,6 +974,21 @@ export const renameSeat = (room: EditorRoom, key: string, value: string) => {
   });
 };
 
+/** Control characters (line breaks, tabs, ...) the API rejects in a name. */
+const CONTROL_CHARS = /\p{Cc}/gu;
+
+/** Set a seat's name (kept as typed, capped, no control characters; trimmed on save). */
+export const nameSeat = (room: EditorRoom, key: string, value: string) => {
+  const cell = room.cells[key];
+  if (!isSeat(cell)) return room;
+  return withCells(room, (cells) => {
+    cells[key] = {
+      ...cell,
+      name: clipCodePoints(value.replace(CONTROL_CHARS, " "), MAX_NAME_LENGTH),
+    };
+  });
+};
+
 /** Set a seat's description (kept as typed, capped; trimmed on save). */
 export const describeSeat = (room: EditorRoom, key: string, value: string) => {
   const cell = room.cells[key];
@@ -1090,6 +1114,7 @@ export function cellLabel(room: EditorRoom, key: string) {
     const about = cell.description?.trim()
       ? `, ${cell.description.trim()}`
       : "";
+    const named = cell.name?.trim() ? `, ${cell.name.trim()}` : "";
     const screens = screensLinkedTo(room, key).length;
     const linked =
       screens === 0
@@ -1097,7 +1122,7 @@ export function cellLabel(room: EditorRoom, key: string) {
         : screens === 1
           ? ", with screen"
           : `, with ${screens} screens`;
-    return `Seat ${cell.label || "(no label)"}${about}${linked}${who}, ${where(key)}`;
+    return `Seat ${cell.label || "(no label)"}${named}${about}${linked}${who}, ${where(key)}`;
   }
   const squares = groupKeys(room, key).length;
   const size = squares > 1 ? `, ${squares} squares` : "";
@@ -1476,6 +1501,138 @@ export function moveItem(
     key,
     notes: out.notes,
     announce: withNotes(announce, out.notes),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Legacy labels -> names
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a seat's label predates the identifier rules (too long or with
+ * other characters, e.g. "WALL SOFA (S)"). Such labels still save unchanged;
+ * converting turns them into a name plus a short identifier.
+ */
+export const isLegacyLabel = (label: string) =>
+  label.length > 0 && !isValidIdentifier(label);
+
+/** Seats of the room with legacy labels, in reading order. */
+export const legacySeatKeys = (room: EditorRoom): string[] =>
+  seatEntries(room)
+    .filter(([, c]) => isLegacyLabel(c.label))
+    .map(([k]) => k)
+    .sort(byKeyPosition);
+
+/** A legacy label as a name: trimmed, whitespace collapsed, at most 60 characters. */
+export const cleanSeatName = (label: string) =>
+  clipCodePoints(
+    label.replace(CONTROL_CHARS, " ").replace(/\s+/g, " ").trim(),
+    MAX_NAME_LENGTH,
+  ).trim();
+
+/** Letters and digits of `text` folded to ASCII ("Fenêtre" -> "Fenetre"). */
+const asciiRuns = (text: string) =>
+  text
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toUpperCase()
+    .match(/[A-Z]+|[0-9]+/g) ?? [];
+
+/**
+ * The short code for a legacy label, before making it unique: the initials of
+ * its words with numbers kept whole ("WALL SOFA (S)" -> "WS", "WINDOW SEAT 12"
+ * -> "WS12"). Text in brackets is left out when there is anything else. A
+ * single word gives its first two letters ("Sofa" -> "SO"). Empty when the
+ * label has no usable letters or digits (emoji, punctuation, other scripts).
+ */
+export function identifierBase(label: string): string {
+  const outside = label.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, " ");
+  let runs = asciiRuns(outside);
+  if (runs.length === 0) runs = asciiRuns(label);
+  if (runs.length === 0) return "";
+  let code = runs.map((r) => (/^[0-9]/.test(r) ? r : r[0])).join("");
+  if (code.length < 2 && runs.length === 1) code = runs[0].slice(0, 2);
+  return code.slice(0, MAX_LABEL_LENGTH);
+}
+
+/**
+ * A unique identifier from `base`: `base` itself if no other label uses it
+ * (ignoring case), else `base` + 2, 3, ... (shortening `base` to fit 8
+ * characters). Null when `base` is empty.
+ */
+export function uniqueIdentifier(
+  base: string,
+  used: Set<string>,
+): string | null {
+  if (!base) return null;
+  if (!used.has(labelId(base))) return base;
+  for (let n = 2; n < 10_000_000; n++) {
+    const suffix = String(n);
+    const code = base.slice(0, MAX_LABEL_LENGTH - suffix.length) + suffix;
+    if (!used.has(labelId(code))) return code;
+  }
+  return null;
+}
+
+/** Convert one legacy seat (no-op if its label is a valid identifier). */
+function convertSeat(room: EditorRoom, key: string): EditorRoom {
+  const cell = room.cells[key];
+  if (!isSeat(cell) || !isLegacyLabel(cell.label)) return room;
+  const used = new Set(
+    seatEntries(room)
+      .filter(([k]) => k !== key)
+      .map(([, c]) => labelId(c.label)),
+  );
+  // Without the seat itself, so the auto-labeller ignores its old label.
+  const others = withCells(room, (cells) => {
+    delete cells[key];
+  });
+  const label =
+    uniqueIdentifier(identifierBase(cell.label), used) ??
+    nextSeatLabel(others, parseKey(key).row);
+  const name = cell.name?.trim() ? cell.name : cleanSeatName(cell.label);
+  return withCells(room, (cells) => {
+    cells[key] = { ...cell, label, name };
+  });
+}
+
+export interface Conversion {
+  room: EditorRoom;
+  /** Seats converted. */
+  count: number;
+  /** What happened, for the live region. */
+  announce: string;
+}
+
+/**
+ * "Use as name": the seat's legacy label becomes its name (unless it already
+ * has one) and a short, unique identifier is generated for it.
+ */
+export function convertLegacySeat(room: EditorRoom, key: string): Conversion {
+  const before = room.cells[key];
+  const next = convertSeat(room, key);
+  const after = next.cells[key];
+  if (next === room || !isSeat(before) || !isSeat(after))
+    return { room, count: 0, announce: "Nothing to convert." };
+  return {
+    room: next,
+    count: 1,
+    announce: `“${before.label}” is now the name; the identifier is ${after.label}.`,
+  };
+}
+
+/** "Convert all to names": every legacy seat of the room, in reading order. */
+export function convertAllLegacySeats(room: EditorRoom): Conversion {
+  const keys = legacySeatKeys(room);
+  const next = keys.reduce(convertSeat, room);
+  const count = keys.length;
+  return {
+    room: next,
+    count,
+    announce:
+      count === 0
+        ? "Nothing to convert."
+        : `Converted ${count} seat label${count === 1 ? "" : "s"} to names with short identifiers.`,
   };
 }
 

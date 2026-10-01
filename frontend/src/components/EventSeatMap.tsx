@@ -49,6 +49,12 @@ import {
 } from "./seatFloorPlanModel";
 import { useSeatReservation } from "./useSeatReservation";
 import { displayCallsign } from "../utils/callsign";
+import {
+  seatDisplayName,
+  seatHeading,
+  seatNameIfDifferent,
+  seatSummary,
+} from "../utils/seatName";
 
 const isGoing = (r: RSVP | null | undefined) =>
   r === RSVP.yes || r === RSVP.maybe;
@@ -685,19 +691,21 @@ const EventSeatMap: React.FC = () => {
     actions.push(lobbyButton);
   } else if (selectedSeat) {
     kicker = "SELECTED";
-    title = selectedSeat.label;
+    title = seatHeading(selectedSeat);
     sub = mySeat
-      ? `Swap from ${mySeat.label} to ${selectedSeat.label}? Your old seat frees up for the squad.`
+      ? `Swap from ${seatDisplayName(mySeat)} to ${seatDisplayName(selectedSeat)}? Your old seat frees up for the squad.`
       : "Free for the times you're here. Claim it before someone else does.";
-    const about = selectedSeat.description?.trim();
-    if (about) {
+    // "You selected Wall sofa (S) · S1 — Next to the fridge" when the seat
+    // has more to say than its identifier.
+    const selectedText = seatSummary(selectedSeat);
+    if (selectedText !== selectedSeat.label) {
       sub = (
         <>
           <Box
             component="span"
             sx={{ display: "block", mb: 1, color: colors.text }}
           >
-            You selected {selectedSeat.label} — {about}
+            You selected {selectedText}
           </Box>
           {sub}
         </>
@@ -714,8 +722,8 @@ const EventSeatMap: React.FC = () => {
         {saving
           ? "Saving…"
           : mySeat
-            ? `Swap to ${selectedSeat.label}`
-            : `Claim ${selectedSeat.label}`}
+            ? `Swap to ${seatDisplayName(selectedSeat)}`
+            : `Claim ${seatDisplayName(selectedSeat)}`}
       </Button>,
       <Button
         key="cancel"
@@ -730,7 +738,9 @@ const EventSeatMap: React.FC = () => {
   } else if (reservation) {
     kicker = "YOUR SEAT";
     titleTone = "lime";
-    title = mySeat ? `${mySeat.label} · ${roomName(mySeat)}` : ownSeat;
+    title = mySeat
+      ? `${seatDisplayName(mySeat)} · ${roomName(mySeat)}`
+      : ownSeat;
     sub = mySeat
       ? canRelease
         ? "Tap another free seat to move."
@@ -982,7 +992,7 @@ const EventSeatMap: React.FC = () => {
                   <Box component="li" key={entry.seat.id} sx={listRowSx}>
                     <Box
                       component="span"
-                      title={entry.seat.label}
+                      title={seatHeading(entry.seat)}
                       sx={{
                         // Fits an 8-character identifier; longer legacy
                         // labels are cut (full text in the title).
@@ -1060,12 +1070,18 @@ const EventSeatMap: React.FC = () => {
                           </Box>
                         ))
                       )}
-                      {entry.seat.description && (
+                      {(seatNameIfDifferent(entry.seat) ||
+                        entry.seat.description?.trim()) && (
                         <Box
                           component="span"
                           sx={{ fontSize: 12, color: colors.textMuted }}
                         >
-                          {entry.seat.description}
+                          {[
+                            seatNameIfDifferent(entry.seat),
+                            entry.seat.description?.trim(),
+                          ]
+                            .filter(Boolean)
+                            .join(" — ")}
                         </Box>
                       )}
                     </Box>

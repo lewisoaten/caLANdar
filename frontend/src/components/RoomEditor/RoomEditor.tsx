@@ -41,6 +41,8 @@ import {
   TOOL_SHORTCUTS,
   applyTool,
   canMergeAdjacent,
+  convertAllLegacySeats,
+  convertLegacySeat,
   describeSeat,
   fromLayout,
   groupKeys,
@@ -57,6 +59,7 @@ import {
   parseKey,
   removeShape,
   removedReservations,
+  nameSeat,
   renameSeat,
   reserverName,
   screensLinkedTo,
@@ -81,7 +84,13 @@ import {
   uploadErrorMessage,
 } from "./api";
 import { EditorGrid } from "./EditorGrid";
-import { FeaturePanel, GridLegend, RoomPanel, SeatPanel } from "./SidePanels";
+import {
+  FeaturePanel,
+  GridLegend,
+  LegacyLabelsBanner,
+  RoomPanel,
+  SeatPanel,
+} from "./SidePanels";
 import { TOOL_ICONS } from "./icons";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 
@@ -1135,6 +1144,14 @@ const RoomEditor = () => {
                 the side panel. Tool shortcuts: V select, M move, D seat, S
                 screen, E entrance, G merge, U split, X erase.
               </Box>
+              <LegacyLabelsBanner
+                room={room}
+                onConvertAll={() => {
+                  const out = convertAllLegacySeats(room);
+                  if (out.count) updateRoom(out.room);
+                  announce(out.announce);
+                }}
+              />
               <EditorGrid
                 room={room}
                 tool={tool}
@@ -1208,10 +1225,11 @@ const RoomEditor = () => {
                   seats={linkCandidates(room, sel).map((k) => {
                     const c = room.cells[k];
                     const about = isSeat(c) && c.description?.trim();
+                    const named = isSeat(c) && c.name?.trim();
                     return {
                       key: k,
                       label: isSeat(c)
-                        ? `${c.label || "(no label)"}${about ? ` – ${about}` : ""}`
+                        ? `${c.label || "(no label)"}${named ? ` · ${named}` : ""}${about ? ` – ${about}` : ""}`
                         : k,
                     };
                   })}
@@ -1227,9 +1245,16 @@ const RoomEditor = () => {
                   duplicate={!!sel && isDuplicateLabel(room, sel)}
                   screens={sel ? screensLinkedTo(room, sel).length : 0}
                   onRename={(v) => sel && updateRoom(renameSeat(room, sel, v))}
+                  onName={(v) => sel && updateRoom(nameSeat(room, sel, v))}
                   onDescribe={(v) =>
                     sel && updateRoom(describeSeat(room, sel, v))
                   }
+                  onUseAsName={() => {
+                    if (!sel) return;
+                    const out = convertLegacySeat(room, sel);
+                    if (out.count) updateRoom(out.room);
+                    announce(out.announce);
+                  }}
                   onRemove={removeSelected}
                 />
               )}

@@ -1,7 +1,7 @@
 use sqlx::PgPool;
 
 use crate::{
-    controllers::Error,
+    controllers::{seat::seat_display_name, Error},
     repositories::{event_seating_config, invitation, room, seat, seat_reservation},
     routes::seat_reservations::{SeatReservation, SeatReservationSubmit},
     util::is_event_active,
@@ -291,8 +291,15 @@ pub async fn create(
             let seat_description = if let Some(seat_id) = submit.seat_id {
                 match seat::get(pool, seat_id).await {
                     Ok(Some(seat)) => match room::get(pool, seat.room_id).await {
-                        Ok(Some(room)) => format!("{} - {}", room.name, seat.label),
-                        _ => format!("Seat {}", seat.label),
+                        Ok(Some(room)) => format!(
+                            "{} - {}",
+                            room.name,
+                            seat_display_name(&seat.label, seat.name.as_deref())
+                        ),
+                        _ => format!(
+                            "Seat {}",
+                            seat_display_name(&seat.label, seat.name.as_deref())
+                        ),
                     },
                     _ => "unknown seat".to_string(),
                 }
@@ -439,8 +446,15 @@ pub async fn update(
             let seat_description = if let Some(seat_id) = submit.seat_id {
                 match seat::get(pool, seat_id).await {
                     Ok(Some(seat)) => match room::get(pool, seat.room_id).await {
-                        Ok(Some(room)) => format!("{} - {}", room.name, seat.label),
-                        _ => format!("Seat {}", seat.label),
+                        Ok(Some(room)) => format!(
+                            "{} - {}",
+                            room.name,
+                            seat_display_name(&seat.label, seat.name.as_deref())
+                        ),
+                        _ => format!(
+                            "Seat {}",
+                            seat_display_name(&seat.label, seat.name.as_deref())
+                        ),
                     },
                     _ => "unknown seat".to_string(),
                 }

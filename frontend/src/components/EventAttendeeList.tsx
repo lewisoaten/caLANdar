@@ -29,6 +29,7 @@ import {
   summariseSquad,
   type SquadSeating,
 } from "./lobbyModel";
+import { seatDisplayName } from "../utils/seatName";
 
 interface EventAttendeListProps {
   event_id: number;
@@ -133,15 +134,17 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
         const seatsRes = await fetch(`/api/events/${props.event_id}/seats`, {
           headers,
         });
-        const seats: Array<{ id: number; label: string }> = seatsRes.ok
-          ? await seatsRes.json()
-          : [];
+        const seats: Array<{
+          id: number;
+          label: string;
+          name?: string | null;
+        }> = seatsRes.ok ? await seatsRes.json() : [];
         if (cancelled) return;
         setSeating({
           hasSeating: true,
           allowUnspecifiedSeat: Boolean(cfg.allowUnspecifiedSeat),
           unspecifiedSeatLabel: cfg.unspecifiedSeatLabel || "Unspecified Seat",
-          labels: new Map(seats.map((s) => [s.id, s.label])),
+          labels: new Map(seats.map((s) => [s.id, seatDisplayName(s)])),
         });
       } catch (error) {
         console.error("Error fetching seat labels:", error);

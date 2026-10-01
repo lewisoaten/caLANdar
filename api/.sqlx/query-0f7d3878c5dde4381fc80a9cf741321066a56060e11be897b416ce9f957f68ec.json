@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        INSERT INTO seat (\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            grid_col,\n            grid_row\n        )\n        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n        RETURNING\n            id,\n            event_id,\n            room_id,\n            label,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        ",
+  "query": "\n        UPDATE seat\n        SET\n            label = $2,\n            name = $3,\n            description = $4,\n            x = $5,\n            y = $6,\n            grid_col = COALESCE($7, grid_col),\n            grid_row = COALESCE($8, grid_row),\n            last_modified = NOW()\n        WHERE id = $1\n        RETURNING\n            id,\n            event_id,\n            room_id,\n            label,\n            name,\n            description,\n            x,\n            y,\n            created_at,\n            last_modified,\n            grid_col,\n            grid_row\n        ",
   "describe": {
     "columns": [
       {
@@ -25,36 +25,41 @@
       },
       {
         "ordinal": 4,
-        "name": "description",
+        "name": "name",
         "type_info": "Text"
       },
       {
         "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
         "name": "x",
         "type_info": "Float8"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "y",
         "type_info": "Float8"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "last_modified",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "grid_col",
         "type_info": "Int4"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "grid_row",
         "type_info": "Int4"
       }
@@ -62,8 +67,8 @@
     "parameters": {
       "Left": [
         "Int4",
-        "Int4",
         "Varchar",
+        "Text",
         "Text",
         "Float8",
         "Float8",
@@ -77,6 +82,7 @@
       false,
       false,
       true,
+      true,
       false,
       false,
       false,
@@ -85,5 +91,5 @@
       true
     ]
   },
-  "hash": "c0533faf9063f0d005231e06901a87e924283eeca9c976a95de860c24d09f654"
+  "hash": "0f7d3878c5dde4381fc80a9cf741321066a56060e11be897b416ce9f957f68ec"
 }

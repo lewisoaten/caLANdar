@@ -7,6 +7,7 @@ pub struct Seat {
     pub event_id: i32,
     pub room_id: i32,
     pub label: String,
+    pub name: Option<String>,
     pub description: Option<String>,
     pub x: f64,
     pub y: f64,
@@ -25,6 +26,7 @@ pub async fn get_all_by_event(pool: &PgPool, event_id: i32) -> Result<Vec<Seat>,
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
@@ -52,6 +54,7 @@ pub async fn get_all_by_room(pool: &PgPool, room_id: i32) -> Result<Vec<Seat>, s
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
@@ -78,6 +81,7 @@ pub async fn get(pool: &PgPool, seat_id: i32) -> Result<Option<Seat>, sqlx::Erro
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
@@ -94,13 +98,19 @@ pub async fn get(pool: &PgPool, seat_id: i32) -> Result<Option<Seat>, sqlx::Erro
     .await
 }
 
+/// A seat's text: its short identifier (`label`), optional name and description.
+pub struct SeatText {
+    pub label: String,
+    pub name: Option<String>,
+    pub description: Option<String>,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn create<'e, E: sqlx::PgExecutor<'e>>(
     executor: E,
     event_id: i32,
     room_id: i32,
-    label: String,
-    description: Option<String>,
+    text: SeatText,
     x: f64,
     y: f64,
     grid: (Option<i32>, Option<i32>),
@@ -112,18 +122,20 @@ pub async fn create<'e, E: sqlx::PgExecutor<'e>>(
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
             grid_col,
             grid_row
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING
             id,
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
@@ -134,8 +146,9 @@ pub async fn create<'e, E: sqlx::PgExecutor<'e>>(
         "#,
         event_id,
         room_id,
-        label,
-        description,
+        text.label,
+        text.name,
+        text.description,
         x,
         y,
         grid.0,
@@ -149,8 +162,7 @@ pub async fn create<'e, E: sqlx::PgExecutor<'e>>(
 pub async fn update<'e, E: sqlx::PgExecutor<'e>>(
     executor: E,
     seat_id: i32,
-    label: String,
-    description: Option<String>,
+    text: SeatText,
     x: f64,
     y: f64,
     grid: (Option<i32>, Option<i32>),
@@ -161,11 +173,12 @@ pub async fn update<'e, E: sqlx::PgExecutor<'e>>(
         UPDATE seat
         SET
             label = $2,
-            description = $3,
-            x = $4,
-            y = $5,
-            grid_col = COALESCE($6, grid_col),
-            grid_row = COALESCE($7, grid_row),
+            name = $3,
+            description = $4,
+            x = $5,
+            y = $6,
+            grid_col = COALESCE($7, grid_col),
+            grid_row = COALESCE($8, grid_row),
             last_modified = NOW()
         WHERE id = $1
         RETURNING
@@ -173,6 +186,7 @@ pub async fn update<'e, E: sqlx::PgExecutor<'e>>(
             event_id,
             room_id,
             label,
+            name,
             description,
             x,
             y,
@@ -182,8 +196,9 @@ pub async fn update<'e, E: sqlx::PgExecutor<'e>>(
             grid_row
         "#,
         seat_id,
-        label,
-        description,
+        text.label,
+        text.name,
+        text.description,
         x,
         y,
         grid.0,

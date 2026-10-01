@@ -10,6 +10,7 @@
  * read the admin reservation list instead.
  */
 import { InvitationLiteData } from "../../types/invitations";
+import { seatHeading } from "../../utils/seatName";
 
 export interface ReservationLookup {
   /** Whether the guest holds any reservation (a seat or a floating one). */
@@ -95,7 +96,10 @@ export async function fetchReservation(
   return { exists: true, seatId: data?.seatId ?? null };
 }
 
-/** A seat's label and room name, for showing a reservation. */
+/**
+ * A seat's display text ("Wall sofa (S) · WS", or just the identifier) and
+ * room name, for showing a reservation.
+ */
 export async function fetchSeatLabel(
   eventId: number,
   seatId: number,
@@ -114,5 +118,8 @@ export async function fetchSeatLabel(
     });
     if (roomRes.ok) roomName = (await roomRes.json())?.name ?? null;
   }
-  return { label: seat?.label ?? null, roomName };
+  return {
+    label: typeof seat?.label === "string" ? seatHeading(seat) : null,
+    roomName,
+  };
 }

@@ -8,6 +8,8 @@ use crate::{
 
 /// Maximum length of a seat identifier (the short label drawn on the seat).
 pub const MAX_IDENTIFIER_LEN: usize = 8;
+/// Maximum length of a seat's name (its human-readable title).
+pub const MAX_NAME_LEN: usize = 60;
 /// Maximum length of a seat's free-text description.
 pub const MAX_DESCRIPTION_LEN: usize = 120;
 
@@ -46,6 +48,35 @@ pub fn normalise_seat_identifier_for(
     }
 }
 
+/// Trim and validate a seat name, e.g. "Wall sofa (S)": blank becomes `None`;
+/// otherwise 1 to 60 characters (code points) of printable text, no control
+/// characters.
+pub fn normalise_seat_name(name: Option<&str>) -> Result<Option<String>, String> {
+    let Some(text) = name.map(str::trim).filter(|n| !n.is_empty()) else {
+        return Ok(None);
+    };
+    if text.chars().count() > MAX_NAME_LEN {
+        return Err(format!(
+            "Seat name must be at most {MAX_NAME_LEN} characters"
+        ));
+    }
+    if text.chars().any(char::is_control) {
+        return Err(
+            "Seat name may not contain control characters (such as line breaks or tabs)"
+                .to_string(),
+        );
+    }
+    Ok(Some(text.to_string()))
+}
+
+/// How a seat is named in prose (audit log, activity ticker): its name when it
+/// has one, otherwise its identifier.
+pub fn seat_display_name<'a>(label: &'a str, name: Option<&'a str>) -> &'a str {
+    name.map(str::trim)
+        .filter(|n| !n.is_empty())
+        .unwrap_or(label)
+}
+
 /// Trim a seat description: blank becomes `None`; at most 120 characters.
 pub fn normalise_seat_description(description: Option<&str>) -> Result<Option<String>, String> {
     let Some(text) = description.map(str::trim).filter(|d| !d.is_empty()) else {
@@ -66,6 +97,7 @@ impl From<seat::Seat> for Seat {
             event_id: seat.event_id,
             room_id: seat.room_id,
             label: seat.label,
+            name: seat.name,
             description: seat.description,
             x: seat.x,
             y: seat.y,
@@ -153,6 +185,7 @@ pub async fn create(
     user_email: String,
 ) -> Result<Seat, Error> {
     seat_submit.label = normalise_seat_identifier(&seat_submit.label).map_err(Error::BadInput)?;
+    seat_submit.name = normalise_seat_name(seat_submit.name.as_deref()).map_err(Error::BadInput)?;
     seat_submit.description =
         normalise_seat_description(seat_submit.description.as_deref()).map_err(Error::BadInput)?;
 
@@ -166,8 +199,11 @@ pub async fn create(
         pool,
         event_id,
         seat_submit.room_id,
-        seat_submit.label.clone(),
-        seat_submit.description.clone(),
+        seat::SeatText {
+            label: seat_submit.label.clone(),
+            name: seat_submit.name.clone(),
+            description: seat_submit.description.clone(),
+        },
         seat_submit.x,
         seat_submit.y,
         (seat_submit.grid_col, seat_submit.grid_row),
@@ -214,6 +250,7 @@ pub async fn update(
         existing.as_ref().map(|s| s.label.as_str()),
     )
     .map_err(Error::BadInput)?;
+    seat_submit.name = normalise_seat_name(seat_submit.name.as_deref()).map_err(Error::BadInput)?;
     seat_submit.description =
         normalise_seat_description(seat_submit.description.as_deref()).map_err(Error::BadInput)?;
 
@@ -226,8 +263,11 @@ pub async fn update(
     match seat::update(
         pool,
         seat_id,
-        seat_submit.label.clone(),
-        seat_submit.description.clone(),
+        seat::SeatText {
+            label: seat_submit.label.clone(),
+            name: seat_submit.name.clone(),
+            description: seat_submit.description.clone(),
+        },
         seat_submit.x,
         seat_submit.y,
         (seat_submit.grid_col, seat_submit.grid_row),
@@ -326,6 +366,55 @@ mod tests {
             Ok("W12".to_string())
         );
         assert!(normalise_seat_identifier_for("Window seat 12", None).is_err());
+    }
+
+    #[test]
+    fn keeps_unchanged_legacy_labels_with_spaces_and_parentheses() {
+        let old = Some("WALL SOFA (S)");
+        assert_eq!(
+            normalise_seat_identifier_for("WALL SOFA (S)", old),
+            Ok("WALL SOFA (S)".to_string())
+        );
+        assert_eq!(
+            normalise_seat_identifier_for("  WALL SOFA (S) ", old),
+            Ok("WALL SOFA (S)".to_string())
+        );
+        assert!(normalise_seat_identifier_for("WALL SOFA (N)", old).is_err());
+        assert_eq!(
+            normalise_seat_identifier_for("WS", old),
+            Ok("WS".to_string())
+        );
+    }
+
+    #[test]
+    fn validates_seat_names() {
+        assert_eq!(normalise_seat_name(None), Ok(None));
+        assert_eq!(normalise_seat_name(Some("   ")), Ok(None));
+        assert_eq!(
+            normalise_seat_name(Some("  Wall sofa (S) ")),
+            Ok(Some("Wall sofa (S)".to_string()))
+        );
+        assert_eq!(
+            normalise_seat_name(Some("Fensterplatz – Süd #3 🎮")),
+            Ok(Some("Fensterplatz – Süd #3 🎮".to_string()))
+        );
+        // Counted in code points, not bytes.
+        let max = "é".repeat(MAX_NAME_LEN);
+        assert_eq!(normalise_seat_name(Some(&max)), Ok(Some(max.clone())));
+        assert!(normalise_seat_name(Some(&format!("{max}x"))).is_err());
+        assert!(normalise_seat_name(Some("Wall\nsofa")).is_err());
+        assert!(normalise_seat_name(Some("Wall\tsofa")).is_err());
+        assert!(normalise_seat_name(Some("Wall\u{7}sofa")).is_err());
+    }
+
+    #[test]
+    fn displays_the_name_falling_back_to_the_identifier() {
+        assert_eq!(
+            seat_display_name("WS", Some("Wall sofa (S)")),
+            "Wall sofa (S)"
+        );
+        assert_eq!(seat_display_name("WS", Some("  ")), "WS");
+        assert_eq!(seat_display_name("WS", None), "WS");
     }
 
     #[test]

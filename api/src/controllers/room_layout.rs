@@ -10,7 +10,7 @@ use crate::{
             cell_in_grid, cell_name, feature_groups, touches, validate_background_opacity,
             validate_background_style, validate_features, validate_grid_rows, GRID_COLS,
         },
-        seat::{normalise_seat_description, normalise_seat_identifier_for},
+        seat::{normalise_seat_description, normalise_seat_identifier_for, normalise_seat_name},
         Error,
     },
     repositories::{room, seat},
@@ -147,6 +147,8 @@ pub fn validate_layout(
                 .map(String::as_str);
             seat.label = normalise_seat_identifier_for(&seat.label, saved)
                 .map_err(|e| format!("{room_label}: {e}"))?;
+            seat.name = normalise_seat_name(seat.name.as_deref())
+                .map_err(|e| format!("{room_label}: seat {}: {e}", seat.label))?;
             seat.description = normalise_seat_description(seat.description.as_deref())
                 .map_err(|e| format!("{room_label}: seat {}: {e}", seat.label))?;
             // Identifiers are unique per room regardless of case.
@@ -196,6 +198,7 @@ impl From<seat::Seat> for LayoutSeat {
         Self {
             id: seat.id,
             label: seat.label,
+            name: seat.name,
             description: seat.description,
             grid_col: seat.grid_col,
             grid_row: seat.grid_row,
@@ -451,29 +454,15 @@ async fn save_seat(
 ) -> Result<(), sqlx::Error> {
     let (x, y) = grid_to_xy(seat.grid_col, seat.grid_row, grid_rows);
     let grid = (Some(seat.grid_col), Some(seat.grid_row));
+    let text = seat::SeatText {
+        label: seat.label.clone(),
+        name: seat.name.clone(),
+        description: seat.description.clone(),
+    };
     if let Some(seat_id) = seat.id {
-        seat::update(
-            &mut **tx,
-            seat_id,
-            seat.label.clone(),
-            seat.description.clone(),
-            x,
-            y,
-            grid,
-        )
-        .await?;
+        seat::update(&mut **tx, seat_id, text, x, y, grid).await?;
     } else {
-        seat::create(
-            &mut **tx,
-            event_id,
-            room_id,
-            seat.label.clone(),
-            seat.description.clone(),
-            x,
-            y,
-            grid,
-        )
-        .await?;
+        seat::create(&mut **tx, event_id, room_id, text, x, y, grid).await?;
     }
     Ok(())
 }
@@ -487,6 +476,7 @@ mod tests {
         LayoutSeatSubmit {
             id,
             label: label.to_string(),
+            name: None,
             description: None,
             grid_col: col,
             grid_row: row,
@@ -600,6 +590,43 @@ mod tests {
         let mut long_text = submit(vec![room(None, vec![seat(None, "A1", 0, 0)])]);
         long_text.rooms[0].seats[0].description = Some("x".repeat(121));
         assert!(validate_layout(&mut long_text, &existing()).is_err());
+    }
+
+    #[test]
+    fn keeps_a_legacy_label_with_spaces_and_validates_names() {
+        let mut existing = existing();
+        existing.seat_labels.insert(11, "WALL SOFA (S)".to_string());
+        // Saving without converting keeps the legacy label.
+        let mut kept = submit(vec![room(
+            Some(1),
+            vec![seat(Some(11), "WALL SOFA (S)", 3, 3)],
+        )]);
+        assert_eq!(validate_layout(&mut kept, &existing), Ok(()));
+        assert_eq!(kept.rooms[0].seats[0].label, "WALL SOFA (S)");
+
+        // Converting: the old label becomes the name, a short code the identifier.
+        let mut converted = submit(vec![room(Some(1), vec![seat(Some(11), "WS", 3, 3)])]);
+        converted.rooms[0].seats[0].name = Some("  Wall sofa (S) ".to_string());
+        assert_eq!(validate_layout(&mut converted, &existing), Ok(()));
+        assert_eq!(converted.rooms[0].seats[0].label, "WS");
+        assert_eq!(
+            converted.rooms[0].seats[0].name.as_deref(),
+            Some("Wall sofa (S)")
+        );
+
+        let mut blank = submit(vec![room(None, vec![seat(None, "A1", 0, 0)])]);
+        blank.rooms[0].seats[0].name = Some("   ".to_string());
+        assert_eq!(validate_layout(&mut blank, &existing), Ok(()));
+        assert_eq!(blank.rooms[0].seats[0].name, None);
+
+        let mut long_name = submit(vec![room(None, vec![seat(None, "A1", 0, 0)])]);
+        long_name.rooms[0].seats[0].name = Some("x".repeat(61));
+        let err = validate_layout(&mut long_name, &existing).expect_err("too long");
+        assert!(err.contains("seat A1") && err.contains("60"), "{err}");
+
+        let mut control = submit(vec![room(None, vec![seat(None, "A1", 0, 0)])]);
+        control.rooms[0].seats[0].name = Some("Wall\nsofa".to_string());
+        assert!(validate_layout(&mut control, &existing).is_err());
     }
 
     #[test]

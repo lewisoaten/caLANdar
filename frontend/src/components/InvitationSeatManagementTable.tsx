@@ -52,6 +52,7 @@ import {
   tones,
   type HlTone,
 } from "./hl";
+import { seatHeading, seatNameIfDifferent } from "../utils/seatName";
 
 // ---------------------------------------------------------------------------
 // Shared admin-list pieces (also used by InvitationsTable/SeatOccupancyAdmin)
@@ -447,11 +448,11 @@ export default function InvitationSeatManagementTable(
     if (!seat)
       return { label: "?", room: "Unknown seat", spoken: "Unknown seat" };
     const room = rooms.find((r) => r.id === seat.roomId)?.name ?? null;
-    return {
-      label: seat.label,
-      room,
-      spoken: room ? `Seat ${seat.label}, ${room}` : `Seat ${seat.label}`,
-    };
+    // "Wall sofa (S) · WS"; read as "Seat WS, Wall sofa (S), Lounge".
+    const spoken = [seat.label, seatNameIfDifferent(seat), room]
+      .filter(Boolean)
+      .join(", ");
+    return { label: seatHeading(seat), room, spoken: `Seat ${spoken}` };
   };
 
   // Handle edit - open wizard

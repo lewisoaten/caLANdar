@@ -111,6 +111,10 @@ export const designSeats = (eventId: number): FloorPlanSeat[] => [
   gridSeat(eventId, 1, 6, "B2", 4, 5, 8),
   gridSeat(eventId, 1, 7, "B3", 7, 5, 8),
   gridSeat(eventId, 1, 8, "B4", 9, 5, 8),
-  gridSeat(eventId, 2, 9, "C1", 4, 2, 5, "Console corner"),
+  // A named seat: the tile shows "C1", everything else "Beanbag (left)".
+  {
+    ...gridSeat(eventId, 2, 9, "C1", 4, 2, 5, "Console corner"),
+    name: "Beanbag (left)",
+  },
   gridSeat(eventId, 2, 10, "C2", 7, 2, 5, "Console corner"),
 ];

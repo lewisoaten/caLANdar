@@ -32,6 +32,10 @@ pub struct Seat {
     /// The seat identifier shown on the seat (up to 8 characters; older seats may be longer).
     pub label: String,
 
+    /// Optional human-readable name, e.g. "Wall sofa (S)" (up to 60 characters),
+    /// shown instead of the identifier wherever the seat is mentioned.
+    pub name: Option<String>,
+
     /// Optional free-text description of the seat (up to 120 characters).
     pub description: Option<String>,
 
@@ -61,6 +65,7 @@ impl SchemaExample for Seat {
             event_id: 1,
             room_id: 1,
             label: "A1".to_string(),
+            name: Some("Front left".to_string()),
             description: Some("Front row, left corner".to_string()),
             x: 0.25,
             y: 0.5,
@@ -81,6 +86,10 @@ pub struct SeatSubmit {
     /// Seat identifier: 1-8 characters of A-Z, a-z, 0-9, `-`, `_` and `.` (trimmed).
     /// An update may keep a label saved before these rules if it is unchanged.
     pub label: String,
+    /// Optional name, e.g. "Wall sofa (S)": 1-60 characters of printable text (no
+    /// control characters; trimmed; blank or omitted clears it).
+    #[serde(default)]
+    pub name: Option<String>,
     /// Optional free text, at most 120 characters (trimmed; blank clears it).
     #[serde(default)]
     pub description: Option<String>,
@@ -99,6 +108,7 @@ impl SchemaExample for SeatSubmit {
         Self {
             room_id: 1,
             label: "A1".to_string(),
+            name: Some("Front left".to_string()),
             description: Some("Front row, left corner".to_string()),
             x: 0.25,
             y: 0.5,

@@ -53,6 +53,7 @@ import {
   ConfirmDialog,
   RowAction,
 } from "./InvitationSeatManagementTable";
+import { seatHeading, seatNameIfDifferent } from "../utils/seatName";
 
 interface SeatOccupancyAdminProps {
   eventId: number;
@@ -322,7 +323,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
 
         return {
           ...reservation,
-          seatLabel: seat?.label || null,
+          seatLabel: seat ? seatHeading(seat) : null,
           roomName: room?.name || null,
           invitationHandle: invitation?.handle || null,
           invitationAvatarUrl: invitation?.avatarUrl || null,
@@ -757,8 +758,8 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                         key={seat.id}
                         title={
                           seat.isOccupied
-                            ? `${seat.label} - ${seat.occupantCount} reservation(s)`
-                            : `${seat.label} - Available`
+                            ? `${seatHeading(seat)} - ${seat.occupantCount} reservation(s)`
+                            : `${seatHeading(seat)} - Available`
                         }
                         sx={{
                           listStyle: "none",
@@ -786,6 +787,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                       >
                         {seat.label}
                         <Box component="span" sx={srOnly}>
+                          {seatNameIfDifferent(seat)
+                            ? `, ${seatNameIfDifferent(seat)}`
+                            : ""}
                           {seat.isOccupied
                             ? `, taken (${seat.occupantCount} reservation${seat.occupantCount === 1 ? "" : "s"})`
                             : ", free"}
@@ -980,7 +984,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
                     </ListSubheader>,
                     ...roomSeats.map((seat) => (
                       <MenuItem key={seat.id} value={seat.id} sx={{ pl: 3 }}>
-                        {seat.label}
+                        {seatHeading(seat)}
                       </MenuItem>
                     )),
                   ];

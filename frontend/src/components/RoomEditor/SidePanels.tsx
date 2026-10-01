@@ -28,12 +28,14 @@ import {
 import {
   BACKGROUND_TYPES,
   MAX_DESCRIPTION_LENGTH,
+  MAX_NAME_LENGTH,
   codePointLength,
   MAX_LABEL_LENGTH,
   MAX_OPACITY,
   MAX_ROWS,
   MIN_OPACITY,
   isValidIdentifier,
+  legacySeatKeys,
   minRows,
   reserverName,
   seatStats,
@@ -450,13 +452,83 @@ export function RoomPanel({
   );
 }
 
+export interface LegacyLabelsBannerProps {
+  room: EditorRoom;
+  onConvertAll: () => void;
+}
+
+/**
+ * Above the grid when seats of the room still have labels from the old
+ * editor that are too long to be identifiers ("WALL SOFA (S)"). Converting is
+ * always an explicit action: they save unchanged otherwise.
+ */
+export function LegacyLabelsBanner({
+  room,
+  onConvertAll,
+}: LegacyLabelsBannerProps) {
+  const id = useId();
+  const keys = legacySeatKeys(room);
+  if (keys.length === 0) return null;
+  const first = room.cells[keys[0]];
+  const example = first && first.t === "seat" ? first.label : "";
+  const n = keys.length;
+  return (
+    <Box
+      component="section"
+      aria-labelledby={`${id}-text`}
+      data-testid="legacy-labels-banner"
+      sx={{
+        margin: "12px 14px 0",
+        padding: "10px 14px",
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: "10px 16px",
+        border: `1px solid ${tint("amber", 0.45)}`,
+        backgroundColor: tint("amber", 0.08),
+      }}
+    >
+      <Box
+        id={`${id}-text`}
+        sx={{
+          flex: "1 1 260px",
+          minWidth: 0,
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: colors.amber,
+          overflowWrap: "anywhere",
+        }}
+      >
+        {n === 1
+          ? `1 seat has a label too long to be an identifier (${example}).`
+          : `${n} seats have labels too long to be identifiers (e.g. ${example}).`}{" "}
+        <Box component="span" sx={{ color: colors.textMuted }}>
+          Converting keeps the text as each seat’s name and gives it a short
+          identifier.
+        </Box>
+      </Box>
+      <Button
+        variant="outlined"
+        size="small"
+        onClick={onConvertAll}
+        sx={{ minHeight: 44, flex: "none" }}
+      >
+        Convert all to names
+      </Button>
+    </Box>
+  );
+}
+
 export interface SeatPanelProps {
   seat: SeatCell | null;
   duplicate: boolean;
   /** Screens linked to this seat. */
   screens?: number;
   onRename: (label: string) => void;
+  onName: (name: string) => void;
   onDescribe: (description: string) => void;
+  /** Turn a legacy label into the name, with a generated identifier. */
+  onUseAsName: () => void;
   onRemove: () => void;
 }
 
@@ -496,11 +568,14 @@ export function SeatPanel({
   duplicate,
   screens = 0,
   onRename,
+  onName,
   onDescribe,
+  onUseAsName,
   onRemove,
 }: SeatPanelProps) {
   const id = useId();
   const legacy = !!seat?.label && !isValidIdentifier(seat.label);
+  const name = seat?.name ?? "";
   const described = [
     `${id}-help`,
     `${id}-count`,
@@ -576,13 +651,60 @@ export function SeatPanel({
           )}
           {legacy && (
             <Box
-              id={`${id}-legacy`}
-              sx={{ fontSize: 13, lineHeight: 1.45, color: colors.amber }}
+              data-testid="legacy-label-note"
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "flex-start",
+                gap: "8px",
+                padding: "10px 12px",
+                border: `1px solid ${tint("amber", 0.45)}`,
+                backgroundColor: tint("amber", 0.08),
+              }}
             >
-              This older label is kept as it is. If you edit it, it must follow
-              the rules above; put longer text in the description.
+              <Box
+                id={`${id}-legacy`}
+                sx={{ fontSize: 13, lineHeight: 1.45, color: colors.amber }}
+              >
+                This older label is too long to be an identifier. It still saves
+                as it is; use it as the seat’s name to give the seat a short
+                identifier instead.
+              </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onUseAsName}
+                sx={{ minHeight: 44 }}
+              >
+                Use as name
+              </Button>
             </Box>
           )}
+          <Field label="Name (optional)" id={`${id}-name`}>
+            <OutlinedInput
+              id={`${id}-name`}
+              value={name}
+              onChange={(e) => onName(e.target.value)}
+              placeholder="e.g. Wall sofa (S)"
+              inputProps={{
+                // No maxLength: it counts UTF-16 units, the API counts code
+                // points. `nameSeat` clips by code point instead.
+                autoComplete: "off",
+                "aria-describedby": `${id}-name-help ${id}-name-count`,
+              }}
+              sx={{ ...inputSx, fontSize: 15 }}
+            />
+            <Box sx={helpRowSx}>
+              <Box component="span" id={`${id}-name-help`}>
+                Shown instead of the identifier wherever the seat is mentioned.
+              </Box>
+              <Counter
+                id={`${id}-name-count`}
+                n={codePointLength(name)}
+                max={MAX_NAME_LENGTH}
+              />
+            </Box>
+          </Field>
           <Field label="Description (optional)" id={`${id}-about`}>
             <OutlinedInput
               id={`${id}-about`}

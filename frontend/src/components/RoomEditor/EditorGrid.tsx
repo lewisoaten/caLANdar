@@ -727,6 +727,7 @@ export function EditorGrid({
             aria-label={`${cellLabel(room, k)}${candidate ? ", can be linked" : ""}${dup ? ", duplicate label" : ""}`}
             title={[
               cell.label,
+              cell.name?.trim(),
               cell.description?.trim(),
               screened ? "With screen" : "",
               who ? `Reserved by ${reserverName(who)}` : "",

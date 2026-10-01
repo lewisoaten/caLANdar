@@ -293,6 +293,49 @@ describe("EventSeatMap", () => {
     ).toBeGreaterThan(0);
   });
 
+  it("names a seat in the claim panel, its accessible name and who's where", async () => {
+    const user = userEvent.setup();
+    routes["GET /api/events/1/seats"] = () =>
+      json(
+        seats.map((s) =>
+          s.id === 2
+            ? {
+                ...s,
+                label: "S1",
+                name: "Wall sofa (S)",
+                description: "Next to the fridge",
+              }
+            : s,
+        ),
+      );
+    routes["POST /api/events/1/seat-reservations/me"] = () =>
+      json(reservation(2));
+    renderMap();
+    await plan();
+    const seat = await screen.findByRole("button", {
+      name: "S1, Wall sofa (S), Next to the fridge, free",
+    });
+    // The tile still shows the identifier.
+    expect(seat).toHaveTextContent("S1");
+    expect(seat).toHaveAttribute(
+      "title",
+      "Wall sofa (S) · S1 · Next to the fridge",
+    );
+    await user.click(seat);
+    expect(
+      screen.getByText("You selected Wall sofa (S) · S1 — Next to the fridge"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Wall sofa (S) — Next to the fridge").length,
+    ).toBeGreaterThan(0);
+    await user.click(
+      screen.getByRole("button", { name: "Claim Wall sofa (S)" }),
+    );
+    expect(
+      await screen.findByText("Wall sofa (S) · Main Hall"),
+    ).toBeInTheDocument();
+  });
+
   it("swaps with PUT and releases with DELETE", async () => {
     const user = userEvent.setup();
     routes["GET /api/events/1/seat-reservations/me?optional=true"] = () =>

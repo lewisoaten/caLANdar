@@ -162,8 +162,15 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     expect(puts).toHaveLength(1);
     expect(puts[0].releaseReserved).toBe(false);
     expect(puts[0].rooms[0].seats).toEqual([
-      { label: "B1", description: null, gridCol: 0, gridRow: 1 },
-      { id: 10, label: "A1", description: null, gridCol: 2, gridRow: 2 },
+      { label: "B1", name: null, description: null, gridCol: 0, gridRow: 1 },
+      {
+        id: 10,
+        label: "A1",
+        name: null,
+        description: null,
+        gridCol: 2,
+        gridRow: 2,
+      },
     ]);
   });
 
@@ -391,7 +398,14 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     // Same seat id (so the reservation stays) and nothing released.
     expect(puts[0].releaseReserved).toBe(false);
     expect(puts[0].rooms[0].seats).toEqual([
-      { id: 10, label: "A1", description: null, gridCol: 4, gridRow: 2 },
+      {
+        id: 10,
+        label: "A1",
+        name: null,
+        description: null,
+        gridCol: 4,
+        gridRow: 2,
+      },
     ]);
     expect(
       cell(/^Seat A1, reserved by NoScope_Nia, column 5, row 3/),
@@ -539,6 +553,160 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     expect(puts[0].rooms[0].seats[0].description).toBe(
       "Window seat next to the fridge",
     );
+  });
+
+  describe("seat names and legacy labels", () => {
+    /** Serve a layout whose room also has seats with old-editor labels. */
+    const withLegacySeats = () => {
+      const base = globalThis.fetch;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          if (
+            url.startsWith("/api/events/7/room-layout") &&
+            init?.method !== "PUT"
+          ) {
+            const l = layout();
+            l.rooms[0].seats.push(
+              {
+                id: 11,
+                label: "WALL SOFA (S)",
+                description: "By the TV",
+                gridCol: 0,
+                gridRow: 3,
+                x: 0,
+                y: 0,
+                reservedBy: null,
+              },
+              {
+                id: 12,
+                label: "WINDOW SEAT 12",
+                name: null,
+                description: null,
+                gridCol: 5,
+                gridRow: 3,
+                x: 0,
+                y: 0,
+                reservedBy: null,
+              },
+            );
+            return new Response(JSON.stringify(l));
+          }
+          return base(url, init);
+        }),
+      );
+    };
+
+    it("names a seat with a counter and saves the name trimmed", async () => {
+      renderEditor();
+      fireEvent.click(
+        await screen.findByRole("gridcell", { name: /^Seat A1/ }),
+      );
+      const name = screen.getByLabelText("Name (optional)");
+      expect(
+        screen.getByText(
+          "Shown instead of the identifier wherever the seat is mentioned.",
+        ),
+      ).toBeInTheDocument();
+      fireEvent.change(name, { target: { value: "  Wall sofa (S) " } });
+      expect(screen.getByText(/^16\/60/)).toBeInTheDocument();
+      expect(
+        cell(/^Seat A1, Wall sofa \(S\), reserved by NoScope_Nia/),
+      ).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+      await screen.findByText("Saved · seat map updated");
+      expect(puts[0].rooms[0].seats[0]).toMatchObject({
+        id: 10,
+        label: "A1",
+        name: "Wall sofa (S)",
+      });
+    });
+
+    it("converts all legacy labels from the banner and saves names with identifiers", async () => {
+      withLegacySeats();
+      renderEditor();
+      const banner = await screen.findByTestId("legacy-labels-banner");
+      expect(banner).toHaveTextContent(
+        "2 seats have labels too long to be identifiers (e.g. WALL SOFA (S)).",
+      );
+      // Nothing is converted until asked.
+      expect(cell(/^Seat WALL SOFA \(S\)/)).toBeInTheDocument();
+      fireEvent.click(
+        within(banner).getByRole("button", { name: "Convert all to names" }),
+      );
+      expect(
+        screen.queryByTestId("legacy-labels-banner"),
+      ).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            "Converted 2 seat labels to names with short identifiers.",
+          ),
+        ).toBeInTheDocument(),
+      );
+      expect(cell(/^Seat WS, WALL SOFA \(S\), By the TV/)).toBeInTheDocument();
+      expect(cell(/^Seat WS12, WINDOW SEAT 12/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+      await screen.findByText("Saved · seat map updated");
+      expect(puts[0].rooms[0].seats).toEqual([
+        {
+          id: 10,
+          label: "A1",
+          name: null,
+          description: null,
+          gridCol: 2,
+          gridRow: 2,
+        },
+        {
+          id: 11,
+          label: "WS",
+          name: "WALL SOFA (S)",
+          description: "By the TV",
+          gridCol: 0,
+          gridRow: 3,
+        },
+        {
+          id: 12,
+          label: "WS12",
+          name: "WINDOW SEAT 12",
+          description: null,
+          gridCol: 5,
+          gridRow: 3,
+        },
+      ]);
+    });
+
+    it("converts one seat with 'Use as name', and saves unconverted ones unchanged", async () => {
+      withLegacySeats();
+      renderEditor();
+      fireEvent.click(
+        await screen.findByRole("gridcell", { name: /^Seat WINDOW SEAT 12/ }),
+      );
+      const note = screen.getByTestId("legacy-label-note");
+      fireEvent.click(
+        within(note).getByRole("button", { name: "Use as name" }),
+      );
+      expect(screen.getByLabelText("Identifier")).toHaveValue("WS12");
+      expect(screen.getByLabelText("Name (optional)")).toHaveValue(
+        "WINDOW SEAT 12",
+      );
+      expect(screen.queryByTestId("legacy-label-note")).not.toBeInTheDocument();
+      expect(screen.getByTestId("legacy-labels-banner")).toHaveTextContent(
+        "1 seat has a label too long to be an identifier (WALL SOFA (S)).",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+      await screen.findByText("Saved · seat map updated");
+      const seats = puts[0].rooms[0].seats;
+      expect(seats.find((s) => s.id === 11)).toMatchObject({
+        label: "WALL SOFA (S)",
+        name: null,
+      });
+      expect(seats.find((s) => s.id === 12)).toMatchObject({
+        label: "WS12",
+        name: "WINDOW SEAT 12",
+      });
+    });
   });
 
   describe("screens and entrances", () => {

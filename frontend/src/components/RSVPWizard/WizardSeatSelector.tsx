@@ -9,6 +9,7 @@ import { InvitationLiteData } from "../../types/invitations";
 import { SeatAvailabilityResponse } from "../../types/seat_reservations";
 import { colors, fonts, hairline, tint } from "../hl";
 import { displayCallsign } from "../../utils/callsign";
+import { seatHeading, seatSummary } from "../../utils/seatName";
 import {
   SeatFloorPlan,
   FloorPlanLegend,
@@ -195,9 +196,9 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
         const room = rooms.find((r) => r.id === seat.roomId);
         if (room) {
           // Call callback with full seat information
-          onSeatSelect(seat.id, seat.label, room.name);
+          onSeatSelect(seat.id, seatHeading(seat), room.name);
         } else {
-          onSeatSelect(seat.id, seat.label);
+          onSeatSelect(seat.id, seatHeading(seat));
         }
       } else {
         // This should not happen: seatId exists but seat data is missing.
@@ -438,7 +439,6 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       {selectedSeatId !== null &&
         (() => {
           const picked = seats.find((s) => s.id === selectedSeatId);
-          const about = picked?.description?.trim();
           return (
             <Box role="status" sx={{ fontSize: 13, color: colors.textMuted }}>
               {picked && (
@@ -446,8 +446,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
                   component="span"
                   sx={{ display: "block", color: colors.text }}
                 >
-                  You selected {picked.label}
-                  {about ? ` — ${about}` : ""}
+                  You selected {seatSummary(picked)}
                 </Box>
               )}
               Seat will be reserved when you confirm your RSVP

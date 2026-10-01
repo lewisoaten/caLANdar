@@ -189,6 +189,54 @@ describe("WizardSeatSelector reserved seat handling", () => {
     expect(onSeatSelect).toHaveBeenCalledWith(10, "Seat 10", "Main Hall");
   });
 
+  it("names a seat in the picker and passes its name to the review", async () => {
+    mockAvailability = { availableSeatIds: [10] };
+    const original = { ...mockSeats[0] };
+    Object.assign(mockSeats[0], {
+      label: "WS",
+      name: "Wall sofa (S)",
+      description: "By the TV",
+    });
+    try {
+      const onSeatSelect = vi.fn();
+      renderSelector(null, { onSeatSelect, selectedSeatId: 10 });
+      const seat = await screen.findByRole("button", {
+        name: /^WS, Wall sofa \(S\), By the TV/,
+      });
+      expect(seat).toHaveTextContent("WS");
+      expect(
+        screen.getByText("You selected Wall sofa (S) · WS — By the TV"),
+      ).toBeInTheDocument();
+      await userEvent.click(seat);
+      // Pressing the selected seat deselects it; pick it again from scratch.
+      expect(onSeatSelect).toHaveBeenCalledWith(null);
+    } finally {
+      mockSeats.splice(0, 1, original);
+    }
+  });
+
+  it("passes the seat's name and identifier when picking it", async () => {
+    mockAvailability = { availableSeatIds: [10] };
+    const original = { ...mockSeats[0] };
+    Object.assign(mockSeats[0], { label: "WS", name: "Wall sofa (S)" });
+    try {
+      const onSeatSelect = vi.fn();
+      renderSelector(null, { onSeatSelect });
+      await userEvent.click(
+        await screen.findByRole("button", {
+          name: /^WS, Wall sofa \(S\), free/,
+        }),
+      );
+      expect(onSeatSelect).toHaveBeenCalledWith(
+        10,
+        "Wall sofa (S) · WS",
+        "Main Hall",
+      );
+    } finally {
+      mockSeats.splice(0, 1, original);
+    }
+  });
+
   it("deselects the picked seat when pressed again", async () => {
     mockAvailability = { availableSeatIds: [10] };
     const onSeatSelect = vi.fn();

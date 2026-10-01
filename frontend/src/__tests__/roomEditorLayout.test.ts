@@ -369,8 +369,15 @@ describe("fromLayout / toSubmit", () => {
       backgroundStyle: "retro",
       backgroundOpacity: 0.6,
       seats: [
-        { id: 10, label: "A1", description: null, gridCol: 2, gridRow: 2 },
-        { label: "A2", description: null, gridCol: 4, gridRow: 2 },
+        {
+          id: 10,
+          label: "A1",
+          name: null,
+          description: null,
+          gridCol: 2,
+          gridRow: 2,
+        },
+        { label: "A2", name: null, description: null, gridCol: 4, gridRow: 2 },
       ],
     });
     expect(body.rooms[1]).toMatchObject({
@@ -571,6 +578,7 @@ describe("moving seats and features", () => {
     expect(seat).toEqual({
       id: 10,
       label: "A1",
+      name: null,
       description: "Window seat",
       gridCol: 8,
       gridRow: 3,

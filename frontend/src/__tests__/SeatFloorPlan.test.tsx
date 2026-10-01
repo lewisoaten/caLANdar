@@ -102,6 +102,22 @@ describe("seat labels", () => {
     expect(seatTitle(free)).toBe("A2");
   });
 
+  it("reads a seat's name after its identifier, and leads the tooltip with it", () => {
+    const [, free] = tiles();
+    const named = {
+      ...free,
+      seat: { ...free.seat, label: "S1", name: "Wall sofa (S)" },
+    };
+    expect(seatAriaLabel(named, true)).toBe(
+      "S1, Wall sofa (S), with screen, free",
+    );
+    expect(seatTitle(named)).toBe("Wall sofa (S) · S1");
+    // A name that only repeats the identifier isn't read twice.
+    const same = { ...free, seat: { ...free.seat, name: " a2 " } };
+    expect(seatAriaLabel(same)).toBe("A2, free");
+    expect(seatTitle(same)).toBe("a2");
+  });
+
   it("picks the tile's second line", () => {
     const [taken, free, selected, mine] = tiles();
     expect(seatSubLabel(taken)).toBe("NoScope_Nia");

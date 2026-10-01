@@ -166,7 +166,7 @@ export interface SquadSeating {
   allowUnspecifiedSeat: boolean;
   /** The event's configured label for a floating (no fixed seat) seat. */
   unspecifiedSeatLabel: string;
-  /** Seat labels by seat id. */
+  /** Seat display names (the name, else the identifier) by seat id. */
   labels: Map<number, string>;
 }
 
