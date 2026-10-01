@@ -89,7 +89,7 @@ async fn resolve_steam_id(input: &str, steam_api_key: &String) -> Result<i64, Er
         SteamIdInput::Vanity(vanity) => {
             match steam_api::resolve_vanity_url(steam_api_key, &vanity).await {
                 Ok(Some(id)) => id.parse::<i64>().map_err(|_| {
-                    Error::Controller(format!("Steam returned an invalid ID for {vanity}"))
+                    Error::Upstream(format!("Steam returned an invalid ID for {vanity}"))
                 }),
                 Ok(None) => Err(Error::BadInput(format!(
                     "No Steam profile found for custom URL \"{vanity}\""
@@ -100,7 +100,7 @@ async fn resolve_steam_id(input: &str, steam_api_key: &String) -> Result<i64, Er
                         "Unable to resolve Steam custom URL {vanity}: {}",
                         e.without_url()
                     );
-                    Err(Error::Controller(
+                    Err(Error::Upstream(
                         "Unable to resolve Steam custom URL; Steam may be unavailable".to_string(),
                     ))
                 }
@@ -131,7 +131,7 @@ impl From<reqwest::Error> for Error {
         // reqwest errors embed the request URL, which carries the Steam API
         // key: log the detail (URL stripped) and return a generic message.
         log::error!("Steam API request failed: {}", error.without_url());
-        Error::Controller("Steam API request failed".to_string())
+        Error::Upstream("Steam API request failed".to_string())
     }
 }
 

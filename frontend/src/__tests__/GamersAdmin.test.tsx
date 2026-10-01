@@ -225,7 +225,13 @@ describe("GamersAdmin", () => {
     );
     renderAsAdmin(<GamersAdmin />);
     expect(await screen.findByText("Couldn't load gamers")).toBeInTheDocument();
-    expect(screen.getByText("db down")).toBeInTheDocument();
+    // 500 descriptions are internals: show a plain message instead.
+    expect(screen.queryByText("db down")).toBeNull();
+    expect(
+      screen.getByText(
+        "The server had a problem. Please try again in a minute.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Try again" }),
     ).toBeInTheDocument();

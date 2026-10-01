@@ -55,7 +55,21 @@ pub async fn steam_game_cache_stats(
         .map_err(|e| SteamGameCacheStatsError::InternalServerError(e.to_string()))
 }
 
-custom_errors!(UpdateGameError, Unauthorized, InternalServerError);
+custom_errors!(
+    UpdateGameError,
+    Unauthorized,
+    BadGateway,
+    InternalServerError
+);
+
+/// Map a controller error from `game::update`: Steam failures are 502.
+/// The controller logs the detail; the message is safe to show.
+fn update_game_error(e: Error) -> UpdateGameError {
+    match e {
+        Error::Upstream(msg) => UpdateGameError::BadGateway(msg),
+        e => UpdateGameError::InternalServerError(e.to_string()),
+    }
+}
 
 #[openapi(tag = "Games")]
 #[post("/steam-game-update-v2?<_as_admin>")]
@@ -88,8 +102,7 @@ pub async fn steam_game_update_v2(
                 last_refreshed: refresh.last_refreshed,
             }))
         }
-        // The controller logs the detail; `e` is a message safe to show.
-        Err(e) => Err(UpdateGameError::InternalServerError(e.to_string())),
+        Err(e) => Err(update_game_error(e)),
     }
 }
 
@@ -123,5 +136,27 @@ pub async fn get_steam_game(
         Err(e) => Err(SteamGameError::BadRequest(format!(
             "Error searching steam games: {e}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{update_game_error, Error, UpdateGameError};
+    use crate::controllers::game::{REFRESH_SAVE_FAILED, REFRESH_STEAM_UNAVAILABLE};
+
+    #[test]
+    fn steam_failure_is_bad_gateway() {
+        assert!(matches!(
+            update_game_error(Error::Upstream(REFRESH_STEAM_UNAVAILABLE.to_string())),
+            UpdateGameError::BadGateway(ref m) if m == REFRESH_STEAM_UNAVAILABLE
+        ));
+    }
+
+    #[test]
+    fn save_failure_is_internal() {
+        assert!(matches!(
+            update_game_error(Error::Controller(REFRESH_SAVE_FAILED.to_string())),
+            UpdateGameError::InternalServerError(ref m) if m == REFRESH_SAVE_FAILED
+        ));
     }
 }

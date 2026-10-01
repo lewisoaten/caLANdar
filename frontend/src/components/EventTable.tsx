@@ -151,10 +151,17 @@ const STATUS_STYLE: Record<AdminEventStatus, { label: string; color: string }> =
 // Row pieces
 // ---------------------------------------------------------------------------
 
-/** Stack the table into rows once the panel is narrower than this. */
-const STACK_BELOW = 720;
+/**
+ * Stack the table into rows once the panel is narrower than this. Every
+ * layout from ~860px wide (panel ≥ 540px) keeps the desktop grid,
+ * as in the design; phones get stacked rows.
+ */
+const STACK_BELOW = 540;
 const stacked = `@container hlEvents (max-width: ${STACK_BELOW}px)`;
+/** Between stacking and full width the fixed columns tighten up. */
+const compact = `@container hlEvents (min-width: ${STACK_BELOW + 0.02}px) and (max-width: 800px)`;
 const GRID = "minmax(0,2.2fr) 90px minmax(0,1.4fr) 110px 120px";
+const GRID_COMPACT = "minmax(0,2fr) 64px minmax(0,1.4fr) 92px 112px";
 
 const mono = { fontFamily: fonts.mono } as const;
 
@@ -196,6 +203,11 @@ const rowSx = {
   gap: "12px 16px",
   alignItems: "center",
   px: "20px",
+  [compact]: {
+    gridTemplateColumns: GRID_COMPACT,
+    columnGap: "12px",
+    px: "16px",
+  },
   // Narrow panels: the same fixed areas for every row, so a long status
   // ("LIVE RSVPS") never wraps differently from a short one ("ENDED").
   [stacked]: {

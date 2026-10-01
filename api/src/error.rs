@@ -159,3 +159,4 @@ generate_error!(
 );
 generate_error!(InternalServerError, 500, "Internal Server Error");
 generate_error!(NotImplemented, 501, "Not Implemented");
+generate_error!(BadGateway, 502, "Bad Gateway");

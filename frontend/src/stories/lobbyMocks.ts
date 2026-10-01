@@ -303,7 +303,7 @@ export function mockLobbyApi(eventId: number, opts: LobbyMockOptions = {}) {
       mockResponse(404, undefined),
     [`GET ${p}/seat-reservations/me`]:
       seatId === undefined || !response || response === "no"
-        ? () => mockResponse(404, { error: { code: 404 } })
+        ? () => mockResponse(204, undefined)
         : {
             id: 1,
             eventId,

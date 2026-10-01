@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "vitest";
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import moment from "moment";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
@@ -135,5 +136,91 @@ describe("InvitationSeatManagementTable", () => {
     for (const el of nia.querySelectorAll<HTMLElement>("[tabindex]")) {
       expect(el.matches("button, a, input, [role=button]")).toBe(true);
     }
+  });
+
+  test("invalid email is explained inline, not by a native bubble", async () => {
+    const user = userEvent.setup();
+    renderAsAdmin(<InvitationSeatManagementTable event={event} as_admin />);
+    await row("Nia");
+    const input = screen.getByRole("textbox", { name: "Invite by email" });
+    expect(input.closest("form")).toHaveAttribute("novalidate");
+    await user.type(input, "not-an-email");
+    await user.click(screen.getByRole("button", { name: "Invite" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "not-an-email isn't a valid email address.",
+    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input.getAttribute("aria-describedby")).toContain(alert.id);
+  });
+
+  test("shows the server's reason for each email that wasn't sent", async () => {
+    let posts = 0;
+    server.use(
+      http.post("/api/events/7/invitations", async ({ request }) => {
+        posts += 1;
+        const { email } = (await request.json()) as { email: string };
+        if (email === "nia@example.com")
+          return HttpResponse.json(
+            {
+              error: {
+                code: 409,
+                reason: "Conflict",
+                description: "nia@example.com is already invited to this event",
+              },
+            },
+            { status: 409 },
+          );
+        return HttpResponse.json(
+          invitation(email, "", [0, 0, 0, 0, 0, 0, 0, 0]),
+          { status: 201 },
+        );
+      }),
+    );
+    const user = userEvent.setup();
+    renderAsAdmin(<InvitationSeatManagementTable event={event} as_admin />);
+    await row("Nia");
+    const input = screen.getByRole("textbox", { name: "Invite by email" });
+    await user.type(input, "nia@example.com, new@example.com");
+    await user.click(screen.getByRole("button", { name: "Invite" }));
+    const alert = await screen.findByText(
+      "nia@example.com is already invited to this event.",
+    );
+    expect(alert).toHaveAttribute("role", "alert");
+    expect(input.getAttribute("aria-describedby")).toContain(alert.id);
+    expect(posts).toBe(2);
+    // Only the failed address stays in the field.
+    expect(input).toHaveValue("nia@example.com");
+    expect(input).toHaveAttribute("aria-invalid", "true");
+  });
+
+  test("a 502 keeps the saved invite out of the field but explains it", async () => {
+    server.use(
+      http.post("/api/events/7/invitations", () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 502,
+              reason: "Bad Gateway",
+              description:
+                "Invitation for new@example.com was saved but the email could not be sent; use resend to try again",
+            },
+          },
+          { status: 502 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderAsAdmin(<InvitationSeatManagementTable event={event} as_admin />);
+    await row("Nia");
+    const input = screen.getByRole("textbox", { name: "Invite by email" });
+    await user.type(input, "new@example.com");
+    await user.click(screen.getByRole("button", { name: "Invite" }));
+    expect(
+      await screen.findByText(
+        "Invitation for new@example.com was saved but the email could not be sent; use resend to try again.",
+      ),
+    ).toHaveAttribute("role", "alert");
+    expect(input).toHaveValue("");
   });
 });

@@ -132,7 +132,8 @@ const baseRoutes = (): Record<string, Handler> => ({
       attendance: [1, 1],
       lastModified: stamp,
     }),
-  "GET /api/events/1/seat-reservations/me": () => json(null, 404),
+  "GET /api/events/1/seat-reservations/me?optional=true": () =>
+    new Response(null, { status: 204 }),
   "POST /api/events/1/seat-reservations/check-availability": () =>
     json({ availableSeatIds: [2, 3] }),
 });
@@ -266,7 +267,7 @@ describe("EventSeatMap", () => {
 
   it("swaps with PUT and releases with DELETE", async () => {
     const user = userEvent.setup();
-    routes["GET /api/events/1/seat-reservations/me"] = () =>
+    routes["GET /api/events/1/seat-reservations/me?optional=true"] = () =>
       json(reservation(2));
     routes["POST /api/events/1/seat-reservations/check-availability"] = () =>
       json({ availableSeatIds: [3] });
@@ -322,7 +323,7 @@ describe("EventSeatMap", () => {
   it("hides release when a specific seat is required", async () => {
     routes["GET /api/events/1/seating-config"] = () =>
       json({ ...seatingConfig, allowUnspecifiedSeat: false });
-    routes["GET /api/events/1/seat-reservations/me"] = () =>
+    routes["GET /api/events/1/seat-reservations/me?optional=true"] = () =>
       json(reservation(2));
     renderMap();
     await plan();
@@ -424,7 +425,7 @@ describe("EventSeatMap", () => {
           lastModified: stamp,
         },
       ]);
-    routes["GET /api/events/1/seat-reservations/me"] = () =>
+    routes["GET /api/events/1/seat-reservations/me?optional=true"] = () =>
       json(reservation(null));
     renderMap();
     await plan();

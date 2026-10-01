@@ -223,6 +223,8 @@ const Account = () => {
         page: String(p),
         count: String(count),
         sort: s,
+        // No profile yet → 204 instead of an error.
+        optional: "true",
       });
       if (q) params.set("search", q);
       return `/api/profile?${params}`;
@@ -244,7 +246,7 @@ const Account = () => {
           signOut();
           return;
         }
-        if (response.status === 404) {
+        if (response.status === 204 || response.status === 404) {
           setProfile({ status: "unlinked" });
         } else if (!response.ok) {
           throw await apiErrorFrom("Load profile", response);
@@ -303,7 +305,7 @@ const Account = () => {
         const summary = await fetch(profileUrl(0, 1, "", "playtime"), {
           headers,
         });
-        if (summary.ok) {
+        if (summary.ok && summary.status !== 204) {
           const s = (await summary.json()) as ProfileResponse;
           after = s.libraryGames ?? s.totalGames ?? after;
         }

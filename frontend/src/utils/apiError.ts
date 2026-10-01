@@ -40,12 +40,17 @@ export async function apiErrorFrom(
 
 /**
  * The server's explanation of a failure, if it is safe to show to the user.
- * Only client errors qualify: their descriptions explain what to change (a
- * seat already taken, an inactive event), whereas server errors describe
- * internals such as database constraint names.
+ * Client errors qualify (their descriptions explain what to change: a seat
+ * already taken, an inactive event), and so does 502 Bad Gateway, which the
+ * API uses for upstream failures (Steam, the email provider) with a message
+ * written for people. Other server errors describe internals such as
+ * database constraint names.
  */
 export function userFacingReason(error: unknown): string | undefined {
-  if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+  if (
+    error instanceof ApiError &&
+    ((error.status >= 400 && error.status < 500) || error.status === 502)
+  ) {
     return error.description;
   }
   return undefined;

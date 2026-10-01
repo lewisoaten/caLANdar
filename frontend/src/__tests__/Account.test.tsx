@@ -143,6 +143,18 @@ describe("Account", { timeout: 15000 }, () => {
     expect(lastProfileQuery?.get("page")).toBe("0");
   });
 
+  test("asks for the profile optionally; 204 means not linked", async () => {
+    server.use(
+      http.get("/api/profile", ({ request }) => {
+        lastProfileQuery = new URL(request.url).searchParams;
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    render(<Account />);
+    expect(await screen.findByText("NOT LINKED")).toBeInTheDocument();
+    expect(lastProfileQuery?.get("optional")).toBe("true");
+  });
+
   test("no Steam profile (404) shows the link form", async () => {
     server.use(
       http.get("/api/profile", () =>

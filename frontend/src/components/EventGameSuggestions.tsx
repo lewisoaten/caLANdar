@@ -907,12 +907,28 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
             renderInput={(params) => (
               <TextField
                 {...params}
-                label="Suggest a game"
-                placeholder="Search Steam…"
+                // The design's search input: icon + placeholder, no floating
+                // label (the name comes from aria-label).
+                placeholder="Suggest a game from Steam…"
                 error={errorMessage ? true : false}
                 helperText={errorMessage}
+                sx={{
+                  "& .MuiOutlinedInput-root": {
+                    backgroundColor: "rgba(6,7,11,0.6)",
+                    pl: "14px",
+                  },
+                  // 48px tall like the design (and the Suggest button).
+                  "& .MuiOutlinedInput-root.MuiAutocomplete-inputRoot": {
+                    paddingBlock: "3px",
+                  },
+                  "& .MuiInputAdornment-positionStart": { mr: "10px", ml: 0 },
+                }}
                 slotProps={{
                   ...params.slotProps,
+                  htmlInput: {
+                    ...params.slotProps.htmlInput,
+                    "aria-label": "Suggest a game",
+                  },
                   input: {
                     ...params.slotProps.input,
                     startAdornment: (
@@ -948,7 +964,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
             type="submit"
             variant="outlined"
             disabled={props.disabled || !selectedGame || submitting}
-            sx={{ alignSelf: "flex-start", minHeight: 56 }}
+            sx={{ alignSelf: "flex-start", minHeight: 48 }}
           >
             {submitting ? "Suggesting…" : "Suggest"}
           </Button>
@@ -961,9 +977,22 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                 gap: 1.25,
               }}
             >
+              <Box
+                component="label"
+                htmlFor="game-comment"
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 11,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
+                  color: colors.textMuted,
+                  mb: "-4px",
+                }}
+              >
+                Pitch (optional)
+              </Box>
               <TextField
                 id="game-comment"
-                label="Pitch (optional)"
                 placeholder="e.g., Game supports 3 players per squad"
                 fullWidth
                 multiline

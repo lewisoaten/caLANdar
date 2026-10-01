@@ -536,6 +536,12 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
               gap: 1.25,
               flexWrap: "wrap",
               justifyContent: "space-between",
+              // Phones: Delete and Save share the row equally (stacked
+              // full-width when even that is too tight).
+              "@media (max-width: 599.95px)": {
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(136px, 1fr))",
+              },
             }}
           >
             {onDelete ? (
@@ -543,17 +549,31 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
                 Delete event
               </Button>
             ) : (
-              <span />
+              <Box
+                component="span"
+                sx={{ "@media (max-width: 599.95px)": { display: "none" } }}
+              />
             )}
             <Box
-              sx={{ display: "flex", alignItems: "center", gap: 1.5 }}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                minWidth: 0,
+                "@media (max-width: 599.95px)": {
+                  gridColumn: onDelete ? undefined : "1 / -1",
+                },
+              }}
               aria-live="polite"
             >
               <Button
                 type="submit"
                 variant="contained"
                 disabled={submitting}
-                sx={{ minWidth: 180 }}
+                sx={{
+                  minWidth: 180,
+                  "@media (max-width: 599.95px)": { minWidth: 0, flex: 1 },
+                }}
               >
                 {submitLabel}
               </Button>

@@ -479,8 +479,19 @@ const EventManagement = () => {
         onChange={(_e, v: ManageTab) => selectTab(v)}
         aria-label="Event settings"
         variant="scrollable"
-        scrollButtons={false}
-        sx={{ borderBottom: `1px solid ${hairline.chrome}` }}
+        // Phones can't fit every tab: show arrows (dimmed at either end) so
+        // the off-screen ones, like Broadcast, are discoverable.
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{
+          borderBottom: `1px solid ${hairline.chrome}`,
+          "& .MuiTabs-scrollButtons": {
+            width: 36,
+            flex: "none",
+            color: colors.cyan,
+            "&.Mui-disabled": { opacity: 0.25 },
+          },
+        }}
       >
         {MANAGE_TABS.map((t) => (
           <Tab

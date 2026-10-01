@@ -51,6 +51,37 @@ pub struct InvitationsResponse {
     pub last_modified: DateTime<Utc>,
 }
 
+custom_errors!(
+    InvitationPostError,
+    BadRequest,
+    NotFound,
+    Conflict,
+    BadGateway,
+    InternalServerError
+);
+
+/// Map the database error from inserting an invitation.
+fn invitation_insert_error(e: &sqlx::Error, event_id: i32, email: &str) -> InvitationPostError {
+    match e.as_database_error() {
+        Some(db) if db.is_unique_violation() => {
+            InvitationPostError::Conflict(format!("{email} is already invited to this event"))
+        }
+        Some(db) if db.is_foreign_key_violation() => {
+            InvitationPostError::NotFound(format!("Event {event_id} not found"))
+        }
+        _ => InvitationPostError::InternalServerError(format!(
+            "Error creating invitation for {email}: {e}"
+        )),
+    }
+}
+
+/// Invite an email address to an event and send the invitation email.
+///
+/// The address is trimmed and lower-cased. Errors:
+/// - 400 if the address is not a valid email (the description says why)
+/// - 404 if the event does not exist
+/// - 409 if the address is already invited to this event
+/// - 502 if the invitation was saved but the email provider rejected the email
 #[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Event Invitations")]
 #[post(
@@ -67,25 +98,9 @@ pub async fn post(
     tera: &State<Tera>,
     _as_admin: Option<bool>,
     user: AdminUser,
-) -> Result<status::Created<Json<InvitationsResponse>>, rocket::response::status::BadRequest<String>>
-{
-    // Insert new event and return it
-    let invitation: InvitationsResponse = match sqlx::query_as!(
-        InvitationsResponse,
-        r#"INSERT INTO invitation (event_id, email)
-        VALUES ($1, $2)
-        RETURNING event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified"#,
-        event_id,
-        invitation_request.email,
-    ).fetch_one(pool.inner()).await
-    {
-        Ok(event) => event,
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(
-                "Error getting database ID".to_string(),
-            ))
-        }
-    };
+) -> Result<status::Created<Json<InvitationsResponse>>, InvitationPostError> {
+    let email = crate::util::normalise_email(&invitation_request.email);
+    crate::util::validate_email(&email).map_err(InvitationPostError::BadRequest)?;
 
     //Get event details
     let event = match event::filter(
@@ -96,24 +111,32 @@ pub async fn post(
     )
     .await
     {
-        Ok(event) => {
-            if event.len() != 1 {
-                return Err(rocket::response::status::BadRequest(
-                    "Too many events returned for ID".to_string(),
-                ));
-            }
-
-            event[0].clone()
+        Ok(mut events) if events.len() == 1 => events.remove(0),
+        Ok(_) => {
+            return Err(InvitationPostError::NotFound(format!(
+                "Event {event_id} not found"
+            )))
         }
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(
-                "Error getting database ID".to_string(),
-            ))
+        Err(e) => {
+            return Err(InvitationPostError::InternalServerError(format!(
+                "Error getting event {event_id}: {e}"
+            )))
         }
     };
 
+    // Insert new invitation and return it
+    let invitation: InvitationsResponse = sqlx::query_as!(
+        InvitationsResponse,
+        r#"INSERT INTO invitation (event_id, email)
+        VALUES ($1, $2)
+        RETURNING event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified"#,
+        event_id,
+        email,
+    ).fetch_one(pool.inner()).await
+    .map_err(|e| invitation_insert_error(&e, event_id, &email))?;
+
     let mut context = Context::new();
-    context.insert("name", &invitation_request.email);
+    context.insert("name", &email);
     context.insert("title", &event.title);
     context.insert(
         "time_begin",
@@ -126,7 +149,7 @@ pub async fn post(
     context.insert("description", &event.description);
 
     let email_details = PreauthEmailDetails {
-        address: invitation_request.email.clone(),
+        address: email.clone(),
         subject: format!("{} - caLANdar Invitation", event.title),
         template: "email_invitation.html.tera".to_string(),
     };
@@ -143,24 +166,25 @@ pub async fn post(
     .await
     {
         Ok(()) => (),
-        Err(_) => {
-            return Err(rocket::response::status::BadRequest(
-                "Error sending invitation email".to_string(),
-            ))
+        Err(e) => {
+            log::error!("Unable to send invitation email to {email}: {e}");
+            return Err(InvitationPostError::BadGateway(format!(
+                "Invitation for {email} was saved but the email could not be sent; use resend to try again"
+            )));
         }
     }
 
     // Log audit entry
     let metadata = rocket::serde::json::serde_json::json!({
         "event_id": event_id,
-        "invited_email": invitation_request.email,
+        "invited_email": email,
     });
     crate::util::log_audit(
         pool.inner(),
         Some(user.email),
         "invitation.create".to_string(),
         "invitation".to_string(),
-        Some(format!("{}-{}", event_id, invitation_request.email)),
+        Some(format!("{event_id}-{email}")),
         Some(metadata),
     )
     .await;

@@ -333,6 +333,25 @@ export const outsideEventReason = (
   return null;
 };
 
+/**
+ * The refusal shown when a move/resize would leave the event, in local time
+ * and in the same "… Not moved." shape as the clash message.
+ */
+export const outsideEventMessage = (
+  reason: "before" | "after",
+  gameName: string,
+  action: "move" | "resize",
+  span: { start: moment.MomentInput; end: moment.MomentInput },
+  timeBegin: moment.MomentInput,
+  timeEnd: moment.MomentInput,
+): string => {
+  const at = (t: moment.MomentInput) => moment(t).local().format("ddd HH:mm");
+  const outcome = action === "move" ? "Not moved." : "Not resized.";
+  return reason === "before"
+    ? `${gameName} would start at ${at(span.start)}, before the event begins (${at(timeBegin)}). ${outcome}`
+    : `${gameName} would end at ${at(span.end)}, after the event ends (${at(timeEnd)}). ${outcome}`;
+};
+
 /** Earliest free start for a new session on a day (30-min steps). */
 export const firstFreeStart = (
   sessions: Session[],

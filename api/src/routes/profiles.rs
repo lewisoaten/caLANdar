@@ -6,8 +6,9 @@ use crate::{
 use chrono::{DateTime, Utc};
 use rocket::{
     get, post, put,
+    response::status::NoContent,
     serde::{json::Json, Deserialize, Serialize},
-    State,
+    Either, State,
 };
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
@@ -166,8 +167,11 @@ custom_errors!(ProfileGetError, NotFound, BadRequest, InternalServerError);
 /// - count: games per page (default 10, max 100)
 /// - search: optional case-insensitive substring of the game name
 /// - sort: "playtime" (default, most played first) or "name" (A-Z)
+/// - optional: when `true`, a user with no Steam profile gets `204 No Content`
+///   instead of `404 Not Found` (default `false`, so existing clients are unchanged)
+#[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Profile")]
-#[get("/profile?<page>&<count>&<search>&<sort>", format = "json")]
+#[get("/profile?<page>&<count>&<search>&<sort>&<optional>", format = "json")]
 pub async fn get(
     pool: &State<PgPool>,
     user: User,
@@ -175,7 +179,8 @@ pub async fn get(
     count: Option<i64>,
     search: Option<String>,
     sort: Option<String>,
-) -> Result<Json<Profile>, ProfileGetError> {
+    optional: Option<bool>,
+) -> Result<Either<Json<Profile>, NoContent>, ProfileGetError> {
     let page = page.unwrap_or(0);
     let count = count.unwrap_or(10);
     let sort = match sort.as_deref() {
@@ -189,7 +194,8 @@ pub async fn get(
     };
 
     match profile::get(pool, user.email.clone(), count, page, search, sort).await {
-        Ok(profile) => Ok(Json(profile)),
+        Ok(profile) => Ok(Either::Left(Json(profile))),
+        Err(Error::NoData(_)) if optional.unwrap_or(false) => Ok(Either::Right(NoContent)),
         Err(Error::NoData(_)) => Err(ProfileGetError::NotFound(format!(
             "Profile for {}",
             user.email
@@ -204,8 +210,22 @@ custom_errors!(
     ProfileUpdateError,
     NotFound,
     BadRequest,
+    BadGateway,
     InternalServerError
 );
+
+/// Map a controller error from `profile::edit` for `PUT /profile`.
+/// Steam failures (e.g. vanity URL resolution) are 502, not 500.
+fn profile_update_error(e: Error, email: &str) -> ProfileUpdateError {
+    match e {
+        Error::NoData(_) => ProfileUpdateError::NotFound(format!("Profile for {email}")),
+        Error::BadInput(msg) => ProfileUpdateError::BadRequest(msg),
+        Error::Upstream(msg) => ProfileUpdateError::BadGateway(msg),
+        e => {
+            ProfileUpdateError::InternalServerError(format!("Error updating profile, due to: {e}"))
+        }
+    }
+}
 
 /// Update the user's profile.
 ///
@@ -231,18 +251,27 @@ pub async fn put(
     .await
     {
         Ok(updated_profile) => Ok(Json(updated_profile)),
-        Err(Error::NoData(_)) => Err(ProfileUpdateError::NotFound(format!(
-            "Profile for {}",
-            user.email
-        ))),
-        Err(Error::BadInput(msg)) => Err(ProfileUpdateError::BadRequest(msg)),
-        Err(e) => Err(ProfileUpdateError::InternalServerError(format!(
-            "Error updating profile, due to: {e}"
-        ))),
+        Err(e) => Err(profile_update_error(e, &user.email)),
     }
 }
 
-custom_errors!(UpdateUserGameError, Unauthorized, InternalServerError);
+custom_errors!(
+    UpdateUserGameError,
+    Unauthorized,
+    NotFound,
+    BadGateway,
+    InternalServerError
+);
+
+/// Map a controller error from `profile::update_user_games`.
+/// Steam failures are 502; a user with no Steam profile is 404.
+fn update_user_games_error(e: Error, email: &str) -> UpdateUserGameError {
+    match e {
+        Error::NoData(_) => UpdateUserGameError::NotFound(format!("Profile for {email}")),
+        Error::Upstream(msg) => UpdateUserGameError::BadGateway(msg),
+        e => UpdateUserGameError::InternalServerError(format!("Error updating games, due to: {e}")),
+    }
+}
 
 #[openapi(tag = "Profile")]
 #[post("/profile/games/update")]
@@ -253,9 +282,7 @@ pub async fn post_games_update(
 ) -> Result<Json<Profile>, UpdateUserGameError> {
     match profile::update_user_games(pool, user.email.clone(), steam_api_key.inner()).await {
         Ok(updated_profile) => Ok(Json(updated_profile)),
-        Err(e) => Err(UpdateUserGameError::InternalServerError(format!(
-            "Error updating games, due to: {e}"
-        ))),
+        Err(e) => Err(update_user_games_error(e, &user.email)),
     }
 }
 
@@ -263,6 +290,7 @@ custom_errors!(
     AdminProfileUpdateError,
     NotFound,
     BadRequest,
+    BadGateway,
     InternalServerError
 );
 
@@ -295,8 +323,60 @@ pub async fn put_admin(
             "Profile for {email}"
         ))),
         Err(Error::BadInput(msg)) => Err(AdminProfileUpdateError::BadRequest(msg)),
+        Err(Error::Upstream(msg)) => Err(AdminProfileUpdateError::BadGateway(msg)),
         Err(e) => Err(AdminProfileUpdateError::InternalServerError(format!(
             "Error updating profile, due to: {e}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        profile_update_error, update_user_games_error, Error, ProfileUpdateError,
+        UpdateUserGameError,
+    };
+
+    #[test]
+    fn profile_update_maps_steam_failure_to_bad_gateway() {
+        let e = profile_update_error(
+            Error::Upstream("Unable to resolve Steam custom URL".to_string()),
+            "a@b.c",
+        );
+        assert!(
+            matches!(e, ProfileUpdateError::BadGateway(ref m) if m == "Unable to resolve Steam custom URL")
+        );
+    }
+
+    #[test]
+    fn profile_update_keeps_other_statuses() {
+        assert!(matches!(
+            profile_update_error(Error::BadInput("bad".to_string()), "a@b.c"),
+            ProfileUpdateError::BadRequest(_)
+        ));
+        assert!(matches!(
+            profile_update_error(Error::NoData(String::new()), "a@b.c"),
+            ProfileUpdateError::NotFound(_)
+        ));
+        assert!(matches!(
+            profile_update_error(Error::Controller("db".to_string()), "a@b.c"),
+            ProfileUpdateError::InternalServerError(_)
+        ));
+    }
+
+    #[test]
+    fn games_update_maps_steam_failure_to_bad_gateway() {
+        assert!(matches!(
+            update_user_games_error(Error::Upstream("Steam API request failed".to_string()), "a@b.c"),
+            UpdateUserGameError::BadGateway(ref m) if m == "Steam API request failed"
+        ));
+        assert!(matches!(
+            update_user_games_error(Error::NoData(String::new()), "a@b.c"),
+            UpdateUserGameError::NotFound(_)
+        ));
+        assert!(matches!(
+            update_user_games_error(Error::Controller("db".to_string()), "a@b.c"),
+            UpdateUserGameError::InternalServerError(_)
+        ));
     }
 }

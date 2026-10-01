@@ -66,9 +66,10 @@ export function StatCell({
           letterSpacing: "0.14em",
           textTransform: "uppercase",
           color: colors.textMuted,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
+          // Never truncate: labels wrap at spaces, tighten their tracking on
+          // phone widths, and only break inside a word as a last resort.
+          overflowWrap: "anywhere",
+          "@media (max-width: 400px)": { letterSpacing: "0.04em" },
         }}
       >
         {label}

@@ -126,134 +126,140 @@ const formatBytes = (n: unknown): string | null => {
 const countOf = (n: unknown, unit: string): string | null =>
   typeof n === "number" ? `${n} ${unit}${n === 1 ? "" : "s"}` : null;
 
-export const getActionDescription = (log: AuditLogEntry): string => {
-  const parts = log.action.split(".");
-  const entity = parts[0];
-  const action = parts[1];
+/** A non-empty string from metadata, or undefined. */
+const str = (v: unknown): string | undefined =>
+  typeof v === "string" && v.trim()
+    ? v.trim()
+    : typeof v === "number"
+      ? String(v)
+      : undefined;
 
+/** `"Label: detail"` when there is a detail, else just `"Label"`. */
+const withDetail = (label: string, detail: string | undefined, sep = ": ") =>
+  detail ? `${label}${sep}${detail}` : label;
+
+/**
+ * Human text for an audit entry. Parts the server didn't record are left out
+ * rather than shown as "Unknown".
+ */
+export const getActionDescription = (log: AuditLogEntry): string => {
+  const [entity, action] = log.action.split(".");
+  const m = log.metadata ?? {};
   let description = "";
 
   switch (entity) {
     case "auth":
       description = "User logged in";
       break;
-    case "event":
-      if (action === "create") {
-        const title = (log.metadata?.title as string) || "Unknown";
-        description = `Created event "${title}"`;
-      } else if (action === "update") {
-        const title = (log.metadata?.title as string) || "Unknown";
-        description = `Updated event "${title}"`;
-      } else if (action === "delete") {
-        description = `Deleted event`;
-      }
+    case "event": {
+      const title = str(m.title);
+      const quoted = title ? `"${title}"` : undefined;
+      if (action === "create")
+        description = withDetail("Created event", quoted, " ");
+      else if (action === "update")
+        description = withDetail("Updated event", quoted, " ");
+      else if (action === "delete") description = "Deleted event";
       break;
+    }
     case "event_seating_config":
       if (action === "update") {
-        const hasSeating = log.metadata?.has_seating as boolean;
-        const allowUnspecified = log.metadata
-          ?.allow_unspecified_seat as boolean;
-        const label = log.metadata?.unspecified_seat_label as string;
+        if (typeof m.has_seating !== "boolean") {
+          description = "Updated seating config";
+          break;
+        }
         description = `Updated seating config: seating ${
-          hasSeating ? "enabled" : "disabled"
+          m.has_seating ? "enabled" : "disabled"
         }`;
-        if (hasSeating && allowUnspecified) {
-          description += `, unspecified seat allowed (${label})`;
+        if (m.has_seating && m.allow_unspecified_seat === true) {
+          const label = str(m.unspecified_seat_label);
+          description += withDetail(
+            ", unspecified seat allowed",
+            label && `(${label})`,
+            " ",
+          );
         }
       }
       break;
     case "invitation":
-      if (action === "create") {
-        const email = (log.metadata?.invited_email as string) || "unknown";
-        description = `Created invitation for ${email}`;
-      } else if (action === "delete") {
-        const email = (log.metadata?.deleted_email as string) || "unknown";
-        description = `Deleted invitation for ${email}`;
-      }
+      if (action === "create")
+        description = withDetail(
+          "Created invitation",
+          str(m.invited_email),
+          " for ",
+        );
+      else if (action === "delete")
+        description = withDetail(
+          "Deleted invitation",
+          str(m.deleted_email),
+          " for ",
+        );
       break;
     case "rsvp":
       if (action === "update") {
-        const response = (log.metadata?.response as string) || "Unknown";
-        const attendance = (log.metadata?.attendance as string) || "none";
-        const handle = (log.metadata?.handle as string) || "N/A";
-        const seatCleared = log.metadata?.seat_cleared as boolean;
-        const isAdminUpdate = log.metadata?.admin_update as boolean;
-        const targetEmail = log.metadata?.target_email as string;
-
-        const parts = [`${response}`];
-        if (attendance !== "none") {
-          parts.push(attendance);
-        }
-        if (handle !== "N/A") {
-          parts.push(`handle: ${handle}`);
-        }
-
-        let baseDescription = `Updated RSVP: ${parts.join(", ")}`;
-        if (isAdminUpdate && targetEmail) {
-          baseDescription = `Admin updated RSVP for ${targetEmail}: ${parts.join(
-            ", ",
-          )}`;
-        }
-        if (seatCleared) {
-          baseDescription += " (seat cleared)";
-        }
-        description = baseDescription;
+        const attendance = str(m.attendance);
+        const handle = str(m.handle);
+        const details = [
+          str(m.response),
+          attendance && attendance !== "none" ? attendance : undefined,
+          handle && handle !== "N/A" ? `handle: ${handle}` : undefined,
+        ].filter(Boolean);
+        const target = str(m.target_email);
+        const base =
+          m.admin_update === true && target
+            ? `Admin updated RSVP for ${target}`
+            : "Updated RSVP";
+        description = withDetail(base, details.join(", ") || undefined);
+        if (m.seat_cleared === true) description += " (seat cleared)";
       }
       break;
-    case "game_suggestion":
+    case "game_suggestion": {
+      const game = str(m.game_name);
+      const comment = str(m.comment);
       if (action === "create") {
-        const gameName = log.metadata?.game_name as string | undefined;
-        const gameId = (log.metadata?.game_id as string) || "Unknown";
-        const comment = log.metadata?.comment as string | undefined;
-        const gameDisplay = gameName || `game (ID: ${gameId})`;
-        const commentDisplay = comment ? ` - "${comment}"` : "";
-        description = `Suggested game: ${gameDisplay}${commentDisplay}`;
+        description = `Suggested ${game ?? "a game"}${
+          comment ? ` - "${comment}"` : ""
+        }`;
       } else if (action === "update_comment") {
-        const gameName = log.metadata?.game_name as string | undefined;
-        const comment = log.metadata?.comment as string | undefined;
-        description = `Updated suggestion comment${
-          gameName ? ` on ${gameName}` : ""
-        }${comment ? `: "${comment}"` : ""}`;
+        description = `Updated suggestion comment${game ? ` on ${game}` : ""}${
+          comment ? `: "${comment}"` : ""
+        }`;
       }
       break;
+    }
     case "game_vote":
       if (action === "update") {
-        const gameName = log.metadata?.game_name as string | undefined;
-        const gameId = (log.metadata?.game_id as string) || "Unknown";
-        const vote = (log.metadata?.vote as string) || "Unknown";
-        const gameDisplay = gameName || `game (ID: ${gameId})`;
-        description = `Voted ${vote} on ${gameDisplay}`;
+        const vote = str(m.vote);
+        const game = str(m.game_name) ?? "a game";
+        description = vote ? `Voted ${vote} on ${game}` : `Voted on ${game}`;
       }
       break;
     case "email":
       if (action === "send") {
-        const emailType = log.metadata?.email_type as string | undefined;
-        const recipientEmail = log.metadata?.recipient_email as
-          string | undefined;
-        const recipientCount = log.metadata?.recipient_count as
-          number | undefined;
-        const subject = log.metadata?.subject as string | undefined;
-
-        if (emailType === "invitation_resend") {
-          description = `Resent invitation email to ${recipientEmail}`;
-        } else if (emailType === "custom") {
-          description = `Sent custom email to ${recipientCount} recipients: "${subject}"`;
+        const type = str(m.email_type);
+        if (type === "invitation_resend") {
+          description = withDetail(
+            "Resent invitation email",
+            str(m.recipient_email),
+            " to ",
+          );
+        } else if (type === "custom") {
+          const count = countOf(m.recipient_count, "recipient");
+          const subject = str(m.subject);
+          description = `Sent custom email${count ? ` to ${count}` : ""}${
+            subject ? `: "${subject}"` : ""
+          }`;
         } else {
-          description = `Sent email`;
+          description = "Sent email";
         }
       }
       break;
     case "room":
-      if (action === "create") {
-        const name = (log.metadata?.name as string) || "Unknown";
-        description = `Created room: ${name}`;
-      } else if (action === "update") {
-        const name = (log.metadata?.name as string) || "Unknown";
-        description = `Updated room: ${name}`;
-      } else if (action === "delete") {
-        description = `Deleted room`;
-      } else if (action === "layout_update") {
-        const m = log.metadata ?? {};
+      if (action === "create")
+        description = withDetail("Created room", str(m.name));
+      else if (action === "update")
+        description = withDetail("Updated room", str(m.name));
+      else if (action === "delete") description = "Deleted room";
+      else if (action === "layout_update") {
         const released = Array.isArray(m.reservations_released)
           ? m.reservations_released.length
           : 0;
@@ -266,12 +272,8 @@ export const getActionDescription = (log: AuditLogEntry): string => {
           ? `Saved room layout (${details.join(", ")})`
           : "Saved room layout";
       } else if (action === "background_update") {
-        const type = (log.metadata?.content_type as string | undefined)
-          ?.split("/")[1]
-          ?.toUpperCase();
-        const details = [type, formatBytes(log.metadata?.bytes)].filter(
-          Boolean,
-        );
+        const type = str(m.content_type)?.split("/")[1]?.toUpperCase();
+        const details = [type, formatBytes(m.bytes)].filter(Boolean);
         description = details.length
           ? `Uploaded room background (${details.join(", ")})`
           : "Uploaded room background";
@@ -280,38 +282,37 @@ export const getActionDescription = (log: AuditLogEntry): string => {
       }
       break;
     case "seat":
-      if (action === "create") {
-        const label = (log.metadata?.label as string) || "Unknown";
-        description = `Created seat: ${label}`;
-      } else if (action === "update") {
-        const label = (log.metadata?.label as string) || "Unknown";
-        description = `Updated seat: ${label}`;
-      } else if (action === "delete") {
-        description = `Deleted seat`;
-      }
+      if (action === "create")
+        description = withDetail("Created seat", str(m.label));
+      else if (action === "update")
+        description = withDetail("Updated seat", str(m.label));
+      else if (action === "delete") description = "Deleted seat";
       break;
-    case "seat_reservation":
-      if (action === "create") {
-        const seat = (log.metadata?.seat as string) || "unknown seat";
-        const attendance = (log.metadata?.attendance as string) || "none";
-        description = `Reserved seat: ${seat} (${attendance})`;
-      } else if (action === "update") {
-        const seat = (log.metadata?.seat as string) || "unknown seat";
-        const attendance = (log.metadata?.attendance as string) || "none";
-        description = `Updated seat reservation: ${seat} (${attendance})`;
-      }
+    case "seat_reservation": {
+      const seat = str(m.seat);
+      const attendance = str(m.attendance);
+      const tail =
+        attendance && attendance !== "none" ? ` (${attendance})` : "";
+      if (action === "create")
+        description = `${seat ? `Reserved seat: ${seat}` : "Reserved a seat"}${tail}`;
+      else if (action === "update")
+        description = `${withDetail("Updated seat reservation", seat)}${tail}`;
       break;
+    }
     case "profile":
-      if (action === "update") {
-        description = `Updated profile`;
-      } else if (action === "games_refresh") {
-        const gamesCount = (log.metadata?.games_count as number) || "Unknown";
-        description = `Refreshed games library (${gamesCount} games)`;
+      if (action === "update") description = "Updated profile";
+      else if (action === "games_refresh") {
+        const count = countOf(m.games_count, "game");
+        description = withDetail(
+          "Refreshed games library",
+          count ? `(${count})` : undefined,
+          " ",
+        );
       }
       break;
     case "steam_games":
       if (action === "update") {
-        const added = log.metadata?.games_added as number | undefined;
+        const added = m.games_added;
         description =
           typeof added === "number"
             ? `Updated Steam games database (+${added} games)`
@@ -346,6 +347,46 @@ export const getEntityTypeName = (entityType: string): string => {
   return entityTypeMap[entityType] || entityType;
 };
 
+/**
+ * What the entry's `entityId` actually identifies. Many entries are keyed by
+ * their event (`rsvp` → "2" is event 2, not RSVP 2) or by
+ * `"{eventId}-{appid}"` / `"{eventId}-{email}"`; label those for what they
+ * are. Null when there is nothing useful to show.
+ */
+export const getEntityRef = (log: AuditLogEntry): string | null => {
+  const id = log.entityId?.trim();
+  if (!id) return null;
+  const isNum = /^\d+$/.test(id);
+  const [, action] = log.action.split(".");
+  const pair = /^(\d+)-(.+)$/.exec(id);
+  switch (log.entityType) {
+    case "event":
+    case "rsvp":
+    case "seat_reservation":
+    case "event_seating_config":
+    case "email":
+      return isNum ? `Event #${id}` : null;
+    case "room":
+      if (action === "layout_update") return isNum ? `Event #${id}` : null;
+      return isNum ? `Room #${id}` : null;
+    case "seat":
+      return isNum ? `Seat #${id}` : null;
+    case "game_suggestion":
+    case "game_vote":
+      if (isNum) return `Event #${id}`;
+      if (pair && /^\d+$/.test(pair[2]))
+        return `Event #${pair[1]} · Steam app ${pair[2]}`;
+      return null;
+    case "invitation":
+      if (isNum) return `Event #${id}`;
+      return pair ? `Event #${pair[1]}` : null;
+    case "profile":
+      return /^\d{17}$/.test(id) ? `Steam ID ${id}` : null;
+    default:
+      return `${getEntityTypeName(log.entityType)} #${id}`;
+  }
+};
+
 interface FetchResult {
   key: string;
   data?: AuditLogsResponse;
@@ -355,6 +396,7 @@ interface FetchResult {
 function AuditRow({ log, now }: { log: AuditLogEntry; now: number }) {
   const tone = tones[auditTone(log.entityType)];
   const who = log.userId || "System";
+  const entityRef = getEntityRef(log);
   return (
     <Box
       component="li"
@@ -411,7 +453,7 @@ function AuditRow({ log, now }: { log: AuditLogEntry; now: number }) {
         }}
       >
         {getActionDescription(log)}
-        {log.entityId && (
+        {entityRef && (
           <Box
             component="span"
             sx={{
@@ -422,7 +464,7 @@ function AuditRow({ log, now }: { log: AuditLogEntry; now: number }) {
               whiteSpace: "nowrap",
             }}
           >
-            {getEntityTypeName(log.entityType)} #{log.entityId}
+            {entityRef}
           </Box>
         )}
       </Box>

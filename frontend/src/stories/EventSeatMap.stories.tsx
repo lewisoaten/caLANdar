@@ -224,7 +224,7 @@ const register = (
       respondedAt: me.response ? stamp : null,
     }),
     [`GET /api/events/${eventId}/seat-reservations/me`]: () =>
-      reservation ?? mockResponse(404, undefined),
+      reservation ?? mockResponse(204, undefined),
     [`POST /api/events/${eventId}/seat-reservations/check-availability`]:
       () => ({
         availableSeatIds: seats

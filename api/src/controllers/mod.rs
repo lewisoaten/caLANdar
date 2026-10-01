@@ -29,6 +29,9 @@ pub enum Error {
     NotPermitted(String),
     Conflict(String),
     NotFound(String),
+    /// An upstream service (Steam, the email provider) failed or answered
+    /// with something unusable. The message is safe to show to the client.
+    Upstream(String),
 }
 
 pub async fn ensure_user_invited(pool: &PgPool, event_id: i32, email: &str) -> Result<(), Error> {
@@ -59,7 +62,8 @@ impl Display for Error {
             | Error::NoData(reason)
             | Error::NotPermitted(reason)
             | Error::Conflict(reason)
-            | Error::NotFound(reason) => reason.fmt(f),
+            | Error::NotFound(reason)
+            | Error::Upstream(reason) => reason.fmt(f),
         }
     }
 }

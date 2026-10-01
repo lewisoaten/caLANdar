@@ -13,6 +13,7 @@ import {
   hoursInDay,
   instantAt,
   isOutsideWindow,
+  outsideEventMessage,
   outsideEventReason,
   placementLabel,
   rankSuggestions,
@@ -167,6 +168,34 @@ describe("sessions and range", () => {
     expect(outsideEventReason(days, 0, 17, 1, BEGIN, END)).toBe("before");
     expect(outsideEventReason(days, 2, 11, 2, BEGIN, END)).toBe("after");
     expect(outsideEventReason(days, 1, 11, 2, BEGIN, END)).toBeNull();
+  });
+
+  it("explains an out-of-event placement in local time, like a clash", () => {
+    const end = moment("2026-11-15T13:00:00");
+    const msg = outsideEventMessage(
+      "after",
+      "Factorio",
+      "move",
+      { start: moment("2026-11-15T11:00:00"), end },
+      BEGIN,
+      END,
+    );
+    expect(msg).toBe(
+      "Factorio would end at Sun 13:00, after the event ends (Sun 12:00). Not moved.",
+    );
+    expect(msg).not.toMatch(/Cannot|\d{2}\/\d{2}\/\d{4}/);
+    expect(
+      outsideEventMessage(
+        "before",
+        "Factorio",
+        "resize",
+        { start: moment("2026-11-13T17:00:00"), end: BEGIN },
+        BEGIN,
+        END,
+      ),
+    ).toBe(
+      "Factorio would start at Fri 17:00, before the event begins (Fri 18:00). Not resized.",
+    );
   });
 
   it("finds the first free start in the day's window", () => {

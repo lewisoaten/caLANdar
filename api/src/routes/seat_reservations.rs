@@ -5,8 +5,9 @@ use crate::{
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
     delete, get, post, put,
+    response::status::NoContent,
     serde::{json::Json, Deserialize, Serialize},
-    State,
+    Either, State,
 };
 use rocket_okapi::okapi::schemars;
 use rocket_okapi::okapi::schemars::JsonSchema;
@@ -128,15 +129,20 @@ pub async fn get_all(
 custom_errors!(SeatReservationGetMeError, NotFound, InternalServerError);
 
 /// Get the current user's seat reservation for an event.
+///
+/// - optional: when `true`, having no reservation returns `204 No Content`
+///   instead of `404 Not Found` (default `false`, so existing clients are unchanged)
 #[openapi(tag = "Seat Reservations")]
-#[get("/events/<event_id>/seat-reservations/me", format = "json")]
+#[get("/events/<event_id>/seat-reservations/me?<optional>", format = "json")]
 pub async fn get_me(
     event_id: i32,
     pool: &State<PgPool>,
     user: User,
-) -> Result<Json<SeatReservation>, SeatReservationGetMeError> {
+    optional: Option<bool>,
+) -> Result<Either<Json<SeatReservation>, NoContent>, SeatReservationGetMeError> {
     match seat_reservation::get_by_email(pool, event_id, &user.email).await {
-        Ok(Some(reservation)) => Ok(Json(reservation)),
+        Ok(Some(reservation)) => Ok(Either::Left(Json(reservation))),
+        Ok(None) if optional.unwrap_or(false) => Ok(Either::Right(NoContent)),
         Ok(None) => Err(SeatReservationGetMeError::NotFound(
             "No seat reservation found for this event".to_string(),
         )),

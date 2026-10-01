@@ -297,13 +297,31 @@ export function SeatFloorPlan({
     // Only when the room (or the highlighted desk) changes, not on every render.
   }, [room.id, focusId]);
 
+  // A plan that scrolls but has no selectable desk would trap keyboard users
+  // out of the overflow: make the scroller itself a focusable region then.
+  const [scrollable, setScrollable] = React.useState(false);
+  React.useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const measure = () => setScrollable(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, []);
+  const hasFocusableDesk = ordered.some(isEnabled);
+  const focusableScroller = scrollable && !hasFocusableDesk;
+
   const minWidth = GRID_COLS * minCellSize + (GRID_COLS - 1) * GAP + PAD * 2;
 
   return (
     <Box
       ref={scroller}
-      role="group"
+      role={focusableScroller ? "region" : "group"}
       aria-label={label}
+      tabIndex={focusableScroller ? 0 : undefined}
       onKeyDown={handleKeyDown}
       sx={[
         {

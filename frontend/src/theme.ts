@@ -308,6 +308,16 @@ const theme: Theme = createTheme({
     },
     MuiButtonBase: {
       defaultProps: { disableRipple: true },
+      styleOverrides: {
+        // ButtonBase resets `outline: 0`, which beats the global
+        // `:focus-visible` ring: restore it for every bare ButtonBase. The
+        // switch draws its ring on the track instead. `:where` keeps this at
+        // single-class specificity so component rings (tabs, menu items,
+        // checkboxes with inset offsets) still win.
+        root: {
+          "&:where(.Mui-focusVisible:not(.MuiSwitch-switchBase))": focusRing,
+        },
+      },
     },
     MuiButton: {
       defaultProps: { disableElevation: true },
@@ -858,7 +868,31 @@ const theme: Theme = createTheme({
     },
     MuiSlider: {
       styleOverrides: {
-        thumb: { borderRadius: 0, width: 16, height: 16 },
+        // Horizontal sliders reserve the thumb's 44px touch target.
+        root: { "&.MuiSlider-horizontal": { paddingBlock: 20 } },
+        // A 16px square drawn inside a transparent 44×44 thumb, so the whole
+        // touch target is the thumb (WCAG 2.5.8) without a bigger visual.
+        thumb: {
+          borderRadius: 0,
+          width: 44,
+          height: 44,
+          backgroundColor: "transparent",
+          "&::before": {
+            width: 16,
+            height: 16,
+            inset: "50% auto auto 50%",
+            transform: "translate(-50%, -50%)",
+            borderRadius: 0,
+            backgroundColor: "currentColor",
+            boxShadow: "none",
+          },
+          "&::after": { display: "none" },
+          "&:hover, &.Mui-active, &.Mui-focusVisible": { boxShadow: "none" },
+          "&:hover::before, &.Mui-active::before": {
+            boxShadow: `0 0 0 6px ${tint("cyan", 0.16)}`,
+          },
+          "&.Mui-focusVisible::before": focusRing,
+        },
         track: { borderRadius: 0 },
         rail: { borderRadius: 0, backgroundColor: tint("cyan", 0.25) },
       },

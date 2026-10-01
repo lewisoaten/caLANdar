@@ -67,6 +67,12 @@ fn refresh_failed(message: &str, detail: impl Display) -> Error {
     Error::Controller(message.to_string())
 }
 
+/// Log `detail` and return an upstream (Steam) error carrying only `message`.
+fn steam_unavailable(detail: impl Display) -> Error {
+    log::error!("Steam game cache refresh failed: {detail}");
+    Error::Upstream(REFRESH_STEAM_UNAVAILABLE.to_string())
+}
+
 pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefresh, Error> {
     let steam_game_update = game_update::create(pool)
         .await
@@ -74,7 +80,7 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefres
 
     let steam_games = steam_api::get_app_list(steam_api_key)
         .await
-        .map_err(|e| refresh_failed(REFRESH_STEAM_UNAVAILABLE, e))?;
+        .map_err(steam_unavailable)?;
 
     log::info!("Retrieved {} games from Steam API", steam_games.len());
 

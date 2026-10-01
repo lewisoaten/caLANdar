@@ -93,7 +93,9 @@ const me = {
 
 const profile = ({ query }: MockRequest) => {
   if (scenario === "unlinked")
-    return mockResponse(404, { error: { code: 404 } });
+    return query.get("optional") === "true"
+      ? mockResponse(204, undefined)
+      : mockResponse(404, { error: { code: 404 } });
   if (scenario === "error") return mockResponse(500, { error: { code: 500 } });
   const games = scenario === "empty" ? [] : library;
   const page = Number(query.get("page") ?? 0);
@@ -162,7 +164,7 @@ type Story = StoryObj<typeof meta>;
 
 export const WithSteamLibrary: Story = { decorators: [withScenario("linked")] };
 
-/** No Steam ID saved yet: GET /profile 404s, the form is open. */
+/** No Steam ID saved yet: GET /profile?optional=true is 204, the form is open. */
 export const NoSteamProfile: Story = { decorators: [withScenario("unlinked")] };
 
 export const EmptyLibrary: Story = { decorators: [withScenario("empty")] };

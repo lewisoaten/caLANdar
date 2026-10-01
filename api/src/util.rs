@@ -70,6 +70,42 @@ pub fn normalise_email(email: &str) -> String {
     email.trim().to_lowercase()
 }
 
+/// Longest address the `email VARCHAR(255)` columns can hold.
+pub const MAX_EMAIL_LEN: usize = 255;
+
+/// Check that `email` (already normalised) looks like a deliverable address.
+///
+/// Deliberately loose: one `@`, a non-empty local part, a dotted domain
+/// with no empty labels, no whitespace, and short enough for the database.
+/// Returns a reason suitable for showing to the user.
+pub fn validate_email(email: &str) -> Result<(), String> {
+    if email.is_empty() {
+        return Err("Email address is required".to_string());
+    }
+    if email.len() > MAX_EMAIL_LEN {
+        return Err(format!(
+            "\"{email}\" is not a valid email address: longer than {MAX_EMAIL_LEN} characters"
+        ));
+    }
+    let invalid = |why: &str| Err(format!("\"{email}\" is not a valid email address: {why}"));
+    if email.chars().any(char::is_whitespace) {
+        return invalid("it contains whitespace");
+    }
+    let Some((local, domain)) = email.split_once('@') else {
+        return invalid("it has no @");
+    };
+    if domain.contains('@') {
+        return invalid("it has more than one @");
+    }
+    if local.is_empty() {
+        return invalid("nothing before the @");
+    }
+    if !domain.contains('.') || domain.split('.').any(str::is_empty) {
+        return invalid("the domain after the @ is incomplete");
+    }
+    Ok(())
+}
+
 /// Gravatar URL for an email address.
 ///
 /// Must stay identical to the SQL form used across the repositories:
@@ -320,6 +356,34 @@ mod tests {
             non_blank(Some(" nia ".to_string())),
             Some("nia".to_string())
         );
+    }
+
+    #[test]
+    fn validate_email_accepts_normal_addresses() {
+        assert!(validate_email("a@b.co").is_ok());
+        assert!(validate_email("first.last+tag@sub.example.co.uk").is_ok());
+    }
+
+    #[test]
+    fn validate_email_rejects_with_reason() {
+        for (input, why) in [
+            ("", "required"),
+            ("nope", "no @"),
+            ("a@@b.com", "more than one @"),
+            ("a@b@c.com", "more than one @"),
+            ("@b.com", "nothing before the @"),
+            ("a@b", "domain"),
+            ("a@b.", "domain"),
+            ("a@.com", "domain"),
+            ("a b@c.com", "whitespace"),
+        ] {
+            let err = validate_email(input).expect_err(input);
+            assert!(err.contains(why), "{input:?}: {err}");
+        }
+        let long = format!("{}@b.com", "a".repeat(MAX_EMAIL_LEN));
+        assert!(validate_email(&long)
+            .expect_err("too long")
+            .contains("longer than"));
     }
 
     #[test]

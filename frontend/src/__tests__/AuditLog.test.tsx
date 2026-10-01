@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import AuditLog, {
   buildAuditQuery,
   getActionDescription,
+  getEntityRef,
   humanizeAction,
   type AuditLogEntry,
 } from "../components/AuditLog";
@@ -137,6 +138,52 @@ describe("getActionDescription", () => {
     ).toBe("Seat teleport");
   });
 
+  test("leaves out parts the server didn't record", () => {
+    const bare = (action: string, entityType: string) =>
+      getActionDescription(entry({ action, entityType, metadata: null }));
+    expect(bare("rsvp.update", "rsvp")).toBe("Updated RSVP");
+    expect(bare("game_suggestion.create", "game_suggestion")).toBe(
+      "Suggested a game",
+    );
+    expect(bare("game_vote.update", "game_vote")).toBe("Voted on a game");
+    expect(bare("event.update", "event")).toBe("Updated event");
+    expect(bare("invitation.create", "invitation")).toBe("Created invitation");
+    expect(bare("seat_reservation.create", "seat_reservation")).toBe(
+      "Reserved a seat",
+    );
+    expect(bare("profile.games_refresh", "profile")).toBe(
+      "Refreshed games library",
+    );
+    expect(bare("event_seating_config.update", "event_seating_config")).toBe(
+      "Updated seating config",
+    );
+    for (const [a, t] of [
+      ["rsvp.update", "rsvp"],
+      ["game_vote.update", "game_vote"],
+      ["room.create", "room"],
+      ["seat.update", "seat"],
+      ["email.send", "email"],
+    ])
+      expect(bare(a, t)).not.toMatch(/unknown|N\/A|undefined/i);
+  });
+
+  test("labels the entity id for what it identifies", () => {
+    const ref = (entityType: string, entityId: string, action = "x.update") =>
+      getEntityRef(entry({ entityType, entityId, action }));
+    expect(ref("rsvp", "2")).toBe("Event #2");
+    expect(ref("seat_reservation", "2")).toBe("Event #2");
+    expect(ref("game_vote", "2-427520")).toBe("Event #2 · Steam app 427520");
+    expect(ref("game_suggestion", "2-620")).toBe("Event #2 · Steam app 620");
+    expect(ref("invitation", "2-kai@example.com")).toBe("Event #2");
+    expect(ref("room", "2", "room.layout_update")).toBe("Event #2");
+    expect(ref("room", "1", "room.background_update")).toBe("Room #1");
+    expect(ref("seat", "9")).toBe("Seat #9");
+    expect(
+      ref("profile", "kai@example.com", "profile.games_refresh"),
+    ).toBeNull();
+    expect(getEntityRef(entry({ entityId: null }))).toBeNull();
+  });
+
   test("humanizes unknown entity.action codes", () => {
     expect(humanizeAction("room.background_update")).toBe(
       "Room background updated",
@@ -162,7 +209,8 @@ describe("AuditLog", () => {
     ).toBeInTheDocument();
     expect(within(list).getByText("bex@example.com")).toBeInTheDocument();
     expect(within(list).getByText("System")).toBeInTheDocument();
-    expect(within(list).getByText("RSVP #12")).toBeInTheDocument();
+    // An RSVP entry is keyed by its event.
+    expect(within(list).getByText("Event #12")).toBeInTheDocument();
 
     const q = last();
     expect(q.get("as_admin")).toBe("true");

@@ -39,6 +39,12 @@ describe("userFacingReason", () => {
     );
   });
 
+  test("exposes upstream (502) descriptions written for people", () => {
+    expect(
+      userFacingReason(new ApiError("x", 502, "Steam API request failed")),
+    ).toBe("Steam API request failed");
+  });
+
   test("hides server error descriptions", () => {
     expect(
       userFacingReason(new ApiError("x", 500, "violates foreign key")),

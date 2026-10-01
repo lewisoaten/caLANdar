@@ -442,6 +442,10 @@ export default function Dashboard({ children }: AppProps) {
                   minWidth: 44,
                   minHeight: 44,
                   justifyContent: "flex-start",
+                  "&.Mui-focusVisible": {
+                    outline: `2px solid ${colors.cyan}`,
+                    outlineOffset: 2,
+                  },
                 }}
               >
                 <BrandMark size={30} wordmark={false} />

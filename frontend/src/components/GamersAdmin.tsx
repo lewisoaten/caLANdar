@@ -53,6 +53,7 @@ import {
   isValidSteamInput,
   useDebouncedValue,
 } from "./adminListUtils";
+import { apiErrorFrom, userFacingReason } from "../utils/apiError";
 
 export const GAMERS_PAGE_SIZE = 9;
 
@@ -95,15 +96,19 @@ interface FetchResult {
   error?: string;
 }
 
+/**
+ * The server's explanation of a failure when it is meant for people (client
+ * errors and 502 upstream/Steam failures); otherwise a plain fallback rather
+ * than internals or a raw status.
+ */
 async function readError(response: Response): Promise<string> {
-  const text = await response.text();
-  try {
-    const body = JSON.parse(text) as { error?: { description?: string } };
-    if (body?.error?.description) return body.error.description;
-  } catch {
-    // Not the JSON error envelope; fall through to the raw text.
-  }
-  return text || `HTTP ${response.status}`;
+  const error = await apiErrorFrom("Request failed", response);
+  return (
+    userFacingReason(error) ??
+    (response.status >= 500
+      ? "The server had a problem. Please try again in a minute."
+      : `The request failed (error ${response.status}).`)
+  );
 }
 
 interface MetaRowProps {

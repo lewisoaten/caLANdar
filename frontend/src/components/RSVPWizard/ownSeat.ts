@@ -86,11 +86,11 @@ export async function fetchReservation(
   if (fromSquad) return fromSquad;
 
   // Older API without the markers: fall back to the direct lookup.
-  const me = await fetch(`/api/events/${eventId}/seat-reservations/me`, {
-    headers,
-    signal,
-  });
-  if (me.status === 404) return NO_RESERVATION;
+  const me = await fetch(
+    `/api/events/${eventId}/seat-reservations/me?optional=true`,
+    { headers, signal },
+  );
+  if (me.status === 204 || me.status === 404) return NO_RESERVATION;
   const data = await ok(me).json();
   return { exists: true, seatId: data?.seatId ?? null };
 }

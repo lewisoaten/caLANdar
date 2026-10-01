@@ -38,6 +38,7 @@ import {
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { getAttendanceDescription } from "../utils/attendanceDescription";
+import { ApiError, apiErrorFrom, userFacingReason } from "../utils/apiError";
 import { useSnackbar } from "notistack";
 import RSVPWizard from "./RSVPWizard/RSVPWizard";
 import {
@@ -86,6 +87,35 @@ export function parseEmailList(value: string): string[] {
       return true;
     });
 }
+
+/** Loose shape check, matching what the browser's `type=email` accepts. */
+export function isValidEmail(value: string): boolean {
+  return /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(value);
+}
+
+/** Why one invitation failed, in words an admin can act on. */
+export function inviteFailureReason(error: unknown): string {
+  const reason = userFacingReason(error);
+  if (reason) return reason;
+  if (error instanceof ApiError) {
+    if (error.status === 409) return "already invited";
+    if (error.status === 400) return "not a valid email address";
+    if (error.status === 404) return "this event no longer exists";
+    if (error.status === 502)
+      return "saved, but the invite email could not be sent; use resend to try again";
+    return "the server couldn't send it, try again";
+  }
+  return "network error, try again";
+}
+
+/** Full-stopped, for joining several reasons (emails keep their case). */
+const sentence = (text: string) => {
+  const t = text.trim();
+  return /[.!?]$/.test(t) ? t : `${t}.`;
+};
+
+const isSignOut = (error: unknown) =>
+  error instanceof ApiError && error.status === 401;
 
 /**
  * Attendance buckets as small squares, with a text alternative. Not
@@ -268,10 +298,12 @@ export default function InvitationSeatManagementTable(
   // Inline invite field
   const [inviteValue, setInviteValue] = useState("");
   const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   // Send invitations (copy from event) dialog state
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [emailsValue, setEmailsValue] = useState<string>("");
+  const [emailsError, setEmailsError] = useState<string | null>(null);
   const [availableEvents, setAvailableEvents] = useState<EventData[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | "">(0);
 
@@ -509,10 +541,16 @@ export default function InvitationSeatManagementTable(
           variant: "success",
         });
       } else {
-        const text = await response.text();
-        enqueueSnackbar(text || "Unable to resend invitation", {
-          variant: "error",
-        });
+        const error = await apiErrorFrom(
+          "Unable to resend invitation",
+          response,
+        );
+        enqueueSnackbar(
+          userFacingReason(error) ?? "Unable to resend invitation",
+          {
+            variant: "error",
+          },
+        );
       }
     } catch (error) {
       console.error("Error resending:", error);
@@ -528,6 +566,7 @@ export default function InvitationSeatManagementTable(
   const handleSendDialogClose = () => {
     setSendDialogOpen(false);
     setEmailsValue("");
+    setEmailsError(null);
     setSelectedEventId(0);
   };
 
@@ -569,72 +608,114 @@ export default function InvitationSeatManagementTable(
     }
   };
 
-  /** POST one invitation per email. Returns true if all succeeded. */
-  const sendInvites = async (raw: string): Promise<boolean> => {
+  /**
+   * POST one invitation per email. Returns true if all succeeded; otherwise
+   * reports each failed address with the server's reason (in `setError`) and
+   * leaves only those addresses in the field so they can be fixed and resent.
+   */
+  const sendInvites = async (
+    raw: string,
+    setValue: (value: string) => void,
+    setError: (error: string | null) => void,
+  ): Promise<boolean> => {
     const emails = parseEmailList(raw);
 
     if (emails.length === 0) {
-      enqueueSnackbar("Please enter at least one email", { variant: "error" });
+      setError("Enter at least one email address.");
       return false;
     }
-
-    try {
-      await Promise.all(
-        emails.map(async (email) => {
-          const response = await fetch(
-            `/api/events/${event_id}/invitations?as_admin=true`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-              body: JSON.stringify({ email }),
-            },
-          );
-
-          if (response.status === 401) {
-            signOut();
-            throw new Error("Unauthorized");
-          } else if (response.ok) {
-            return response
-              .text()
-              .then((data) => JSON.parse(data, dateParser) as InvitationData);
-          } else if (response.status === 400) {
-            throw new Error("Invalid event data.");
-          } else {
-            throw new Error("Failed to send invitation");
-          }
-        }),
+    const invalid = emails.filter((e) => !isValidEmail(e));
+    if (invalid.length > 0) {
+      setError(
+        invalid.length === 1
+          ? `${invalid[0]} isn't a valid email address.`
+          : `These aren't valid email addresses: ${invalid.join(", ")}.`,
       );
+      return false;
+    }
+    setError(null);
 
+    const results = await Promise.allSettled(
+      emails.map(async (email) => {
+        const response = await fetch(
+          `/api/events/${event_id}/invitations?as_admin=true`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              Authorization: "Bearer " + token,
+            },
+            body: JSON.stringify({ email }),
+          },
+        );
+        if (response.status === 401) {
+          signOut();
+          throw new ApiError("Signed out", 401);
+        }
+        if (!response.ok)
+          throw await apiErrorFrom("Couldn't send the invitation", response);
+      }),
+    );
+
+    if (results.some((r) => r.status === "rejected" && isSignOut(r.reason)))
+      return false;
+
+    const failures = emails.flatMap((email, i) => {
+      const r = results[i];
+      if (r.status === "fulfilled") return [];
+      const status = r.reason instanceof ApiError ? r.reason.status : 0;
+      // Expected failures are explained inline; only log the unexpected.
+      if (status === 0 || (status >= 500 && status !== 502))
+        console.error("Error sending invitation:", r.reason);
+      const reason = inviteFailureReason(r.reason);
+      return [
+        {
+          email,
+          // 502: the invitation was saved, only its email failed.
+          saved: status === 502,
+          message: reason.toLowerCase().includes(email.toLowerCase())
+            ? sentence(reason)
+            : `${email}: ${sentence(reason)}`,
+        },
+      ];
+    });
+    const sent = emails.filter((_, i) => results[i].status === "fulfilled");
+
+    if (sent.length > 0) {
       enqueueSnackbar(
-        emails.length === 1
-          ? `Invitation sent to ${emails[0]}`
-          : `${emails.length} invitations sent`,
+        sent.length === 1
+          ? `Invitation sent to ${sent[0]}`
+          : `${sent.length} invitations sent`,
         { variant: "success" },
       );
-      fetchData();
-      return true;
-    } catch (error) {
-      console.error("Error sending invitations:", error);
-      enqueueSnackbar("Failed to send some invitations", { variant: "error" });
-      fetchData();
-      return false;
     }
+    if (sent.length > 0 || failures.some((f) => f.saved)) fetchData();
+    if (failures.length === 0) return true;
+
+    // Keep only the addresses that still need sending, to fix and retry.
+    setValue(
+      failures
+        .filter((f) => !f.saved)
+        .map((f) => f.email)
+        .join(", "),
+    );
+    setError(failures.map((f) => f.message).join(" "));
+    return false;
   };
 
   const handleInlineInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     setInviting(true);
-    if (await sendInvites(inviteValue)) setInviteValue("");
+    if (await sendInvites(inviteValue, setInviteValue, setInviteError))
+      setInviteValue("");
     setInviting(false);
   };
 
   const handleSendInvitations = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (await sendInvites(emailsValue)) handleSendDialogClose();
+    if (await sendInvites(emailsValue, setEmailsValue, setEmailsError))
+      handleSendDialogClose();
   };
 
   const renderAttendance = (attendee: CombinedAttendeeData) => {
@@ -671,6 +752,7 @@ export default function InvitationSeatManagementTable(
       <Box
         component="form"
         onSubmit={handleInlineInvite}
+        noValidate
         aria-label="Invite gamers"
         sx={{ display: "flex", flexWrap: "wrap", gap: 1.25 }}
       >
@@ -678,13 +760,20 @@ export default function InvitationSeatManagementTable(
           type="email"
           name="invite"
           value={inviteValue}
-          onChange={(e) => setInviteValue(e.target.value)}
+          onChange={(e) => {
+            setInviteValue(e.target.value);
+            if (inviteError) setInviteError(null);
+          }}
           placeholder="Invite by email"
           required
+          error={inviteError !== null}
           slotProps={{
             htmlInput: {
               "aria-label": "Invite by email",
-              "aria-describedby": `${uid}-invite-help`,
+              "aria-invalid": inviteError !== null,
+              "aria-describedby": inviteError
+                ? `${uid}-invite-error ${uid}-invite-help`
+                : `${uid}-invite-help`,
               multiple: true,
             },
           }}
@@ -717,6 +806,20 @@ export default function InvitationSeatManagementTable(
           gap: 1,
         }}
       >
+        {inviteError && (
+          <Typography
+            id={`${uid}-invite-error`}
+            role="alert"
+            sx={{
+              flexBasis: "100%",
+              fontSize: 13,
+              color: colors.pinkText,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {inviteError}
+          </Typography>
+        )}
         <Typography
           id={`${uid}-invite-help`}
           sx={{ fontSize: 13, color: colors.textMuted }}
@@ -1001,7 +1104,7 @@ export default function InvitationSeatManagementTable(
         maxWidth="sm"
         fullWidth
       >
-        <Box component="form" onSubmit={handleSendInvitations}>
+        <Box component="form" noValidate onSubmit={handleSendInvitations}>
           <DialogTitle>Send invitations</DialogTitle>
           <DialogContent>
             <DialogContentText sx={{ mb: 2 }}>
@@ -1043,8 +1146,15 @@ export default function InvitationSeatManagementTable(
               multiline
               minRows={2}
               value={emailsValue}
-              onChange={(e) => setEmailsValue(e.target.value)}
-              helperText="Separate multiple emails with commas"
+              onChange={(e) => {
+                setEmailsValue(e.target.value);
+                if (emailsError) setEmailsError(null);
+              }}
+              error={emailsError !== null}
+              helperText={emailsError ?? "Separate multiple emails with commas"}
+              slotProps={{
+                formHelperText: emailsError ? { role: "alert" } : undefined,
+              }}
             />
           </DialogContent>
           <DialogActions>

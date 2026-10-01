@@ -35,6 +35,7 @@ import {
   fmtClock,
   instantAt,
   isOutsideWindow,
+  outsideEventMessage,
   outsideEventReason,
   rankMap,
   rankSuggestions,
@@ -244,19 +245,19 @@ export default function EventGameSchedule() {
         event.timeEnd,
       );
       const action = verb === "moved to" ? "move" : "resize";
-      if (reason === "before") {
+      if (reason) {
         say(
-          `Cannot ${action} game: it would start before the event begins`,
-          "error",
-        );
-        return null;
-      }
-      if (reason === "after") {
-        const end = instantAt(days[day], st + dur);
-        say(
-          `Cannot ${action} game: it would end at ${end.format(
-            "DD/MM/YYYY HH:mm",
-          )} which is after the event ends`,
+          outsideEventMessage(
+            reason,
+            name,
+            action,
+            {
+              start: instantAt(days[day] ?? days[0], st),
+              end: instantAt(days[day] ?? days[0], st + dur),
+            },
+            event.timeBegin,
+            event.timeEnd,
+          ),
           "error",
         );
         return null;

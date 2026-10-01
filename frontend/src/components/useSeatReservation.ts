@@ -119,7 +119,8 @@ export function useSeatReservation({
   useEffect(() => {
     if (!eventId || !token || !hasSeating) return;
     let cancelled = false;
-    fetch(`/api/events/${eventId}/seat-reservations/me`, {
+    // `optional`: "no reservation" is 204, not a 404 the console logs.
+    fetch(`/api/events/${eventId}/seat-reservations/me?optional=true`, {
       headers: headers(token),
     })
       .then((response) => {
@@ -127,7 +128,7 @@ export function useSeatReservation({
           signOut();
           return null;
         }
-        if (response.status === 404) return null;
+        if (response.status === 204 || response.status === 404) return null;
         if (!response.ok) throw new Error("Failed to fetch reservation");
         return response
           .text()
