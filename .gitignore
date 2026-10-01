@@ -25,3 +25,6 @@ frontend/design-sync-pkg/dist/
 .mcp.json
 .stignore
 *.sync-conflict-*
+
+# Local Netlify folder
+.netlify
