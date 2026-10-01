@@ -9,6 +9,7 @@ import {
   LAN_DAY_CUTOFF_HOUR,
   LanDay,
   MIN_DURATION_HOURS,
+  SCHEDULER_WINDOW_HINT,
   Session,
   VisibleRange,
   buildGridLines,
@@ -369,6 +370,7 @@ export function ScheduleTimeline({
             backgroundColor: tint("lime", 0.12),
           }}
           label="Auto-schedule window"
+          description={SCHEDULER_WINDOW_HINT}
         />
         {legendExtra && <Box sx={{ ml: "auto" }}>{legendExtra}</Box>}
       </Box>
@@ -637,13 +639,17 @@ export function ScheduleTimeline({
 function LegendItem({
   swatch,
   label,
+  description,
 }: {
   swatch: Record<string, string>;
   label: string;
+  /** Longer explanation, as a hover title (the page header says it in full). */
+  description?: string;
 }) {
   return (
     <Box
       component="span"
+      title={description}
       sx={{ display: "flex", alignItems: "center", gap: 1 }}
     >
       <Box

@@ -4,6 +4,7 @@ import { EventData } from "../../types/events";
 import { GameScheduleEntry } from "../../types/game_schedule";
 import { GameSuggestion } from "../../types/game_suggestions";
 import { InvitationLiteData } from "../../types/invitations";
+import { withTimeZone } from "./scheduleModel";
 
 export type LoadState = "loading" | "ready" | "error";
 
@@ -84,7 +85,11 @@ export function useScheduleData(
     (options: { background?: boolean } = {}) => {
       if (!eventId || !token) return Promise.resolve();
       const req = ++scheduleReq.current;
-      return get<GameScheduleEntry[]>(`/api/events/${eventId}/game_schedule`)
+      // `tz`: the scheduler plans suggestions inside the same local-time
+      // window the timeline draws.
+      return get<GameScheduleEntry[]>(
+        withTimeZone(`/api/events/${eventId}/game_schedule`),
+      )
         .then((data) => {
           if (req !== scheduleReq.current) return;
           if (data) setSchedule(data);

@@ -515,10 +515,80 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     await user.click(screen.getByRole("button", { name: /Recalculate/ }));
     expect(
       await screen.findByText(
-        "Re-planned 1 suggested slot from the latest votes and attendance. Your 2 pinned sessions are unchanged.",
+        "Suggested 1 game, one session each, from the latest votes and attendance. Your 2 pinned sessions are unchanged.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    // The scheduler is told which wall clock the window is on.
+    expect(
+      calls.find((c) => c.url.includes("/game_schedule/recalculate"))?.url,
+    ).toBe(
+      "/api/events/7/game_schedule/recalculate?as_admin=true&tz=Europe%2FLondon",
+    );
+  });
+
+  it("counts games, not duplicate entries, after a recalculation", async () => {
+    const user = userEvent.setup();
+    const dsg = schedule[2];
+    override = (method, path) =>
+      method === "POST" && path === "/api/events/7/game_schedule/recalculate"
+        ? new Response(
+            JSON.stringify([
+              dsg,
+              { ...dsg, startTime: iso("2026-11-14T18:00:00") },
+              // Already pinned: not a new suggestion
+              { ...schedule[0], id: 0, isPinned: false, isSuggested: true },
+            ]),
+            { status: 200 },
+          )
+        : undefined;
+    renderPage(true);
+    await block(/^Counter-Strike 2/);
+    await user.click(screen.getByRole("button", { name: /Recalculate/ }));
+    expect(
+      await screen.findByText(
+        "Suggested 1 game, one session each, from the latest votes and attendance. Your 2 pinned sessions are unchanged.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows each game once even if the API repeats it", async () => {
+    schedule = [
+      ...schedule,
+      // Suggested again although pinned, and a second suggestion
+      entry(0, 730, "Counter-Strike 2", "2026-11-14T15:00:00", 120, false),
+      entry(0, 548430, "Deep Rock Galactic", "2026-11-14T18:00:00", 120, false),
+    ];
+    renderPage(false);
+    await block(/^Counter-Strike 2, Friday 19:00/);
+    const timeline = screen.getByRole("region", { name: "Timeline" });
+    expect(
+      within(timeline).getAllByRole("button", { name: /^Counter-Strike 2,/ }),
+    ).toHaveLength(1);
+    expect(
+      within(timeline).getAllByRole("button", { name: /^Deep Rock Galactic,/ }),
+    ).toHaveLength(1);
+    expect(
+      within(timeline).getByRole("button", {
+        name: /^Deep Rock Galactic, Saturday 12:00/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains the auto-schedule window and asks for local-time plans", async () => {
+    renderPage(false);
+    await block(/^Counter-Strike 2/);
+    expect(
+      screen.getByText(
+        "Auto-schedule window: 10:00 – 01:00 each day (your local time). Suggested sessions are planned inside it; pinned sessions can go any time.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTitle(/^Auto-schedule window: 10:00 – 01:00/),
+    ).toHaveTextContent("Auto-schedule window");
+    expect(
+      calls.find((c) => c.url.startsWith("/api/events/7/game_schedule"))?.url,
+    ).toBe("/api/events/7/game_schedule?tz=Europe%2FLondon");
   });
 
   it("keeps the last row while dragging through the gap between rows", async () => {

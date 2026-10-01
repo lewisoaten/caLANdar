@@ -157,7 +157,6 @@ const scheduleFor = (eventId: number, firstDay = "2026-11-13") => {
       180,
       true,
     ),
-    entry(eventId, 730, "Counter-Strike 2", at(1, 19), 180, false),
     entry(eventId, 252950, "Rocket League", at(2, 11), 90, false),
   ];
 };
@@ -314,6 +313,16 @@ mockScheduleApi(306); // details open
 mockScheduleApi(307); // add dialog
 mockScheduleApi(308); // add dialog, catalogue search
 mockApi({ "GET /api/events/309": mockResponse(500, null) }); // event error
+// Spans the UK clock change (Sun 25 Oct 2026): same 10:00 – 01:00 window daily
+mockScheduleApi(310, {
+  event: event(
+    310,
+    "Clock-change LAN",
+    "2026-10-23T18:00:00",
+    "2026-10-25T18:00:00",
+  ),
+  schedule: scheduleFor(310, "2026-10-23"),
+});
 
 const meta = {
   title: "Components/EventGameSchedule",
@@ -372,6 +381,15 @@ export const EmptyMember: Story = {
 /** The schedule request fails: the timeline offers a retry. */
 export const ScheduleLoadError: Story = {
   decorators: [route(305), withUser({ isAdmin: true })],
+};
+
+/**
+ * An event across a DST change (in Europe/London clocks go back on Sunday
+ * 25 Oct 2026): the green auto-schedule window still reads 10:00 – 01:00 local
+ * on every row.
+ */
+export const AcrossClockChange: Story = {
+  decorators: [route(310), withUser({ isAdmin: true })],
 };
 
 /** The event itself fails to load. */

@@ -26,16 +26,46 @@ export const DEFAULT_DURATION_HOURS = 2;
 
 /**
  * The backend scheduler (`api/src/scheduler.rs`) never has a game in progress
- * between `NIGHT_START_HOUR_UTC` (01:00) and `DAY_START_HOUR_UTC` (10:00): a
- * session may end at exactly 01:00Z and start at exactly 10:00Z. It only plans
- * inside the event, so its "window" for each UTC day is
- * [10:00Z, 01:00Z next day] intersected with the event.
- * Keep these in sync with the constants in `scheduler.rs`.
+ * between `NIGHT_START_HOUR` (01:00) and `DAY_START_HOUR` (10:00) **local wall
+ * clock**: a session may end at exactly 01:00 and start at exactly 10:00. The
+ * UI sends the browser's zone as `?tz=` (see `browserTimeZone`), so the
+ * window is the same wall-clock 10:00 → 01:00 every day for both, even across
+ * a DST change (that day's window is then 24 ± 1h long). It only plans inside
+ * the event, so each day's window is [10:00, 01:00 next day] (local)
+ * intersected with the event. Keep these in sync with `scheduler.rs`.
  */
-export const SCHEDULER_DAY_START_HOUR_UTC = 10;
-export const SCHEDULER_NIGHT_START_HOUR_UTC = 1;
-export const SCHEDULER_WINDOW_START_UTC = SCHEDULER_DAY_START_HOUR_UTC;
-export const SCHEDULER_WINDOW_END_UTC = 24 + SCHEDULER_NIGHT_START_HOUR_UTC;
+export const SCHEDULER_DAY_START_HOUR = 10;
+export const SCHEDULER_NIGHT_START_HOUR = 1;
+/** Window on a LAN-day row, in hours past the row's local midnight. */
+export const SCHEDULER_WINDOW_START = SCHEDULER_DAY_START_HOUR;
+export const SCHEDULER_WINDOW_END = 24 + SCHEDULER_NIGHT_START_HOUR;
+
+/** `10:00 – 01:00`: the window as people read it. */
+export const SCHEDULER_WINDOW_LABEL = `${String(SCHEDULER_DAY_START_HOUR).padStart(2, "0")}:00 – ${String(
+  SCHEDULER_NIGHT_START_HOUR,
+).padStart(2, "0")}:00`;
+
+/** One-line explanation of the window, shown in the header and legend. */
+export const SCHEDULER_WINDOW_HINT = `Auto-schedule window: ${SCHEDULER_WINDOW_LABEL} each day (your local time). Suggested sessions are planned inside it; pinned sessions can go any time.`;
+
+/**
+ * The browser's IANA zone (e.g. `Europe/London`), sent to the scheduler so
+ * its window matches the one drawn here. Undefined when the browser can't say
+ * (the API then defaults to Europe/London).
+ */
+export const browserTimeZone = (): string | undefined => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** `url` with the browser's zone added as `tz` (when known). */
+export const withTimeZone = (url: string, tz = browserTimeZone()): string =>
+  tz
+    ? `${url}${url.includes("?") ? "&" : "?"}tz=${encodeURIComponent(tz)}`
+    : url;
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -113,7 +143,20 @@ export const instantAt = (day: LanDay, h: number): moment.Moment => {
     .milliseconds(0);
 };
 
-/** Absolute auto-schedule windows (ms since epoch) for an event. */
+/**
+ * `hour`:00 local wall time on the calendar day of `date` (overflowing into the
+ * next day for `hour` >= 24). Built with `new Date(y, m, d, h)` semantics, the
+ * same DST resolution the backend's `local_instant` uses: an hour that happens
+ * twice resolves to the earlier one, a skipped hour lands just after the jump.
+ */
+const localHour = (date: moment.Moment, hour: number): number =>
+  new Date(date.year(), date.month(), date.date(), hour, 0, 0, 0).valueOf();
+
+/**
+ * Absolute auto-schedule windows (ms since epoch) for an event: 10:00 → 01:00
+ * next day, local wall clock, for every local day the event touches, clipped
+ * to the event.
+ */
 export const autoScheduleWindows = (
   timeBegin: moment.MomentInput,
   timeEnd: moment.MomentInput,
@@ -122,16 +165,45 @@ export const autoScheduleWindows = (
   const end = moment(timeEnd).valueOf();
   if (!(end > begin)) return [];
   const out: Array<[number, number]> = [];
+  const last = moment(end).local().startOf("day");
+  // Start a day early: the previous evening's window can run past midnight.
   for (
-    let d = Math.floor(begin / DAY_MS) * DAY_MS - DAY_MS;
-    d <= end;
-    d += DAY_MS
+    let d = moment(begin).local().startOf("day").subtract(1, "day");
+    !d.isAfter(last);
+    d = d.clone().add(1, "day")
   ) {
-    const s = Math.max(begin, d + SCHEDULER_WINDOW_START_UTC * HOUR_MS);
-    const e = Math.min(end, d + SCHEDULER_WINDOW_END_UTC * HOUR_MS);
+    const s = Math.max(begin, localHour(d, SCHEDULER_WINDOW_START));
+    const e = Math.min(end, localHour(d, SCHEDULER_WINDOW_END));
     if (e > s) out.push([s, e]);
   }
   return out;
+};
+
+/**
+ * One entry per game, as the scheduler intends: a game that has a pinned
+ * session gets no suggested one, and a game suggested twice keeps only its
+ * earliest suggestion. Pinned entries are always kept. A defensive guard in
+ * case the API ever returns duplicates.
+ */
+export const dedupeSchedule = (
+  entries: GameScheduleEntry[],
+): GameScheduleEntry[] => {
+  const pinnedGames = new Set(
+    entries.filter((e) => e.isPinned).map((e) => e.gameId),
+  );
+  const firstSuggested = new Map<number, GameScheduleEntry>();
+  for (const e of entries) {
+    if (e.isPinned || pinnedGames.has(e.gameId)) continue;
+    const prev = firstSuggested.get(e.gameId);
+    if (
+      !prev ||
+      moment(e.startTime).valueOf() < moment(prev.startTime).valueOf()
+    )
+      firstSuggested.set(e.gameId, e);
+  }
+  return entries.filter(
+    (e) => e.isPinned || firstSuggested.get(e.gameId) === e,
+  );
 };
 
 /** One LAN day per row, from the event's first to its last day. */
@@ -177,12 +249,12 @@ export const dayIndexOf = (t: moment.MomentInput, days: LanDay[]): number => {
   return Math.max(0, Math.min(days.length - 1, i));
 };
 
-/** Schedule entries placed on the timeline grid. */
+/** Schedule entries placed on the timeline grid (see `dedupeSchedule`). */
 export const toSessions = (
   entries: GameScheduleEntry[],
   days: LanDay[],
 ): Session[] =>
-  entries
+  dedupeSchedule(entries)
     .map((entry) => {
       const day = dayIndexOf(entry.startTime, days);
       return {

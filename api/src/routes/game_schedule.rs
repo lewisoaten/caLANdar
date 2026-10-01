@@ -3,6 +3,7 @@ use crate::{
     controllers::{game_schedule, Error},
 };
 use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use rocket::{
     delete, get, patch, post,
     serde::{json::Json, Deserialize, Serialize},
@@ -89,18 +90,40 @@ impl SchemaExample for GameScheduleRequest {
     }
 }
 
-custom_errors!(GameScheduleGetError, Forbidden, InternalServerError);
+/// Parse the optional `tz` query parameter (an IANA zone such as
+/// `Europe/London`); absent means [`crate::scheduler::DEFAULT_TIMEZONE`].
+fn parse_tz(tz: Option<&str>) -> Result<Tz, String> {
+    match tz.map(str::trim) {
+        None | Some("") => Ok(crate::scheduler::DEFAULT_TIMEZONE),
+        Some(name) => name.parse::<Tz>().map_err(|_| {
+            format!("Unknown time zone '{name}': expected an IANA name such as Europe/London")
+        }),
+    }
+}
+
+custom_errors!(
+    GameScheduleGetError,
+    BadRequest,
+    Forbidden,
+    InternalServerError
+);
 
 /// Get all scheduled games for an event
-/// Returns both pinned (manually scheduled) games and suggested games from the algorithm
+/// Returns both pinned (manually scheduled) games and suggested games from the algorithm.
+///
+/// `tz` (optional, IANA name, default `Europe/London`) is the zone whose wall
+/// clock defines the auto-schedule window (10:00 → 01:00 local every day).
+/// An unknown zone is a 400.
 #[openapi(tag = "Game Schedule")]
-#[get("/events/<event_id>/game_schedule", format = "json")]
+#[get("/events/<event_id>/game_schedule?<tz>", format = "json")]
 pub async fn get_all(
     event_id: i32,
+    tz: Option<&str>,
     pool: &State<PgPool>,
     user: User,
 ) -> Result<Json<Vec<GameScheduleEntry>>, GameScheduleGetError> {
-    match game_schedule::get_all(pool, event_id, &user.email).await {
+    let tz = parse_tz(tz).map_err(GameScheduleGetError::BadRequest)?;
+    match game_schedule::get_all(pool, event_id, &user.email, tz).await {
         Ok(schedule) => Ok(Json(schedule)),
         // Not invited: 403, so the client doesn't mistake it for an expired session
         Err(Error::NotPermitted(e)) => Err(GameScheduleGetError::Forbidden(e)),
@@ -238,19 +261,24 @@ pub async fn pin(
 
 custom_errors!(
     GameScheduleRecalculateError,
+    BadRequest,
     Unauthorized,
     InternalServerError
 );
 
 /// Force recalculation of suggested game schedule (admin only)
+///
+/// `tz` (optional, IANA name, default `Europe/London`) as for `GET game_schedule`.
 #[openapi(tag = "Game Schedule")]
-#[post("/events/<event_id>/game_schedule/recalculate")]
+#[post("/events/<event_id>/game_schedule/recalculate?<tz>")]
 pub async fn recalculate_suggested_schedule(
     event_id: i32,
+    tz: Option<&str>,
     pool: &State<PgPool>,
     _admin_user: AdminUser,
 ) -> Result<Json<Vec<GameScheduleEntry>>, GameScheduleRecalculateError> {
-    match game_schedule::schedule_suggested_games(pool, event_id).await {
+    let tz = parse_tz(tz).map_err(GameScheduleRecalculateError::BadRequest)?;
+    match game_schedule::schedule_suggested_games(pool, event_id, tz).await {
         Ok(suggested) => {
             log::info!(
                 "Admin forced recalculation of {} suggested games for event {}",
@@ -263,5 +291,19 @@ pub async fn recalculate_suggested_schedule(
         Err(e) => Err(GameScheduleRecalculateError::InternalServerError(format!(
             "Error recalculating suggested schedule, due to: {e}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_tz_param() {
+        assert_eq!(parse_tz(None), Ok(chrono_tz::Europe::London));
+        assert_eq!(parse_tz(Some("")), Ok(chrono_tz::Europe::London));
+        assert_eq!(parse_tz(Some("Asia/Tokyo")), Ok(chrono_tz::Asia::Tokyo));
+        assert_eq!(parse_tz(Some("UTC")), Ok(chrono_tz::UTC));
+        assert!(parse_tz(Some("Mars/Olympus_Mons")).is_err());
     }
 }

@@ -3,27 +3,37 @@
 //! Rules (they mirror the `HyperLAN` handoff, "Recalculate" behaviour):
 //! - games are planned in vote order (most votes first);
 //! - games owned by fewer than [`MIN_OWNERS`] attendees are skipped;
-//! - a game gets at most [`MAX_SESSIONS_PER_GAME`] sessions, pinned ones included;
+//! - every game appears on the schedule at most once: a game that already has a
+//!   pinned session is not suggested again, and each other game gets at most
+//!   [`MAX_SESSIONS_PER_GAME`] suggested session;
 //! - sessions keep a [`BUFFER_MINUTES`] gap from every other session (pinned too);
 //! - nothing is in progress during the night: a session may end at exactly
-//!   [`NIGHT_START_HOUR_UTC`]:00 and may start at exactly [`DAY_START_HOUR_UTC`]:00
-//!   but never overlaps the hours in between. The frontend draws the same
-//!   window (`SCHEDULER_WINDOW_*_UTC` in `frontend/src/components/schedule/scheduleModel.ts`),
-//!   so keep both in sync.
-use chrono::{DateTime, Duration, Utc};
+//!   [`NIGHT_START_HOUR`]:00 and may start at exactly [`DAY_START_HOUR`]:00
+//!   **local wall-clock time** (in [`SchedulerInput::tz`]) but never overlaps
+//!   the hours in between. The window is therefore the same wall-clock window
+//!   every day (10:00 → 01:00); across a DST change it simply lasts 24 ± 1h.
+//!   The frontend draws the same window (`SCHEDULER_DAY_START_HOUR` /
+//!   `SCHEDULER_NIGHT_START_HOUR` in `frontend/src/components/schedule/scheduleModel.ts`)
+//!   in the browser's zone and sends that zone as `?tz=`, so keep both in sync.
+use chrono::{DateTime, Duration, LocalResult, NaiveDate, Offset, TimeZone, Timelike, Utc};
+use chrono_tz::Tz;
 use std::collections::HashMap;
 
-/// UTC hour at which the scheduler's night starts (no session may run past it).
-pub const NIGHT_START_HOUR_UTC: i64 = 1;
-/// UTC hour at which the scheduler's day starts again (earliest start after the night).
-pub const DAY_START_HOUR_UTC: i64 = 10;
+/// Local hour at which the scheduler's night starts (no session may run past it).
+pub const NIGHT_START_HOUR: u32 = 1;
+/// Local hour at which the scheduler's day starts again (earliest start after the night).
+pub const DAY_START_HOUR: u32 = 10;
+/// Zone used when a caller doesn't say which one the window is in.
+pub const DEFAULT_TIMEZONE: Tz = chrono_tz::Europe::London;
 /// Games owned by fewer attendees than this are not auto-scheduled.
 pub const MIN_OWNERS: usize = 2;
-/// Most sessions (pinned + suggested) a single game gets.
-pub const MAX_SESSIONS_PER_GAME: usize = 2;
+/// Most sessions (pinned + suggested) a single game gets. One: a game shows up
+/// on the schedule at most once, so a pinned game is never suggested again and
+/// no game is suggested twice.
+pub const MAX_SESSIONS_PER_GAME: usize = 1;
 /// Minimum gap between any two sessions, in minutes.
 pub const BUFFER_MINUTES: i64 = 30;
-/// Granularity of candidate start times, in minutes.
+/// Granularity of candidate start times, in minutes (aligned to local :00/:30).
 pub const SLOT_STEP_MINUTES: i64 = 30;
 
 /// Represents a game that can be scheduled
@@ -71,6 +81,8 @@ pub struct SchedulerInput {
     pub pinned_slots: Vec<OccupiedSlot>,
     /// Default duration for each game in minutes
     pub default_game_duration: i32,
+    /// Zone whose wall clock defines the night (see [`NIGHT_START_HOUR`]).
+    pub tz: Tz,
 }
 
 /// A suggested game schedule
@@ -93,8 +105,8 @@ pub struct SchedulerOutput {
 /// Main scheduling function - uses a greedy algorithm to maximize voter availability.
 ///
 /// Runs up to [`MAX_SESSIONS_PER_GAME`] rounds; each round walks the eligible games
-/// in vote order and gives each one (that is still under its limit) the start time
-/// where the most of its voters are around.
+/// in vote order and gives each one (that is still under its limit, pinned
+/// sessions included) the start time where the most of its voters are around.
 pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
     let mut suggested_schedules = Vec::new();
     let duration = Duration::minutes(i64::from(input.default_game_duration));
@@ -131,7 +143,7 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
         .collect();
     sorted_games.sort_by_key(|game| std::cmp::Reverse(game.votes));
 
-    let candidates = build_start_times(input.event_start, input.event_end);
+    let candidates = build_start_times(input.event_start, input.event_end, input.tz);
 
     for _round in 0..MAX_SESSIONS_PER_GAME {
         let mut placed_any = false;
@@ -145,7 +157,7 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
 
             for &start in &candidates {
                 let end = start + duration;
-                if end > input.event_end || overlaps_night(start, end) {
+                if end > input.event_end || overlaps_night(start, end, input.tz) {
                     continue;
                 }
                 if clashes(&occupied, start, end) {
@@ -195,10 +207,24 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
     }
 }
 
-/// Candidate start times: every [`SLOT_STEP_MINUTES`] from the event start.
-fn build_start_times(event_start: DateTime<Utc>, event_end: DateTime<Utc>) -> Vec<DateTime<Utc>> {
-    let mut slots = Vec::new();
-    let mut current = event_start;
+/// Candidate start times: the event start, then every [`SLOT_STEP_MINUTES`]
+/// on local :00 / :30 boundaries (so 10:00 local is always a candidate, even in
+/// zones with a :45 offset).
+fn build_start_times(
+    event_start: DateTime<Utc>,
+    event_end: DateTime<Utc>,
+    tz: Tz,
+) -> Vec<DateTime<Utc>> {
+    let mut slots = vec![event_start];
+    let local = event_start.with_timezone(&tz);
+    let into_step = Duration::minutes(i64::from(local.minute()) % SLOT_STEP_MINUTES)
+        + Duration::seconds(i64::from(local.second()))
+        + Duration::nanoseconds(i64::from(local.nanosecond()));
+    let mut current = if into_step.is_zero() {
+        event_start + Duration::minutes(SLOT_STEP_MINUTES)
+    } else {
+        event_start - into_step + Duration::minutes(SLOT_STEP_MINUTES)
+    };
     while current < event_end {
         slots.push(current);
         current += Duration::minutes(SLOT_STEP_MINUTES);
@@ -218,29 +244,44 @@ fn clashes(
         .any(|&(os, oe)| start < oe + buffer && os < end + buffer)
 }
 
-/// True when [start, end) overlaps any night, i.e. the hours between
-/// [`NIGHT_START_HOUR_UTC`]:00 and [`DAY_START_HOUR_UTC`]:00 UTC.
+/// The instant of `hour`:00 local wall-clock time on `date` in `tz`.
+///
+/// DST edge cases resolve the same way as JavaScript's `new Date(y, m, d, h)`,
+/// which the frontend uses to draw the window, so both always agree:
+/// - ambiguous (clocks go back, the hour happens twice): the earlier instant;
+/// - non-existent (clocks go forward, the hour is skipped): read with the
+///   offset in force before the gap, i.e. it lands just after the jump.
+pub fn local_instant(tz: Tz, date: NaiveDate, hour: u32) -> Option<DateTime<Utc>> {
+    let naive = date.and_hms_opt(hour, 0, 0)?;
+    match tz.from_local_datetime(&naive) {
+        LocalResult::Single(t) => Some(t.with_timezone(&Utc)),
+        LocalResult::Ambiguous(a, b) => Some(a.min(b).with_timezone(&Utc)),
+        LocalResult::None => {
+            let before = tz
+                .offset_from_utc_datetime(&(naive - Duration::days(1)))
+                .fix();
+            Some((naive - Duration::seconds(i64::from(before.local_minus_utc()))).and_utc())
+        }
+    }
+}
+
+/// True when [start, end) overlaps any night, i.e. the local hours between
+/// [`NIGHT_START_HOUR`]:00 and [`DAY_START_HOUR`]:00 in `tz`.
 /// Touching a boundary (ending at 01:00, starting at 10:00) is allowed.
-fn overlaps_night(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
-    let mut day = start
-        .date_naive()
-        .pred_opt()
-        .unwrap_or_else(|| start.date_naive());
-    let last = end.date_naive();
-    while day <= last {
-        let Some(midnight) = day.and_hms_opt(0, 0, 0) else {
+fn overlaps_night(start: DateTime<Utc>, end: DateTime<Utc>, tz: Tz) -> bool {
+    let first = start.with_timezone(&tz).date_naive();
+    let first = first.pred_opt().unwrap_or(first);
+    let last = end.with_timezone(&tz).date_naive();
+    for day in first.iter_days().take_while(|d| *d <= last) {
+        let (Some(night_start), Some(night_end)) = (
+            local_instant(tz, day, NIGHT_START_HOUR),
+            local_instant(tz, day, DAY_START_HOUR),
+        ) else {
             return true;
         };
-        let midnight = midnight.and_utc();
-        let night_start = midnight + Duration::hours(NIGHT_START_HOUR_UTC);
-        let night_end = midnight + Duration::hours(DAY_START_HOUR_UTC);
         if start < night_end && end > night_start {
             return true;
         }
-        let Some(next) = day.succ_opt() else {
-            return true;
-        };
-        day = next;
     }
     false
 }
@@ -431,12 +472,13 @@ mod tests {
             event_end,
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
+            tz: chrono_tz::UTC,
         };
 
         let output = schedule_games(&input);
 
-        // Both games are scheduled twice (MAX_SESSIONS_PER_GAME)
-        assert_eq!(output.suggested_schedules.len(), 4);
+        // Each game is scheduled exactly once (MAX_SESSIONS_PER_GAME)
+        assert_eq!(output.suggested_schedules.len(), 2);
 
         let sessions_a: Vec<_> = output
             .suggested_schedules
@@ -448,8 +490,8 @@ mod tests {
             .iter()
             .filter(|s| s.game_id == 2)
             .collect();
-        assert_eq!(sessions_a.len(), 2, "Game A should get two sessions");
-        assert_eq!(sessions_b.len(), 2, "Game B should get two sessions");
+        assert_eq!(sessions_a.len(), 1, "Game A should get one session");
+        assert_eq!(sessions_b.len(), 1, "Game B should get one session");
 
         // Game A is scheduled on Day 2 (when both gamers are available)
         for s in &sessions_a {
@@ -522,6 +564,7 @@ mod tests {
             event_end,
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
+            tz: chrono_tz::UTC,
         };
 
         let output = schedule_games(&input);
@@ -651,6 +694,7 @@ mod tests {
             event_end,
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours per game
+            tz: chrono_tz::UTC,
         };
 
         let output = schedule_games(&input);
@@ -752,6 +796,7 @@ mod tests {
             event_end,
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 10am-11am
             default_game_duration: 120,      // 2 hours per game
+            tz: chrono_tz::UTC,
         };
 
         let output = schedule_games(&input);
@@ -850,6 +895,7 @@ mod tests {
             event_end,
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 1am-4am
             default_game_duration: 120,      // 2 hours per game
+            tz: chrono_tz::UTC,
         };
 
         let output = schedule_games(&input);
@@ -937,6 +983,7 @@ mod tests {
             event_end,
             pinned_slots,
             default_game_duration: 120,
+            tz: chrono_tz::UTC,
         }
     }
 
@@ -964,7 +1011,9 @@ mod tests {
     }
 
     #[test]
-    fn test_at_most_two_sessions_per_game_including_pinned() {
+    fn test_each_game_at_most_once_and_pinned_games_not_suggested() {
+        // Regression: games used to be suggested twice, and a pinned game could
+        // also be suggested. Plenty of room here, so only the rule limits it.
         let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
         let end = Utc.with_ymd_and_hms(2024, 11, 26, 22, 0, 0).unwrap();
         let pinned = OccupiedSlot {
@@ -973,7 +1022,12 @@ mod tests {
             duration_minutes: 120,
         };
         let output = schedule_games(&input_for(
-            vec![game(1, 3, &["a", "b"], 2), game(2, 2, &["a", "b"], 2)],
+            vec![
+                game(1, 3, &["a", "b"], 2),
+                // Most votes, but already pinned
+                game(2, 9, &["a", "b"], 2),
+                game(3, 1, &["a"], 2),
+            ],
             all_day_voters(&["a", "b"]),
             start,
             end,
@@ -986,8 +1040,11 @@ mod tests {
                 .filter(|s| s.game_id == id)
                 .count()
         };
-        assert_eq!(count(1), MAX_SESSIONS_PER_GAME, "unpinned game gets two");
-        assert_eq!(count(2), 1, "pinned once, so only one more suggestion");
+        assert_eq!(MAX_SESSIONS_PER_GAME, 1);
+        assert_eq!(count(1), 1, "unpinned game is suggested once");
+        assert_eq!(count(3), 1, "unpinned game is suggested once");
+        assert_eq!(count(2), 0, "a pinned game is never suggested again");
+        assert_eq!(output.suggested_schedules.len(), 2);
         assert_buffered(&output.suggested_schedules);
         let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 20, 0, 0).unwrap();
         for s in &output.suggested_schedules {
@@ -998,6 +1055,25 @@ mod tests {
                 "{s:?} is within the buffer of the pinned session"
             );
         }
+    }
+
+    #[test]
+    fn test_game_pinned_twice_is_still_not_suggested() {
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 25, 22, 0, 0).unwrap();
+        let pin = |h| OccupiedSlot {
+            game_id: 1,
+            start_time: Utc.with_ymd_and_hms(2024, 11, 24, h, 0, 0).unwrap(),
+            duration_minutes: 60,
+        };
+        let output = schedule_games(&input_for(
+            vec![game(1, 5, &["a"], 2)],
+            all_day_voters(&["a"]),
+            start,
+            end,
+            vec![pin(12), pin(15)],
+        ));
+        assert!(output.suggested_schedules.is_empty());
     }
 
     #[test]
@@ -1035,26 +1111,183 @@ mod tests {
         );
     }
 
+    fn overlaps_night_utc(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
+        overlaps_night(start, end, chrono_tz::UTC)
+    }
+
     #[test]
     fn test_overlaps_night() {
         let at = |d, h, m| Utc.with_ymd_and_hms(2024, 11, d, h, m, 0).unwrap();
         assert!(
-            !overlaps_night(at(24, 23, 0), at(25, 1, 0)),
+            !overlaps_night_utc(at(24, 23, 0), at(25, 1, 0)),
             "ends at 01:00"
         );
-        assert!(overlaps_night(at(24, 23, 30), at(25, 1, 30)), "ends 01:30");
         assert!(
-            !overlaps_night(at(25, 10, 0), at(25, 12, 0)),
+            overlaps_night_utc(at(24, 23, 30), at(25, 1, 30)),
+            "ends 01:30"
+        );
+        assert!(
+            !overlaps_night_utc(at(25, 10, 0), at(25, 12, 0)),
             "starts 10:00"
         );
         assert!(
-            overlaps_night(at(25, 9, 30), at(25, 11, 30)),
+            overlaps_night_utc(at(25, 9, 30), at(25, 11, 30)),
             "starts 09:30"
         );
         assert!(
-            overlaps_night(at(25, 0, 0), at(25, 12, 0)),
+            overlaps_night_utc(at(25, 0, 0), at(25, 12, 0)),
             "spans the night"
         );
-        assert!(!overlaps_night(at(24, 12, 0), at(24, 23, 0)), "afternoon");
+        assert!(
+            !overlaps_night_utc(at(24, 12, 0), at(24, 23, 0)),
+            "afternoon"
+        );
+    }
+
+    /// Plenty of games, everyone around all weekend: the greedy planner fills
+    /// each window from its first minute, so window edges are easy to see.
+    fn packed_weekend(tz: Tz, start: DateTime<Utc>, end: DateTime<Utc>) -> SchedulerOutput {
+        let games = (1..=16).map(|id| game(id, 1, &["a"], 2)).collect();
+        let mut input = input_for(games, all_day_voters(&["a"]), start, end, vec![]);
+        input.tz = tz;
+        schedule_games(&input)
+    }
+
+    /// Local (date, HH:MM) of each session start / end.
+    fn local_spans(output: &SchedulerOutput, tz: Tz) -> Vec<(String, String)> {
+        output
+            .suggested_schedules
+            .iter()
+            .map(|s| {
+                (
+                    s.start_time
+                        .with_timezone(&tz)
+                        .format("%a %H:%M")
+                        .to_string(),
+                    end_of(s).with_timezone(&tz).format("%a %H:%M").to_string(),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_local_instant_dst_edges() {
+        let london = chrono_tz::Europe::London;
+        let d = |m, day| NaiveDate::from_ymd_opt(2026, m, day).expect("valid date");
+        // BST (UTC+1) on Saturday 24 Oct 2026
+        assert_eq!(
+            local_instant(london, d(10, 24), 10),
+            Some(Utc.with_ymd_and_hms(2026, 10, 24, 9, 0, 0).unwrap())
+        );
+        // 01:00 happens twice on Sunday 25 Oct: the earlier (BST) one
+        assert_eq!(
+            local_instant(london, d(10, 25), 1),
+            Some(Utc.with_ymd_and_hms(2026, 10, 25, 0, 0, 0).unwrap())
+        );
+        // GMT from then on
+        assert_eq!(
+            local_instant(london, d(10, 25), 10),
+            Some(Utc.with_ymd_and_hms(2026, 10, 25, 10, 0, 0).unwrap())
+        );
+        // 01:00 doesn't exist on Sunday 29 Mar 2026: the moment clocks jump
+        assert_eq!(
+            local_instant(london, d(3, 29), 1),
+            Some(Utc.with_ymd_and_hms(2026, 3, 29, 1, 0, 0).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_window_is_same_local_hours_across_uk_clock_change() {
+        // The owner's report: Fri 23 → Sun 25 Oct 2026 spans the UK clock change.
+        // The window must read 10:00 → 01:00 local every day, not 11:00 → 02:00
+        // BST then 10:00 → 01:00 GMT.
+        let london = chrono_tz::Europe::London;
+        let start = Utc.with_ymd_and_hms(2026, 10, 23, 17, 0, 0).unwrap(); // Fri 18:00 BST
+        let end = Utc.with_ymd_and_hms(2026, 10, 25, 18, 0, 0).unwrap(); // Sun 18:00 GMT
+        let output = packed_weekend(london, start, end);
+        let spans = local_spans(&output, london);
+        let starts: Vec<&str> = spans.iter().map(|(s, _)| s.as_str()).collect();
+        assert!(starts.contains(&"Fri 18:00"), "{spans:?}");
+        assert!(
+            starts.contains(&"Fri 23:00"),
+            "Fri runs until 01:00: {spans:?}"
+        );
+        assert!(
+            starts.contains(&"Sat 10:00"),
+            "Sat opens at 10:00 BST: {spans:?}"
+        );
+        assert!(
+            starts.contains(&"Sun 10:00"),
+            "Sun opens at 10:00 GMT: {spans:?}"
+        );
+        // Nothing in progress 01:00–10:00 local on either night (hard-coded UTC)
+        let nights = [
+            (
+                Utc.with_ymd_and_hms(2026, 10, 24, 0, 0, 0).unwrap(), // Sat 01:00 BST
+                Utc.with_ymd_and_hms(2026, 10, 24, 9, 0, 0).unwrap(), // Sat 10:00 BST
+            ),
+            (
+                Utc.with_ymd_and_hms(2026, 10, 25, 0, 0, 0).unwrap(), // Sun 01:00 BST
+                Utc.with_ymd_and_hms(2026, 10, 25, 10, 0, 0).unwrap(), // Sun 10:00 GMT
+            ),
+        ];
+        for s in &output.suggested_schedules {
+            for (ns, ne) in nights {
+                assert!(
+                    !(s.start_time < ne && end_of(s) > ns),
+                    "{s:?} runs into the night: {spans:?}"
+                );
+            }
+        }
+        // Each local start sits on a :00 / :30 boundary
+        assert!(
+            starts
+                .iter()
+                .all(|s| s.ends_with(":00") || s.ends_with(":30")),
+            "{spans:?}"
+        );
+        assert_buffered(&output.suggested_schedules);
+    }
+
+    #[test]
+    fn test_window_in_non_dst_zone_and_utc() {
+        let start = Utc.with_ymd_and_hms(2026, 10, 23, 9, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2026, 10, 25, 12, 0, 0).unwrap();
+
+        // Tokyo (UTC+9, no DST): opens at 10:00 JST = 01:00Z
+        let tokyo = chrono_tz::Asia::Tokyo;
+        let output = packed_weekend(tokyo, start, end);
+        let spans = local_spans(&output, tokyo);
+        assert!(spans.iter().any(|(s, _)| s == "Sat 10:00"), "{spans:?}");
+        assert!(output
+            .suggested_schedules
+            .iter()
+            .any(|s| s.start_time == Utc.with_ymd_and_hms(2026, 10, 24, 1, 0, 0).unwrap()));
+        for (s, e) in &spans {
+            let (sh, eh) = (&s[4..], &e[4..]);
+            assert!(!("01:00".."10:00").contains(&sh), "{s} starts at night");
+            assert!(
+                eh == "01:00" || !("01:00".."10:00").contains(&eh),
+                "{e} ends at night"
+            );
+        }
+
+        // UTC: opens at 10:00Z
+        let output = packed_weekend(chrono_tz::UTC, start, end);
+        assert!(output
+            .suggested_schedules
+            .iter()
+            .any(|s| s.start_time == Utc.with_ymd_and_hms(2026, 10, 24, 10, 0, 0).unwrap()));
+        assert!(output.suggested_schedules.iter().all(|s| !overlaps_night(
+            s.start_time,
+            end_of(s),
+            chrono_tz::UTC
+        )));
+
+        // Kathmandu (UTC+5:45): candidates still land on local 10:00
+        let kathmandu = chrono_tz::Asia::Kathmandu;
+        let output = packed_weekend(kathmandu, start, end);
+        let spans = local_spans(&output, kathmandu);
+        assert!(spans.iter().any(|(s, _)| s == "Sat 10:00"), "{spans:?}");
     }
 }

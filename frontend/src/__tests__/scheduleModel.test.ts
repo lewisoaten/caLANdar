@@ -28,8 +28,12 @@ import {
   spanShort,
   whenLong,
   whenShort,
-  SCHEDULER_WINDOW_END_UTC,
-  SCHEDULER_WINDOW_START_UTC,
+  SCHEDULER_WINDOW_END,
+  SCHEDULER_WINDOW_HINT,
+  SCHEDULER_WINDOW_START,
+  browserTimeZone,
+  dedupeSchedule,
+  withTimeZone,
 } from "../components/schedule/scheduleModel";
 import { GameScheduleEntry } from "../types/game_schedule";
 import { GameSuggestion, GameVote } from "../types/game_suggestions";
@@ -84,31 +88,25 @@ describe("LAN days", () => {
     );
   });
 
-  it("builds the scheduler's window: 10:00-01:00 UTC inside the event", () => {
+  it("builds the scheduler's window: 10:00-01:00 local inside the event", () => {
     const windows = autoScheduleWindows(BEGIN, END);
-    const utc = windows.map(([s, e]) => [
-      moment.utc(s).format("DD HH:mm"),
-      moment.utc(e).format("DD HH:mm"),
+    const local = windows.map(([s, e]) => [
+      moment(s).format("DD HH:mm"),
+      moment(e).format("DD HH:mm"),
     ]);
-    // Every window starts at 10:00Z (or the event start) and ends at 01:00Z
-    // (or the event end).
-    utc.forEach(([s, e], i) => {
-      if (i > 0) expect(s.endsWith("10:00")).toBe(true);
-      if (i < utc.length - 1) expect(e.endsWith("01:00")).toBe(true);
-    });
-    expect(windows[0][0]).toBe(BEGIN.valueOf());
-    expect(windows[windows.length - 1][1]).toBe(END.valueOf());
+    expect(local).toEqual([
+      ["13 18:00", "14 01:00"],
+      ["14 10:00", "15 01:00"],
+      ["15 10:00", "15 12:00"],
+    ]);
   });
 
   it("projects windows onto rows in local hours", () => {
-    const off = BEGIN.utcOffset() / 60;
     // Friday row starts at the event start (18:00 local).
-    expect(days[0].windows[0][0]).toBe(18);
-    // Saturday's window starts at 10:00 UTC.
-    expect(days[1].windows[0][0]).toBe(10 + off);
+    expect(days[0].windows).toEqual([[18, 25]]);
+    expect(days[1].windows).toEqual([[10, 25]]);
     // Sunday ends with the event at 12:00.
-    const sun = days[2].windows;
-    expect(sun[sun.length - 1][1]).toBe(12);
+    expect(days[2].windows).toEqual([[10, 12]]);
   });
 });
 
@@ -289,25 +287,13 @@ describe("formatting", () => {
     expect(spanLong(fri, 24, 2)).toBe("Saturday 00:00 to 02:00 (Friday night)");
   });
 
-  it("draws the window the backend scheduler uses (10:00Z to 01:00Z)", () => {
-    // Mirrors DAY_START_HOUR_UTC / NIGHT_START_HOUR_UTC in api/src/scheduler.rs.
-    expect(SCHEDULER_WINDOW_START_UTC).toBe(10);
-    expect(SCHEDULER_WINDOW_END_UTC).toBe(25);
-    const windows = autoScheduleWindows(
-      "2026-11-13T00:00:00Z",
-      "2026-11-14T23:00:00Z",
+  it("draws the window the backend scheduler uses (10:00 to 01:00 local)", () => {
+    // Mirrors DAY_START_HOUR / NIGHT_START_HOUR in api/src/scheduler.rs.
+    expect(SCHEDULER_WINDOW_START).toBe(10);
+    expect(SCHEDULER_WINDOW_END).toBe(25);
+    expect(SCHEDULER_WINDOW_HINT).toBe(
+      "Auto-schedule window: 10:00 – 01:00 each day (your local time). Suggested sessions are planned inside it; pinned sessions can go any time.",
     );
-    expect(
-      windows.map(([s, e]) => [
-        new Date(s).toISOString(),
-        new Date(e).toISOString(),
-      ]),
-    ).toEqual([
-      // The tail of the previous night's window, clipped to the event start.
-      ["2026-11-13T00:00:00.000Z", "2026-11-13T01:00:00.000Z"],
-      ["2026-11-13T10:00:00.000Z", "2026-11-14T01:00:00.000Z"],
-      ["2026-11-14T10:00:00.000Z", "2026-11-14T23:00:00.000Z"],
-    ]);
   });
 
   it("ticks every 2h over 12h spans and hourly otherwise", () => {
@@ -399,5 +385,98 @@ describe("votes and attendance", () => {
       moment.utc("2026-11-13T10:00:00Z"),
     );
     expect(before.known).toBe(false);
+  });
+});
+
+// The suite runs in Europe/London (vite.config.ts), where clocks go back at
+// 02:00 BST on Sunday 25 Oct 2026: the product owner's Fri 23 – Sun 25 event.
+describe("auto-schedule window across the UK clock change", () => {
+  const begin = "2026-10-23T08:00:00Z"; // Fri 09:00 BST
+  const end = "2026-10-25T23:30:00Z"; // Sun 23:30 GMT
+  const days = buildLanDays(begin, end);
+
+  it("is the same wall-clock 10:00 → 01:00 every day", () => {
+    expect(days.map((d) => d.short)).toEqual(["FRI", "SAT", "SUN"]);
+    expect(days.map((d) => d.windows)).toEqual([
+      [[10, 25]],
+      [[10, 25]],
+      [[10, 23.5]],
+    ]);
+  });
+
+  it("follows the offset change in absolute time", () => {
+    const iso = autoScheduleWindows(begin, end).map(([s, e]) => [
+      new Date(s).toISOString(),
+      new Date(e).toISOString(),
+    ]);
+    expect(iso).toEqual([
+      // Fri 10:00 BST → Sat 01:00 BST
+      ["2026-10-23T09:00:00.000Z", "2026-10-24T00:00:00.000Z"],
+      // Sat 10:00 BST → Sun 01:00 (the first, BST, one): 15h
+      ["2026-10-24T09:00:00.000Z", "2026-10-25T00:00:00.000Z"],
+      // Sun 10:00 GMT → event end
+      ["2026-10-25T10:00:00.000Z", "2026-10-25T23:30:00.000Z"],
+    ]);
+  });
+
+  it("flags off-window placements on the DST day by wall clock", () => {
+    expect(isOutsideWindow(days[2], 10, 2)).toBe(false);
+    expect(isOutsideWindow(days[2], 9.5, 2)).toBe(true);
+    expect(isOutsideWindow(days[1], 23, 2)).toBe(false);
+    expect(isOutsideWindow(days[1], 23.5, 2)).toBe(true);
+  });
+
+  it("ends at the jump when clocks go forward (29 Mar 2026)", () => {
+    // 01:00 doesn't exist that night (00:59 GMT is followed by 02:00 BST), so
+    // Saturday's window ends at the jump itself, like the API's
+    // `local_instant`: 01:00Z, read as 02:00 BST on the wall clock.
+    const begin = "2026-03-27T08:00:00Z";
+    const end = "2026-03-29T22:00:00Z";
+    const spring = buildLanDays(begin, end);
+    expect(spring.map((d) => d.windows)).toEqual([
+      [[10, 25]],
+      [[10, 26]],
+      [[10, 23]], // 22:00Z = 23:00 BST
+    ]);
+    expect(new Date(autoScheduleWindows(begin, end)[1][1]).toISOString()).toBe(
+      "2026-03-29T01:00:00.000Z",
+    );
+  });
+});
+
+describe("one entry per game", () => {
+  it("drops suggestions for pinned games and repeat suggestions", () => {
+    const pinned = entry(1, 730, "2026-11-13T19:00:00", 120, true);
+    const dupOfPinned = entry(0, 730, "2026-11-14T12:00:00", 120, false);
+    const later = entry(0, 550, "2026-11-14T21:00:00", 120, false);
+    const earlier = entry(0, 550, "2026-11-14T12:00:00", 120, false);
+    const other = entry(0, 440, "2026-11-14T15:00:00", 120, false);
+    const kept = dedupeSchedule([pinned, dupOfPinned, later, earlier, other]);
+    expect(kept).toEqual([pinned, earlier, other]);
+    const days = buildLanDays(BEGIN, END);
+    expect(
+      toSessions([pinned, dupOfPinned, later, earlier, other], days).map(
+        (s) => s.entry,
+      ),
+    ).toEqual([pinned, earlier, other]);
+  });
+
+  it("keeps every pinned session, even of the same game", () => {
+    const a = entry(1, 730, "2026-11-13T19:00:00", 120, true);
+    const b = entry(2, 730, "2026-11-14T19:00:00", 120, true);
+    expect(dedupeSchedule([a, b])).toEqual([a, b]);
+  });
+});
+
+describe("time zone param", () => {
+  it("adds the browser zone to scheduler requests", () => {
+    expect(browserTimeZone()).toBe("Europe/London");
+    expect(withTimeZone("/api/events/1/game_schedule")).toBe(
+      "/api/events/1/game_schedule?tz=Europe%2FLondon",
+    );
+    expect(withTimeZone("/x/recalculate?as_admin=true", "Asia/Tokyo")).toBe(
+      "/x/recalculate?as_admin=true&tz=Asia%2FTokyo",
+    );
+    expect(withTimeZone("/x", "")).toBe("/x");
   });
 });

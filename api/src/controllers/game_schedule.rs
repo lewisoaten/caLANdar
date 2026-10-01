@@ -1,4 +1,5 @@
 use chrono::{DateTime, Datelike, Utc};
+use chrono_tz::Tz;
 use sqlx::PgPool;
 use std::collections::HashMap;
 
@@ -38,11 +39,13 @@ impl From<game_schedule::GameSchedule> for GameScheduleEntry {
     }
 }
 
-/// Get all scheduled games for an event (pinned + suggested)
+/// Get all scheduled games for an event (pinned + suggested). `tz` is the zone
+/// whose wall clock defines the scheduler's nightly window.
 pub async fn get_all(
     pool: &PgPool,
     event_id: i32,
     email: &str,
+    tz: Tz,
 ) -> Result<Vec<GameScheduleEntry>, Error> {
     // Ensure user is invited to the event
     ensure_user_invited(pool, event_id, email).await?;
@@ -59,7 +62,7 @@ pub async fn get_all(
     .map_err(|e| Error::Controller(format!("Unable to get pinned games due to: {e}")))?;
 
     // Get suggested games from scheduling algorithm
-    let suggested_games = schedule_suggested_games(pool, event_id).await?;
+    let suggested_games = schedule_suggested_games(pool, event_id, tz).await?;
 
     // Combine pinned and suggested games
     let mut all_games: Vec<GameScheduleEntry> = pinned_games
@@ -132,11 +135,13 @@ pub async fn pin(
     create(pool, event_id, request, email).await
 }
 
-/// Schedule games using the scheduling algorithm
+/// Schedule games using the scheduling algorithm; the nightly window is read
+/// on `tz`'s wall clock (see [`scheduler`]).
 #[allow(clippy::too_many_lines)]
 pub async fn schedule_suggested_games(
     pool: &PgPool,
     event_id: i32,
+    tz: Tz,
 ) -> Result<Vec<GameScheduleEntry>, Error> {
     // Get event details
     let events = event::filter(
@@ -172,10 +177,14 @@ pub async fn schedule_suggested_games(
     .await
     .map_err(|e| Error::Controller(format!("Unable to get pinned games due to: {e}")))?;
 
-    // Pinned games stay in the list: they count towards a game's session limit
-    // (the scheduler sees them through `pinned_slots`) and may get one more
-    // suggested session.
-    let games_to_schedule = games_with_votes;
+    // A game appears on the schedule at most once: games that already have a
+    // pinned session are not suggested again. (The scheduler enforces the
+    // same rule through `pinned_slots`; filtering here also saves the voter
+    // queries for them.)
+    let games_to_schedule: Vec<_> = games_with_votes
+        .into_iter()
+        .filter(|g| !pinned_games.iter().any(|p| p.game_id == g.game_id))
+        .collect();
 
     if games_to_schedule.is_empty() {
         return Ok(Vec::new());
@@ -265,6 +274,7 @@ pub async fn schedule_suggested_games(
         event_end,
         pinned_slots,
         default_game_duration: 120, // 2 hours default
+        tz,
     };
 
     let scheduler_output = scheduler::schedule_games(&scheduler_input);

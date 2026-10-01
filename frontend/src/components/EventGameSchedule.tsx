@@ -27,10 +27,12 @@ import AddToScheduleDialog, {
 import {
   LAN_DAY_CUTOFF_HOUR,
   MIN_DURATION_HOURS,
+  SCHEDULER_WINDOW_HINT,
   Session,
   buildLanDays,
   clockDay,
   dayIndexOf,
+  dedupeSchedule,
   findClash,
   fmtClock,
   instantAt,
@@ -46,10 +48,11 @@ import {
   toSessions,
   visibleRange,
   whenShort,
+  withTimeZone,
 } from "./schedule/scheduleModel";
 
 const DESCRIPTION =
-  "Suggested slots are auto-planned inside the green window, where most of the squad is around. Pinned sessions are placed by the host and can go any time of day.";
+  "Suggested slots are auto-planned where most of the squad is around, one session per game. Pinned sessions are placed by the host.";
 
 const RECALC_HINT =
   "Re-plan every suggested slot from current votes and attendance. Pinned sessions stay put.";
@@ -435,7 +438,9 @@ export default function EventGameSchedule() {
     try {
       const response = await send(
         "POST",
-        `/api/events/${event.id}/game_schedule/recalculate?as_admin=true`,
+        withTimeZone(
+          `/api/events/${event.id}/game_schedule/recalculate?as_admin=true`,
+        ),
       );
       if (!response || !response.ok) {
         if (response)
@@ -446,15 +451,24 @@ export default function EventGameSchedule() {
         say("Failed to recalculate suggested schedule", "error");
         return;
       }
-      const planned = (await response.json()) as unknown[];
+      const planned = (await response.json()) as GameScheduleEntry[];
       await refreshSchedule({ background: true });
-      const pinnedCount = allSessions.filter((s) => s.pinned).length;
-      const n = Array.isArray(planned) ? planned.length : 0;
+      const pinned = schedule.filter((e) => e.isPinned);
+      const pinnedCount = pinned.length;
+      // Count games, not raw entries: one session per game, and games that
+      // are pinned are never suggested again (same rule as the timeline).
+      const n = Array.isArray(planned)
+        ? dedupeSchedule([...pinned, ...planned]).filter((e) => !e.isPinned)
+            .length
+        : 0;
+      const kept = `Your ${pinnedCount} pinned session${pinnedCount === 1 ? " is" : "s are"} unchanged.`;
       // No Undo: suggested slots are never stored – the server re-plans them
       // from votes and attendance on every load – so there is nothing to
       // restore, and pinned sessions are never touched.
       say(
-        `Re-planned ${n} suggested slot${n === 1 ? "" : "s"} from the latest votes and attendance. Your ${pinnedCount} pinned session${pinnedCount === 1 ? " is" : "s are"} unchanged.`,
+        n
+          ? `Suggested ${n} game${n === 1 ? "" : "s"}, one session each, from the latest votes and attendance. ${kept}`
+          : `No games left to suggest from the current votes and attendance. ${kept}`,
         "success",
       );
     } finally {
@@ -659,7 +673,24 @@ export default function EventGameSchedule() {
       <PageHeader
         kicker="RUN ORDER"
         title="Schedule"
-        description={DESCRIPTION}
+        description={
+          <>
+            {DESCRIPTION}
+            <Box
+              component="span"
+              data-testid="schedule-window-hint"
+              sx={{
+                display: "block",
+                mt: 0.75,
+                pl: 1.25,
+                borderLeft: `2px solid ${colors.lime}`,
+                fontSize: 14,
+              }}
+            >
+              {SCHEDULER_WINDOW_HINT}
+            </Box>
+          </>
+        }
         actions={
           isAdmin ? (
             <>
