@@ -1,16 +1,26 @@
 import * as React from "react";
 import Box from "@mui/material/Box";
-import { keyframes } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import { colors, fonts, tint } from "../hl/tokens";
 import { usePrefersReducedMotion } from "../hl/usePrefersReducedMotion";
+import { RIG, generateAuthScene } from "./authArtModel";
 import {
-  PERSPECTIVE_ORIGIN_Y,
-  RIG,
-  generateAuthScene,
-  projectPlanPoint,
-  type Desk,
-  type DeskState,
-} from "./authArtModel";
+  beaconGeometry,
+  chooseArtMode,
+  gridLayer,
+  gridLinePaths,
+  glowBand,
+  gridTile,
+  motionPlan,
+  packetMotion,
+  planGeometry,
+  skylinePaths,
+  starPaths,
+  twinkleStars,
+  type ArtPalette,
+  type ArtPath,
+  type AuthArtMode,
+} from "./authArtGeometry";
 
 /*
  * Generated hero artwork for the signed-out pages: a synthwave horizon with a
@@ -19,109 +29,243 @@ import {
  * packets and a beacon over "your desk"), finished with HUD readouts,
  * scanlines, film grain and a vignette.
  *
- * Built only from SVG and CSS: no images, no requests, no dependencies. All
- * motion is CSS (transform/opacity, plus stroke-dashoffset on a few short
- * paths) and stops entirely under prefers-reduced-motion; the still frame is
- * designed to stand on its own. The layout is seeded, so a seed always draws
- * the same scene. Purely decorative: aria-hidden, nothing focusable.
+ * Built for cheap frames (it is the first thing a phone sees):
+ * - The scene is projected once in JS (`authArtGeometry`) into a few merged
+ *   2D paths: no live 3D, no masks or blend modes on anything that moves, and
+ *   the still frame rasterises once.
+ * - Only `transform`/`opacity` animate (Web Animations, so they stay on the
+ *   compositor; see `motionPlan`), each on its own small layer. 'full'
+ *   (desktop) runs grid scroll, desk pulse, two packets, tag bob, beam flicker
+ *   and five twinkling stars; 'lite' (phones, low-power devices, Save-Data)
+ *   runs just the grid scroll and the pulse; 'still' runs nothing.
+ * - Everything pauses while the tab is hidden, the art is off-screen, or
+ *   someone is typing on a small screen. prefers-reduced-motion always wins.
+ *
+ * Seeded (a seed always draws the same scene). Purely decorative: aria-hidden,
+ * nothing focusable, no images or requests.
  */
 
-const gridScroll = keyframes`
-  from { transform: translate3d(0, 0, 0); }
-  to { transform: translate3d(0, ${RIG.cell}px, 0); }
-`;
-const planBob = keyframes`
-  from { transform: translateZ(0); }
-  to { transform: translateZ(14px); }
-`;
-const labelBob = keyframes`
-  from { transform: translate(-50%, -100%) translateY(0); }
-  to { transform: translate(-50%, -100%) translateY(-9px); }
-`;
-const twinkle = keyframes`
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
-`;
-const ring = keyframes`
-  from { transform: scale(0.5); opacity: 0.95; }
-  to { transform: scale(2.6); opacity: 0; }
-`;
-const packet = keyframes`
-  from { stroke-dashoffset: 100; }
-  to { stroke-dashoffset: 0; }
-`;
-const flicker = keyframes`
-  0%, 100% { opacity: 1; }
-  45% { opacity: 0.78; }
-  50% { opacity: 0.95; }
-  55% { opacity: 0.7; }
-`;
-const sweep = keyframes`
-  0% { transform: translate3d(0, -40%, 0); opacity: 0; }
-  12% { opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: translate3d(0, 260%, 0); opacity: 0; }
-`;
-/** Ticker reel: 8 values plus a repeat of the first (8/9 of its height). */
-const tick = keyframes`
-  from { transform: translateY(0); }
-  to { transform: translateY(-88.8889%); }
-`;
-
-const deskTone: Record<DeskState, { stroke: string; fill: string }> = {
-  lime: { stroke: colors.lime, fill: tint("lime", 0.16) },
-  violet: { stroke: colors.violetLight, fill: tint("violet", 0.26) },
-  empty: { stroke: tint("cyan", 0.42), fill: "rgba(6,7,11,0.55)" },
-  you: { stroke: colors.cyan, fill: tint("cyan", 0.38) },
+const palette: ArtPalette = {
+  cyan: colors.cyan,
+  violet: colors.violet,
+  violetLight: colors.violetLight,
+  lime: colors.lime,
+  tint,
 };
 
-const deskPath = ({ x, y, w, h }: Desk, cut = 9) =>
-  `M${x + cut} ${y}H${x + w}V${y + h - cut}L${x + w - cut} ${y + h}H${x}V${y + cut}Z`;
-
-/** Tiled film grain, rasterised once by the browser. */
+/**
+ * Film grain, scanlines and vignette as one static layer (grain alpha baked
+ * into the tile instead of an opacity/blend over moving content).
+ */
 const NOISE = `url("data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.55 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.0385 0"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>',
 )}")`;
+
+const GRID = gridLayer();
+const SUN = { cx: RIG.width / 2, cy: RIG.horizon - 12, r: 158 };
+/** Horizon glow bands (the old box-shadow: 18px 3px cyan, 60px 14px violet). */
+const GLOW_C = glowBand(0.55, 1 + 3, 18);
+const GLOW_V = glowBand(0.35, 1 + 14, 60);
+type GlowBand = ReturnType<typeof glowBand>;
 
 export interface AuthHeroArtProps {
   /** Seed for the generated layout (stars, skyline, desks, traces). */
   seed?: number;
   /** Show the HUD readouts (hidden in the compact mobile banner). */
   hud?: boolean;
+  /**
+   * Motion set: 'auto' (default) picks 'full' on desktop and 'lite' on phones
+   * and low-power devices; 'still' is the static frame. Reduced motion always
+   * forces 'still'.
+   */
+  mode?: AuthArtMode | "auto";
 }
 
-export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
-  const scene = React.useMemo(() => generateAuthScene(seed), [seed]);
-  const reduced = usePrefersReducedMotion();
+interface NavigatorHints {
+  connection?: { saveData?: boolean };
+  deviceMemory?: number;
+  hardwareConcurrency?: number;
+}
 
-  const planLeft = RIG.planeWidth / 2 - RIG.planWidth / 2;
-  const planTop = RIG.planeFar - RIG.planNear - RIG.planDepth;
-  const beamHeight = 300;
-  const you = scene.you;
-  const label = projectPlanPoint(
-    you.x + you.w / 2,
-    you.y + you.h / 2,
-    RIG.planLift + beamHeight * 0.62,
+function useArtMode(requested: AuthArtMode | "auto") {
+  const reducedMotion = usePrefersReducedMotion();
+  const narrow = useMediaQuery("(max-width: 880px)", { noSsr: true });
+  const nav = (typeof navigator === "undefined" ? {} : navigator) as
+    NavigatorHints | Record<string, never>;
+  return {
+    reducedMotion,
+    mode: chooseArtMode(requested, {
+      reducedMotion,
+      narrow,
+      saveData: nav.connection?.saveData,
+      deviceMemory: nav.deviceMemory,
+      cores: nav.hardwareConcurrency,
+    }),
+  };
+}
+
+/**
+ * True while the motion should be paused: tab hidden, art scrolled out of
+ * view, or a text field focused on a small screen (typing, keyboard up).
+ */
+function usePaused(ref: React.RefObject<HTMLElement | null>, active: boolean) {
+  const [hidden, setHidden] = React.useState(
+    () => typeof document !== "undefined" && document.hidden,
   );
-  const sun = { cx: RIG.width / 2, cy: RIG.horizon - 12, r: 158 };
-  const pings = [...scene.pings, scene.pings[0]];
+  const [offscreen, setOffscreen] = React.useState(false);
+  const [typing, setTyping] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!active) return;
+    const onVisibility = () => setHidden(document.hidden);
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [active]);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!active || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) setOffscreen(!e.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [active, ref]);
+
+  React.useEffect(() => {
+    if (!active) return;
+    const small = () =>
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(max-width: 879.98px)").matches;
+    const isField = (t: EventTarget | null) =>
+      t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement;
+    const onIn = (e: FocusEvent) => setTyping(isField(e.target) && small());
+    const onOut = () => setTyping(false);
+    document.addEventListener("focusin", onIn);
+    document.addEventListener("focusout", onOut);
+    return () => {
+      document.removeEventListener("focusin", onIn);
+      document.removeEventListener("focusout", onOut);
+    };
+  }, [active]);
+
+  return active && (hidden || offscreen || typing);
+}
+
+/**
+ * Runs the mode's Web Animations on the art's elements and pauses/resumes
+ * them; cancels everything on unmount or when the mode changes.
+ */
+function useMotion(
+  ref: React.RefObject<HTMLElement | null>,
+  plan: ReturnType<typeof motionPlan>,
+  paused: boolean,
+) {
+  const running = React.useRef<Animation[]>([]);
+  React.useEffect(() => {
+    const root = ref.current;
+    if (!root || plan.length === 0) return;
+    const anims: Animation[] = [];
+    for (const spec of plan) {
+      const el = root.querySelectorAll<HTMLElement | SVGElement>(spec.target)[
+        spec.index
+      ];
+      if (el && typeof el.animate === "function")
+        anims.push(el.animate(spec.frames as Keyframe[], spec.timing));
+    }
+    running.current = anims;
+    return () => {
+      anims.forEach((a) => a.cancel());
+      running.current = [];
+    };
+  }, [ref, plan]);
+  React.useEffect(() => {
+    for (const a of running.current) {
+      if (paused) a.pause();
+      else a.play();
+    }
+  }, [paused, plan]);
+}
+
+const Paths = ({ paths }: { paths: ArtPath[] }) => (
+  <>
+    {paths.map((p, i) => (
+      <path key={i} d={p.d} fill={p.fill} fillOpacity={p.opacity} />
+    ))}
+  </>
+);
+
+/** Latency readout: updated from JS every 1.5 s, only while animating. */
+function Ping({ pings, running }: { pings: number[]; running: boolean }) {
+  const [i, setI] = React.useState(0);
+  React.useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(
+      () => setI((n) => (n + 1) % pings.length),
+      1500,
+    );
+    return () => window.clearInterval(t);
+  }, [running, pings.length]);
+  return (
+    <b className="hlAuthArt-ping">{String(pings[i]).padStart(3, "0")}ms</b>
+  );
+}
+
+export function AuthHeroArt({
+  seed = 2026,
+  hud = true,
+  mode: requested = "auto",
+}: AuthHeroArtProps) {
+  const scene = React.useMemo(() => generateAuthScene(seed), [seed]);
+  const { mode, reducedMotion } = useArtMode(requested);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const paused = usePaused(ref, mode !== "still");
+  const full = mode === "full";
+
+  const g = React.useMemo(() => {
+    const beacon = beaconGeometry(scene);
+    const twinkles = full ? twinkleStars(scene) : [];
+    const packets = full ? packetMotion(scene, palette) : [];
+    return {
+      plan: planGeometry(scene, palette),
+      twinkles,
+      stars: starPaths(scene, new Set(twinkles.map((t) => t.i))),
+      skyline: skylinePaths(scene, palette),
+      beacon,
+      packets,
+      motion: motionPlan(mode, packets, twinkles),
+    };
+  }, [scene, full, mode]);
+  useMotion(ref, g.motion, paused);
+  const { beacon } = g;
 
   return (
     <Box
+      ref={ref}
       aria-hidden="true"
       data-testid="auth-hero-art"
       data-seed={seed}
-      data-motion={reduced ? "reduced" : "full"}
-      className={`hlAuthArt${reduced ? " hlAuthArt--static" : ""}`}
+      data-mode={mode}
+      data-paused={paused ? "true" : "false"}
+      data-motion={reducedMotion ? "reduced" : mode}
+      className={[
+        "hlAuthArt",
+        `hlAuthArt--${mode}`,
+        mode === "still" && "hlAuthArt--static",
+        paused && "hlAuthArt--paused",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       sx={rootSx}
     >
       <div className="hlAuthArt-rig">
-        {/* Sky, sun and stars */}
+        {/* Static base: sky, sun, stars, skyline, floor and converging grid */}
         <svg
-          className="hlAuthArt-sky"
+          className="hlAuthArt-base"
           width={RIG.width}
-          height={RIG.horizon + 4}
-          viewBox={`0 0 ${RIG.width} ${RIG.horizon + 4}`}
+          height={RIG.height}
+          viewBox={`0 0 ${RIG.width} ${RIG.height}`}
           focusable="false"
         >
           <defs>
@@ -144,20 +288,34 @@ export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
             </linearGradient>
             <mask id="hlaSunCut">
               <rect width={RIG.width} height={RIG.horizon} fill="#fff" />
-              {Array.from({ length: 9 }, (_, i) => {
-                const y = sun.cy - sun.r * 0.28 + i * 19;
-                return (
-                  <rect
-                    key={i}
-                    x="0"
-                    y={y}
-                    width={RIG.width}
-                    height={1.5 + i * 1.3}
-                    fill="#000"
-                  />
-                );
-              })}
+              <path
+                fill="#000"
+                d={Array.from({ length: 9 }, (_, i) => {
+                  const y = SUN.cy - SUN.r * 0.28 + i * 19;
+                  return `M0 ${y}h${RIG.width}v${1.5 + i * 1.3}h${-RIG.width}Z`;
+                }).join("")}
+              />
             </mask>
+            <linearGradient
+              id="hlaFloor"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1={RIG.horizon}
+              x2="0"
+              y2={RIG.horizon + 520}
+            >
+              <stop offset="0" stopColor="#120b30" />
+              <stop offset={120 / 520} stopColor="#0a0718" />
+              <stop offset="1" stopColor={colors.bg} />
+            </linearGradient>
+            <clipPath id="hlaGridClip">
+              <rect
+                x={GRID.clip.left}
+                y={RIG.horizon}
+                width={GRID.clip.right - GRID.clip.left}
+                height={RIG.height * 2}
+              />
+            </clipPath>
           </defs>
           <rect
             width={RIG.width}
@@ -165,7 +323,7 @@ export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
             fill="url(#hlaSky)"
           />
           <ellipse
-            cx={sun.cx}
+            cx={SUN.cx}
             cy={RIG.horizon}
             rx={620}
             ry={300}
@@ -173,305 +331,267 @@ export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
           />
           <g className="hlAuthArt-sun">
             <circle
-              cx={sun.cx}
-              cy={sun.cy}
-              r={sun.r + 26}
+              cx={SUN.cx}
+              cy={SUN.cy}
+              r={SUN.r + 26}
               fill="none"
               stroke={tint("cyan", 0.22)}
               strokeWidth="1.5"
               strokeDasharray="2 10"
             />
             <circle
-              cx={sun.cx}
-              cy={sun.cy}
-              r={sun.r}
+              cx={SUN.cx}
+              cy={SUN.cy}
+              r={SUN.r}
               fill="url(#hlaSun)"
               mask="url(#hlaSunCut)"
             />
           </g>
-        </svg>
-        {[0, 1, 2].map((group) => (
-          <svg
-            key={group}
-            className={`hlAuthArt-stars hlAuthArt-stars-${group}`}
-            width={RIG.width}
-            height={RIG.horizon}
-            viewBox={`0 0 ${RIG.width} ${RIG.horizon}`}
-            focusable="false"
-          >
-            {scene.stars
-              .filter((s) => s.group === group)
-              .map((s, i) => (
-                <circle
-                  key={i}
-                  cx={s.x}
-                  cy={s.y}
-                  r={s.r}
-                  fill={i % 7 === 0 ? colors.violetText : colors.text}
-                />
-              ))}
-          </svg>
-        ))}
-
-        {/* Floor: grid plane plus the floating floor plan */}
-        <div className="hlAuthArt-floorBase" />
-        <div
-          className="hlAuthArt-reflection"
-          style={{ left: sun.cx - sun.r, width: sun.r * 2 }}
-        />
-        <div className="hlAuthArt-floor">
-          <div className="hlAuthArt-plane">
-            <div className="hlAuthArt-gridFade">
-              <div className="hlAuthArt-gridMove" />
-            </div>
-            <div className="hlAuthArt-planRig">
-              <svg
-                className="hlAuthArt-plan"
-                width={RIG.planWidth}
-                height={RIG.planDepth}
-                viewBox={`0 0 ${RIG.planWidth} ${RIG.planDepth}`}
-                style={{ left: planLeft, top: planTop }}
-                focusable="false"
-              >
-                <defs>
-                  <linearGradient id="hlaStage" x1="0" y1="0" x2="0" y2="1">
-                    <stop
-                      offset="0"
-                      stopColor={colors.violet}
-                      stopOpacity="0.85"
-                    />
-                    <stop
-                      offset="1"
-                      stopColor={colors.violet}
-                      stopOpacity="0.15"
-                    />
-                  </linearGradient>
-                </defs>
-                {/* Room outline with chamfered corners */}
-                <path
-                  d={`M40 0H${RIG.planWidth}V${RIG.planDepth - 40}L${RIG.planWidth - 40} ${RIG.planDepth}H0V40Z`}
-                  fill="rgba(8,10,22,0.55)"
-                  stroke={tint("cyan", 0.35)}
-                  strokeWidth="3"
-                />
-                <path
-                  d={`M0 120V40L40 0H160M${RIG.planWidth} ${RIG.planDepth - 120}V${RIG.planDepth - 40}L${RIG.planWidth - 40} ${RIG.planDepth}H${RIG.planWidth - 160}`}
-                  fill="none"
-                  stroke={colors.cyan}
-                  strokeWidth="6"
-                />
-                {/* Stage */}
-                <rect
-                  x={scene.stage.x - 14}
-                  y={scene.stage.y - 14}
-                  width={scene.stage.w + 28}
-                  height={scene.stage.h + 28}
-                  fill={tint("violet", 0.12)}
-                />
-                <rect
-                  x={scene.stage.x}
-                  y={scene.stage.y}
-                  width={scene.stage.w}
-                  height={scene.stage.h}
-                  fill="url(#hlaStage)"
-                  stroke={colors.violetLight}
-                  strokeWidth="3"
-                />
-                {/* Traces: a wide faint glow pass, the line, then packets */}
-                {scene.traces.map((t, i) => (
-                  <path
-                    key={`g${i}`}
-                    d={t.d}
-                    fill="none"
-                    stroke={tint("cyan", 0.12)}
-                    strokeWidth="12"
-                  />
-                ))}
-                {scene.traces.map((t, i) => (
-                  <path
-                    key={`l${i}`}
-                    d={t.d}
-                    fill="none"
-                    stroke={tint("cyan", 0.6)}
-                    strokeWidth="2.5"
-                  />
-                ))}
-                {scene.traces
-                  .filter((t) => t.packet)
-                  .map((t, i) => (
-                    <path
-                      key={`p${i}`}
-                      className="hlAuthArt-packet"
-                      d={t.d}
-                      pathLength={100}
-                      fill="none"
-                      stroke={i % 3 === 0 ? colors.lime : "#d6fbff"}
-                      strokeWidth="5"
-                      strokeLinecap="square"
-                      style={{
-                        animationDuration: `${t.duration}s`,
-                        animationDelay: `-${t.delay}s`,
-                      }}
-                    />
-                  ))}
-                {/* Desks */}
-                {scene.desks.map((d) => {
-                  const tone = deskTone[d.state];
-                  const my = d.monitor === "top" ? d.y + 4 : d.y + d.h - 9;
-                  return (
-                    <g key={d.id}>
-                      {d.state !== "empty" && (
-                        <path
-                          d={deskPath(d)}
-                          fill="none"
-                          stroke={tone.stroke}
-                          strokeOpacity="0.22"
-                          strokeWidth="10"
-                        />
-                      )}
-                      <path
-                        d={deskPath(d)}
-                        fill={tone.fill}
-                        stroke={tone.stroke}
-                        strokeWidth={d.state === "you" ? 4 : 2.5}
-                      />
-                      <rect
-                        x={d.x + 12}
-                        y={my}
-                        width={d.w - 24}
-                        height={5}
-                        fill={
-                          d.state === "empty" ? tint("cyan", 0.35) : tone.stroke
-                        }
-                      />
-                    </g>
-                  );
-                })}
-                {/* Nodes */}
-                {scene.nodes.map((n, i) => {
-                  const c =
-                    n.tone === "lime"
-                      ? colors.lime
-                      : n.tone === "violet"
-                        ? colors.violetLight
-                        : colors.cyan;
-                  return (
-                    <g key={i}>
-                      <circle
-                        className="hlAuthArt-ring"
-                        cx={n.x}
-                        cy={n.y}
-                        r={12}
-                        fill="none"
-                        stroke={c}
-                        strokeWidth="3"
-                        style={{ animationDelay: `-${n.delay}s` }}
-                      />
-                      <rect
-                        x={n.x - 6}
-                        y={n.y - 6}
-                        width={12}
-                        height={12}
-                        fill={c}
-                        transform={`rotate(45 ${n.x} ${n.y})`}
-                      />
-                    </g>
-                  );
-                })}
-                {/* Your desk: target brackets and a pulse ring */}
-                <circle
-                  className="hlAuthArt-ring hlAuthArt-ring--you"
-                  cx={you.x + you.w / 2}
-                  cy={you.y + you.h / 2}
-                  r={40}
-                  fill="none"
-                  stroke={colors.cyan}
-                  strokeWidth="4"
-                />
-                <path
-                  d={(() => {
-                    const p = 14;
-                    const l = 18;
-                    const x0 = you.x - p;
-                    const y0 = you.y - p;
-                    const x1 = you.x + you.w + p;
-                    const y1 = you.y + you.h + p;
-                    return `M${x0} ${y0 + l}V${y0}H${x0 + l}M${x1 - l} ${y0}H${x1}V${y0 + l}M${x1} ${y1 - l}V${y1}H${x1 - l}M${x0 + l} ${y1}H${x0}V${y1 - l}`;
-                  })()}
-                  fill="none"
-                  stroke={colors.cyan}
-                  strokeWidth="4"
-                />
-              </svg>
-              <div
-                className="hlAuthArt-beam"
-                style={{
-                  left: planLeft + you.x - 10,
-                  top: planTop + you.y + you.h / 2 - beamHeight,
-                  width: you.w + 20,
-                  height: beamHeight,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Skyline in front of the sun, then the horizon glow and fog */}
-        <svg
-          className="hlAuthArt-skyline"
-          width={RIG.width}
-          height={RIG.horizon + 2}
-          viewBox={`0 0 ${RIG.width} ${RIG.horizon + 2}`}
-          focusable="false"
-        >
-          {scene.towers.map((t, i) => (
-            <g key={i}>
-              <rect
-                x={t.x}
-                y={RIG.horizon - t.h}
-                width={t.w}
-                height={t.h + 2}
-                fill="#07060f"
-              />
-              <rect
-                x={t.x}
-                y={RIG.horizon - t.h}
-                width={t.w}
-                height={1.5}
-                fill={i % 4 === 0 ? tint("violet", 0.9) : tint("cyan", 0.5)}
-              />
-              {t.lights.map((l, j) => (
-                <rect
-                  key={j}
-                  x={l.x}
-                  y={l.y}
-                  width={j % 3 === 0 ? 6 : 3}
-                  height={1.6}
-                  fill={
-                    l.tone === "lime"
-                      ? colors.lime
-                      : l.tone === "violet"
-                        ? colors.violetLight
-                        : colors.cyan
-                  }
-                  opacity="0.85"
-                />
-              ))}
+          {g.stars.map(([plain, violet], group) => (
+            <g key={group} opacity={group === 2 ? 0.6 : undefined}>
+              <path d={plain} fill={colors.text} />
+              <path d={violet} fill={colors.violetText} />
             </g>
           ))}
+          {/* Floor glow; below it the gradient has reached the page colour. */}
+          <rect
+            x={-400}
+            y={RIG.horizon}
+            width={RIG.width + 800}
+            height={520}
+            fill="url(#hlaFloor)"
+          />
+          <Paths paths={g.skyline} />
+          <g clipPath="url(#hlaGridClip)">
+            <Paths paths={staticGridLines()} />
+          </g>
         </svg>
-        <div className="hlAuthArt-haze" />
-        <div className="hlAuthArt-horizon" />
-        <div className="hlAuthArt-tag" style={{ left: label.x, top: label.y }}>
-          <span className="hlAuthArt-tagKicker">{"// YOUR DESK"}</span>
-          <span className="hlAuthArt-tagId">{you.id}</span>
+        {g.twinkles.map((t) => (
+          <div
+            key={t.i}
+            className="hlAuthArt-twinkle"
+            style={{
+              left: t.x - t.size / 2,
+              top: t.y - t.size / 2,
+              width: t.size,
+              height: t.size,
+            }}
+          />
+        ))}
+
+        {/* The one moving grid layer, under a static screen-space fade */}
+        <div className="hlAuthArt-gridFade">
+          <div className="hlAuthArt-gridMove" />
         </div>
+
+        {/* Static floor plan, haze and horizon glow */}
+        <svg
+          className="hlAuthArt-plan"
+          width={RIG.width}
+          height={RIG.height}
+          viewBox={`0 0 ${RIG.width} ${RIG.height}`}
+          focusable="false"
+        >
+          <defs>
+            <linearGradient
+              id="hlaStage"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1={g.plan.stage.y1}
+              x2="0"
+              y2={g.plan.stage.y2}
+            >
+              <stop offset="0" stopColor={colors.violet} stopOpacity="0.85" />
+              <stop offset="1" stopColor={colors.violet} stopOpacity="0.15" />
+            </linearGradient>
+            <linearGradient id="hlaHaze" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={colors.violet} stopOpacity="0" />
+              <stop
+                offset="0.27"
+                stopColor={colors.violet}
+                stopOpacity="0.34"
+              />
+              <stop offset="0.5" stopColor={colors.violet} stopOpacity="0.16" />
+              <stop offset="1" stopColor={colors.violet} stopOpacity="0" />
+            </linearGradient>
+            <linearGradient id="hlaHorizon" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor={colors.cyan} stopOpacity="0" />
+              <stop offset="0.3" stopColor={colors.cyan} />
+              <stop offset="0.5" stopColor="#e6fdff" />
+              <stop offset="0.7" stopColor={colors.cyan} />
+              <stop offset="1" stopColor={colors.cyan} stopOpacity="0" />
+            </linearGradient>
+            <linearGradient
+              id="hlaGridFade"
+              gradientUnits="userSpaceOnUse"
+              x1="0"
+              y1={GRID.fade[0].y}
+              x2="0"
+              y2={GRID.fade[GRID.fade.length - 1].y}
+            >
+              {GRID.fade.map((f, i) => (
+                <stop
+                  key={i}
+                  offset={
+                    (f.y - GRID.fade[0].y) /
+                    (GRID.fade[GRID.fade.length - 1].y - GRID.fade[0].y)
+                  }
+                  stopColor={f.colour}
+                  stopOpacity={f.opacity}
+                />
+              ))}
+            </linearGradient>
+            <linearGradient id="hlaRefl" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={colors.cyan} stopOpacity="0.5" />
+              <stop offset="0.4" stopColor={colors.violet} stopOpacity="0.3" />
+              <stop offset="1" stopColor={colors.violet} stopOpacity="0" />
+            </linearGradient>
+            <radialGradient
+              id="hlaReflFade"
+              gradientUnits="userSpaceOnUse"
+              cx="0"
+              cy="0"
+              r="1"
+              gradientTransform={`translate(${SUN.cx} ${RIG.horizon}) scale(${SUN.r} 260)`}
+            >
+              <stop offset="0.3" stopColor="#fff" />
+              <stop offset="1" stopColor="#fff" stopOpacity="0" />
+            </radialGradient>
+            <mask id="hlaReflMask">
+              <rect
+                x={SUN.cx - SUN.r}
+                y={RIG.horizon}
+                width={SUN.r * 2}
+                height={260}
+                fill="url(#hlaReflFade)"
+              />
+            </mask>
+            {glowGradient("hlaGlowC", colors.cyan, GLOW_C)}
+            {glowGradient("hlaGlowV", colors.violet, GLOW_V)}
+          </defs>
+          {/* Grid fade towards the horizon, then the sun's reflection */}
+          <rect
+            x={GRID.clip.left}
+            y={RIG.horizon}
+            width={GRID.clip.right - GRID.clip.left}
+            height={GRID.fade[GRID.fade.length - 1].y - RIG.horizon}
+            fill="url(#hlaGridFade)"
+          />
+          <path
+            mask="url(#hlaReflMask)"
+            fill="url(#hlaRefl)"
+            d={Array.from(
+              { length: 29 },
+              (_, i) =>
+                `M${SUN.cx - SUN.r} ${RIG.horizon + i * 9}h${SUN.r * 2}v3h${-SUN.r * 2}Z`,
+            ).join("")}
+          />
+          <Paths paths={g.plan.paths} />
+          {!full && <Paths paths={g.plan.aislePackets} />}
+          <rect
+            x={-400}
+            y={RIG.horizon - 40}
+            width={RIG.width + 800}
+            height={150}
+            fill="url(#hlaHaze)"
+          />
+          {(
+            [
+              [GLOW_V, "hlaGlowV"],
+              [GLOW_C, "hlaGlowC"],
+            ] as const
+          ).map(([band, id]) => (
+            <rect
+              key={id}
+              x={-400}
+              y={RIG.horizon - band.extent}
+              width={RIG.width + 800}
+              height={band.extent * 2}
+              fill={`url(#${id})`}
+            />
+          ))}
+          <rect
+            x={-400}
+            y={RIG.horizon - 1}
+            width={RIG.width + 800}
+            height={2}
+            fill="url(#hlaHorizon)"
+          />
+        </svg>
       </div>
 
-      <div className="hlAuthArt-sweep" />
-      <div className="hlAuthArt-grain" />
-      <div className="hlAuthArt-scan" />
-      <div className="hlAuthArt-vignette" />
+      {/* Grain, scanlines and vignette: static, painted straight after the
+          static plan so the two can share a layer. */}
+      <div className="hlAuthArt-finish" />
+
+      <div className="hlAuthArt-rig hlAuthArt-rig--top">
+        {/* Beacon: beam, pulse ring, packets and the tag */}
+        <svg
+          className="hlAuthArt-beam"
+          width={beacon.box.right - beacon.box.left}
+          height={beacon.box.bottom - beacon.box.top}
+          viewBox={`${beacon.box.left} ${beacon.box.top} ${beacon.box.right - beacon.box.left} ${beacon.box.bottom - beacon.box.top}`}
+          style={{ left: beacon.box.left, top: beacon.box.top }}
+          focusable="false"
+        >
+          <defs>
+            <linearGradient
+              id="hlaBeam"
+              gradientUnits="userSpaceOnUse"
+              {...beacon.gradient}
+            >
+              <stop offset="0" stopColor={colors.cyan} stopOpacity="0.75" />
+              <stop offset="0.3" stopColor={colors.cyan} stopOpacity="0.35" />
+              <stop offset="0.35" stopColor={colors.cyan} stopOpacity="0.26" />
+              <stop offset="0.6" stopColor={colors.cyan} stopOpacity="0.1" />
+              <stop offset="1" stopColor={colors.cyan} stopOpacity="0" />
+            </linearGradient>
+            <linearGradient
+              id="hlaBeamSide"
+              gradientUnits="userSpaceOnUse"
+              {...beacon.gradient}
+            >
+              <stop offset="0" stopColor={colors.cyan} stopOpacity="0.6" />
+              <stop offset="0.3" stopColor={colors.cyan} stopOpacity="0.6" />
+              <stop offset="1" stopColor={colors.cyan} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={beacon.body} fill="url(#hlaBeam)" />
+          <path d={beacon.sides} fill="url(#hlaBeamSide)" />
+        </svg>
+        <div
+          className="hlAuthArt-pulse"
+          style={{
+            left: beacon.pulse.left,
+            top: beacon.pulse.top,
+            width: beacon.pulse.width,
+            height: beacon.pulse.height,
+            borderWidth: `${beacon.pulse.borderY}px ${beacon.pulse.borderX}px`,
+          }}
+        />
+        {g.packets.map((p, i) => (
+          <div
+            key={i}
+            className="hlAuthArt-packet"
+            style={{
+              width: p.width,
+              height: p.height,
+              marginLeft: -p.width / 2,
+              marginTop: -p.height / 2,
+              backgroundColor: p.colour,
+              boxShadow: `0 0 6px ${p.colour}`,
+              transform: p.frames[0].transform,
+            }}
+          />
+        ))}
+        <div
+          className="hlAuthArt-tag"
+          style={{ left: beacon.label.x, top: beacon.label.y }}
+        >
+          <span className="hlAuthArt-tagKicker">{"// YOUR DESK"}</span>
+          <span className="hlAuthArt-tagId">{scene.you.id}</span>
+        </div>
+      </div>
 
       {hud && (
         <div className="hlAuthArt-hud">
@@ -496,13 +616,7 @@ export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
           </div>
           <div className="hlAuthArt-hudRow">
             <span>PING</span>
-            <b className="hlAuthArt-ticker">
-              <span className="hlAuthArt-tickerReel">
-                {pings.map((p, i) => (
-                  <span key={i}>{String(p).padStart(3, "0")}ms</span>
-                ))}
-              </span>
-            </b>
+            <Ping pings={scene.pings} running={full && !paused} />
           </div>
           <div className="hlAuthArt-hudRow">
             <span>UPLINK</span>
@@ -514,7 +628,19 @@ export function AuthHeroArt({ seed = 2026, hud = true }: AuthHeroArtProps) {
   );
 }
 
-const planeHeight = RIG.planeFar + RIG.planeNear;
+function glowGradient(id: string, c: string, band: GlowBand) {
+  return (
+    <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+      {band.stops.map((s, i) => (
+        <stop key={i} offset={s.offset} stopColor={c} stopOpacity={s.opacity} />
+      ))}
+    </linearGradient>
+  );
+}
+
+/** The converging grid lines do not depend on the seed: build them once. */
+let gridLineCache: ArtPath[] | undefined;
+const staticGridLines = () => (gridLineCache ??= gridLinePaths(palette));
 
 const rootSx = {
   position: "absolute",
@@ -544,7 +670,10 @@ const rootSx = {
     transform: "scale(var(--s))",
     transformOrigin: `${RIG.width / 2}px ${RIG.horizon}px`,
   },
-  "& .hlAuthArt-sky": { left: 0, top: 0 },
+  "& .hlAuthArt-base, & .hlAuthArt-plan": {
+    left: 0,
+    top: 0,
+  },
   // A smaller sun in the compact banner keeps clear of the brand.
   "& .hlAuthArt-sun": {
     transformOrigin: `${RIG.width / 2}px ${RIG.horizon}px`,
@@ -553,7 +682,7 @@ const rootSx = {
     "@media (min-width: 880px)": { transform: "none" },
   },
   // The sky gradient does not reach the top of tall containers: extend it.
-  "& .hlAuthArt-rig::before": {
+  "& .hlAuthArt-rig:not(.hlAuthArt-rig--top)::before": {
     content: '""',
     position: "absolute",
     left: -2000,
@@ -562,119 +691,40 @@ const rootSx = {
     height: 2001,
     backgroundColor: colors.bg,
   },
-  "& .hlAuthArt-stars": { left: 0, top: 0 },
-  "& .hlAuthArt-stars-0": { animation: `${twinkle} 3.4s ease-in-out infinite` },
-  "& .hlAuthArt-stars-1": {
-    animation: `${twinkle} 4.6s ease-in-out -1.7s infinite`,
-  },
-  "& .hlAuthArt-stars-2": {
-    opacity: 0.6,
-    animation: `${twinkle} 2.6s ease-in-out -0.8s infinite`,
-  },
-  "& .hlAuthArt-floorBase": {
-    position: "absolute",
-    left: -2000,
-    right: -2000,
-    top: RIG.horizon,
-    bottom: -3000,
-    background: `linear-gradient(180deg, #120b30 0, #0a0718 120px, ${colors.bg} 520px)`,
-  },
-  "& .hlAuthArt-reflection": {
-    position: "absolute",
-    top: RIG.horizon,
-    height: 260,
-    background: `linear-gradient(180deg, ${tint("cyan", 0.5)} 0, ${tint("violet", 0.3)} 40%, transparent 100%)`,
-    maskImage:
-      "repeating-linear-gradient(180deg, #000 0 3px, transparent 3px 9px), radial-gradient(ellipse 50% 100% at 50% 0, #000 30%, transparent 100%)",
-    maskComposite: "intersect",
-  },
-  "& .hlAuthArt-floor": {
-    position: "absolute",
-    inset: 0,
-    perspective: `${RIG.perspective}px`,
-    perspectiveOrigin: `${RIG.width / 2}px ${PERSPECTIVE_ORIGIN_Y}px`,
-  },
-  "& .hlAuthArt-plane": {
-    position: "absolute",
-    left: RIG.width / 2 - RIG.planeWidth / 2,
-    top: RIG.horizon + RIG.eye - RIG.planeFar,
-    width: RIG.planeWidth,
-    height: planeHeight,
-    transformOrigin: `50% ${RIG.planeFar}px`,
-    transform: `rotateX(${RIG.tilt}deg)`,
-    transformStyle: "preserve-3d",
-  },
   "& .hlAuthArt-gridFade": {
     position: "absolute",
-    inset: 0,
+    left: GRID.box.left,
+    top: GRID.box.top,
+    width: GRID.box.width,
+    height: GRID.box.height,
     overflow: "hidden",
-    maskImage: `linear-gradient(180deg, transparent 2%, rgba(0,0,0,0.55) 22%, #000 60%), radial-gradient(ellipse 50% 100% at 50% 100%, #000 55%, transparent 100%)`,
-    maskComposite: "intersect",
   },
   "& .hlAuthArt-gridMove": {
     position: "absolute",
-    left: 0,
-    right: 0,
-    top: -RIG.cell,
-    bottom: 0,
-    backgroundImage: [
-      `linear-gradient(90deg, ${tint("cyan", 0.55)} 3px, transparent 3px)`,
-      `linear-gradient(0deg, ${tint("violet", 0.75)} 3px, transparent 3px)`,
-    ].join(","),
-    backgroundSize: `${RIG.cell}px ${RIG.cell}px`,
-    backgroundPosition: `${(RIG.planeWidth / 2) % RIG.cell}px 0`,
-    willChange: "transform",
-    animation: `${gridScroll} 2.6s linear infinite`,
+    left: GRID.el.left,
+    top: GRID.el.top,
+    width: GRID.el.width,
+    height: GRID.el.height,
+    transformOrigin: "0 0",
+    transform: GRID.transform(0),
+    backgroundImage: gridTile(colors.violet),
+    backgroundRepeat: "repeat-y",
   },
-  "& .hlAuthArt-planRig": {
+  "& .hlAuthArt-pulse": {
     position: "absolute",
-    inset: 0,
-    transformStyle: "preserve-3d",
-    animation: `${planBob} 5s ease-in-out infinite alternate`,
-  },
-  "& .hlAuthArt-plan": {
-    transform: `translateZ(${RIG.planLift}px)`,
-  },
-  "& .hlAuthArt-packet": {
-    strokeDasharray: "5 95",
-    strokeDashoffset: 62,
-    animation: `${packet} 3s linear infinite`,
-  },
-  "& .hlAuthArt-ring": {
-    transformBox: "fill-box",
-    transformOrigin: "center",
+    boxSizing: "border-box",
+    borderStyle: "solid",
+    borderColor: colors.cyan,
+    borderRadius: "50%",
+    // Still frame of the pulse.
     transform: "scale(1.6)",
     opacity: 0.5,
-    animation: `${ring} 2.6s ease-out infinite`,
   },
-  "& .hlAuthArt-ring--you": { animationDuration: "2s" },
-  "& .hlAuthArt-beam": {
+  "& .hlAuthArt-packet": { position: "absolute", left: 0, top: 0 },
+  "& .hlAuthArt-twinkle": {
     position: "absolute",
-    transformOrigin: "50% 100%",
-    transform: `translateZ(${RIG.planLift}px) rotateX(-90deg)`,
-    background: `linear-gradient(0deg, ${tint("cyan", 0.75)} 0%, ${tint("cyan", 0.28)} 35%, transparent 100%)`,
-    borderLeft: `2px solid ${tint("cyan", 0.6)}`,
-    borderRight: `2px solid ${tint("cyan", 0.6)}`,
-    maskImage: "linear-gradient(0deg, #000 30%, transparent 100%)",
-    animation: `${flicker} 3.2s steps(1, end) infinite`,
-  },
-  "& .hlAuthArt-skyline": { left: 0, top: 0 },
-  "& .hlAuthArt-haze": {
-    position: "absolute",
-    left: -400,
-    right: -400,
-    top: RIG.horizon - 40,
-    height: 150,
-    background: `linear-gradient(180deg, transparent 0, ${tint("violet", 0.34)} 27%, ${tint("violet", 0.16)} 50%, transparent 100%)`,
-  },
-  "& .hlAuthArt-horizon": {
-    position: "absolute",
-    left: -400,
-    right: -400,
-    top: RIG.horizon - 1,
-    height: 2,
-    background: `linear-gradient(90deg, transparent, ${colors.cyan} 30%, #e6fdff 50%, ${colors.cyan} 70%, transparent)`,
-    boxShadow: `0 0 18px 3px ${tint("cyan", 0.55)}, 0 0 60px 14px ${tint("violet", 0.35)}`,
+    borderRadius: "50%",
+    background: `radial-gradient(circle, ${colors.text} 0 26%, ${tint("cyan", 0.35)} 34%, transparent 70%)`,
   },
   "& .hlAuthArt-tag": {
     position: "absolute",
@@ -690,7 +740,6 @@ const rootSx = {
     backgroundColor: "rgba(6,7,11,0.82)",
     border: `1px solid ${tint("cyan", 0.6)}`,
     boxShadow: `0 0 18px -4px ${tint("cyan", 0.8)}`,
-    animation: `${labelBob} 5s ease-in-out infinite alternate`,
     "&::after": {
       content: '""',
       position: "absolute",
@@ -713,32 +762,14 @@ const rootSx = {
   },
 
   // Screen-space finish
-  "& .hlAuthArt-sweep": {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: "var(--hz)",
-    height: "30%",
-    background: `linear-gradient(180deg, transparent, ${tint("cyan", 0.06)} 70%, ${tint("cyan", 0.16)} 99%, transparent)`,
-    animation: `${sweep} 7s ease-in infinite`,
-    opacity: 0,
-  },
-  "& .hlAuthArt-grain": {
+  "& .hlAuthArt-finish": {
     position: "absolute",
     inset: 0,
-    backgroundImage: NOISE,
-    opacity: 0.07,
-  },
-  "& .hlAuthArt-scan": {
-    position: "absolute",
-    inset: 0,
-    backgroundImage:
+    backgroundImage: [
+      "radial-gradient(ellipse 85% 75% at 50% 35%, transparent 55%, rgba(6,7,11,0.8) 100%)",
       "repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 3px)",
-  },
-  "& .hlAuthArt-vignette": {
-    position: "absolute",
-    inset: 0,
-    background: `radial-gradient(ellipse 85% 75% at 50% 35%, transparent 55%, rgba(6,7,11,0.8) 100%)`,
+      NOISE,
+    ].join(","),
   },
 
   "& .hlAuthArt-hud": {
@@ -768,6 +799,7 @@ const rootSx = {
     justifyContent: "space-between",
     alignItems: "baseline",
   },
+  "& .hlAuthArt-ping": { fontSize: 12, lineHeight: "1.3em", height: "1.3em" },
   "& .hlAuthArt-bars": {
     display: "grid",
     gridTemplateColumns: "repeat(16, 1fr)",
@@ -775,26 +807,13 @@ const rootSx = {
     "& span": { height: 6, backgroundColor: tint("cyan", 0.16) },
     "& span.on": { backgroundColor: colors.lime },
   },
-  "& .hlAuthArt-ticker": {
-    display: "inline-block",
-    height: "1.3em",
-    lineHeight: "1.3em",
-    overflow: "hidden",
-    fontSize: 12,
-  },
-  "& .hlAuthArt-tickerReel": {
-    display: "flex",
-    flexDirection: "column",
-    animation: `${tick} 12s steps(8, end) infinite`,
-    "& span": { height: "1.3em" },
-  },
 
-  // Reduced motion: every animation off, the base styles are the still frame.
-  "&.hlAuthArt--static *, &.hlAuthArt--static *::before, &.hlAuthArt--static *::after":
-    { animation: "none !important" },
-  "@media (prefers-reduced-motion: reduce)": {
-    "& *, & *::before, & *::after": { animation: "none !important" },
-  },
+  // Layer hints for the two always-moving layers, only while they move.
+  "&.hlAuthArt--lite:not(.hlAuthArt--paused), &.hlAuthArt--full:not(.hlAuthArt--paused)":
+    {
+      "& .hlAuthArt-gridMove": { willChange: "transform" },
+      "& .hlAuthArt-pulse": { willChange: "transform, opacity" },
+    },
 } as const;
 
 export default AuthHeroArt;

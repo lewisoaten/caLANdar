@@ -5,15 +5,25 @@ import { AuthHeroArt } from "../components/auth/AuthHeroArt";
 
 /**
  * The generated artwork behind the signed-out pages (Sign in, Verify email).
- * Pure SVG + CSS, seeded, decorative (aria-hidden). Motion stops under
- * prefers-reduced-motion; the still frame is the same composition.
+ * Pure SVG + CSS, seeded, decorative (aria-hidden). The scene is pre-projected
+ * into a few static layers; motion is compositor-only Web Animations.
+ * `mode`: 'auto' picks 'full' on desktop and 'lite' (grid scroll + desk pulse)
+ * on phones and low-power devices; 'still' is the static frame, which is also
+ * what prefers-reduced-motion always gets. Motion pauses while the tab is
+ * hidden, the art is off-screen, or a field is focused on a small screen.
  */
 const meta = {
   title: "Components/Auth/AuthHeroArt",
   component: AuthHeroArt,
   parameters: { layout: "fullscreen", backgroundFx: false },
   tags: ["autodocs"],
-  args: { seed: 2026, hud: true },
+  args: { seed: 2026, hud: true, mode: "auto" },
+  argTypes: {
+    mode: {
+      control: "inline-radio",
+      options: ["auto", "full", "lite", "still"],
+    },
+  },
   decorators: [
     (Story, { parameters }) => (
       <Box
@@ -59,6 +69,33 @@ export const MobileBanner: Story = {
 
 /** A different seed rearranges stars, skyline, desks and traces. */
 export const OtherSeed: Story = { args: { seed: 7 } };
+
+/** Desktop motion set, forced (packets, beam flicker, tag bob, twinkles). */
+export const Full: Story = {
+  args: { mode: "full" },
+  play: async ({ canvasElement }) => {
+    const art = within(canvasElement).getByTestId("auth-hero-art");
+    await expect(art.dataset.mode).toBe(
+      matchMedia("(prefers-reduced-motion: reduce)").matches ? "still" : "full",
+    );
+  },
+};
+
+/** Phone motion set: only the grid scroll and the desk pulse. */
+export const Lite: Story = {
+  args: { mode: "lite" },
+  parameters: { frame: { width: 390, height: 300 } },
+};
+
+/** The static frame (also what reduced motion gets). */
+export const Still: Story = {
+  args: { mode: "still" },
+  play: async ({ canvasElement }) => {
+    const art = within(canvasElement).getByTestId("auth-hero-art");
+    await expect(art.dataset.mode).toBe("still");
+    await expect(art.getAnimations({ subtree: true }).length).toBe(0);
+  },
+};
 
 /** Without the HUD readouts. */
 export const NoHud: Story = { args: { hud: false } };
