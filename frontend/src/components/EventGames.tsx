@@ -211,7 +211,7 @@ function SuggestGameDialog({
       {shown && (
         <Box component="form" noValidate onSubmit={submit}>
           <Box sx={{ position: "relative" }}>
-            <GameCover appid={shown.appid} />
+            <GameCover appid={shown.appid} name={shown.name} />
             <IconButton
               onClick={close}
               aria-label="Close"
