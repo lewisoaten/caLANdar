@@ -243,26 +243,29 @@ interface ShapeStyle {
   color: string;
 }
 
+/**
+ * Screens follow the seat colours exactly: free = cyan, taken = violet, yours
+ * = lime, selected = solid cyan. A screen with no linked seat has no state, so
+ * it stays a neutral steel grey rather than borrowing one of those colours.
+ */
 const screenStyles: Record<ScreenLook, ShapeStyle> = {
   plain: {
-    border: "rgba(165,139,255,0.5)",
+    border: "rgba(169,179,204,0.45)",
     style: "solid",
-    fill: fill(tint("violet", 0.12)),
-    color: colors.violetText,
-  },
-  // Linked to a free seat: an empty violet outline, the screen is up for grabs.
-  free: {
-    border: colors.violetLight,
-    style: "dashed",
-    fill: fill(tint("violet", 0.04)),
+    fill: fill("rgba(169,179,204,0.10)"),
     color: colors.textMuted,
   },
-  // Clearly fuller than a plain screen, like the seat it belongs to.
-  taken: {
-    border: colors.violetLight,
+  free: {
+    border: colors.cyan,
     style: "solid",
-    fill: fill(tint("violet", 0.36)),
-    color: colors.text,
+    fill: fill(tint("cyan", 0.06)),
+    color: colors.cyan,
+  },
+  taken: {
+    border: "rgba(165,139,255,0.5)",
+    style: "solid",
+    fill: fill(tint("violet", 0.18)),
+    color: colors.violetText,
   },
   mine: {
     border: colors.lime,
@@ -743,7 +746,7 @@ export type LegendKey =
   | SeatState
   | "screen"
   | "entrance"
-  /** A screen linked to a seat: dashed while the seat is free, filled when taken. */
+  /** A screen linked to a seat: shows that seat's colour (free, taken, yours). */
   | "linkedScreen";
 
 const legendSwatch: Record<LegendKey, Record<string, unknown>> = {
@@ -754,10 +757,14 @@ const legendSwatch: Record<LegendKey, Record<string, unknown>> = {
     backgroundColor: tint("violet", 0.25),
     border: "1px solid rgba(165,139,255,0.5)",
   },
-  screen: { backgroundColor: tint("violet", 0.4) },
+  // Not linked to a seat: no state, so no seat colour.
+  screen: {
+    backgroundColor: "rgba(169,179,204,0.18)",
+    border: "1px solid rgba(169,179,204,0.45)",
+  },
   linkedScreen: {
-    // Half free (dashed outline), half taken (filled).
-    border: `1px dashed ${colors.violetLight}`,
+    // Takes its seat's colour: cyan outline while free, violet once taken.
+    border: `1px solid ${colors.cyan}`,
     backgroundImage: `linear-gradient(90deg, transparent 50%, ${tint("violet", 0.45)} 50%)`,
   },
   entrance: {
@@ -772,7 +779,7 @@ const legendDefaults: Record<LegendKey, string> = {
   free: "Free",
   taken: "Taken",
   screen: "Screen",
-  linkedScreen: "Screen: free / taken with its seat",
+  linkedScreen: "Screen: same colour as its seat",
   entrance: "Entrance",
 };
 

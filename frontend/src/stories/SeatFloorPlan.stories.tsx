@@ -266,9 +266,9 @@ const shapesHall = mainHall(1, {
 });
 
 /**
- * Screens linked to seats show the seat's state: dashed while it is free,
+ * Screens linked to seats show the seat's state: cyan while it is free,
  * violet (with the occupant's avatar on 2+ squares) when taken, lime when
- * it is yours. Unlinked screens keep the plain look; the L-shaped door and
+ * it is yours. Unlinked screens stay a neutral grey; the L-shaped door and
  * the two touching screens are drawn as saved. Linked seats are announced
  * "with screen".
  */

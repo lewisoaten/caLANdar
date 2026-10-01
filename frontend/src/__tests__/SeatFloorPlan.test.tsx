@@ -385,7 +385,7 @@ describe("FloorPlanLegend", () => {
   it("has a linked-screen entry", () => {
     render(<FloorPlanLegend items={["linkedScreen"]} />);
     expect(screen.getByRole("listitem").textContent).toBe(
-      "Screen: free / taken with its seat",
+      "Screen: same colour as its seat",
     );
   });
 });
