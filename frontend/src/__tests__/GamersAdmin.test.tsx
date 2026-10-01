@@ -214,6 +214,39 @@ describe("GamersAdmin", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
+  test("refresh games POSTs to the admin route and disables while in flight", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    let email: unknown = null;
+    let asAdmin: string | null = null;
+    server.use(
+      http.post(
+        "/api/profile/:email/games/update",
+        async ({ params, request }) => {
+          email = params.email;
+          asAdmin = new URL(request.url).searchParams.get("as_admin");
+          await gate;
+          return HttpResponse.json({});
+        },
+      ),
+    );
+    renderAsAdmin(<GamersAdmin />);
+    const button = await screen.findByRole("button", {
+      name: "Refresh games for nia@example.com",
+    });
+    await userEvent.click(button);
+    await waitFor(() => expect(button).toBeDisabled());
+    expect(button).toHaveAttribute("aria-busy", "true");
+    release();
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(email).toBe("nia@example.com");
+    expect(asAdmin).toBe("true");
+    expect(button).not.toHaveAttribute("aria-busy");
+    expect(
+      await screen.findByText("Games refreshed for nia@example.com"),
+    ).toBeInTheDocument();
+  });
+
   test("shows an error state with retry", async () => {
     server.use(
       http.get("/api/gamers", () =>

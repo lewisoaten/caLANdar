@@ -287,6 +287,7 @@ pub async fn me(pool: &PgPool, email: String) -> Result<Me, Error> {
 pub async fn update_user_games(
     pool: &PgPool,
     email: String,
+    admin_email: Option<String>,
     steam_api_key: &String,
 ) -> Result<Profile, Error> {
     let profile = get(
@@ -303,16 +304,16 @@ pub async fn update_user_games(
 
     let games_count = user_games.response.games.len();
 
-    // Create each user game in the user_games.rs repository
-    for game in user_games.response.games {
-        match user_games::create(pool, email.clone(), game.appid, game.playtime_forever).await {
-            Ok(_) => (),
-            Err(e) => {
-                return Err(Error::Controller(format!(
-                    "Unable to create user game due to: {e}"
-                )))
-            }
-        }
+    let games: Vec<(i64, i32)> = user_games
+        .response
+        .games
+        .iter()
+        .map(|game| (game.appid, game.playtime_forever))
+        .collect();
+    if let Err(e) = user_games::create_many(pool, &email, &games).await {
+        return Err(Error::Controller(format!(
+            "Unable to create user games due to: {e}"
+        )));
     }
 
     // Log audit entry for games refresh
@@ -322,7 +323,7 @@ pub async fn update_user_games(
     });
     crate::util::log_audit(
         pool,
-        Some(email.clone()),
+        admin_email.or_else(|| Some(email.clone())),
         "profile.games_refresh".to_string(),
         "profile".to_string(),
         Some(email.clone()),

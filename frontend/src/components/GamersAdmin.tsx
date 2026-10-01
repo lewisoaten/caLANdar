@@ -7,6 +7,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import TextField from "@mui/material/TextField";
@@ -148,9 +149,54 @@ interface GamerCardProps {
   gamer: GamerSummaryData;
   now: number;
   onEdit: (gamer: GamerSummaryData) => void;
+  onRefreshed: () => void;
 }
 
-function GamerCard({ gamer, now, onEdit }: GamerCardProps) {
+function GamerCard({ gamer, now, onEdit, onRefreshed }: GamerCardProps) {
+  const { signOut } = useContext(UserDispatchContext);
+  const { token } = useContext(UserContext);
+  const { enqueueSnackbar } = useSnackbar();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshGames = async () => {
+    setRefreshing(true);
+    try {
+      const response = await fetch(
+        `/api/profile/${encodeURIComponent(gamer.email)}/games/update?as_admin=true`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+        },
+      );
+      if (response.status === 401) {
+        signOut();
+        return;
+      }
+      if (response.ok) {
+        enqueueSnackbar(`Games refreshed for ${gamer.email}`, {
+          variant: "success",
+        });
+        onRefreshed();
+        return;
+      }
+      enqueueSnackbar(`Failed to refresh games: ${await readError(response)}`, {
+        variant: "error",
+      });
+    } catch (e) {
+      console.error("Error refreshing games:", e);
+      enqueueSnackbar(
+        "Error refreshing games. Check your connection and try again.",
+        { variant: "error" },
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const linked = steamLinked(gamer);
   const callsign = displayCallsign(gamer);
   const others = gamer.handles.filter((h) => h && h !== callsign);
@@ -270,6 +316,30 @@ function GamerCard({ gamer, now, onEdit }: GamerCardProps) {
             No Steam
           </Tag>
         )}
+        <Tooltip title={linked ? "Refresh games" : "Steam not linked"}>
+          <span>
+            <IconButton
+              aria-label={`Refresh games for ${gamer.email}`}
+              onClick={refreshGames}
+              disabled={refreshing || !linked}
+              aria-busy={refreshing || undefined}
+              sx={{
+                color: colors.textMuted,
+                "&:hover": { color: colors.cyan },
+              }}
+            >
+              {refreshing ? (
+                <CircularProgress
+                  size={18}
+                  color="inherit"
+                  aria-hidden="true"
+                />
+              ) : (
+                <SyncSharp sx={{ fontSize: 18 }} />
+              )}
+            </IconButton>
+          </span>
+        </Tooltip>
         <Tooltip title="Edit Steam ID">
           <IconButton
             aria-label={`Edit Steam ID for ${gamer.email}`}
@@ -690,6 +760,7 @@ const GamersAdmin = () => {
                 gamer={g}
                 now={now}
                 onEdit={setEditing}
+                onRefreshed={() => setReload((n) => n + 1)}
               />
             ))}
           </Box>

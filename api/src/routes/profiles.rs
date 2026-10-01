@@ -280,7 +280,7 @@ pub async fn post_games_update(
     steam_api_key: &State<String>,
     user: User,
 ) -> Result<Json<Profile>, UpdateUserGameError> {
-    match profile::update_user_games(pool, user.email.clone(), steam_api_key.inner()).await {
+    match profile::update_user_games(pool, user.email.clone(), None, steam_api_key.inner()).await {
         Ok(updated_profile) => Ok(Json(updated_profile)),
         Err(e) => Err(update_user_games_error(e, &user.email)),
     }
@@ -327,6 +327,24 @@ pub async fn put_admin(
         Err(e) => Err(AdminProfileUpdateError::InternalServerError(format!(
             "Error updating profile, due to: {e}"
         ))),
+    }
+}
+
+/// Refresh a gamer's Steam games library as an administrator.
+#[openapi(tag = "Profile")]
+#[post("/profile/<email>/games/update?<_as_admin>")]
+pub async fn post_games_update_admin(
+    pool: &State<PgPool>,
+    steam_api_key: &State<String>,
+    _as_admin: Option<bool>,
+    user: AdminUser,
+    email: String,
+) -> Result<Json<Profile>, UpdateUserGameError> {
+    match profile::update_user_games(pool, email.clone(), Some(user.email), steam_api_key.inner())
+        .await
+    {
+        Ok(updated_profile) => Ok(Json(updated_profile)),
+        Err(e) => Err(update_user_games_error(e, &email)),
     }
 }
 
