@@ -261,6 +261,37 @@ registerEvent(1005, "Spring LAN 2025", {
   ],
 });
 
+// 1006: long identifiers and legacy labels that predate the 8-character
+// limit ("Window seat 12"): tiles stay one square, the text is cut with an
+// ellipsis and the full label + description are in the tooltip.
+registerEvent(1006, "Label Stress LAN", {
+  rooms: [
+    baseRoom(
+      1006,
+      1,
+      "Main Hall",
+      "Long labels and descriptions",
+      6,
+      screens(0),
+      [
+        {
+          ...seat("Window seat 12", 1, 2, 6),
+          description: "Window desk next to the fridge",
+        },
+        seat("ABCDEFGH", 2, 2, 6),
+        seat("Desk-12", 3, 2, 6, who("NoScope_Nia")),
+        {
+          ...seat("WWWWWWWW", 4, 2, 6),
+          description: "Widest possible identifier",
+        },
+        seat("A1", 5, 2, 6),
+        seat("Legacy seat with a long name", 6, 2, 6, who("CasualGamer")),
+        seat("x.y_z-9", 7, 2, 6),
+      ],
+    ),
+  ],
+});
+
 const meta = {
   title: "Admin/RoomEditor",
   component: RoomEditor,
@@ -289,6 +320,15 @@ export const LoadError: Story = { decorators: at(1004) };
 
 /** A room saved by the old editor: seats placed from x/y, legacy image shown. */
 export const LegacyRoom: Story = { decorators: at(1005) };
+
+/** Long identifiers and legacy labels stay inside their squares (ellipsis + tooltip). */
+export const LongLabels: Story = { decorators: at(1006) };
+
+/** The long labels on a phone. */
+export const LongLabelsMobile: Story = {
+  decorators: at(1006),
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
 
 /** Non-admins see an explanation instead of the editor. */
 export const NotAdmin: Story = {

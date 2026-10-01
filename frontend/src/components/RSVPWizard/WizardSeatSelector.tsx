@@ -420,11 +420,25 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
 
       {byoButton}
 
-      {selectedSeatId !== null && (
-        <Box role="status" sx={{ fontSize: 13, color: colors.textMuted }}>
-          Seat will be reserved when you confirm your RSVP
-        </Box>
-      )}
+      {selectedSeatId !== null &&
+        (() => {
+          const picked = seats.find((s) => s.id === selectedSeatId);
+          const about = picked?.description?.trim();
+          return (
+            <Box role="status" sx={{ fontSize: 13, color: colors.textMuted }}>
+              {picked && (
+                <Box
+                  component="span"
+                  sx={{ display: "block", color: colors.text }}
+                >
+                  You selected {picked.label}
+                  {about ? ` — ${about}` : ""}
+                </Box>
+              )}
+              Seat will be reserved when you confirm your RSVP
+            </Box>
+          );
+        })()}
     </Box>
   );
 };

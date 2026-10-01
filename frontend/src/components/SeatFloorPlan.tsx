@@ -68,23 +68,45 @@ const PAD = 6;
 export function deskAriaLabel(desk: FloorPlanDesk): string {
   const { seat, state, occupants = [] } = desk;
   const names = joinNames(occupants.map(who));
-  let text: string;
+  // "A1, Window desk next to the fridge, free"
+  const about = seat.description?.trim();
+  const name = about ? `${seat.label}, ${about}` : seat.label;
   switch (state) {
     case "mine":
-      text = `${seat.label}, your seat`;
-      break;
+      return `${name}, your seat`;
     case "taken":
-      text = `${seat.label}, taken${names ? ` by ${names}` : ""}`;
-      break;
+      return `${name}, taken${names ? ` by ${names}` : ""}`;
     case "selected":
-      text = `${seat.label}, selected`;
-      break;
+      return `${name}, selected`;
     default:
-      text = `${seat.label}, free`;
-      if (names) text += `, shared with ${names} at other times`;
+      return `${name}, free${names ? `, shared with ${names} at other times` : ""}`;
   }
-  if (seat.description) text += `. ${seat.description}`;
-  return text;
+}
+
+/** Tooltip of a desk: identifier, description and who sits there. */
+export function deskTitle(desk: FloorPlanDesk): string {
+  const occupants = desk.occupants ?? [];
+  return [
+    desk.seat.label,
+    desk.seat.description?.trim(),
+    desk.state === "taken" && occupants.length > 0
+      ? joinNames(occupants.map(who))
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * Desk label size: the usual `clamp(10px, 1.6cqi, 16px)`, shrunk for longer
+ * identifiers so up to 8 characters fit one cell (the plan is the `cqi`
+ * container; a cell is about 100cqi / 12 wide). Longer legacy labels get an
+ * ellipsis; the full text is in the title and accessible name.
+ */
+export function labelFontSize(label: string, withAvatar = false): string {
+  const n = Math.max(4, label.length);
+  const room = withAvatar ? "100cqi / 12 - 36px" : "100cqi / 12 - 13px";
+  return `clamp(7px, min(1.6cqi, calc((${room}) / ${(0.62 * n).toFixed(2)})), 16px)`;
 }
 
 /** Default second line of a desk tile. */
@@ -370,8 +392,11 @@ export function SeatFloorPlan({
             if (!cell) return null;
             const enabled = isEnabled(desk);
             const occupants = desk.occupants ?? [];
+            // Long identifiers need the whole width: the occupant's name is
+            // still on the second line.
             const avatarOf =
-              desk.state === "taken" || desk.state === "mine"
+              (desk.state === "taken" || desk.state === "mine") &&
+              desk.seat.label.length <= 5
                 ? occupants[0]
                 : undefined;
             const sub = desk.sub ?? deskSubLabel(desk);
@@ -392,11 +417,7 @@ export function SeatFloorPlan({
                 disabled={desk.state === "taken" || desk.disabled}
                 aria-pressed={pressable ? desk.state === "selected" : undefined}
                 aria-label={desk.ariaLabel ?? deskAriaLabel(desk)}
-                title={
-                  desk.state === "taken" && occupants.length > 0
-                    ? `${desk.seat.label}: ${joinNames(occupants.map(who))}`
-                    : undefined
-                }
+                title={deskTitle(desk)}
                 onClick={enabled ? () => onDeskSelect?.(desk.seat) : undefined}
                 sx={{
                   gridColumn: cell.col + 1,
@@ -447,6 +468,7 @@ export function SeatFloorPlan({
                     alignItems: "center",
                     gap: "4px",
                     maxWidth: "100%",
+                    minWidth: 0,
                   }}
                 >
                   {avatarOf && (
@@ -464,11 +486,17 @@ export function SeatFloorPlan({
                   <Box
                     component="span"
                     sx={{
-                      fontFamily: fonts.mono,
-                      fontSize: "clamp(10px, 1.6cqi, 16px)",
-                      fontWeight: 700,
-                      lineHeight: 1,
+                      minWidth: 0,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                       whiteSpace: "nowrap",
+                      fontFamily: fonts.mono,
+                      fontSize: labelFontSize(
+                        desk.seat.label,
+                        Boolean(avatarOf),
+                      ),
+                      fontWeight: 700,
+                      lineHeight: 1.1,
                     }}
                   >
                     {desk.seat.label}

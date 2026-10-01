@@ -3,14 +3,21 @@ import {
   applyTool,
   cellKey,
   cellLabel,
+  describeDesk,
+  describePlan,
   duplicateLabels,
   fromLayout,
   isDuplicateLabel,
+  isValidIdentifier,
   legacyCell,
+  MAX_DESCRIPTION_LENGTH,
   minRows,
   moveFocus,
+  moveGroup,
+  moveItem,
   newRoom,
   nextDeskLabel,
+  planMove,
   removedReservations,
   renameDesk,
   sanitizeLabel,
@@ -22,6 +29,7 @@ import {
   validateRooms,
   type ApiLayoutRoom,
   type Cell,
+  type DeskCell,
   type EditorRoom,
 } from "../components/RoomEditor/layout";
 
@@ -91,18 +99,69 @@ describe("nextDeskLabel", () => {
     expect(nextDeskLabel(r, 1)).toBe("A1");
   });
 
-  it("never returns a label longer than 4 characters", () => {
-    const r = room({ "0,0": { t: "desk", label: "ABCD" } });
+  it("never returns a label longer than 8 characters", () => {
+    const r = room({ "0,0": { t: "desk", label: "ABCDEFGH" } });
     const label = nextDeskLabel(r, 0);
-    expect(label.length).toBeLessThanOrEqual(4);
+    expect(label.length).toBeLessThanOrEqual(8);
     expect(label).toBe("A1");
+  });
+
+  it("treats identifiers case-insensitively when numbering", () => {
+    const r = room({ "0,0": { t: "desk", label: "a1" } });
+    expect(nextDeskLabel(r, 0)).toBe("A2");
   });
 });
 
 describe("labels", () => {
-  it("sanitises to A-Z0-9, upper case, max 4", () => {
-    expect(sanitizeLabel("a-1 b2c")).toBe("A1B2");
+  it("sanitises to A-Z a-z 0-9 - _ ., max 8, keeping case", () => {
+    expect(sanitizeLabel("a-1 b2c")).toBe("a-1b2c");
+    expect(sanitizeLabel("Win.dow_12345")).toBe("Win.dow_");
     expect(sanitizeLabel("é!")).toBe("");
+  });
+
+  it("knows which identifiers are valid (legacy labels are not)", () => {
+    expect(isValidIdentifier("A1")).toBe(true);
+    expect(isValidIdentifier("Desk-12")).toBe(true);
+    expect(isValidIdentifier("ABCDEFGH")).toBe(true);
+    expect(isValidIdentifier("ABCDEFGHI")).toBe(false);
+    expect(isValidIdentifier("Window seat 12")).toBe(false);
+    expect(isValidIdentifier("")).toBe(false);
+  });
+
+  it("flags duplicates regardless of case", () => {
+    const r = room({
+      "0,0": { t: "desk", label: "a1" },
+      "1,0": { t: "desk", label: "A1" },
+    });
+    expect(isDuplicateLabel(r, "0,0")).toBe(true);
+    expect(duplicateLabels(r)).toEqual(new Set(["a1", "A1"]));
+  });
+
+  it("sets descriptions on desks only, capped at 120 characters", () => {
+    const r = room({
+      "0,0": { t: "desk", label: "A1" },
+      "1,0": { t: "screen" },
+    });
+    const d = describeDesk(r, "0,0", "Window desk next to the fridge");
+    expect(d.cells["0,0"]).toEqual({
+      t: "desk",
+      label: "A1",
+      description: "Window desk next to the fridge",
+    });
+    expect(
+      (describeDesk(r, "0,0", "x".repeat(200)).cells["0,0"] as DeskCell)
+        .description,
+    ).toHaveLength(MAX_DESCRIPTION_LENGTH);
+    expect(describeDesk(r, "1,0", "nope")).toBe(r);
+    // Trimmed, and blank becomes null, in the PUT body.
+    const padded = describeDesk(r, "0,0", "  By the door  ");
+    expect(toSubmit([padded], false).rooms[0].seats[0].description).toBe(
+      "By the door",
+    );
+    expect(
+      toSubmit([describeDesk(r, "0,0", "   ")], false).rooms[0].seats[0]
+        .description,
+    ).toBeNull();
   });
 
   it("detects duplicates within a room", () => {
@@ -121,9 +180,9 @@ describe("labels", () => {
       "0,0": { t: "desk", label: "A1" },
       "1,0": { t: "screen" },
     });
-    expect(renameDesk(r, "0,0", "b12x9").cells["0,0"]).toEqual({
+    expect(renameDesk(r, "0,0", "b12 x9 long").cells["0,0"]).toEqual({
       t: "desk",
-      label: "B12X",
+      label: "b12x9lon",
     });
     expect(renameDesk(r, "1,0", "Z")).toBe(r);
   });
@@ -414,5 +473,143 @@ describe("keyboard helpers", () => {
     expect(legacyCell(0.99, 0.99, 8)).toEqual({ col: 11, row: 7 });
     expect(legacyCell(1.5, -1, 8)).toEqual({ col: 11, row: 0 });
     expect(legacyCell(NaN, 0.5, 8)).toEqual({ col: 6, row: 4 });
+  });
+});
+
+describe("moving desks and features", () => {
+  const base = () =>
+    room(
+      {
+        "1,1": {
+          t: "desk",
+          label: "A1",
+          seatId: 10,
+          description: "Window desk",
+          reservedBy: nia,
+        },
+        "2,1": { t: "desk", label: "A2", seatId: 11 },
+        // A three-square screen strip on the top row, and an entrance.
+        "4,0": { t: "screen" },
+        "5,0": { t: "screen" },
+        "6,0": { t: "screen" },
+        "0,5": { t: "entrance" },
+      },
+      6,
+    );
+
+  it("groups a desk alone and a feature with its whole strip", () => {
+    const r = base();
+    expect(moveGroup(r, "1,1")).toEqual(["1,1"]);
+    expect(moveGroup(r, "5,0")).toEqual(["4,0", "5,0", "6,0"]);
+    expect(moveGroup(r, "0,5")).toEqual(["0,5"]);
+    expect(moveGroup(r, "9,9")).toEqual([]);
+  });
+
+  it("moves a reserved desk with its id, identifier, description and reservation", () => {
+    const r = base();
+    const out = moveItem(r, "1,1", { col: 8, row: 3 });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.key).toBe("8,3");
+    expect(out.room.cells["1,1"]).toBeUndefined();
+    expect(out.room.cells["8,3"]).toEqual(r.cells["1,1"]);
+    expect(out.announce).toBe(
+      "Moved desk A1 to column 9, row 4. NoScope_Nia's reservation moves with it.",
+    );
+    // The save keeps the seat id, so the reservation stays attached.
+    const seat = toSubmit([out.room], false).rooms[0].seats.find(
+      (s) => s.id === 10,
+    );
+    expect(seat).toEqual({
+      id: 10,
+      label: "A1",
+      description: "Window desk",
+      gridCol: 8,
+      gridRow: 3,
+    });
+    expect(removedReservations([r], [out.room])).toEqual([]);
+  });
+
+  it("swaps a desk dropped on another desk", () => {
+    const r = base();
+    expect(planMove(r, "1,1", { col: 2, row: 1 })).toEqual({
+      type: "swap",
+      from: ["1,1"],
+      to: ["2,1"],
+      other: "2,1",
+    });
+    const out = moveItem(r, "1,1", { col: 2, row: 1 });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect((out.room.cells["2,1"] as DeskCell).label).toBe("A1");
+    expect((out.room.cells["1,1"] as DeskCell).label).toBe("A2");
+    expect((out.room.cells["1,1"] as DeskCell).seatId).toBe(11);
+    expect(out.announce).toMatch(/^Swapped desk A1 with desk A2\./);
+  });
+
+  it("won't drop a desk on a feature", () => {
+    const r = base();
+    const plan = planMove(r, "1,1", { col: 5, row: 0 });
+    expect(plan.type).toBe("blocked");
+    const out = moveItem(r, "1,1", { col: 5, row: 0 });
+    expect(out).toEqual({
+      ok: false,
+      announce:
+        "Can't move it there. The screen is in the way. Desks can only swap places with other desks.",
+    });
+  });
+
+  it("moves a whole feature strip, clamped inside the grid", () => {
+    const r = base();
+    // Grabbing the middle square and dropping it on the right edge keeps
+    // the strip whole: it ends at the last column.
+    const plan = planMove(r, "5,0", { col: 11, row: 3 });
+    expect(plan).toEqual({
+      type: "move",
+      from: ["4,0", "5,0", "6,0"],
+      to: ["9,3", "10,3", "11,3"],
+    });
+    const out = moveItem(r, "5,0", { col: 11, row: 3 });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.key).toBe("10,3");
+    for (const k of ["9,3", "10,3", "11,3"])
+      expect(out.room.cells[k]).toEqual({ t: "screen" });
+    for (const k of ["4,0", "5,0", "6,0"])
+      expect(out.room.cells[k]).toBeUndefined();
+    expect(out.announce).toBe("Moved screen (3 squares) to column 10, row 4.");
+    // Overlapping its own old squares is fine.
+    expect(planMove(r, "4,0", { col: 5, row: 0 }).type).toBe("move");
+    // Rows clamp too.
+    expect(planMove(r, "0,5", { col: 0, row: 40 })).toEqual({ type: "none" });
+  });
+
+  it("rejects a feature landing on anything else", () => {
+    const r = base();
+    const plan = planMove(r, "4,0", { col: 1, row: 1 });
+    expect(plan.type).toBe("blocked");
+    expect(describePlan(r, plan)).toMatch(
+      /^column 2, row 2, can't drop here\. The desk A1 at column 2, row 2 is in the way\./,
+    );
+    expect(moveItem(r, "4,0", { col: 1, row: 1 }).ok).toBe(false);
+  });
+
+  it("describes drops for the live region and ignores no-op moves", () => {
+    const r = base();
+    expect(describePlan(r, planMove(r, "1,1", { col: 3, row: 3 }))).toBe(
+      "column 4, row 4, free.",
+    );
+    expect(describePlan(r, planMove(r, "1,1", { col: 2, row: 1 }))).toBe(
+      "column 3, row 2, swaps with desk A2.",
+    );
+    expect(planMove(r, "1,1", { col: 1, row: 1 })).toEqual({ type: "none" });
+    expect(moveItem(r, "1,1", { col: 1, row: 1 }).ok).toBe(false);
+    expect(moveItem(r, "9,9", { col: 1, row: 1 }).ok).toBe(false);
+  });
+
+  it("names desks with their description", () => {
+    expect(cellLabel(base().cells["1,1"], "1,1")).toBe(
+      "Desk A1, Window desk, reserved by NoScope_Nia, column 2, row 2",
+    );
   });
 });

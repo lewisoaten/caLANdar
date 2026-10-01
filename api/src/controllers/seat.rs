@@ -6,6 +6,59 @@ use crate::{
     routes::seats::{Seat, SeatSubmit},
 };
 
+/// Maximum length of a seat identifier (the short label drawn on the desk).
+pub const MAX_IDENTIFIER_LEN: usize = 8;
+/// Maximum length of a seat's free-text description.
+pub const MAX_DESCRIPTION_LEN: usize = 120;
+
+/// Trim and validate a seat identifier: 1 to 8 characters of A-Z, a-z, 0-9,
+/// `-`, `_` and `.`. Case is kept (uniqueness checks ignore it).
+pub fn normalise_seat_identifier(label: &str) -> Result<String, String> {
+    let label = label.trim();
+    if label.is_empty() || label.chars().count() > MAX_IDENTIFIER_LEN {
+        return Err(format!(
+            "Seat identifier \"{label}\" must be 1 to {MAX_IDENTIFIER_LEN} characters"
+        ));
+    }
+    if !label
+        .bytes()
+        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    {
+        return Err(format!(
+            "Seat identifier \"{label}\" may only contain letters, digits, '-', '_' and '.'"
+        ));
+    }
+    Ok(label.to_string())
+}
+
+/// Validate a seat identifier, but let an existing seat keep a label saved
+/// before the current rules (e.g. "Window seat 12") as long as it is unchanged.
+pub fn normalise_seat_identifier_for(
+    label: &str,
+    existing: Option<&str>,
+) -> Result<String, String> {
+    let trimmed = label.trim();
+    match existing {
+        Some(old) if !trimmed.is_empty() && (old == label || old.trim() == trimmed) => {
+            Ok(old.to_string())
+        }
+        _ => normalise_seat_identifier(label),
+    }
+}
+
+/// Trim a seat description: blank becomes `None`; at most 120 characters.
+pub fn normalise_seat_description(description: Option<&str>) -> Result<Option<String>, String> {
+    let Some(text) = description.map(str::trim).filter(|d| !d.is_empty()) else {
+        return Ok(None);
+    };
+    if text.chars().count() > MAX_DESCRIPTION_LEN {
+        return Err(format!(
+            "Seat description must be at most {MAX_DESCRIPTION_LEN} characters"
+        ));
+    }
+    Ok(Some(text.to_string()))
+}
+
 impl From<seat::Seat> for Seat {
     fn from(seat: seat::Seat) -> Self {
         Self {
@@ -96,12 +149,12 @@ pub async fn get(pool: &PgPool, seat_id: i32) -> Result<Option<Seat>, Error> {
 pub async fn create(
     pool: &PgPool,
     event_id: i32,
-    seat_submit: SeatSubmit,
+    mut seat_submit: SeatSubmit,
     user_email: String,
 ) -> Result<Seat, Error> {
-    if seat_submit.label.trim().is_empty() {
-        return Err(Error::BadInput("Seat label cannot be empty".to_string()));
-    }
+    seat_submit.label = normalise_seat_identifier(&seat_submit.label).map_err(Error::BadInput)?;
+    seat_submit.description =
+        normalise_seat_description(seat_submit.description.as_deref()).map_err(Error::BadInput)?;
 
     if seat_submit.x < 0.0 || seat_submit.x > 1.0 || seat_submit.y < 0.0 || seat_submit.y > 1.0 {
         return Err(Error::BadInput(
@@ -150,12 +203,19 @@ pub async fn create(
 pub async fn update(
     pool: &PgPool,
     seat_id: i32,
-    seat_submit: SeatSubmit,
+    mut seat_submit: SeatSubmit,
     user_email: String,
 ) -> Result<Seat, Error> {
-    if seat_submit.label.trim().is_empty() {
-        return Err(Error::BadInput("Seat label cannot be empty".to_string()));
-    }
+    let existing = seat::get(pool, seat_id)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to get seat due to: {e}")))?;
+    seat_submit.label = normalise_seat_identifier_for(
+        &seat_submit.label,
+        existing.as_ref().map(|s| s.label.as_str()),
+    )
+    .map_err(Error::BadInput)?;
+    seat_submit.description =
+        normalise_seat_description(seat_submit.description.as_deref()).map_err(Error::BadInput)?;
 
     if seat_submit.x < 0.0 || seat_submit.x > 1.0 || seat_submit.y < 0.0 || seat_submit.y > 1.0 {
         return Err(Error::BadInput(
@@ -220,5 +280,67 @@ pub async fn delete(pool: &PgPool, seat_id: i32, user_email: String) -> Result<(
         Err(e) => Err(Error::Controller(format!(
             "Unable to delete seat due to: {e}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validates_seat_identifiers() {
+        assert_eq!(normalise_seat_identifier(" A1 "), Ok("A1".to_string()));
+        assert_eq!(normalise_seat_identifier("zz99"), Ok("zz99".to_string()));
+        assert_eq!(
+            normalise_seat_identifier("Dk-1.b_"),
+            Ok("Dk-1.b_".to_string())
+        );
+        assert_eq!(
+            normalise_seat_identifier("ABCDEFGH"),
+            Ok("ABCDEFGH".to_string())
+        );
+        assert!(normalise_seat_identifier("").is_err());
+        assert!(normalise_seat_identifier("   ").is_err());
+        assert!(normalise_seat_identifier("ABCDEFGHI").is_err());
+        assert!(normalise_seat_identifier("A 1").is_err());
+        assert!(normalise_seat_identifier("Ä1").is_err());
+        assert!(normalise_seat_identifier("A/1").is_err());
+    }
+
+    #[test]
+    fn keeps_unchanged_legacy_identifiers() {
+        let old = Some("Window seat 12");
+        assert_eq!(
+            normalise_seat_identifier_for("Window seat 12", old),
+            Ok("Window seat 12".to_string())
+        );
+        assert_eq!(
+            normalise_seat_identifier_for(" Window seat 12 ", old),
+            Ok("Window seat 12".to_string())
+        );
+        // Changing it means following the rules.
+        assert!(normalise_seat_identifier_for("Window seat 13", old).is_err());
+        assert!(normalise_seat_identifier_for("", old).is_err());
+        assert_eq!(
+            normalise_seat_identifier_for("W12", old),
+            Ok("W12".to_string())
+        );
+        assert!(normalise_seat_identifier_for("Window seat 12", None).is_err());
+    }
+
+    #[test]
+    fn validates_seat_descriptions() {
+        assert_eq!(normalise_seat_description(None), Ok(None));
+        assert_eq!(normalise_seat_description(Some("   ")), Ok(None));
+        assert_eq!(
+            normalise_seat_description(Some("  Window desk next to the fridge ")),
+            Ok(Some("Window desk next to the fridge".to_string()))
+        );
+        let max = "é".repeat(MAX_DESCRIPTION_LEN);
+        assert_eq!(
+            normalise_seat_description(Some(&max)),
+            Ok(Some(max.clone()))
+        );
+        assert!(normalise_seat_description(Some(&format!("{max}x"))).is_err());
     }
 }

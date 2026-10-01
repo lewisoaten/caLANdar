@@ -3,6 +3,7 @@ import SvgIcon, { type SvgIconProps } from "@mui/material/SvgIcon";
 import DeskSharp from "@mui/icons-material/DeskSharp";
 import TvSharp from "@mui/icons-material/TvSharp";
 import DoorFrontSharp from "@mui/icons-material/DoorFrontSharp";
+import OpenWithSharp from "@mui/icons-material/OpenWithSharp";
 import type { Tool } from "./layout";
 
 /** Material Symbols "arrow_selector_tool" (not in @mui/icons-material). */
@@ -25,6 +26,7 @@ export function EraseToolIcon(props: SvgIconProps) {
 
 export const TOOL_ICONS: Record<Tool, React.ComponentType<SvgIconProps>> = {
   select: SelectToolIcon,
+  move: OpenWithSharp,
   desk: DeskSharp,
   screen: TvSharp,
   entrance: DoorFrontSharp,

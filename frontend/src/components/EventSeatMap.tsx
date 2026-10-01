@@ -688,13 +688,17 @@ const EventSeatMap: React.FC = () => {
     sub = mySeat
       ? `Swap from ${mySeat.label} to ${selectedSeat.label}? Your old seat frees up for the squad.`
       : "Free for the times you're here. Claim it before someone else does.";
-    if (selectedSeat.description) {
+    const about = selectedSeat.description?.trim();
+    if (about) {
       sub = (
         <>
-          {sub}
-          <Box component="span" sx={{ display: "block", mt: 1 }}>
-            {selectedSeat.description}
+          <Box
+            component="span"
+            sx={{ display: "block", mb: 1, color: colors.text }}
+          >
+            You selected {selectedSeat.label} — {about}
           </Box>
+          {sub}
         </>
       );
     }
@@ -966,9 +970,15 @@ const EventSeatMap: React.FC = () => {
                   <Box component="li" key={desk.seat.id} sx={listRowSx}>
                     <Box
                       component="span"
+                      title={desk.seat.label}
                       sx={{
-                        width: 40,
+                        // Fits an 8-character identifier; longer legacy
+                        // labels are cut (full text in the title).
+                        width: 72,
                         flex: "none",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                         fontFamily: fonts.mono,
                         fontSize: 13,
                         fontWeight: 700,

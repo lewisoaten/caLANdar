@@ -91,12 +91,15 @@ export const DEFAULT_ROWS = 8;
 /** Rows for a room added in the editor. */
 export const NEW_ROOM_ROWS = 6;
 export const MAX_ROWS = 50;
-export const MAX_LABEL_LENGTH = 4;
+/** Seat identifier: the short code drawn on the desk tile. */
+export const MAX_LABEL_LENGTH = 8;
+/** Optional free-text seat description, e.g. "Window desk next to the fridge". */
+export const MAX_DESCRIPTION_LENGTH = 120;
 export const DEFAULT_OPACITY = 60;
 export const MIN_OPACITY = 10;
 export const MAX_OPACITY = 100;
 
-export type Tool = "select" | "desk" | "screen" | "entrance" | "erase";
+export type Tool = "select" | "move" | "desk" | "screen" | "entrance" | "erase";
 
 export interface DeskCell {
   t: "desk";
@@ -271,7 +274,7 @@ export function toSubmit(
           seats.push({
             ...(cell.seatId != null ? { id: cell.seatId } : {}),
             label: cell.label,
-            description: cell.description ?? null,
+            description: cell.description?.trim() || null,
             gridCol: col,
             gridRow: row,
           });
@@ -308,12 +311,24 @@ export const snapshot = (rooms: EditorRoom[]) =>
 /** Row letters for new rows (I and O are skipped: they read as 1 and 0). */
 export const ROW_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ".split("");
 
-/** Upper-case, keep A-Z/0-9 only, max 4 characters. */
+/** Characters a seat identifier may use. */
+const IDENTIFIER_CHARS = /[^A-Za-z0-9._-]/g;
+
+/** Keep A-Z, a-z, 0-9, `-`, `_` and `.` only, max 8 characters. */
 export const sanitizeLabel = (value: string) =>
-  value
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .slice(0, MAX_LABEL_LENGTH);
+  value.replace(IDENTIFIER_CHARS, "").slice(0, MAX_LABEL_LENGTH);
+
+/**
+ * Whether `label` is a valid identifier today. Labels saved before the limits
+ * (e.g. "Window seat 12") stay as they are until someone edits them.
+ */
+export const isValidIdentifier = (label: string) =>
+  label.length > 0 &&
+  label.length <= MAX_LABEL_LENGTH &&
+  !/[^A-Za-z0-9._-]/.test(label);
+
+/** Identifiers are unique per room regardless of case ("a1" clashes with "A1"). */
+const labelId = (label: string) => label.toLowerCase();
 
 const labelPrefix = (label: string) => label.replace(/\d+$/, "");
 
@@ -325,10 +340,10 @@ export function nextDeskLabel(room: EditorRoom, row: number): string {
   const desks = Object.entries(room.cells).filter(
     (e): e is [string, DeskCell] => e[1].t === "desk",
   );
-  const used = new Set(desks.map(([, c]) => c.label));
+  const used = new Set(desks.map(([, c]) => labelId(c.label)));
   const withNumber = (prefix: string) => {
     let n = 1;
-    while (used.has(prefix + n)) n++;
+    while (used.has(labelId(prefix + n))) n++;
     const label = prefix + n;
     return label.length <= MAX_LABEL_LENGTH ? label : null;
   };
@@ -351,19 +366,21 @@ export function nextDeskLabel(room: EditorRoom, row: number): string {
     const label = withNumber(l);
     if (label) return label;
   }
-  // Pathological (every 1-4 char label in use is impossible on a 600-cell grid).
+  // Pathological (every short label in use is impossible on a 600-cell grid).
   return "Z";
 }
 
-/** Labels used by more than one desk in the room. */
+/** Labels used by more than one desk in the room (ignoring case). */
 export function duplicateLabels(room: EditorRoom): Set<string> {
-  const seen = new Set<string>();
+  const count = new Map<string, number>();
+  const desks = Object.values(room.cells).filter(
+    (c): c is DeskCell => c.t === "desk",
+  );
+  for (const d of desks)
+    count.set(labelId(d.label), (count.get(labelId(d.label)) ?? 0) + 1);
   const dup = new Set<string>();
-  for (const cell of Object.values(room.cells))
-    if (cell.t === "desk") {
-      if (seen.has(cell.label)) dup.add(cell.label);
-      seen.add(cell.label);
-    }
+  for (const d of desks)
+    if ((count.get(labelId(d.label)) ?? 0) > 1) dup.add(d.label);
   return dup;
 }
 
@@ -371,7 +388,8 @@ export function isDuplicateLabel(room: EditorRoom, key: string) {
   const cell = room.cells[key];
   if (!isDesk(cell) || !cell.label) return false;
   return Object.entries(room.cells).some(
-    ([k, c]) => k !== key && c.t === "desk" && c.label === cell.label,
+    ([k, c]) =>
+      k !== key && c.t === "desk" && labelId(c.label) === labelId(cell.label),
   );
 }
 
@@ -398,6 +416,18 @@ export const renameDesk = (room: EditorRoom, key: string, value: string) => {
   if (!isDesk(cell)) return room;
   return withCells(room, (cells) => {
     cells[key] = { ...cell, label: sanitizeLabel(value) };
+  });
+};
+
+/** Set a desk's description (kept as typed, capped; trimmed on save). */
+export const describeDesk = (room: EditorRoom, key: string, value: string) => {
+  const cell = room.cells[key];
+  if (!isDesk(cell)) return room;
+  return withCells(room, (cells) => {
+    cells[key] = {
+      ...cell,
+      description: value.slice(0, MAX_DESCRIPTION_LENGTH),
+    };
   });
 };
 
@@ -451,6 +481,7 @@ export function newRoom(rooms: EditorRoom[], key: string): EditorRoom {
 
 export const TOOL_LABELS: Record<Tool, string> = {
   select: "Select",
+  move: "Move",
   desk: "Desk",
   screen: "Screen",
   entrance: "Entrance",
@@ -458,7 +489,9 @@ export const TOOL_LABELS: Record<Tool, string> = {
 };
 
 export const TOOL_HINTS: Record<Tool, string> = {
-  select: "Tap a desk to rename or remove it.",
+  select:
+    "Tap a desk to rename or remove it. Drag desks, screens and entrances to move them (on touch, press and hold first).",
+  move: "Tap a desk, screen or entrance, then tap where it goes, or drag it. A desk dropped on another desk swaps places; screens and entrances need empty squares.",
   desk: "Tap empty squares to drop desks. Labels fill in automatically.",
   screen: "Tap squares to mark a screen, projector or feature wall.",
   entrance: "Tap squares to mark the way in.",
@@ -468,13 +501,21 @@ export const TOOL_HINTS: Record<Tool, string> = {
 /** Keyboard shortcuts for the tools (while the toolbar or grid has focus). */
 export const TOOL_SHORTCUTS: Record<Tool, string> = {
   select: "V",
+  move: "M",
   desk: "D",
   screen: "S",
   entrance: "E",
   erase: "X",
 };
 
-export const TOOLS: Tool[] = ["select", "desk", "screen", "entrance", "erase"];
+export const TOOLS: Tool[] = [
+  "select",
+  "move",
+  "desk",
+  "screen",
+  "entrance",
+  "erase",
+];
 
 export const toolForShortcut = (key: string): Tool | undefined =>
   TOOLS.find((t) => TOOL_SHORTCUTS[t] === key.toUpperCase());
@@ -496,7 +537,10 @@ export function cellLabel(cell: Cell | undefined, key: string) {
     const who = cell.reservedBy
       ? `, reserved by ${reserverName(cell.reservedBy)}`
       : "";
-    return `Desk ${cell.label || "(no label)"}${who}, ${where(key)}`;
+    const about = cell.description?.trim()
+      ? `, ${cell.description.trim()}`
+      : "";
+    return `Desk ${cell.label || "(no label)"}${about}${who}, ${where(key)}`;
   }
   return `${FEATURE_NAMES[cell.t]}, ${where(key)}`;
 }
@@ -520,7 +564,7 @@ export type ToolOutcome =
  */
 export function applyTool(
   room: EditorRoom,
-  tool: Tool,
+  tool: Exclude<Tool, "move">,
   key: string,
   sel: string | null,
 ): ToolOutcome {
@@ -618,6 +662,158 @@ export function moveFocus(
 }
 
 // ---------------------------------------------------------------------------
+// Moving desks and features
+// ---------------------------------------------------------------------------
+
+/**
+ * Cells that move together with `key`: a desk on its own, or the whole
+ * horizontal strip of same-kind feature cells it belongs to (the seat map
+ * draws such a run as one screen / entrance). Empty for an empty cell.
+ */
+export function moveGroup(room: EditorRoom, key: string): string[] {
+  const cell = room.cells[key];
+  if (!cell) return [];
+  if (cell.t === "desk") return [key];
+  const { col, row } = parseKey(key);
+  const same = (c: number) => room.cells[cellKey(c, row)]?.t === cell.t;
+  let start = col;
+  while (start > 0 && same(start - 1)) start--;
+  let end = col;
+  while (end < GRID_COLS - 1 && same(end + 1)) end++;
+  const out: string[] = [];
+  for (let c = start; c <= end; c++) out.push(cellKey(c, row));
+  return out;
+}
+
+export type MovePlan =
+  /** Nothing to move, or it would land where it already is. */
+  | { type: "none" }
+  | { type: "move"; from: string[]; to: string[] }
+  /** Desk dropped on another desk: they trade places. */
+  | { type: "swap"; from: string[]; to: string[]; other: string }
+  | { type: "blocked"; from: string[]; to: string[]; reason: string };
+
+/** "desk A1", "screen", "entrance". */
+export const itemName = (cell: Cell) =>
+  cell.t === "desk"
+    ? `desk ${cell.label || "(no label)"}`
+    : FEATURE_NAMES[cell.t].toLowerCase();
+
+/**
+ * What dropping the item at `fromKey` on `target` would do. The grabbed cell
+ * lands on `target`; a feature strip keeps its shape and is clamped so it
+ * stays inside the grid. Desks swap with desks; anything else in the way
+ * blocks the move.
+ */
+export function planMove(
+  room: EditorRoom,
+  fromKey: string,
+  target: { col: number; row: number },
+): MovePlan {
+  const group = moveGroup(room, fromKey);
+  const cell = room.cells[fromKey];
+  if (!cell || !group.length) return { type: "none" };
+  const origin = parseKey(fromKey);
+  const cols = group.map((k) => parseKey(k).col);
+  const dc = clamp(
+    target.col - origin.col,
+    -Math.min(...cols),
+    GRID_COLS - 1 - Math.max(...cols),
+  );
+  const dr = clamp(
+    target.row - origin.row,
+    -origin.row,
+    room.rows - 1 - origin.row,
+  );
+  if (dc === 0 && dr === 0) return { type: "none" };
+  const to = group.map((k) => {
+    const p = parseKey(k);
+    return cellKey(p.col + dc, p.row + dr);
+  });
+
+  if (cell.t === "desk") {
+    const other = room.cells[to[0]];
+    if (!other) return { type: "move", from: group, to };
+    if (other.t === "desk")
+      return { type: "swap", from: group, to, other: to[0] };
+    return {
+      type: "blocked",
+      from: group,
+      to,
+      reason: `The ${itemName(other)} is in the way. Desks can only swap places with other desks.`,
+    };
+  }
+
+  const inGroup = new Set(group);
+  const clash = to.find((k) => !inGroup.has(k) && room.cells[k]);
+  if (clash)
+    return {
+      type: "blocked",
+      from: group,
+      to,
+      reason: `The ${itemName(room.cells[clash])} at ${where(clash)} is in the way. Screens and entrances need empty squares.`,
+    };
+  return { type: "move", from: group, to };
+}
+
+/** Short spoken description of a planned drop, for the live region. */
+export function describePlan(room: EditorRoom, plan: MovePlan): string {
+  if (plan.type === "none") return "Back where it started.";
+  const at = where(plan.to[0]);
+  if (plan.type === "move") return `${at}, free.`;
+  if (plan.type === "swap")
+    return `${at}, swaps with ${itemName(room.cells[plan.other])}.`;
+  return `${at}, can't drop here. ${plan.reason}`;
+}
+
+export type MoveResult =
+  | { ok: true; room: EditorRoom; key: string; announce: string }
+  | { ok: false; announce: string };
+
+/**
+ * Move the item at `fromKey` to `target` (see `planMove`). Desks keep their
+ * seat id, identifier, description and reservation: the reservation follows
+ * the desk. `key` is where the grabbed cell ended up.
+ */
+export function moveItem(
+  room: EditorRoom,
+  fromKey: string,
+  target: { col: number; row: number },
+): MoveResult {
+  const cell = room.cells[fromKey];
+  const plan = planMove(room, fromKey, target);
+  if (!cell || plan.type === "none")
+    return { ok: false, announce: cell ? "Not moved." : "Nothing to move." };
+  if (plan.type === "blocked")
+    return { ok: false, announce: `Can't move it there. ${plan.reason}` };
+
+  const moving = plan.from.map((k) => room.cells[k]);
+  const next = withCells(room, (cells) => {
+    const other = plan.type === "swap" ? cells[plan.other] : undefined;
+    for (const k of plan.from) delete cells[k];
+    plan.to.forEach((k, i) => {
+      cells[k] = moving[i];
+    });
+    if (other) cells[plan.from[0]] = other;
+  });
+  const key = plan.to[plan.from.indexOf(fromKey)];
+  const at = where(plan.to[0]);
+  const follows =
+    isDesk(cell) && cell.reservedBy
+      ? ` ${reserverName(cell.reservedBy)}'s reservation moves with it.`
+      : "";
+  let announce: string;
+  if (plan.type === "swap") {
+    const other = room.cells[plan.other] as DeskCell;
+    announce = `Swapped ${itemName(cell)} with ${itemName(other)}. ${(cell as DeskCell).label} is now at ${at}.${follows}`;
+  } else if (isDesk(cell))
+    announce = `Moved ${itemName(cell)} to ${at}.${follows}`;
+  else
+    announce = `Moved ${itemName(cell)}${plan.from.length > 1 ? ` (${plan.from.length} squares)` : ""} to ${at}.`;
+  return { ok: true, room: next, key, announce };
+}
+
+// ---------------------------------------------------------------------------
 // Validation
 // ---------------------------------------------------------------------------
 
@@ -639,8 +835,12 @@ export function validateRooms(rooms: EditorRoom[]): string[] {
       problems.push(
         `${label} has ${blank === 1 ? "a desk" : `${blank} desks`} without a label.`,
       );
-    for (const dup of duplicateLabels(room))
+    const reported = new Set<string>();
+    for (const dup of duplicateLabels(room)) {
+      if (reported.has(labelId(dup))) continue;
+      reported.add(labelId(dup));
       problems.push(`${label}: more than one desk is labelled ${dup}.`);
+    }
   });
   for (const [name, count] of names)
     if (count > 1) {

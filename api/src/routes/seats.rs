@@ -29,10 +29,10 @@ pub struct Seat {
     /// The room ID this seat belongs to.
     pub room_id: i32,
 
-    /// The label for the seat.
+    /// The seat identifier shown on the desk (up to 8 characters; older seats may be longer).
     pub label: String,
 
-    /// Optional description of the seat.
+    /// Optional free-text description of the seat (up to 120 characters).
     pub description: Option<String>,
 
     /// X coordinate of the seat on the floorplan (0.0 to 1.0).
@@ -78,7 +78,11 @@ impl SchemaExample for Seat {
 #[schemars(example = "Self::example")]
 pub struct SeatSubmit {
     pub room_id: i32,
+    /// Seat identifier: 1-8 characters of A-Z, a-z, 0-9, `-`, `_` and `.` (trimmed).
+    /// An update may keep a label saved before these rules if it is unchanged.
     pub label: String,
+    /// Optional free text, at most 120 characters (trimmed; blank clears it).
+    #[serde(default)]
     pub description: Option<String>,
     pub x: f64,
     pub y: f64,

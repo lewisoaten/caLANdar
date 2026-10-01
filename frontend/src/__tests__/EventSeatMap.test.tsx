@@ -265,6 +265,34 @@ describe("EventSeatMap", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a desk's description on the tile, when selected and in who's where", async () => {
+    const user = userEvent.setup();
+    routes["GET /api/events/1/seats"] = () =>
+      json(
+        seats.map((s) =>
+          s.id === 2
+            ? { ...s, description: "Window desk next to the fridge" }
+            : s,
+        ),
+      );
+    renderMap();
+    await plan();
+    const desk = await screen.findByRole("button", {
+      name: "A2, Window desk next to the fridge, free",
+    });
+    expect(desk).toHaveAttribute(
+      "title",
+      "A2 · Window desk next to the fridge",
+    );
+    await user.click(desk);
+    expect(
+      screen.getByText("You selected A2 — Window desk next to the fridge"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Window desk next to the fridge").length,
+    ).toBeGreaterThan(0);
+  });
+
   it("swaps with PUT and releases with DELETE", async () => {
     const user = userEvent.setup();
     routes["GET /api/events/1/seat-reservations/me?optional=true"] = () =>

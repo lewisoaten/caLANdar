@@ -37,7 +37,9 @@ pub struct SeatReservedBy {
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct LayoutSeat {
     pub id: i32,
+    /// Seat identifier shown on the desk (up to 8 characters; older seats may be longer).
     pub label: String,
+    /// Optional free-text description, e.g. "Window desk next to the fridge".
     pub description: Option<String>,
     /// Null for desks placed with the legacy editor; derive from `x`/`y`.
     pub grid_col: Option<i32>,
@@ -68,8 +70,11 @@ pub struct RoomLayoutResponse {
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct LayoutSeatSubmit {
     pub id: Option<i32>,
-    /// 1-4 characters, A-Z and 0-9 (upper-cased by the server), unique within the room.
+    /// Seat identifier shown on the desk: 1-8 characters of A-Z, a-z, 0-9, `-`, `_`
+    /// and `.` (trimmed), unique within the room ignoring case. An existing seat may
+    /// keep a label saved before these rules if it is sent back unchanged.
     pub label: String,
+    /// Optional free text, at most 120 characters (trimmed; blank clears it).
     #[serde(default)]
     pub description: Option<String>,
     /// 0 to 11.

@@ -192,12 +192,15 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     renderEditor();
     fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
     fireEvent.click(cell(/Empty square, column 6, row 3/));
-    const label = screen.getByLabelText("Label");
-    fireEvent.change(label, { target: { value: "a-1" } });
-    expect(label).toHaveValue("A1");
+    const label = screen.getByLabelText("Identifier");
+    // Sanitised as typed; identifiers clash regardless of case.
+    fireEvent.change(label, { target: { value: "a1 !" } });
+    expect(label).toHaveValue("a1");
     expect(label).toHaveAttribute("aria-invalid", "true");
     expect(
-      screen.getByText("Another desk in this room already uses that label."),
+      screen.getByText(
+        "Another desk in this room already uses that identifier.",
+      ),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -356,6 +359,185 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     expect(screen.getByTestId("room-editor-body")).toHaveAttribute(
       "aria-busy",
       "false",
+    );
+  });
+  it("moves a reserved desk with the keyboard (M, arrows, Enter) and saves it", async () => {
+    renderEditor();
+    const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+    fireEvent.keyDown(desk, { key: "m" });
+    await screen.findByText(/^Picked up desk A1\./);
+    fireEvent.keyDown(desk, { key: "ArrowRight" });
+    const target = cell(/Empty square, column 4, row 3/);
+    await waitFor(() => expect(target).toHaveFocus());
+    expect(target).toHaveAttribute("data-drop", "ok");
+    expect(desk).toHaveAttribute("data-drop", "source");
+    await screen.findByText("column 4, row 3, free.");
+    fireEvent.keyDown(target, { key: "ArrowRight" });
+    const next = cell(/Empty square, column 5, row 3/);
+    await waitFor(() => expect(next).toHaveFocus());
+    fireEvent.keyDown(next, { key: "Enter" });
+    const moved = cell(/^Desk A1, reserved by NoScope_Nia, column 5, row 3/);
+    expect(moved).toHaveAttribute("aria-selected", "true");
+    expect(cell(/Empty square, column 3, row 3/)).toBeInTheDocument();
+    await screen.findByText(
+      "Moved desk A1 to column 5, row 3. NoScope_Nia's reservation moves with it.",
+    );
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    expect(
+      await screen.findByText("Saved · seat map updated"),
+    ).toBeInTheDocument();
+    // Same seat id (so the reservation stays) and nothing released.
+    expect(puts[0].releaseReserved).toBe(false);
+    expect(puts[0].rooms[0].seats).toEqual([
+      { id: 10, label: "A1", description: null, gridCol: 4, gridRow: 2 },
+    ]);
+    expect(
+      cell(/^Desk A1, reserved by NoScope_Nia, column 5, row 3/),
+    ).toBeInTheDocument();
+  });
+
+  it("cancels a keyboard move with Escape", async () => {
+    renderEditor();
+    const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+    fireEvent.keyDown(desk, { key: "M" });
+    fireEvent.keyDown(desk, { key: "ArrowUp" });
+    const up = cell(/Empty square, column 3, row 2/);
+    await waitFor(() => expect(up).toHaveFocus());
+    fireEvent.keyDown(up, { key: "Escape" });
+    await screen.findByText("Move cancelled. The desk A1 stays put.");
+    expect(cell(/^Desk A1, .*column 3, row 3/)).toBeInTheDocument();
+    expect(up).not.toHaveAttribute("data-drop");
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  describe("pointer drag", () => {
+    let hit: Element | null = null;
+    beforeEach(() => {
+      hit = null;
+      // jsdom has no layout: point the drag at a chosen cell.
+      document.elementFromPoint = vi.fn(() => hit);
+    });
+
+    const press = (el: Element, x = 10, pointerType = "mouse") =>
+      fireEvent.pointerDown(el, {
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        clientX: x,
+        clientY: 10,
+        pointerType,
+      });
+    const moveTo = (target: Element, x: number) => {
+      hit = target;
+      fireEvent.pointerMove(target, { pointerId: 1, clientX: x, clientY: 10 });
+    };
+
+    it("drags a desk to an empty square, with a cyan drop preview", async () => {
+      renderEditor();
+      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+      const target = cell(/Empty square, column 8, row 4/);
+      press(desk);
+      // Under the 4px threshold it is still a click, not a drag.
+      moveTo(target, 12);
+      expect(target).not.toHaveAttribute("data-drop");
+      moveTo(target, 40);
+      expect(target).toHaveAttribute("data-drop", "ok");
+      fireEvent.pointerUp(target, { pointerId: 1, clientX: 40, clientY: 10 });
+      fireEvent.click(target);
+      expect(
+        cell(/^Desk A1, reserved by NoScope_Nia, column 8, row 4/),
+      ).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+    });
+
+    it("previews an occupied square in pink and refuses the drop", async () => {
+      renderEditor();
+      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+      const screenCell = cell(/^Screen, column 4, row 1/);
+      press(desk);
+      moveTo(screenCell, 60);
+      expect(screenCell).toHaveAttribute("data-drop", "bad");
+      fireEvent.pointerUp(screenCell, { pointerId: 1 });
+      await screen.findByText(
+        "Can't move it there. The screen is in the way. Desks can only swap places with other desks.",
+      );
+      expect(cell(/^Desk A1, .*column 3, row 3/)).toBeInTheDocument();
+      expect(screen.queryByText("Unsaved changes")).toBeNull();
+    });
+
+    it("a plain click still selects (no drag)", async () => {
+      renderEditor();
+      const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+      press(desk);
+      fireEvent.pointerUp(desk, { pointerId: 1 });
+      fireEvent.click(desk);
+      expect(desk).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByLabelText("Identifier")).toHaveValue("A1");
+    });
+
+    it("on touch with Select, only a long press starts a drag", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderEditor();
+        const desk = await screen.findByRole("gridcell", { name: /^Desk A1/ });
+        const target = cell(/Empty square, column 1, row 1/);
+        // A quick swipe is a scroll: nothing is picked up.
+        press(desk, 10, "touch");
+        moveTo(target, 60);
+        expect(target).not.toHaveAttribute("data-drop");
+        fireEvent.pointerUp(target, { pointerId: 1 });
+        // Press and hold, then drag.
+        press(desk, 10, "touch");
+        vi.advanceTimersByTime(400);
+        moveTo(target, 60);
+        expect(target).toHaveAttribute("data-drop", "ok");
+        fireEvent.pointerUp(target, { pointerId: 1 });
+        expect(cell(/^Desk A1, .*column 1, row 1/)).toBeInTheDocument();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("moves a whole screen strip with the Move tool (tap, then tap)", async () => {
+    renderEditor();
+    fireEvent.click(await screen.findByRole("button", { name: "Move" }));
+    expect(screen.getByRole("button", { name: "Move" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(cell(/^Screen, column 4, row 1/));
+    await screen.findByText(/^Picked up screen\./);
+    fireEvent.click(cell(/Empty square, column 9, row 2/));
+    expect(cell(/^Screen, column 9, row 2/)).toBeInTheDocument();
+    expect(cell(/Empty square, column 4, row 1/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    await screen.findByText("Saved · seat map updated");
+    expect(puts[0].rooms[0].features).toEqual([
+      { col: 8, row: 1, kind: "screen" },
+    ]);
+  });
+
+  it("edits a desk's description with a counter and saves it trimmed", async () => {
+    renderEditor();
+    fireEvent.click(await screen.findByRole("gridcell", { name: /^Desk A1/ }));
+    const about = screen.getByLabelText("Description (optional)");
+    fireEvent.change(about, {
+      target: { value: "  Window desk next to the fridge " },
+    });
+    expect(screen.getByText(/^33\/120/)).toBeInTheDocument();
+    expect(
+      cell(/^Desk A1, Window desk next to the fridge, reserved by NoScope_Nia/),
+    ).toHaveAttribute(
+      "title",
+      "A1 · Window desk next to the fridge · Reserved by NoScope_Nia",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    await screen.findByText("Saved · seat map updated");
+    expect(puts[0].rooms[0].seats[0].description).toBe(
+      "Window desk next to the fridge",
     );
   });
 });

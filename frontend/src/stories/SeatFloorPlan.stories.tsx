@@ -182,3 +182,45 @@ export const ReadOnly: Story = {
     onDeskSelect: undefined,
   },
 };
+
+const longLabels = [
+  "Window seat 12",
+  "ABCDEFGH",
+  "WWWWWWWW",
+  "Desk-12",
+  "A1",
+  "Legacy seat with a long name",
+];
+
+/**
+ * Long identifiers (8 characters) and legacy labels from before the limit:
+ * every tile stays one grid square; the label shrinks, then ellipsises, and
+ * the full text plus the description are in the tooltip and accessible name.
+ */
+export const LongLabels: Story = {
+  args: {
+    room: mainHall(1),
+    desks: hall.slice(0, longLabels.length).map((seat, i) => ({
+      seat: {
+        ...seat,
+        label: longLabels[i],
+        description: i === 0 ? "Window desk next to the fridge" : null,
+      },
+      state:
+        i === 2 ? "taken" : i === 3 ? "mine" : i === 4 ? "selected" : "free",
+      occupants:
+        i === 2
+          ? [{ name: "NoScope_Nia" }]
+          : i === 3
+            ? [{ name: "ProGamer123" }]
+            : [],
+    })),
+    label: "Main Hall floor plan",
+  },
+};
+
+/** The long labels on a phone (the plan scrolls sideways at 44px cells). */
+export const LongLabelsMobile: Story = {
+  ...LongLabels,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};

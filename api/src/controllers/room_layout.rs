@@ -10,6 +10,7 @@ use crate::{
             cell_in_grid, validate_background_opacity, validate_background_style,
             validate_features, validate_grid_rows, GRID_COLS,
         },
+        seat::{normalise_seat_description, normalise_seat_identifier_for},
         Error,
     },
     repositories::{room, seat},
@@ -21,28 +22,6 @@ use crate::{
         rooms::Room,
     },
 };
-
-/// Maximum desk label length in the room editor.
-const MAX_LABEL_LEN: usize = 4;
-
-/// Upper-case and validate a desk label: 1-4 characters, A-Z and 0-9 only.
-pub fn normalise_desk_label(label: &str) -> Result<String, String> {
-    let label = label.trim().to_ascii_uppercase();
-    if label.is_empty() || label.len() > MAX_LABEL_LEN {
-        return Err(format!(
-            "Desk label \"{label}\" must be 1 to {MAX_LABEL_LEN} characters"
-        ));
-    }
-    if !label
-        .bytes()
-        .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
-    {
-        return Err(format!(
-            "Desk label \"{label}\" may only contain letters A-Z and digits"
-        ));
-    }
-    Ok(label)
-}
 
 /// Centre of a grid cell as the 0..1 floorplan coordinates legacy views use.
 pub fn grid_to_xy(col: i32, row: i32, grid_rows: i32) -> (f64, f64) {
@@ -57,9 +36,12 @@ pub struct ExistingLayout {
     pub room_ids: HashSet<i32>,
     /// seat id -> room id
     pub seat_rooms: HashMap<i32, i32>,
+    /// seat id -> saved identifier (legacy labels may be kept unchanged)
+    pub seat_labels: HashMap<i32, String>,
 }
 
-/// Validate a submitted layout against what exists, normalising desk labels in place.
+/// Validate a submitted layout against what exists, normalising desk
+/// identifiers and descriptions in place.
 pub fn validate_layout(
     submit: &mut RoomLayoutSubmit,
     existing: &ExistingLayout,
@@ -101,9 +83,16 @@ pub fn validate_layout(
         let mut labels = HashSet::new();
 
         for desk in &mut room.seats {
-            desk.label =
-                normalise_desk_label(&desk.label).map_err(|e| format!("{room_label}: {e}"))?;
-            if !labels.insert(desk.label.clone()) {
+            let saved = desk
+                .id
+                .and_then(|id| existing.seat_labels.get(&id))
+                .map(String::as_str);
+            desk.label = normalise_seat_identifier_for(&desk.label, saved)
+                .map_err(|e| format!("{room_label}: {e}"))?;
+            desk.description = normalise_seat_description(desk.description.as_deref())
+                .map_err(|e| format!("{room_label}: desk {}: {e}", desk.label))?;
+            // Identifiers are unique per room regardless of case.
+            if !labels.insert(desk.label.to_lowercase()) {
                 return Err(format!(
                     "{room_label}: another desk already uses label {}",
                     desk.label
@@ -216,6 +205,10 @@ pub async fn save_layout(
     let existing = ExistingLayout {
         room_ids: current_rooms.iter().map(|r| r.id).collect(),
         seat_rooms: current_seats.iter().map(|s| (s.id, s.room_id)).collect(),
+        seat_labels: current_seats
+            .iter()
+            .map(|s| (s.id, s.label.clone()))
+            .collect(),
     };
     validate_layout(&mut submit, &existing).map_err(Error::BadInput)?;
 
@@ -446,6 +439,11 @@ mod tests {
         ExistingLayout {
             room_ids: HashSet::from([1, 2]),
             seat_rooms: HashMap::from([(10, 1), (11, 1), (20, 2)]),
+            seat_labels: HashMap::from([
+                (10, "A1".to_string()),
+                (11, "Window seat 12".to_string()),
+                (20, "C1".to_string()),
+            ]),
         }
     }
 
@@ -454,16 +452,6 @@ mod tests {
             release_reserved: false,
             rooms,
         }
-    }
-
-    #[test]
-    fn normalises_and_validates_labels() {
-        assert_eq!(normalise_desk_label(" a1 "), Ok("A1".to_string()));
-        assert_eq!(normalise_desk_label("zz99"), Ok("ZZ99".to_string()));
-        assert!(normalise_desk_label("").is_err());
-        assert!(normalise_desk_label("ABCDE").is_err());
-        assert!(normalise_desk_label("A-1").is_err());
-        assert!(normalise_desk_label("Ä1").is_err());
     }
 
     #[test]
@@ -477,12 +465,51 @@ mod tests {
         let mut layout = submit(vec![
             room(
                 Some(1),
-                vec![desk(Some(10), "a1", 2, 2), desk(None, "a2", 4, 2)],
+                vec![desk(Some(10), " a1 ", 2, 2), desk(None, "Desk-12", 4, 2)],
             ),
             room(None, vec![desk(None, "C1", 0, 0)]),
         ]);
+        layout.rooms[0].seats[0].description = Some("  Window desk  ".to_string());
+        layout.rooms[0].seats[1].description = Some("   ".to_string());
         assert_eq!(validate_layout(&mut layout, &existing()), Ok(()));
-        assert_eq!(layout.rooms[0].seats[0].label, "A1");
+        assert_eq!(layout.rooms[0].seats[0].label, "a1");
+        assert_eq!(layout.rooms[0].seats[1].label, "Desk-12");
+        assert_eq!(
+            layout.rooms[0].seats[0].description.as_deref(),
+            Some("Window desk")
+        );
+        assert_eq!(layout.rooms[0].seats[1].description, None);
+    }
+
+    #[test]
+    fn keeps_unchanged_legacy_labels_but_validates_new_ones() {
+        // Seat 11 was saved as "Window seat 12" before the identifier rules.
+        let mut kept = submit(vec![room(
+            Some(1),
+            vec![desk(Some(11), "Window seat 12", 3, 3)],
+        )]);
+        assert_eq!(validate_layout(&mut kept, &existing()), Ok(()));
+        assert_eq!(kept.rooms[0].seats[0].label, "Window seat 12");
+
+        let mut renamed = submit(vec![room(
+            Some(1),
+            vec![desk(Some(11), "Window seat 13", 3, 3)],
+        )]);
+        assert!(validate_layout(&mut renamed, &existing()).is_err());
+
+        // A new desk can't use a legacy-style label.
+        let mut fresh = submit(vec![room(
+            Some(1),
+            vec![desk(None, "Window seat 12", 3, 3)],
+        )]);
+        assert!(validate_layout(&mut fresh, &existing()).is_err());
+
+        let mut too_long = submit(vec![room(None, vec![desk(None, "ABCDEFGHI", 0, 0)])]);
+        assert!(validate_layout(&mut too_long, &existing()).is_err());
+
+        let mut long_text = submit(vec![room(None, vec![desk(None, "A1", 0, 0)])]);
+        long_text.rooms[0].seats[0].description = Some("x".repeat(121));
+        assert!(validate_layout(&mut long_text, &existing()).is_err());
     }
 
     #[test]

@@ -9,6 +9,7 @@ import {
   FloorPlanLegend,
   deskAriaLabel,
   deskSubLabel,
+  deskTitle,
   type FloorPlanDesk,
 } from "../components/SeatFloorPlan";
 import type {
@@ -86,13 +87,19 @@ const renderPlan = (props: Partial<Parameters<typeof SeatFloorPlan>[0]> = {}) =>
 describe("desk labels", () => {
   it("describes each state", () => {
     const [taken, free, selected, mine] = desks();
-    expect(deskAriaLabel(taken)).toBe("A1, taken by NoScope_Nia. Front row");
+    expect(deskAriaLabel(taken)).toBe("A1, Front row, taken by NoScope_Nia");
     expect(deskAriaLabel(free)).toBe("A2, free");
     expect(deskAriaLabel(selected)).toBe("A3, selected");
     expect(deskAriaLabel(mine)).toBe("A4, your seat");
     expect(
       deskAriaLabel({ ...free, occupants: [{ name: "A" }, { name: null }] }),
     ).toBe("A2, free, shared with A and No callsign yet at other times");
+  });
+
+  it("puts identifier, description and occupants in the tooltip", () => {
+    const [taken, free] = desks();
+    expect(deskTitle(taken)).toBe("A1 · Front row · NoScope_Nia");
+    expect(deskTitle(free)).toBe("A2");
   });
 
   it("picks the tile's second line", () => {
@@ -119,7 +126,7 @@ describe("SeatFloorPlan", () => {
     const group = screen.getByRole("group", { name: "Main Hall floor plan" });
     const buttons = within(group).getAllByRole("button");
     expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
-      "A1, taken by NoScope_Nia. Front row",
+      "A1, Front row, taken by NoScope_Nia",
       "A2, free",
       "A3, selected",
       "A4, your seat",
@@ -129,9 +136,36 @@ describe("SeatFloorPlan", () => {
     expect(within(group).getByText("Entrance")).toBeInTheDocument();
   });
 
+  it("keeps long legacy labels inside their square, full text in the title", () => {
+    const [, free] = desks();
+    renderPlan({
+      desks: [
+        {
+          ...free,
+          seat: {
+            ...free.seat,
+            label: "Window seat 12",
+            description: "By the window",
+          },
+        },
+      ],
+    });
+    const desk = screen.getByRole("button", {
+      name: "Window seat 12, By the window, free",
+    });
+    expect(desk).toHaveAttribute("title", "Window seat 12 · By the window");
+    const label = within(desk).getByText("Window seat 12");
+    expect(label).toHaveStyle({
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+    });
+    expect(desk).toHaveStyle({ overflow: "hidden", minWidth: "0" });
+  });
+
   it("disables taken desks and exposes the selection with aria-pressed", () => {
     renderPlan();
-    expect(screen.getByRole("button", { name: /A1, taken/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^A1, .*taken/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: "A2, free" })).toHaveAttribute(
       "aria-pressed",
       "false",
@@ -170,7 +204,7 @@ describe("SeatFloorPlan", () => {
   it("never selects a taken desk", async () => {
     const onDeskSelect = vi.fn();
     renderPlan({ onDeskSelect });
-    await userEvent.click(screen.getByRole("button", { name: /A1, taken/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^A1, .*taken/ }));
     expect(onDeskSelect).not.toHaveBeenCalled();
   });
 
@@ -200,7 +234,7 @@ describe("SeatFloorPlan", () => {
 
   it("backs every desk with an opaque fill so labels stay readable over the plan", () => {
     renderPlan({ onDeskSelect: undefined });
-    for (const name of [/A1, taken/, "A2, free", "A3, selected", /A4/]) {
+    for (const name of [/^A1, .*taken/, "A2, free", "A3, selected", /A4/]) {
       const desk = screen.getByRole("button", { name });
       const bg = getComputedStyle(desk).backgroundColor;
       // An opaque colour (not rgba(..., <1) / transparent).

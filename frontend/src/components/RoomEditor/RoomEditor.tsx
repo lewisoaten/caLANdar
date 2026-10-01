@@ -39,11 +39,14 @@ import {
   TOOL_LABELS,
   TOOL_SHORTCUTS,
   applyTool,
+  describeDesk,
   fromLayout,
   isDesk,
   isDuplicateLabel,
   isReserved,
+  moveItem,
   newRoom,
+  parseKey,
   removeCell,
   removedReservations,
   renameDesk,
@@ -284,7 +287,7 @@ const RoomEditor = () => {
   };
 
   const activate = (key: string) => {
-    if (!room || savingRef.current) return;
+    if (!room || savingRef.current || tool === "move") return;
     const out = applyTool(room, tool, key, sel);
     if (out.type === "select") {
       setSel(out.sel);
@@ -304,6 +307,21 @@ const RoomEditor = () => {
       setSel(out.key);
       setConfirm({ kind: "desk", key: out.key });
     }
+  };
+
+  /** Drag-and-drop or keyboard move of a desk / feature strip. */
+  const move = (from: string, to: { col: number; row: number }) => {
+    if (!room || savingRef.current) return;
+    const out = moveItem(room, from, to);
+    if (!out.ok) {
+      announce(out.announce);
+      return;
+    }
+    updateRoom(out.room);
+    if (isDesk(out.room.cells[out.key])) setSel(out.key);
+    else if (sel && !isDesk(out.room.cells[sel])) setSel(null);
+    setFocus(parseKey(out.key));
+    announce(out.announce);
   };
 
   const erase = (key: string) => {
@@ -971,8 +989,10 @@ const RoomEditor = () => {
               </Box>
               <Box id={kbdId} sx={srOnly}>
                 Use the arrow keys to move between squares and Enter or Space to
-                use the tool. Delete clears a square. Tool shortcuts: V select,
-                D desk, S screen, E entrance, X erase.
+                use the tool. Delete clears a square. To move a desk, screen or
+                entrance, press M on it, use the arrow keys to choose where it
+                goes, then Enter to drop it or Escape to cancel. Tool shortcuts:
+                V select, M move, D desk, S screen, E entrance, X erase.
               </Box>
               <EditorGrid
                 room={room}
@@ -983,6 +1003,8 @@ const RoomEditor = () => {
                 onActivate={activate}
                 onErase={erase}
                 onToolShortcut={(t) => pickTool(t, true)}
+                onMove={move}
+                onAnnounce={announce}
                 describedBy={`${hintId} ${kbdId}`}
                 background={(() => {
                   const src = backgroundSrc(room);
@@ -1027,6 +1049,9 @@ const RoomEditor = () => {
                 desk={selDesk}
                 duplicate={!!sel && isDuplicateLabel(room, sel)}
                 onRename={(v) => sel && updateRoom(renameDesk(room, sel, v))}
+                onDescribe={(v) =>
+                  sel && updateRoom(describeDesk(room, sel, v))
+                }
                 onRemove={removeSelected}
               />
             </Box>

@@ -24,10 +24,12 @@ import {
 } from "../hl";
 import {
   BACKGROUND_TYPES,
+  MAX_DESCRIPTION_LENGTH,
   MAX_LABEL_LENGTH,
   MAX_OPACITY,
   MAX_ROWS,
   MIN_OPACITY,
+  isValidIdentifier,
   minRows,
   reserverName,
   type BackgroundStyle,
@@ -452,23 +454,60 @@ export interface DeskPanelProps {
   desk: DeskCell | null;
   duplicate: boolean;
   onRename: (label: string) => void;
+  onDescribe: (description: string) => void;
   onRemove: () => void;
 }
+
+/** "3/8" under a field; turns pink at the limit. */
+function Counter({ id, n, max }: { id: string; n: number; max: number }) {
+  return (
+    <Box
+      component="span"
+      id={id}
+      sx={{
+        flex: "none",
+        fontFamily: fonts.mono,
+        fontSize: 11,
+        color: n >= max ? colors.pinkText : colors.textDim,
+      }}
+    >
+      {n}/{max}
+      <Box component="span" sx={srOnly}>
+        {" "}
+        characters
+      </Box>
+    </Box>
+  );
+}
+
+const helpRowSx = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: "12px",
+  fontSize: 12,
+  lineHeight: 1.45,
+  color: colors.textMuted,
+} as const;
 
 export function DeskPanel({
   desk,
   duplicate,
   onRename,
+  onDescribe,
   onRemove,
 }: DeskPanelProps) {
   const id = useId();
+  const legacy = !!desk?.label && !isValidIdentifier(desk.label);
   const described = [
     `${id}-help`,
+    `${id}-count`,
     duplicate ? `${id}-dup` : "",
     desk && !desk.label ? `${id}-empty` : "",
+    legacy ? `${id}-legacy` : "",
   ]
     .filter(Boolean)
     .join(" ");
+  const description = desk?.description ?? "";
   return (
     <Box component="section" aria-labelledby={`${id}-title`} sx={panelSx}>
       <Kicker component="h2" id={`${id}-title`}>
@@ -476,20 +515,21 @@ export function DeskPanel({
       </Kicker>
       {!desk ? (
         <Box sx={{ fontSize: 14, lineHeight: 1.5, color: colors.textMuted }}>
-          Use Select and tap a desk to rename it or remove it.
+          Use Select and tap a desk to rename it, describe it or remove it.
         </Box>
       ) : (
         <>
-          <Field label="Label" id={`${id}-label`}>
+          <Field label="Identifier" id={`${id}-label`}>
             <OutlinedInput
               id={`${id}-label`}
               value={desk.label}
               onChange={(e) => onRename(e.target.value)}
               error={duplicate || !desk.label}
               inputProps={{
-                maxLength: MAX_LABEL_LENGTH,
-                autoCapitalize: "characters",
+                // Legacy labels may be longer; they can still be shortened.
+                maxLength: Math.max(MAX_LABEL_LENGTH, desk.label.length),
                 spellCheck: false,
+                autoComplete: "off",
                 "aria-describedby": described,
                 "aria-invalid": duplicate || !desk.label,
               }}
@@ -499,20 +539,24 @@ export function DeskPanel({
                   fontFamily: fonts.mono,
                   fontSize: 18,
                   fontWeight: 700,
-                  textTransform: "uppercase",
                 },
               }}
             />
-            <Box
-              id={`${id}-help`}
-              sx={{ fontSize: 12, color: colors.textMuted }}
-            >
-              A–Z and 0–9, up to {MAX_LABEL_LENGTH} characters.
+            <Box sx={helpRowSx}>
+              <Box component="span" id={`${id}-help`}>
+                Shown on the desk. Letters, digits, - _ and ., up to{" "}
+                {MAX_LABEL_LENGTH} characters.
+              </Box>
+              <Counter
+                id={`${id}-count`}
+                n={desk.label.length}
+                max={MAX_LABEL_LENGTH}
+              />
             </Box>
           </Field>
           {duplicate && (
             <Box id={`${id}-dup`} sx={{ fontSize: 13, color: colors.pinkText }}>
-              Another desk in this room already uses that label.
+              Another desk in this room already uses that identifier.
             </Box>
           )}
           {!desk.label && (
@@ -520,9 +564,43 @@ export function DeskPanel({
               id={`${id}-empty`}
               sx={{ fontSize: 13, color: colors.pinkText }}
             >
-              The desk needs a label.
+              The desk needs an identifier.
             </Box>
           )}
+          {legacy && (
+            <Box
+              id={`${id}-legacy`}
+              sx={{ fontSize: 13, lineHeight: 1.45, color: colors.amber }}
+            >
+              This older label is kept as it is. If you edit it, it must follow
+              the rules above; put longer text in the description.
+            </Box>
+          )}
+          <Field label="Description (optional)" id={`${id}-about`}>
+            <OutlinedInput
+              id={`${id}-about`}
+              value={description}
+              onChange={(e) => onDescribe(e.target.value)}
+              placeholder="e.g. Window desk next to the fridge"
+              multiline
+              minRows={2}
+              inputProps={{
+                maxLength: MAX_DESCRIPTION_LENGTH,
+                "aria-describedby": `${id}-about-help ${id}-about-count`,
+              }}
+              sx={{ ...inputSx, fontSize: 15, alignItems: "flex-start" }}
+            />
+            <Box sx={helpRowSx}>
+              <Box component="span" id={`${id}-about-help`}>
+                Shown to attendees when they pick a seat.
+              </Box>
+              <Counter
+                id={`${id}-about-count`}
+                n={description.length}
+                max={MAX_DESCRIPTION_LENGTH}
+              />
+            </Box>
+          </Field>
           {desk.reservedBy && (
             <Box
               sx={{
