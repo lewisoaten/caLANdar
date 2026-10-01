@@ -20,22 +20,33 @@ pub struct Filter {
     pub search: Option<String>,
 }
 
-pub async fn create(
+/// Upsert a whole library in one statement, rather than one round trip per
+/// game, so large libraries sync well inside the request timeout.
+pub async fn create_many(
     pool: &PgPool,
-    email: String,
-    appid: i64,
-    playtime_forever: i32,
+    email: &str,
+    games: &[(i64, i32)],
 ) -> Result<PgQueryResult, sqlx::Error> {
-    sqlx::query!(
-        r#"
+    // A repeated appid would make the upsert touch the same row twice.
+    let mut unique: std::collections::BTreeMap<i64, i32> = std::collections::BTreeMap::new();
+    for (appid, playtime) in games {
+        unique.insert(*appid, *playtime);
+    }
+    let appids: Vec<i64> = unique.keys().copied().collect();
+    let playtimes: Vec<i32> = unique.values().copied().collect();
+
+    sqlx::query(
+        r"
         INSERT INTO user_game (email, appid, playtime_forever, last_modified)
-        VALUES ($1, $2, $3, NOW())
-        ON CONFLICT (LOWER(email), appid) DO UPDATE SET playtime_forever = $3, last_modified = NOW()
-        "#,
-        email,
-        appid,
-        playtime_forever,
+        SELECT $1, appid, playtime_forever, NOW()
+        FROM UNNEST($2::bigint[], $3::int[]) AS g(appid, playtime_forever)
+        ON CONFLICT (LOWER(email), appid) DO UPDATE
+            SET playtime_forever = EXCLUDED.playtime_forever, last_modified = NOW()
+        ",
     )
+    .bind(email)
+    .bind(&appids)
+    .bind(&playtimes)
     .execute(pool)
     .await
 }
