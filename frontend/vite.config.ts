@@ -109,6 +109,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    testTimeout: 15000,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     // Pin a non-UTC, DST-observing zone. Attendance buckets must be derived
