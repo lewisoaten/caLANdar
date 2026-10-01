@@ -410,6 +410,28 @@ export default function EventGameSchedule() {
   }, [selectedKey, flushDraft]);
   React.useEffect(() => flushDraft, [flushDraft]);
 
+  /**
+   * Pin / Unpin / Remove with a stepper change still pending: Remove drops
+   * it (the session is going), Pin and Unpin save it first. A moved session
+   * is pinned by the save itself, so Pin then has nothing left to do.
+   */
+  const footerAction = async (
+    action: "pin" | "unpin" | "remove",
+    s: Session,
+  ) => {
+    const d = draftRef.current;
+    cancelDraftTimer();
+    if (d && d.key === s.key) {
+      setDraft(null);
+      if (action !== "remove" && (d.st !== s.st || d.dur !== s.dur)) {
+        await place(s, s.day, d.st, d.dur, "now runs");
+        if (action === "pin") return;
+      }
+    }
+    if (action === "pin") await pinInPlace(s);
+    else await deletePinned(s, action);
+  };
+
   const closeDetails = () => {
     flushDraft();
     setSelectedKey(null);
@@ -893,9 +915,9 @@ export default function EventGameSchedule() {
             eventEnd={event.timeEnd.toISOString()}
             onClose={closeDetails}
             isAdmin={isAdmin}
-            onPin={() => void pinInPlace(selected)}
-            onUnpin={() => void deletePinned(selected, "unpin")}
-            onRemove={() => void deletePinned(selected, "remove")}
+            onPin={() => void footerAction("pin", selected)}
+            onUnpin={() => void footerAction("unpin", selected)}
+            onRemove={() => void footerAction("remove", selected)}
             rank={ranks.get(selected.entry.gameId)?.rank ?? null}
             trophyRank={ranks.get(selected.entry.gameId)?.trophyRank ?? null}
             whenLabel={`${selectedClock?.short} ${selectedClock?.dateLabel} · ${fmtClock(

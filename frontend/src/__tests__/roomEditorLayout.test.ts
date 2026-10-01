@@ -152,6 +152,12 @@ describe("labels", () => {
       (describeDesk(r, "0,0", "x".repeat(200)).cells["0,0"] as DeskCell)
         .description,
     ).toHaveLength(MAX_DESCRIPTION_LENGTH);
+    // Counted in code points like the API, never cutting a surrogate pair.
+    const emoji = (
+      describeDesk(r, "0,0", "🎮".repeat(150)).cells["0,0"] as DeskCell
+    ).description as string;
+    expect(Array.from(emoji)).toHaveLength(MAX_DESCRIPTION_LENGTH);
+    expect(emoji.endsWith("🎮")).toBe(true);
     expect(describeDesk(r, "1,0", "nope")).toBe(r);
     // Trimmed, and blank becomes null, in the PUT body.
     const padded = describeDesk(r, "0,0", "  By the door  ");

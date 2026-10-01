@@ -623,6 +623,19 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
       act(() => vi.advanceTimersByTime(STEPPER_SAVE_DELAY_MS * 2));
       expect(patches()).toHaveLength(2);
     });
+
+    it("Remove with a pending change drops it and only deletes", async () => {
+      renderPage(true);
+      const dialog = await openDetails(/^Left 4 Dead 2, Friday 21:30/);
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "End 30 minutes later" }),
+      );
+      fireEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+      await waitFor(() =>
+        expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1),
+      );
+      expect(patches()).toHaveLength(0);
+    });
   });
 
   it("names the real day for sessions after midnight", async () => {

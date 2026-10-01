@@ -25,6 +25,7 @@ import {
 import {
   BACKGROUND_TYPES,
   MAX_DESCRIPTION_LENGTH,
+  codePointLength,
   MAX_LABEL_LENGTH,
   MAX_OPACITY,
   MAX_ROWS,
@@ -530,6 +531,9 @@ export function DeskPanel({
                 maxLength: Math.max(MAX_LABEL_LENGTH, desk.label.length),
                 spellCheck: false,
                 autoComplete: "off",
+                // Identifiers keep their case: no sentence-casing on phones.
+                autoCapitalize: "none",
+                autoCorrect: "off",
                 "aria-describedby": described,
                 "aria-invalid": duplicate || !desk.label,
               }}
@@ -585,7 +589,8 @@ export function DeskPanel({
               multiline
               minRows={2}
               inputProps={{
-                maxLength: MAX_DESCRIPTION_LENGTH,
+                // No maxLength: it counts UTF-16 units, the API counts code
+                // points. `describeDesk` clips by code point instead.
                 "aria-describedby": `${id}-about-help ${id}-about-count`,
               }}
               sx={{ ...inputSx, fontSize: 15, alignItems: "flex-start" }}
@@ -596,7 +601,7 @@ export function DeskPanel({
               </Box>
               <Counter
                 id={`${id}-about-count`}
-                n={description.length}
+                n={codePointLength(description)}
                 max={MAX_DESCRIPTION_LENGTH}
               />
             </Box>

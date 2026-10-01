@@ -93,6 +93,13 @@ export const NEW_ROOM_ROWS = 6;
 export const MAX_ROWS = 50;
 /** Seat identifier: the short code drawn on the desk tile. */
 export const MAX_LABEL_LENGTH = 8;
+/** Length in Unicode code points, as the API counts (`chars()`), not UTF-16 units. */
+export const codePointLength = (text: string) => Array.from(text).length;
+
+/** At most `max` code points of `text`, never cutting a surrogate pair. */
+export const clipCodePoints = (text: string, max: number) =>
+  Array.from(text).slice(0, max).join("");
+
 /** Optional free-text seat description, e.g. "Window desk next to the fridge". */
 export const MAX_DESCRIPTION_LENGTH = 120;
 export const DEFAULT_OPACITY = 60;
@@ -426,7 +433,7 @@ export const describeDesk = (room: EditorRoom, key: string, value: string) => {
   return withCells(room, (cells) => {
     cells[key] = {
       ...cell,
-      description: value.slice(0, MAX_DESCRIPTION_LENGTH),
+      description: clipCodePoints(value, MAX_DESCRIPTION_LENGTH),
     };
   });
 };

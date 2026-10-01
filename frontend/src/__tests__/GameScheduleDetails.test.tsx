@@ -216,4 +216,28 @@ describe("GameScheduleDetails", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close details" }));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it("leaves Enter alone on a step button when nothing is pending", () => {
+    const onCommit = vi.fn();
+    render(
+      <GameScheduleDetails
+        scheduleEntry={{ ...mockScheduleEntry, isPinned: true }}
+        onClose={vi.fn()}
+        isAdmin
+        onRemove={vi.fn()}
+        timing={{
+          days: [{ label: "FRI", active: true, onPick: vi.fn() }],
+          start: "19:00",
+          end: "20:00",
+          pending: false,
+          onCommit,
+          onEndLater: vi.fn(),
+        }}
+      />,
+    );
+    const later = screen.getByRole("button", { name: "End 30 minutes later" });
+    // Not intercepted: the browser's own Enter-activates-the-button applies.
+    expect(fireEvent.keyDown(later, { key: "Enter" })).toBe(true);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
 });

@@ -269,10 +269,11 @@ function Stepper({
   onLater?: () => void;
   onCommit?: () => void;
 }) {
-  // Enter saves what's pending instead of taking another step (Space and
-  // clicks still step).
+  // With a change pending, Enter saves it instead of taking another step
+  // (Space and clicks still step). Otherwise Enter activates the button as
+  // usual.
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key !== "Enter" || !onCommit) return;
+    if (e.key !== "Enter" || !onCommit || !pending) return;
     e.preventDefault();
     onCommit();
   };
@@ -568,8 +569,11 @@ export default function GameScheduleDetails({
           <Box
             // Focus leaving the timing controls saves pending steps.
             onBlur={(e: React.FocusEvent<HTMLElement>) => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node | null))
-                timing.onCommit?.();
+              const next = e.relatedTarget as HTMLElement | null;
+              // The footer's Pin / Unpin / Remove save (or drop) the pending
+              // change themselves; flushing here would disable them mid-click.
+              if (next?.closest?.("[data-schedule-footer]")) return;
+              if (!e.currentTarget.contains(next)) timing.onCommit?.();
             }}
           >
             <Section>
@@ -787,6 +791,7 @@ export default function GameScheduleDetails({
 
       {showFooter && (
         <Box
+          data-schedule-footer=""
           sx={{
             px: "22px",
             pt: 1.75,
