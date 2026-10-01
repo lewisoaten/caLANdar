@@ -6,7 +6,8 @@
 //! - every game appears on the schedule at most once: a game that already has a
 //!   pinned session is not suggested again, and each other game gets at most
 //!   [`MAX_SESSIONS_PER_GAME`] suggested session;
-//! - sessions keep a [`BUFFER_MINUTES`] gap from every other session (pinned too);
+//! - sessions keep a [`BUFFER_MINUTES`] gap from every other session (pinned too;
+//!   zero by default, so games run back to back);
 //! - nothing is in progress during the night: a session may end at exactly
 //!   [`NIGHT_START_HOUR`]:00 and may start at exactly [`DAY_START_HOUR`]:00
 //!   **local wall-clock time** (in [`SchedulerInput::tz`]) but never overlaps
@@ -31,8 +32,9 @@ pub const MIN_OWNERS: usize = 2;
 /// on the schedule at most once, so a pinned game is never suggested again and
 /// no game is suggested twice.
 pub const MAX_SESSIONS_PER_GAME: usize = 1;
-/// Minimum gap between any two sessions, in minutes.
-pub const BUFFER_MINUTES: i64 = 30;
+/// Minimum gap between any two sessions, in minutes. Zero: games may run back
+/// to back (raise it to leave a breather for swapping games).
+pub const BUFFER_MINUTES: i64 = 0;
 /// Granularity of candidate start times, in minutes (aligned to local :00/:30).
 pub const SLOT_STEP_MINUTES: i64 = 30;
 
@@ -632,7 +634,7 @@ mod tests {
         // Game 3: 2 votes (should be scheduled - second priority)
 
         let event_start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap(); // 10am
-                                                                                 // 4.5 hours: two 2h games plus the 30-min buffer between them
+                                                                                 // 4.5 hours: two 2h games with no gap between them
         let event_end = Utc.with_ymd_and_hms(2024, 11, 24, 14, 30, 0).unwrap();
 
         // Game with lowest votes (1 vote) - should NOT be scheduled
@@ -699,7 +701,7 @@ mod tests {
 
         let output = schedule_games(&input);
 
-        // Should only schedule 2 games (4.5 hours available / 2 hours per game + buffer)
+        // Should only schedule 2 games (4.5 hours available / 2 hours per game)
         assert_eq!(
             output.suggested_schedules.len(),
             2,
@@ -815,11 +817,11 @@ mod tests {
             .find(|s| s.game_id == 2)
             .expect("Game 2 should be scheduled");
 
-        // Verify the game keeps the buffer after the pinned slot (starts at or after 11:30)
-        let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 11, 30, 0).unwrap();
+        // Verify the game follows the pinned slot (starts at or after 11:00)
+        let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 11, 0, 0).unwrap();
         assert!(
             game_schedule.start_time >= pinned_end,
-            "Scheduled game should not overlap with pinned slot + buffer. Expected start >= 11:30, got {}",
+            "Scheduled game should not overlap with the pinned slot. Expected start >= 11:00, got {}",
             game_schedule.start_time
         );
 
@@ -937,12 +939,12 @@ mod tests {
             + Duration::minutes(i64::from(game_1_schedule.duration_minutes));
         assert_eq!(game_1_end.hour(), 23, "Game 1 should end at 11pm (23:00)");
 
-        // Game 3 cannot follow at 23:00: the 30-min buffer pushes it to 23:30,
-        // which would run past 01:00, so it waits for the morning window.
+        // Game 3 follows straight on at 23:00 and ends exactly at 01:00, the
+        // moment the pinned slot starts.
         assert_eq!(
             game_3_schedule.start_time,
-            Utc.with_ymd_and_hms(2024, 11, 25, 10, 0, 0).unwrap(),
-            "Game 3 should start at 10:00 the next morning"
+            Utc.with_ymd_and_hms(2024, 11, 24, 23, 0, 0).unwrap(),
+            "Game 3 should start at 23:00, right after Game 1"
         );
         let game_3_end = end_of(game_3_schedule);
 
@@ -950,7 +952,8 @@ mod tests {
         let pinned_start = Utc.with_ymd_and_hms(2024, 11, 25, 1, 0, 0).unwrap();
         let pinned_end = Utc.with_ymd_and_hms(2024, 11, 25, 4, 0, 0).unwrap();
         assert!(game_1_end <= pinned_start);
-        assert!(game_3_schedule.start_time >= pinned_end);
+        assert!(game_3_end <= pinned_start);
+        assert!(pinned_end > pinned_start);
         assert!(game_3_end <= event_end);
         assert_buffered(&output.suggested_schedules);
 
@@ -1077,10 +1080,10 @@ mod tests {
     }
 
     #[test]
-    fn test_buffer_between_back_to_back_sessions() {
+    fn test_sessions_run_back_to_back() {
         let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
         let end = Utc.with_ymd_and_hms(2024, 11, 24, 14, 0, 0).unwrap();
-        // 4 hours would fit two 2h games back to back, but not with the buffer
+        // There is no gap between sessions: 4 hours fits two 2h games back to back
         let output = schedule_games(&input_for(
             vec![game(1, 2, &["a"], 2), game(2, 1, &["a"], 2)],
             all_day_voters(&["a"]),
@@ -1088,8 +1091,13 @@ mod tests {
             end,
             vec![],
         ));
-        assert_eq!(output.suggested_schedules.len(), 1);
+        assert_eq!(output.suggested_schedules.len(), 2);
         assert_eq!(output.suggested_schedules[0].game_id, 1);
+        assert_eq!(output.suggested_schedules[1].game_id, 2);
+        assert_eq!(
+            end_of(&output.suggested_schedules[0]),
+            output.suggested_schedules[1].start_time
+        );
     }
 
     #[test]
@@ -1209,8 +1217,8 @@ mod tests {
         let starts: Vec<&str> = spans.iter().map(|(s, _)| s.as_str()).collect();
         assert!(starts.contains(&"Fri 18:00"), "{spans:?}");
         assert!(
-            starts.contains(&"Fri 23:00"),
-            "Fri runs until 01:00: {spans:?}"
+            starts.contains(&"Fri 22:00"),
+            "Fri runs on until the window closes: {spans:?}"
         );
         assert!(
             starts.contains(&"Sat 10:00"),
