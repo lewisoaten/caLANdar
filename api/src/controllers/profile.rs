@@ -287,6 +287,7 @@ pub async fn me(pool: &PgPool, email: String) -> Result<Me, Error> {
 pub async fn update_user_games(
     pool: &PgPool,
     email: String,
+    admin_email: Option<String>,
     steam_api_key: &String,
 ) -> Result<Profile, Error> {
     let profile = get(
@@ -322,7 +323,7 @@ pub async fn update_user_games(
     });
     crate::util::log_audit(
         pool,
-        Some(email.clone()),
+        admin_email.or_else(|| Some(email.clone())),
         "profile.games_refresh".to_string(),
         "profile".to_string(),
         Some(email.clone()),
