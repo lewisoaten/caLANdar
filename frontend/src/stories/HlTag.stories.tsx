@@ -38,7 +38,7 @@ export const AllTones: Story = {
           EVT-001
         </Tag>
         <Tag tone="amber" icon={<BoltSharp />}>
-          Off-window
+          Pinned
         </Tag>
         <Tag tone="lime" size="sm">
           Steam
