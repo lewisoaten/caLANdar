@@ -282,22 +282,16 @@ function floorColour(y: number) {
   return FLOOR_STOPS[FLOOR_STOPS.length - 1][1];
 }
 
-/** Layout of the one moving layer: the cross lines of the grid, in 3D. */
+/**
+ * Layout of the grid floor: the box the art can show it in, the plane element
+ * the cross lines are defined on (plane (0, -cell) at its top-left, as the old
+ * 3D layer), and the fade towards the horizon.
+ */
 export function gridLayer() {
   const planeLeft = RIG.width / 2 - RIG.planeWidth / 2;
   const planeTop = RIG.horizon + RIG.eye - RIG.planeFar;
   const top = RIG.horizon;
   const height = planeYOf(NEAR_DEPTH) + RIG.cell;
-  // Element-local coordinates (its top-left is plane (0, -cell)).
-  const po = {
-    x: RIG.width / 2 - planeLeft,
-    y: PERSPECTIVE_ORIGIN_Y - (planeTop - RIG.cell),
-  };
-  const oy = RIG.planeFar + RIG.cell;
-  const transform = (t: number) =>
-    `translate(${r1(po.x)}px, ${r1(po.y)}px) perspective(${RIG.perspective}px) ` +
-    `translate(0px, ${r1(oy - po.y)}px) rotateX(${RIG.tilt}deg) ` +
-    `translate(${-RIG.planeWidth / 2}px, ${-oy}px) translateY(${t}px)`;
   // Fade towards the horizon: the floor colour painted over the lines at
   // 1 - alpha. Same result as masking them, without a mask on (or above) the
   // moving layer.
@@ -324,21 +318,139 @@ export function gridLayer() {
       width: RIG.planeWidth,
       height,
     },
-    transform,
     fade,
     clip: GRID_X,
   };
 }
 
-/** One 2600 x 120 tile of the moving cross lines, faded sideways. */
-export function gridTile(violet: string): string {
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${RIG.planeWidth}" height="${RIG.cell}">` +
-    `<linearGradient id="g"><stop offset="0.003" stop-color="${violet}" stop-opacity="0"/>` +
-    `<stop offset="0.23" stop-color="${violet}"/><stop offset="0.77" stop-color="${violet}"/>` +
-    `<stop offset="0.997" stop-color="${violet}" stop-opacity="0"/></linearGradient>` +
-    `<rect y="${RIG.cell - 3}" width="100%" height="3" fill="url(#g)" fill-opacity="0.75"/></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+// --- Moving cross lines -----------------------------------------------------
+//
+// The cross lines used to be a repeating background on a 2600 x 3979 element
+// tilted in CSS 3D. Chrome rasterises a layer with a
+// perspective transform in its own (plane) space at full device scale and
+// treats every tile as visible: ~1450 tiles / ~370 MB of tile memory at DPR 3,
+// almost all of it for the far floor, which is squashed into a few dozen
+// pixels on screen. Phones cannot keep that resident, so every scroll evicted
+// and re-rastered the art (and its neighbours): the mobile flicker.
+//
+// Now the lines are pre-projected 2D paths on a screen-sized element, and the
+// scroll is the floor homography conjugated around a plane translation:
+// `G . translateY(t) . G^-1` (G: plane -> screen). It moves every line exactly
+// as the 3D plane did, interpolates exactly (only the translateY argument
+// changes between keyframes), still runs on the compositor, and the layer
+// stays the size of what is on screen.
+
+/** Row-major 4x4 / 3x3 helpers (just enough for the floor homography). */
+type M = number[][];
+const mul = (a: M, b: M): M =>
+  a.map((row) =>
+    b[0].map((_, j) => row.reduce((s, v, k) => s + v * b[k][j], 0)),
+  );
+const t4 = (x: number, y: number): M => [
+  [1, 0, 0, x],
+  [0, 1, 0, y],
+  [0, 0, 1, 0],
+  [0, 0, 0, 1],
+];
+function invert3(m: M): M {
+  const [[a, b, c], [d, e, f], [g, h, i]] = m;
+  const A = e * i - f * h;
+  const B = -(d * i - f * g);
+  const C = d * h - e * g;
+  const det = a * A + b * B + c * C;
+  return [
+    [A, -(b * i - c * h), b * f - c * e],
+    [B, a * i - c * g, -(a * f - c * d)],
+    [C, -(a * h - b * g), a * e - b * d],
+  ].map((row) => row.map((v) => v / det));
+}
+/** Apply a 3x3 homography to a point. */
+export function applyHomography(h: M, [x, y]: Pt): Pt {
+  const w = h[2][0] * x + h[2][1] * y + h[2][2];
+  return [
+    (h[0][0] * x + h[0][1] * y + h[0][2]) / w,
+    (h[1][0] * x + h[1][1] * y + h[1][2]) / w,
+  ];
+}
+const num = (n: number) => String(Number(n.toPrecision(10)));
+/** A plane homography as a CSS matrix3d (z passes through untouched). */
+const matrix3d = (h: M) =>
+  `matrix3d(${[
+    [h[0][0], h[1][0], 0, h[2][0]],
+    [h[0][1], h[1][1], 0, h[2][1]],
+    [0, 0, 1, 0],
+    [h[0][2], h[1][2], 0, h[2][2]],
+  ]
+    .flat()
+    .map(num)
+    .join(",")})`;
+
+/** Moving lines start just above the plane's far edge (rig y ~412). */
+const MOVE_TOP = 40;
+
+/**
+ * The moving cross lines, pre-projected: the element box (inside the grid
+ * box), the line paths in its local coordinates, and the transform that
+ * scrolls the floor by `t` plane px.
+ */
+export function floorMotion() {
+  const g = gridLayer();
+  const tilt = (RIG.tilt * Math.PI) / 180;
+  const [c, s] = [Math.cos(tilt), Math.sin(tilt)];
+  const planeTop = RIG.horizon + RIG.eye - RIG.planeFar;
+  const poY = PERSPECTIVE_ORIGIN_Y - (planeTop - RIG.cell);
+  const oy = RIG.planeFar + RIG.cell;
+  // The old 3D chain (transform-origin 0 0), plane element -> grid box.
+  const chain = [
+    t4(g.el.left + RIG.planeWidth / 2, g.el.top - MOVE_TOP + poY),
+    [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, -1 / RIG.perspective, 1],
+    ],
+    t4(0, oy - poY),
+    [
+      [1, 0, 0, 0],
+      [0, c, -s, 0],
+      [0, s, c, 0],
+      [0, 0, 0, 1],
+    ],
+    t4(-RIG.planeWidth / 2, -oy),
+  ].reduce(mul);
+  // Restricted to the plane (z = 0) and dropping screen z: a 3x3 homography.
+  const pick = [0, 1, 3];
+  const raw = pick.map((r) => pick.map((k) => chain[r][k]));
+  const G = raw.map((row) => row.map((v) => v / raw[2][2]));
+  const Ginv = invert3(G);
+  const box = {
+    left: 0,
+    top: MOVE_TOP,
+    width: g.box.width,
+    height: g.box.height - MOVE_TOP,
+  };
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const lines: string[] = [];
+  for (let j = 1; j * RIG.cell <= g.el.height; j++) {
+    const [y0, y1] = [j * RIG.cell - 3, j * RIG.cell];
+    const q = (
+      [
+        [0, y0],
+        [RIG.planeWidth, y0],
+        [RIG.planeWidth, y1],
+        [0, y1],
+      ] as Pt[]
+    ).map((p) => applyHomography(G, p));
+    lines.push(`M${q.map(([x, y]) => `${r2(x)} ${r2(y)}`).join("L")}Z`);
+  }
+  return {
+    box,
+    lines,
+    /** Plane element px -> moving element px. */
+    homography: G,
+    transform: (t: number) =>
+      `${matrix3d(G)} translateY(${t}px) ${matrix3d(Ginv)}`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -801,8 +913,8 @@ export function packetMotion(scene: AuthScene, p: ArtPalette) {
 /** The fixed animations, by name (all compositor-only). */
 export const ART_KEYFRAMES = {
   gridScroll: [
-    { offset: 0, transform: gridLayer().transform(0) },
-    { offset: 1, transform: gridLayer().transform(RIG.cell) },
+    { offset: 0, transform: floorMotion().transform(0) },
+    { offset: 1, transform: floorMotion().transform(RIG.cell) },
   ],
   pulse: [
     { offset: 0, transform: "scale(0.5)", opacity: 0.95 },

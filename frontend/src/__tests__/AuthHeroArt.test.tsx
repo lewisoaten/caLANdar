@@ -6,16 +6,21 @@ import {
   RIG,
   generateAuthScene,
   mulberry32,
+  projectFloorPoint,
   projectPlanPoint,
 } from "../components/auth/authArtModel";
 import {
   ART_KEYFRAMES,
   animatedProperties,
+  applyHomography,
   chooseArtMode,
+  floorMotion,
+  gridLayer,
   motionPlan,
   packetMotion,
   twinkleStars,
 } from "../components/auth/authArtGeometry";
+import { watchScrolling } from "../components/auth/scrollPause";
 import SignIn from "../components/SignIn";
 import VerifyEmail from "../components/VerifyEmail";
 import { UserProvider } from "../UserProvider";
@@ -42,13 +47,14 @@ const contrast = (a: number[], b: number[]) => {
 };
 
 /** matchMedia stub: which media features match. */
-const mockMedia = ({ reduce = false, narrow = false } = {}) => {
+const mockMedia = ({ reduce = false, narrow = false, coarse = false } = {}) => {
   vi.stubGlobal(
     "matchMedia",
     vi.fn((query: string) => ({
       matches:
         (reduce && query.includes("prefers-reduced-motion: reduce")) ||
-        (narrow && query.includes("max-width")),
+        (narrow && query.includes("max-width")) ||
+        (coarse && query.includes("pointer: coarse")),
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -66,6 +72,7 @@ interface FakeAnimation {
   el: Element;
   frames: Keyframe[];
   timing: KeyframeAnimationOptions;
+  playState: AnimationPlayState;
   pause: ReturnType<typeof vi.fn>;
   play: ReturnType<typeof vi.fn>;
   cancel: ReturnType<typeof vi.fn>;
@@ -78,12 +85,17 @@ beforeEach(() => {
     frames: Keyframe[],
     timing: KeyframeAnimationOptions,
   ) {
-    const a = {
+    const a: FakeAnimation = {
       el: this,
       frames,
       timing,
-      pause: vi.fn(),
-      play: vi.fn(),
+      playState: "running",
+      pause: vi.fn(() => {
+        a.playState = "paused";
+      }),
+      play: vi.fn(() => {
+        a.playState = "running";
+      }),
       cancel: vi.fn(),
     };
     animations.push(a);
@@ -204,6 +216,101 @@ describe("authArtGeometry", () => {
     expect(chooseArtMode("auto", { ...wide, reducedMotion: true })).toBe(
       "still",
     );
+  });
+});
+
+describe("moving grid floor", () => {
+  const floor = floorMotion();
+  const grid = gridLayer();
+
+  test("pre-projects the cross lines exactly where the 3D floor put them", () => {
+    // Plane element px (x, y) is floor point (x - width/2, depth 3720 - y).
+    for (const y of [120, 1200, 2400, 3600, 3720, 3900]) {
+      for (const x of [0, 700, 1300, 2600]) {
+        const [sx, sy] = applyHomography(floor.homography, [x, y]);
+        const want = projectFloorPoint(
+          x - RIG.planeWidth / 2,
+          RIG.planeFar + RIG.cell - y,
+        );
+        expect(sx + grid.box.left + floor.box.left).toBeCloseTo(want.x, 6);
+        expect(sy + grid.box.top + floor.box.top).toBeCloseTo(want.y, 6);
+      }
+    }
+    // One path per cross line, nearer ones lower on screen.
+    expect(floor.lines).toHaveLength(Math.floor(grid.el.height / RIG.cell));
+    const ys = floor.lines.map((d) => Number(d.split(/[ML Z]+/)[2]));
+    expect([...ys].sort((a, b) => a - b)).toEqual(ys);
+  });
+
+  test("stays a screen-sized 2D layer inside the grid box", () => {
+    expect(floor.box.left).toBeGreaterThanOrEqual(0);
+    expect(floor.box.top).toBeGreaterThan(0);
+    expect(floor.box.left + floor.box.width).toBeLessThanOrEqual(
+      grid.box.width,
+    );
+    expect(floor.box.top + floor.box.height).toBeLessThanOrEqual(
+      grid.box.height,
+    );
+    // The old tilted plane was 2600 x 3979 px; this is under a quarter of it.
+    expect(floor.box.width * floor.box.height).toBeLessThan(
+      (grid.el.width * grid.el.height) / 4,
+    );
+    // Every line starts below the top of the box (nothing clipped away).
+    for (const d of floor.lines)
+      expect(Number(d.split(/[ML Z]+/)[2])).toBeGreaterThan(0);
+  });
+
+  test("scrolls by one cell with keyframes that differ only in the translation", () => {
+    const [from, to] = ART_KEYFRAMES.gridScroll.map((k) => k.transform);
+    expect(from).toBe(floor.transform(0));
+    expect(to).toBe(floor.transform(RIG.cell));
+    expect(from.replace("translateY(0px)", `translateY(${RIG.cell}px)`)).toBe(
+      to,
+    );
+    expect(from).not.toMatch(/perspective|rotate/);
+  });
+});
+
+describe("watchScrolling", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  test("reports a scroll once, then settles 200 ms after the last event", () => {
+    const target = new EventTarget();
+    const onChange = vi.fn();
+    const stop = watchScrolling(target, onChange);
+    target.dispatchEvent(new Event("scroll"));
+    expect(onChange.mock.calls).toEqual([[true]]);
+    vi.advanceTimersByTime(150);
+    target.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(150);
+    target.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(199);
+    expect(onChange.mock.calls).toEqual([[true]]);
+    vi.advanceTimersByTime(1);
+    expect(onChange.mock.calls).toEqual([[true], [false]]);
+    // A new gesture starts a new cycle.
+    target.dispatchEvent(new Event("scroll"));
+    expect(onChange.mock.calls).toEqual([[true], [false], [true]]);
+    stop();
+  });
+
+  test("listens passively and stops cleanly", () => {
+    const target = new EventTarget();
+    const add = vi.spyOn(target, "addEventListener");
+    const onChange = vi.fn();
+    const stop = watchScrolling(target, onChange, 100);
+    expect(add).toHaveBeenCalledWith(
+      "scroll",
+      expect.any(Function),
+      expect.objectContaining({ passive: true, capture: true }),
+    );
+    target.dispatchEvent(new Event("scroll"));
+    stop();
+    vi.advanceTimersByTime(500);
+    target.dispatchEvent(new Event("scroll"));
+    // No pending settle after cleanup, and no further events.
+    expect(onChange.mock.calls).toEqual([[true]]);
   });
 });
 
@@ -350,6 +457,71 @@ describe("AuthHeroArt", () => {
     for (const a of animations) expect(a.pause).toHaveBeenCalled();
     report(true);
     expect(art).toHaveAttribute("data-paused", "false");
+  });
+
+  test("holds still while a touch device scrolls, then resumes in place", () => {
+    vi.useFakeTimers();
+    try {
+      mockMedia({ narrow: true, coarse: true });
+      render(<AuthHeroArt mode="lite" />);
+      expect(animations).toHaveLength(2);
+      act(() => {
+        document.dispatchEvent(new Event("scroll"));
+      });
+      for (const a of animations) expect(a.playState).toBe("paused");
+      act(() => {
+        vi.advanceTimersByTime(120);
+        document.dispatchEvent(new Event("scroll"));
+        vi.advanceTimersByTime(199);
+      });
+      for (const a of animations) expect(a.playState).toBe("paused");
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      for (const a of animations) {
+        expect(a.playState).toBe("running");
+        // Paused and resumed, never restarted.
+        expect(a.cancel).not.toHaveBeenCalled();
+      }
+      expect(animations).toHaveLength(2);
+      // The layer hints stay put (no re-raster) and nothing re-renders.
+      expect(screen.getByTestId("auth-hero-art")).toHaveAttribute(
+        "data-paused",
+        "false",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("keeps animating through scrolls with a mouse", () => {
+    mockMedia();
+    render(<AuthHeroArt mode="full" />);
+    act(() => {
+      document.dispatchEvent(new Event("scroll"));
+    });
+    for (const a of animations) expect(a.pause).not.toHaveBeenCalled();
+  });
+
+  test("stays paused after a scroll while another reason still holds", () => {
+    vi.useFakeTimers();
+    try {
+      mockMedia({ coarse: true });
+      const report = mockIntersection();
+      render(<AuthHeroArt mode="lite" />);
+      act(() => {
+        document.dispatchEvent(new Event("scroll"));
+      });
+      report(false);
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      for (const a of animations) expect(a.playState).toBe("paused");
+      report(true);
+      for (const a of animations) expect(a.playState).toBe("running");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("pauses while typing on a small screen, not on a large one", () => {

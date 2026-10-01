@@ -4,13 +4,14 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { colors, fonts, tint } from "../hl/tokens";
 import { usePrefersReducedMotion } from "../hl/usePrefersReducedMotion";
 import { RIG, generateAuthScene } from "./authArtModel";
+import { isCoarsePointer, watchScrolling } from "./scrollPause";
 import {
   beaconGeometry,
   chooseArtMode,
+  floorMotion,
   gridLayer,
   gridLinePaths,
   glowBand,
-  gridTile,
   motionPlan,
   packetMotion,
   planGeometry,
@@ -31,15 +32,19 @@ import {
  *
  * Built for cheap frames (it is the first thing a phone sees):
  * - The scene is projected once in JS (`authArtGeometry`) into a few merged
- *   2D paths: no live 3D, no masks or blend modes on anything that moves, and
+ *   2D paths: no CSS 3D, no masks or blend modes on anything that moves, and
  *   the still frame rasterises once.
  * - Only `transform`/`opacity` animate (Web Animations, so they stay on the
  *   compositor; see `motionPlan`), each on its own small layer. 'full'
  *   (desktop) runs grid scroll, desk pulse, two packets, tag bob, beam flicker
  *   and five twinkling stars; 'lite' (phones, low-power devices, Save-Data)
  *   runs just the grid scroll and the pulse; 'still' runs nothing.
+ * - Every layer stays about screen-sized, including the moving grid (see
+ *   `floorMotion`: no perspective-transformed plane, whose tiles phones
+ *   cannot keep resident, so scrolling flickered).
  * - Everything pauses while the tab is hidden, the art is off-screen, or
- *   someone is typing on a small screen. prefers-reduced-motion always wins.
+ *   someone is typing on a small screen, and on touch devices while the page
+ *   scrolls. prefers-reduced-motion always wins.
  *
  * Seeded (a seed always draws the same scene). Purely decorative: aria-hidden,
  * nothing focusable, no images or requests.
@@ -62,6 +67,7 @@ const NOISE = `url("data:image/svg+xml,${encodeURIComponent(
 )}")`;
 
 const GRID = gridLayer();
+const FLOOR = floorMotion();
 const SUN = { cx: RIG.width / 2, cy: RIG.horizon - 12, r: 158 };
 /** Horizon glow bands (the old box-shadow: 18px 3px cyan, 60px 14px violet). */
 const GLOW_C = glowBand(0.55, 1 + 3, 18);
@@ -126,9 +132,13 @@ function usePaused(ref: React.RefObject<HTMLElement | null>, active: boolean) {
   React.useEffect(() => {
     const el = ref.current;
     if (!active || !el || typeof IntersectionObserver === "undefined") return;
-    const io = new IntersectionObserver((entries) => {
-      for (const e of entries) setOffscreen(!e.isIntersecting);
-    });
+    // A margin of slack: motion resumes just before the art scrolls back in.
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) setOffscreen(!e.isIntersecting);
+      },
+      { rootMargin: "64px 0px", threshold: 0 },
+    );
     io.observe(el);
     return () => io.disconnect();
   }, [active, ref]);
@@ -155,7 +165,10 @@ function usePaused(ref: React.RefObject<HTMLElement | null>, active: boolean) {
 
 /**
  * Runs the mode's Web Animations on the art's elements and pauses/resumes
- * them; cancels everything on unmount or when the mode changes.
+ * them in place (no restart, no re-render); cancels everything on unmount or
+ * when the mode changes. On touch devices they also hold still while the page
+ * is being scrolled (resuming 200 ms after the last scroll event), so the
+ * scroll gets the frames.
  */
 function useMotion(
   ref: React.RefObject<HTMLElement | null>,
@@ -163,6 +176,15 @@ function useMotion(
   paused: boolean,
 ) {
   const running = React.useRef<Animation[]>([]);
+  const gate = React.useRef({ paused, scrolling: false });
+  const apply = React.useCallback(() => {
+    const hold = gate.current.paused || gate.current.scrolling;
+    for (const a of running.current) {
+      if (hold) {
+        if (a.playState !== "paused") a.pause();
+      } else if (a.playState !== "running") a.play();
+    }
+  }, []);
   React.useEffect(() => {
     const root = ref.current;
     if (!root || plan.length === 0) return;
@@ -175,17 +197,29 @@ function useMotion(
         anims.push(el.animate(spec.frames as Keyframe[], spec.timing));
     }
     running.current = anims;
+    apply();
     return () => {
       anims.forEach((a) => a.cancel());
       running.current = [];
     };
-  }, [ref, plan]);
+  }, [ref, plan, apply]);
   React.useEffect(() => {
-    for (const a of running.current) {
-      if (paused) a.pause();
-      else a.play();
-    }
-  }, [paused, plan]);
+    gate.current.paused = paused;
+    apply();
+  }, [paused, apply]);
+  const animated = plan.length > 0;
+  React.useEffect(() => {
+    if (!animated || !isCoarsePointer()) return;
+    const g = gate.current;
+    const stop = watchScrolling(document, (scrolling) => {
+      g.scrolling = scrolling;
+      apply();
+    });
+    return () => {
+      stop();
+      g.scrolling = false;
+    };
+  }, [animated, apply]);
 }
 
 const Paths = ({ paths }: { paths: ArtPath[] }) => (
@@ -381,7 +415,37 @@ export function AuthHeroArt({
 
         {/* The one moving grid layer, under a static screen-space fade */}
         <div className="hlAuthArt-gridFade">
-          <div className="hlAuthArt-gridMove" />
+          <div className="hlAuthArt-gridMove">
+            <svg
+              className="hlAuthArt-gridLines"
+              width={FLOOR.box.width}
+              height={FLOOR.box.height}
+              viewBox={`0 0 ${FLOOR.box.width} ${FLOOR.box.height}`}
+              focusable="false"
+            >
+              <defs>
+                <linearGradient id="hlaCross">
+                  <stop
+                    offset="0.003"
+                    stopColor={colors.violet}
+                    stopOpacity="0"
+                  />
+                  <stop offset="0.23" stopColor={colors.violet} />
+                  <stop offset="0.77" stopColor={colors.violet} />
+                  <stop
+                    offset="0.997"
+                    stopColor={colors.violet}
+                    stopOpacity="0"
+                  />
+                </linearGradient>
+              </defs>
+              <g fill="url(#hlaCross)" fillOpacity={0.75}>
+                {FLOOR.lines.map((d, i) => (
+                  <path key={i} d={d} />
+                ))}
+              </g>
+            </svg>
+          </div>
         </div>
 
         {/* Static floor plan, haze and horizon glow */}
@@ -701,14 +765,23 @@ const rootSx = {
   },
   "& .hlAuthArt-gridMove": {
     position: "absolute",
-    left: GRID.el.left,
-    top: GRID.el.top,
-    width: GRID.el.width,
-    height: GRID.el.height,
+    left: FLOOR.box.left,
+    top: FLOOR.box.top,
+    width: FLOOR.box.width,
+    height: FLOOR.box.height,
     transformOrigin: "0 0",
-    transform: GRID.transform(0),
-    backgroundImage: gridTile(colors.violet),
-    backgroundRepeat: "repeat-y",
+  },
+  // Drawn at screen size (box x rig scale) and scaled back up into rig
+  // space, so the moving layer rasterises at screen density (layers with a
+  // perspective transform rasterise at full device scale in their own space).
+  "& .hlAuthArt-gridLines": {
+    left: 0,
+    top: 0,
+    overflow: "hidden",
+    width: `calc(${FLOOR.box.width}px * var(--s))`,
+    height: `calc(${FLOOR.box.height}px * var(--s))`,
+    transformOrigin: "0 0",
+    transform: "scale(calc(1 / var(--s)))",
   },
   "& .hlAuthArt-pulse": {
     position: "absolute",
@@ -808,12 +881,15 @@ const rootSx = {
     "& span.on": { backgroundColor: colors.lime },
   },
 
-  // Layer hints for the two always-moving layers, only while they move.
-  "&.hlAuthArt--lite:not(.hlAuthArt--paused), &.hlAuthArt--full:not(.hlAuthArt--paused)":
-    {
-      "& .hlAuthArt-gridMove": { willChange: "transform" },
-      "& .hlAuthArt-pulse": { willChange: "transform, opacity" },
+  // Layer hints for the two always-moving layers in the animated modes. Not
+  // tied to pausing: dropping and re-adding them would re-raster the layers
+  // (a visible flash) every time the art pauses or resumes.
+  "&.hlAuthArt--lite, &.hlAuthArt--full": {
+    "& .hlAuthArt-gridMove, & .hlAuthArt-gridLines": {
+      willChange: "transform",
     },
+    "& .hlAuthArt-pulse": { willChange: "transform, opacity" },
+  },
 } as const;
 
 export default AuthHeroArt;
