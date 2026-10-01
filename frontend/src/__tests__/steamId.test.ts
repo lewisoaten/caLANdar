@@ -30,6 +30,21 @@ describe("parseSteamIdInput", () => {
     ).toEqual({ kind: "vanity", vanity: "the_last-anomaly" });
   });
 
+  test("enforces the server's SteamID64 range", () => {
+    for (const bad of [
+      "00000000000000000",
+      "76561197960265727",
+      "76561202255233024",
+      "99999999999999999",
+      "https://steamcommunity.com/profiles/99999999999999999",
+    ]) {
+      expect(isValidSteamIdInput(bad)).toBe(false);
+    }
+    for (const ok of ["76561197960265728", "76561202255233023"]) {
+      expect(isValidSteamIdInput(ok)).toBe(true);
+    }
+  });
+
   test("rejects everything else", () => {
     for (const bad of [
       "",

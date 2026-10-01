@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT appid, COUNT(*) AS \"owners!\"\n        FROM user_game\n        WHERE appid = ANY($1)\n        AND LOWER(email) = ANY($2)\n        GROUP BY appid\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "appid",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "owners!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "9081dc560d3d1e53701f80fc9ecc21d4ab0cffbe7296e7c436dd288a7ad7f708"
+}

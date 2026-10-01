@@ -201,6 +201,12 @@ pub async fn schedule_suggested_games(
     .map(|i| i.email)
     .collect();
 
+    // Ownership among attending guests for every candidate game, in one query
+    let candidate_ids: Vec<i64> = games_to_schedule.iter().map(|g| g.game_id).collect();
+    let owner_counts = user_games::owner_counts(pool, &candidate_ids, &attending_emails)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to get game owners due to: {e}")))?;
+
     // Get voters and their availability for each game
     let mut voters_map: HashMap<String, Voter> = HashMap::new();
     let mut games: Vec<Game> = Vec::new();
@@ -230,25 +236,7 @@ pub async fn schedule_suggested_games(
             }
         }
 
-        let owner_count = if attending_emails.is_empty() {
-            0
-        } else {
-            user_games::filter(
-                pool,
-                user_games::Filter {
-                    appid: Some(game_record.game_id),
-                    emails: Some(attending_emails.clone()),
-                    count: 1,
-                    page: 0,
-                    search: None,
-                },
-            )
-            .await
-            .map_err(|e| Error::Controller(format!("Unable to get game owners due to: {e}")))?
-            .into_iter()
-            .map(|g| g.emails.map_or(0, |emails| emails.len()))
-            .sum()
-        };
+        let owner_count = owner_counts.get(&game_record.game_id).copied().unwrap_or(0);
 
         games.push(Game {
             id: game_record.game_id,

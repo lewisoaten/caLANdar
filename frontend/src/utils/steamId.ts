@@ -11,7 +11,15 @@ export type SteamIdInput =
 export const STEAM_ID_HELP =
   "Enter a 17-digit SteamID64 or a steamcommunity.com/id/… or /profiles/… link.";
 
-const isSteamId64 = (value: string) => /^\d{17}$/.test(value);
+// Same range the server accepts (`is_steam_id64`): individual accounts only.
+const STEAM_ID64_MIN = BigInt("76561197960265728");
+const STEAM_ID64_MAX = BigInt("76561202255233023");
+
+const isSteamId64 = (value: string) => {
+  if (!/^\d{17}$/.test(value)) return false;
+  const id = BigInt(value);
+  return id >= STEAM_ID64_MIN && id <= STEAM_ID64_MAX;
+};
 
 /** Parse a SteamID64 or a steamcommunity.com profile URL; `null` if invalid. */
 export function parseSteamIdInput(input: string): SteamIdInput | null {

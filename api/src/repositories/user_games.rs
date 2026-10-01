@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use sqlx::{postgres::PgQueryResult, PgPool};
+use std::collections::HashMap;
 
 pub struct UserGame {
     pub emails: Option<Vec<String>>,
@@ -214,4 +215,36 @@ pub async fn delete_for_email(pool: &PgPool, email: &str) -> Result<u64, sqlx::E
     .execute(pool)
     .await?
     .rows_affected())
+}
+
+/// How many of `emails` own each of `appids`, in one grouped query.
+/// Apps nobody owns are absent from the map.
+pub async fn owner_counts(
+    pool: &PgPool,
+    appids: &[i64],
+    emails: &[String],
+) -> Result<HashMap<i64, usize>, sqlx::Error> {
+    if appids.is_empty() || emails.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let emails: Vec<String> = emails.iter().map(|e| e.to_lowercase()).collect();
+
+    let rows = sqlx::query!(
+        r#"
+        SELECT appid, COUNT(*) AS "owners!"
+        FROM user_game
+        WHERE appid = ANY($1)
+        AND LOWER(email) = ANY($2)
+        GROUP BY appid
+        "#,
+        appids,
+        &emails,
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| (r.appid, usize::try_from(r.owners).unwrap_or(0)))
+        .collect())
 }
