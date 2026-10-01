@@ -1,5 +1,12 @@
 import React from "react";
-import { ReactNode, createContext, useState } from "react";
+import {
+  ReactNode,
+  createContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 
@@ -54,6 +61,15 @@ function UserProvider({ children }: Props) {
 
   const navigate = useNavigate();
   const location = useLocation();
+  // Keep the latest router values in refs so the dispatch functions below can
+  // keep a stable identity. Consumers list them in effect dependencies, and a
+  // new identity on every navigation would refetch their data each time.
+  const navigateRef = useRef(navigate);
+  const locationRef = useRef(location);
+  useEffect(() => {
+    navigateRef.current = navigate;
+    locationRef.current = location;
+  }, [navigate, location]);
 
   function signIn(email: string) {
     const user_details = getStoredAccount();
@@ -69,7 +85,7 @@ function UserProvider({ children }: Props) {
       },
       body: JSON.stringify({
         email: email,
-        redirect: location.state?.from.pathname,
+        redirect: locationRef.current.state?.from?.pathname,
       }),
     }).then((response) => {
       if (response.status === 200) {
@@ -113,7 +129,7 @@ function UserProvider({ children }: Props) {
         localStorage.setItem("user_context", JSON.stringify(accountDetails));
         setUserDetails(accountDetails);
         Sentry.setUser({ email: accountDetails.email });
-        navigate(response.redirect || "/events");
+        navigateRef.current(response.redirect || "/events");
         return accountDetails;
       });
   }
@@ -121,7 +137,7 @@ function UserProvider({ children }: Props) {
   function signOut() {
     localStorage.removeItem("user_context");
     setUserDetails(getStoredAccount());
-    navigate("/");
+    navigateRef.current("/");
   }
 
   function getStoredAccount() {
@@ -146,12 +162,13 @@ function UserProvider({ children }: Props) {
     return getStoredAccount().loggedIn;
   }
 
-  const dispatchContext = {
-    signIn,
-    verifyEmail,
-    signOut,
-    isSignedIn,
-  };
+  // The functions only read refs, localStorage and state setters, none of
+  // which change, so the context value is created once.
+  const dispatchContext = useMemo(
+    () => ({ signIn, verifyEmail, signOut, isSignedIn }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   return (
     <UserContext.Provider value={userDetails}>
