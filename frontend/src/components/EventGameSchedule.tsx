@@ -36,11 +36,8 @@ import {
   findClash,
   fmtClock,
   instantAt,
-  isOutsideWindow,
   outsideEventMessage,
   outsideEventReason,
-  rankMap,
-  rankSuggestions,
   sessionKey,
   snap,
   spanShort,
@@ -50,6 +47,7 @@ import {
   whenShort,
   withTimeZone,
 } from "./schedule/scheduleModel";
+import { rankByVotes, voteRankMap } from "../utils/voteRanking";
 
 const DESCRIPTION =
   "Suggested slots are auto-planned where most of the squad is around, one session per game. Pinned sessions are placed by the host.";
@@ -58,6 +56,20 @@ const RECALC_HINT =
   "Re-plan every suggested slot from current votes and attendance. Pinned sessions stay put.";
 
 type Variant = "default" | "success" | "error" | "warning" | "info";
+
+/**
+ * The drawer's +/− timing steppers update the shown time straight away and
+ * save once the admin pauses for this long (trailing debounce), so mashing a
+ * button sends one save and one toast.
+ */
+export const STEPPER_SAVE_DELAY_MS = 700;
+
+/** Unsaved stepper changes for one session. */
+interface TimingDraft {
+  key: string;
+  st: number;
+  dur: number;
+}
 
 export default function EventGameSchedule() {
   const { id } = useParams<{ id: string }>();
@@ -114,11 +126,12 @@ export default function EventGameSchedule() {
     () => visibleRange(days, allSessions),
     [days, allSessions],
   );
+  // Same ranking and trophies as the lobby (shared utils/voteRanking).
   const ranked = React.useMemo(
-    () => rankSuggestions(suggestions),
+    () => rankByVotes(suggestions).map((r) => r.suggestion),
     [suggestions],
   );
-  const ranks = React.useMemo(() => rankMap(suggestions), [suggestions]);
+  const ranks = React.useMemo(() => voteRankMap(suggestions), [suggestions]);
   const suggestionById = React.useMemo(
     () => new Map(suggestions.map((g) => [g.appid, g] as const)),
     [suggestions],
@@ -335,6 +348,72 @@ export default function EventGameSchedule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isAdmin, event, days, allSessions, send, say, refreshSchedule],
   );
+
+  // ---- debounced timing steppers ----------------------------------------
+  const [draft, setDraftState] = React.useState<TimingDraft | null>(null);
+  const draftRef = React.useRef<TimingDraft | null>(null);
+  const draftTimer = React.useRef<number | null>(null);
+  const placeRef = React.useRef(place);
+  const sessionsRef = React.useRef(allSessions);
+  React.useLayoutEffect(() => {
+    placeRef.current = place;
+    sessionsRef.current = allSessions;
+  });
+
+  const setDraft = (next: TimingDraft | null) => {
+    draftRef.current = next;
+    setDraftState(next);
+  };
+
+  const cancelDraftTimer = () => {
+    if (draftTimer.current != null) window.clearTimeout(draftTimer.current);
+    draftTimer.current = null;
+  };
+
+  /**
+   * Save the pending stepper change now (one PATCH/pin, one toast). Nothing
+   * is sent when the draft matches the saved time. A refusal (clash, outside
+   * the event) toasts once and the shown time falls back to the saved one.
+   * Only reads refs, so it is stable across renders.
+   */
+  const flushDraft = React.useCallback(function flush(): void {
+    if (draftTimer.current != null) window.clearTimeout(draftTimer.current);
+    draftTimer.current = null;
+    const d = draftRef.current;
+    if (!d) return;
+    if (busyRef.current) {
+      // Another save is in flight; try again once it has had time to land.
+      draftTimer.current = window.setTimeout(flush, STEPPER_SAVE_DELAY_MS);
+      return;
+    }
+    const s = sessionsRef.current.find((x) => x.key === d.key);
+    draftRef.current = null;
+    setDraftState(null);
+    if (!s || (d.st === s.st && d.dur === s.dur)) return;
+    void placeRef.current(s, s.day, d.st, d.dur, "now runs");
+  }, []);
+
+  /** Nudge the selected session's start/length; saves after a pause. */
+  const stepDraft = (s: Session, dSt: number, dDur: number) => {
+    const cur =
+      draftRef.current?.key === s.key
+        ? draftRef.current
+        : { key: s.key, st: s.st, dur: s.dur };
+    setDraft({ key: s.key, st: cur.st + dSt, dur: cur.dur + dDur });
+    cancelDraftTimer();
+    draftTimer.current = window.setTimeout(flushDraft, STEPPER_SAVE_DELAY_MS);
+  };
+
+  // Switching to another session, or leaving the page, saves what's pending.
+  React.useEffect(() => {
+    if (draftRef.current && draftRef.current.key !== selectedKey) flushDraft();
+  }, [selectedKey, flushDraft]);
+  React.useEffect(() => flushDraft, [flushDraft]);
+
+  const closeDetails = () => {
+    flushDraft();
+    setSelectedKey(null);
+  };
 
   const recreate = React.useCallback(
     async (entry: GameScheduleEntry) => {
@@ -576,73 +655,62 @@ export default function EventGameSchedule() {
     );
   }
 
+  // What the drawer shows: the unsaved stepper draft, else the saved time.
+  const shown =
+    selected && draft?.key === selected.key
+      ? { st: draft.st, dur: draft.dur }
+      : selected
+        ? { st: selected.st, dur: selected.dur }
+        : undefined;
+
   const timing: TimingControls | undefined =
-    selected && isAdmin
+    selected && shown && isAdmin
       ? {
           days: days.map((d) => ({
             label: d.short,
             active: d.index === selected.day,
-            onPick: () =>
-              void place(
-                selected,
-                d.index,
-                selected.st,
-                selected.dur,
-                "moved to",
-              ),
+            onPick: () => {
+              // A day pick saves straight away, carrying any pending times.
+              cancelDraftTimer();
+              setDraft(null);
+              void place(selected, d.index, shown.st, shown.dur, "moved to");
+            },
           })),
-          start: fmtClock(selected.st),
-          end: fmtClock(selected.st + selected.dur),
+          start: fmtClock(shown.st),
+          end: fmtClock(shown.st + shown.dur),
+          pending: draft?.key === selected.key,
+          onCommit: flushDraft,
           onStartEarlier:
-            selected.st - 0.5 >= LAN_DAY_CUTOFF_HOUR
-              ? () =>
-                  void place(
-                    selected,
-                    selected.day,
-                    selected.st - 0.5,
-                    selected.dur + 0.5,
-                    "now runs",
-                  )
+            shown.st - 0.5 >= LAN_DAY_CUTOFF_HOUR
+              ? () => stepDraft(selected, -0.5, 0.5)
               : undefined,
           onStartLater:
-            selected.dur > MIN_DURATION_HOURS
-              ? () =>
-                  void place(
-                    selected,
-                    selected.day,
-                    selected.st + 0.5,
-                    selected.dur - 0.5,
-                    "now runs",
-                  )
+            shown.dur > MIN_DURATION_HOURS
+              ? () => stepDraft(selected, 0.5, -0.5)
               : undefined,
           onEndEarlier:
-            selected.dur > MIN_DURATION_HOURS
-              ? () =>
-                  void place(
-                    selected,
-                    selected.day,
-                    selected.st,
-                    selected.dur - 0.5,
-                    "now runs",
-                  )
+            shown.dur > MIN_DURATION_HOURS
+              ? () => stepDraft(selected, 0, -0.5)
               : undefined,
           onEndLater:
-            selected.st + selected.dur < LAN_DAY_CUTOFF_HOUR + 24
-              ? () =>
-                  void place(
-                    selected,
-                    selected.day,
-                    selected.st,
-                    selected.dur + 0.5,
-                    "now runs",
-                  )
+            shown.st + shown.dur < LAN_DAY_CUTOFF_HOUR + 24
+              ? () => stepDraft(selected, 0, 0.5)
               : undefined,
         }
       : undefined;
 
   const selectedDay = selected ? days[selected.day] : undefined;
   const selectedClock =
-    selected && selectedDay ? clockDay(selectedDay, selected.st) : undefined;
+    shown && selectedDay ? clockDay(selectedDay, shown.st) : undefined;
+  // The entry as the drawer should show it while a stepper change is pending.
+  const shownEntry =
+    selected && shown && selectedDay && draft?.key === selected.key
+      ? {
+          ...selected.entry,
+          startTime: instantAt(selectedDay, shown.st),
+          durationMinutes: Math.round(shown.dur * 60),
+        }
+      : selected?.entry;
   const timelineOverlay =
     scheduleState === "loading" && !schedule.length ? (
       <Box role="status" aria-label="Loading schedule" sx={{ p: 2.5 }}>
@@ -780,7 +848,7 @@ export default function EventGameSchedule() {
       <Drawer
         anchor={isMobile ? "bottom" : "right"}
         open={!!selected}
-        onClose={() => setSelectedKey(null)}
+        onClose={closeDetails}
         slotProps={{
           paper: {
             role: "dialog",
@@ -816,30 +884,26 @@ export default function EventGameSchedule() {
             }}
           />
         )}
-        {selected && selectedDay && (
+        {selected && selectedDay && shown && shownEntry && (
           <GameScheduleDetails
-            scheduleEntry={selected.entry}
+            scheduleEntry={shownEntry}
             suggestion={suggestionById.get(selected.entry.gameId)}
             invitations={invitations}
             eventStart={event.timeBegin.toISOString()}
             eventEnd={event.timeEnd.toISOString()}
-            onClose={() => setSelectedKey(null)}
+            onClose={closeDetails}
             isAdmin={isAdmin}
             onPin={() => void pinInPlace(selected)}
             onUnpin={() => void deletePinned(selected, "unpin")}
             onRemove={() => void deletePinned(selected, "remove")}
-            rank={ranks.get(selected.entry.gameId) ?? null}
+            rank={ranks.get(selected.entry.gameId)?.rank ?? null}
+            trophyRank={ranks.get(selected.entry.gameId)?.trophyRank ?? null}
             whenLabel={`${selectedClock?.short} ${selectedClock?.dateLabel} · ${fmtClock(
-              selected.st,
-            )} → ${fmtClock(selected.st + selected.dur)}${
+              shown.st,
+            )} → ${fmtClock(shown.st + shown.dur)}${
               selectedClock?.nextDay ? ` (${selectedDay.short} NIGHT)` : ""
             }`}
             timing={timing}
-            outsideWindow={isOutsideWindow(
-              selectedDay,
-              selected.st,
-              selected.dur,
-            )}
             busy={busy}
             titleId="session-details-title"
           />

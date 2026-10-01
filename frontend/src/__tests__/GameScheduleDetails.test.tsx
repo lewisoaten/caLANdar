@@ -141,6 +141,7 @@ describe("GameScheduleDetails", () => {
         eventEnd="2026-11-15T12:00:00Z"
         onClose={() => {}}
         rank={1}
+        trophyRank={1}
         whenLabel="SAT 14 NOV · 14:00 → 15:00"
       />,
     );
@@ -159,10 +160,11 @@ describe("GameScheduleDetails", () => {
     expect(within(away).getByText("Bob")).toBeInTheDocument();
   });
 
-  it("wires the admin timing controls and the off-window note", () => {
+  it("wires the admin timing controls without any off-window note", () => {
     const onPick = vi.fn();
     const onStartEarlier = vi.fn();
     const onEndLater = vi.fn();
+    const onCommit = vi.fn();
     const onClose = vi.fn();
     render(
       <GameScheduleDetails
@@ -170,7 +172,6 @@ describe("GameScheduleDetails", () => {
         onClose={onClose}
         isAdmin
         onRemove={vi.fn()}
-        outsideWindow
         timing={{
           days: [
             { label: "FRI", active: true, onPick: vi.fn() },
@@ -178,6 +179,8 @@ describe("GameScheduleDetails", () => {
           ],
           start: "19:00",
           end: "20:00",
+          pending: true,
+          onCommit,
           onStartEarlier,
           onEndLater,
         }}
@@ -201,9 +204,15 @@ describe("GameScheduleDetails", () => {
     expect(
       screen.getByRole("button", { name: "Start 30 minutes later" }),
     ).toBeDisabled();
-    expect(
-      screen.getByText(/Outside the auto-schedule window/),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/auto-schedule window/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/OFF-WINDOW/)).not.toBeInTheDocument();
+    // Pending steps are flagged politely, and Enter saves instead of stepping.
+    expect(screen.getAllByText(", not saved yet")).toHaveLength(2);
+    const later = screen.getByRole("button", { name: "End 30 minutes later" });
+    onEndLater.mockClear();
+    fireEvent.keyDown(later, { key: "Enter" });
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onEndLater).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Close details" }));
     expect(onClose).toHaveBeenCalled();
   });

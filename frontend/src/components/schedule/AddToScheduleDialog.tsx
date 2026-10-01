@@ -12,7 +12,6 @@ import CloseSharp from "@mui/icons-material/CloseSharp";
 import EventAvailableSharp from "@mui/icons-material/EventAvailableSharp";
 import EventBusySharp from "@mui/icons-material/EventBusySharp";
 import HowToVoteSharp from "@mui/icons-material/HowToVoteSharp";
-import ScheduleSharp from "@mui/icons-material/ScheduleSharp";
 import SwapHorizSharp from "@mui/icons-material/SwapHorizSharp";
 import moment from "moment";
 import { GameSuggestion } from "../../types/game_suggestions";
@@ -38,12 +37,12 @@ import {
   firstFreeStart,
   fmtClock,
   fmtDur,
-  isOutsideWindow,
   outsideEventReason,
   spanLong,
   whenShort,
 } from "./scheduleModel";
 import GameCoverImage from "../GameCoverImage";
+import type { TrophyRank, VoteRank } from "../../utils/voteRanking";
 
 export interface AddRequest {
   gameId: number;
@@ -69,7 +68,8 @@ export interface AddToScheduleDialogProps {
   timeEnd: moment.MomentInput;
   /** Suggestions in vote order. */
   suggestions: GameSuggestion[];
-  ranks: Map<number, number>;
+  /** Vote rank per appid (shared utils/voteRanking). */
+  ranks: ReadonlyMap<number, VoteRank>;
   squadSize: number;
   eventTitle: string;
   /** Tapped slot on the timeline, if any. */
@@ -112,7 +112,7 @@ function GameRow({
   appid,
   name,
   meta,
-  rank,
+  trophy,
   badge,
   suggested,
   onPick,
@@ -120,7 +120,7 @@ function GameRow({
   appid: number;
   name: string;
   meta: string;
-  rank?: number;
+  trophy?: TrophyRank | null;
   badge?: React.ReactNode;
   suggested: boolean;
   onPick: () => void;
@@ -182,7 +182,7 @@ function GameRow({
             >
               {name}
             </Box>
-            {rank && rank <= 3 && <TrophyBadge rank={rank} />}
+            {trophy && <TrophyBadge rank={trophy} />}
           </Box>
           <Box component="span" sx={{ fontSize: 12, color: colors.textMuted }}>
             {meta}
@@ -203,7 +203,7 @@ export function TrophyBadge({
   rank,
   size = 20,
 }: {
-  rank: number;
+  rank: TrophyRank;
   size?: number;
 }) {
   const color =
@@ -383,7 +383,6 @@ export function AddToScheduleDialog({
     timeBegin,
     timeEnd,
   );
-  const offWindow = isOutsideWindow(days[day], effectiveSt, effectiveDur);
   const canConfirm = !!picked && !clash && !outsideEvent && !saving;
 
   const pick = (appid: number, name: string, isNew: boolean) => {
@@ -546,7 +545,7 @@ export function AddToScheduleDialog({
                       key={g.appid}
                       appid={g.appid}
                       name={g.name}
-                      rank={ranks.get(g.appid)}
+                      trophy={ranks.get(g.appid)?.trophyRank}
                       suggested
                       meta={`${g.votes} vote${g.votes === 1 ? "" : "s"} · ${g.gamerOwned.length} of ${squadSize} own it`}
                       badge={
@@ -837,11 +836,6 @@ export function AddToScheduleDialog({
             <ScheduleNote tone="pink" icon={<BlockSharp />}>
               Clashes with {clash.entry.gameName} ({fmtClock(clash.st)}–
               {fmtClock(clash.st + clash.dur)}). Pick another time.
-            </ScheduleNote>
-          ) : offWindow ? (
-            <ScheduleNote tone="amber" icon={<ScheduleSharp />}>
-              Outside the auto-schedule window. That&apos;s fine, it just means
-              fewer of the squad may be around.
             </ScheduleNote>
           ) : null}
           <Box

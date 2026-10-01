@@ -5,7 +5,6 @@ import {
   eventPhase,
   formatEventId,
   formatEventRange,
-  rankSuggestions,
   rsvpState,
   splitTitleAccent,
   squadSeatText,
@@ -77,46 +76,6 @@ describe("summariseSquad", () => {
     ]);
     expect(counts).toEqual({ yes: 2, maybe: 1, no: 1, none: 1 });
     expect(people[0].handle).toBe("zed"); // input untouched
-  });
-});
-
-describe("rankSuggestions", () => {
-  test("orders by votes and shares ranks on ties", () => {
-    const ranked = rankSuggestions([
-      { name: "Factorio", votes: 1 },
-      { name: "CS2", votes: 4 },
-      { name: "Deep Rock", votes: 4 },
-      { name: "AoE II", votes: 2 },
-      { name: "Rocket League", votes: 0 },
-    ]);
-    expect(
-      ranked.map((r) => [r.suggestion.name, r.rank, r.trophyRank]),
-    ).toEqual([
-      ["CS2", 1, 1],
-      ["Deep Rock", 1, 1],
-      ["AoE II", 3, 3],
-      ["Factorio", 4, null],
-      ["Rocket League", 5, null],
-    ]);
-  });
-
-  test("no trophy without votes", () => {
-    const ranked = rankSuggestions([
-      { name: "A", votes: 0 },
-      { name: "B", votes: 0 },
-    ]);
-    expect(ranked.map((r) => r.trophyRank)).toEqual([null, null]);
-    expect(ranked.map((r) => r.rank)).toEqual([1, 1]);
-  });
-
-  test("re-sorts when a vote changes", () => {
-    const games = [
-      { name: "A", votes: 2 },
-      { name: "B", votes: 1 },
-    ];
-    expect(rankSuggestions(games)[0].suggestion.name).toBe("A");
-    games[1] = { name: "B", votes: 3 };
-    expect(rankSuggestions(games)[0].suggestion.name).toBe("B");
   });
 });
 

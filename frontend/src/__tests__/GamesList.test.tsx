@@ -40,9 +40,17 @@ const createMockGame = (
 });
 
 const games: SquadGame[] = [
-  createMockGame(1, "Game 1", ["a", "b", "c"], { rank: 1, votes: 4 }),
+  createMockGame(1, "Game 1", ["a", "b", "c"], {
+    rank: 1,
+    votes: 4,
+    trophyRank: 1,
+  }),
   createMockGame(2, "Game 2", ["a", "b", "c"]),
-  createMockGame(3, "Game 3", ["a"], { rank: 4, votes: 1 }),
+  createMockGame(3, "Game 3", ["a"], {
+    rank: 4,
+    votes: 1,
+    trophyRank: null,
+  }),
 ];
 
 describe("GamesList helpers", () => {
@@ -52,7 +60,7 @@ describe("GamesList helpers", () => {
     expect(formatPlayedHours(98430)).toBe("1,641 H PLAYED");
   });
 
-  test("voteRanks ranks like the lobby: shared ranks, no trophy at 0 votes", () => {
+  test("voteRanks ranks like the lobby: dense shared ranks, no trophy at 0 votes", () => {
     const ranks = voteRanks([
       { appid: 10, name: "Beta", votes: 1 },
       { appid: 11, name: "Zed", votes: 5 },
@@ -60,10 +68,11 @@ describe("GamesList helpers", () => {
       { appid: 13, name: "Gamma", votes: null },
     ]);
     expect(ranks.get(11)).toEqual({ rank: 1, votes: 5, trophyRank: 1 });
-    // Ties share a rank (competition ranking).
+    // Ties share a rank and its trophy (dense ranking).
     expect(ranks.get(12)).toEqual({ rank: 2, votes: 1, trophyRank: 2 });
     expect(ranks.get(10)).toEqual({ rank: 2, votes: 1, trophyRank: 2 });
-    expect(ranks.get(13)).toEqual({ rank: 4, votes: 0, trophyRank: null });
+    // No vote: unranked, no trophy.
+    expect(ranks.get(13)).toEqual({ rank: null, votes: 0, trophyRank: null });
   });
 
   test("resultsAnnouncement", () => {
@@ -142,8 +151,15 @@ describe("GamesList helpers", () => {
   });
 
   test("withVotes attaches rank info", () => {
-    const out = withVotes(games, new Map([[2, { rank: 1, votes: 2 }]]));
-    expect(out.find((g) => g.appid === 2)?.vote).toEqual({ rank: 1, votes: 2 });
+    const out = withVotes(
+      games,
+      new Map([[2, { rank: 1, votes: 2, trophyRank: 1 as const }]]),
+    );
+    expect(out.find((g) => g.appid === 2)?.vote).toEqual({
+      rank: 1,
+      votes: 2,
+      trophyRank: 1,
+    });
     expect(out.find((g) => g.appid === 1)?.vote).toBeNull();
   });
 
@@ -256,7 +272,7 @@ describe("GamesList", () => {
       <GamesList
         games={[
           createMockGame(9, "Zero", ["a"], {
-            rank: 1,
+            rank: null,
             votes: 0,
             trophyRank: null,
           }),
@@ -265,7 +281,7 @@ describe("GamesList", () => {
       />,
     );
     const card = screen.getByRole("article", { name: "Zero" });
-    expect(within(card).getByText("IN THE VOTE · #1")).toBeInTheDocument();
+    expect(within(card).getByText("IN THE VOTE · —")).toBeInTheDocument();
     expect(within(card).queryByRole("img")).not.toBeInTheDocument();
   });
 

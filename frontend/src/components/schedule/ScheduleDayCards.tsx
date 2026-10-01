@@ -11,16 +11,17 @@ import {
   clockDay,
   fmtClock,
   fmtDur,
-  isOutsideWindow,
   spanLong,
 } from "./scheduleModel";
 import GameCoverImage from "../GameCoverImage";
+import type { TrophyRank, VoteRank } from "../../utils/voteRanking";
 
 export interface ScheduleDayCardsProps {
   days: LanDay[];
   sessions: Session[];
   suggestions: Map<number, GameSuggestion>;
-  ranks: Map<number, number>;
+  /** Vote rank per appid (shared utils/voteRanking). */
+  ranks: ReadonlyMap<number, VoteRank>;
   squadSize: number;
   onOpen: (key: string) => void;
 }
@@ -124,7 +125,7 @@ export function ScheduleDayCards({
                     session={s}
                     day={day}
                     suggestion={suggestions.get(s.entry.gameId)}
-                    rank={ranks.get(s.entry.gameId)}
+                    trophy={ranks.get(s.entry.gameId)?.trophyRank}
                     squadSize={squadSize}
                     onOpen={onOpen}
                   />
@@ -153,14 +154,14 @@ function SessionCard({
   session: s,
   day,
   suggestion,
-  rank,
+  trophy,
   squadSize,
   onOpen,
 }: {
   session: Session;
   day: LanDay;
   suggestion?: GameSuggestion;
-  rank?: number;
+  trophy?: TrophyRank | null;
   squadSize: number;
   onOpen: (key: string) => void;
 }) {
@@ -171,7 +172,6 @@ function SessionCard({
   const meta = suggestion
     ? `${fmtDur(s.dur)} · ${suggestion.gamerOwned.length} of ${squadSize} own it · ${votes} vote${votes === 1 ? "" : "s"}`
     : `${fmtDur(s.dur)} · not in the vote`;
-  const outside = isOutsideWindow(day, s.st, s.dur);
   // After midnight the card still sits under the LAN day it belongs to, so
   // name the real calendar day ("SAT 00:30") to avoid reading as Friday 00:30.
   const startDay = clockDay(day, s.st);
@@ -181,7 +181,7 @@ function SessionCard({
         component="button"
         type="button"
         onClick={() => onOpen(s.key)}
-        aria-label={`${s.entry.gameName}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}${outside ? ", outside the auto-schedule window" : ""}. ${meta}`}
+        aria-label={`${s.entry.gameName}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}. ${meta}`}
         sx={{
           width: "100%",
           display: "flex",
@@ -250,11 +250,6 @@ function SessionCard({
             >
               {s.pinned ? "PINNED" : "SUGGESTED"}
             </Box>
-            {outside && (
-              <Box component="span" sx={tagSx(colors.amber)}>
-                OFF-WINDOW
-              </Box>
-            )}
           </Box>
           <Box
             component="span"
@@ -290,7 +285,7 @@ function SessionCard({
                 >
                   {s.entry.gameName}
                 </Box>
-                {rank && rank <= 3 && <TrophyBadge rank={rank} size={22} />}
+                {trophy && <TrophyBadge rank={trophy} size={22} />}
               </Box>
               <Box
                 component="span"

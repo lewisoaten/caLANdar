@@ -12,11 +12,9 @@ import {
   fmtDur,
   hoursInDay,
   instantAt,
-  isOutsideWindow,
   outsideEventMessage,
   outsideEventReason,
   placementLabel,
-  rankSuggestions,
   sessionKey,
   snap,
   toSessions,
@@ -36,7 +34,6 @@ import {
   withTimeZone,
 } from "../components/schedule/scheduleModel";
 import { GameScheduleEntry } from "../types/game_schedule";
-import { GameSuggestion, GameVote } from "../types/game_suggestions";
 import { InvitationLiteData, RSVP } from "../types/invitations";
 
 // Local wall-clock times, so the tests hold in any timezone.
@@ -146,12 +143,6 @@ describe("sessions and range", () => {
 
   it("falls back to 08-24 with no windows or sessions", () => {
     expect(visibleRange([], [])).toEqual({ h0: 8, h1: 24, span: 16 });
-  });
-
-  it("flags off-window placements", () => {
-    expect(isOutsideWindow(days[2], 7, 1)).toBe(true);
-    expect(isOutsideWindow(days[0], 19, 2)).toBe(false);
-    expect(isOutsideWindow(days[0], 17, 2)).toBe(true);
   });
 
   it("detects clashes with pinned sessions only", () => {
@@ -318,37 +309,7 @@ describe("formatting", () => {
   });
 });
 
-describe("votes and attendance", () => {
-  const suggestion = (
-    appid: number,
-    votes: number,
-    requestedAt: string,
-  ): GameSuggestion => ({
-    appid,
-    name: `G${appid}`,
-    userEmail: "",
-    comment: null,
-    lastModified: stamp,
-    requestedAt: moment(requestedAt),
-    suggestionLastModified: stamp,
-    selfVote: GameVote.noVote,
-    votes,
-    voters: [],
-    suggester: null,
-    gamerOwned: [],
-    gamerUnowned: [],
-    gamerUnknown: [],
-  });
-
-  it("ranks by votes, then earliest suggestion", () => {
-    const order = rankSuggestions([
-      suggestion(1, 2, "2026-10-03T00:00:00Z"),
-      suggestion(2, 5, "2026-10-04T00:00:00Z"),
-      suggestion(3, 2, "2026-10-01T00:00:00Z"),
-    ]).map((g) => g.appid);
-    expect(order).toEqual([2, 3, 1]);
-  });
-
+describe("attendance", () => {
   it("splits the squad into around / not there from attendance buckets", () => {
     // UTC event so the bucket grid is easy to reason about:
     // buckets = Fri 18Z, Sat 00Z, 06Z, 12Z, 18Z, Sun 00Z, 06Z.
@@ -417,13 +378,6 @@ describe("auto-schedule window across the UK clock change", () => {
       // Sun 10:00 GMT → event end
       ["2026-10-25T10:00:00.000Z", "2026-10-25T23:30:00.000Z"],
     ]);
-  });
-
-  it("flags off-window placements on the DST day by wall clock", () => {
-    expect(isOutsideWindow(days[2], 10, 2)).toBe(false);
-    expect(isOutsideWindow(days[2], 9.5, 2)).toBe(true);
-    expect(isOutsideWindow(days[1], 23, 2)).toBe(false);
-    expect(isOutsideWindow(days[1], 23.5, 2)).toBe(true);
   });
 
   it("ends at the jump when clocks go forward (29 Mar 2026)", () => {

@@ -13,7 +13,9 @@ import { SnackbarProvider } from "notistack";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import moment from "moment";
 import theme from "../theme";
-import EventGameSchedule from "../components/EventGameSchedule";
+import EventGameSchedule, {
+  STEPPER_SAVE_DELAY_MS,
+} from "../components/EventGameSchedule";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 
 // Local wall-clock times so the assertions hold in any timezone.
@@ -479,6 +481,150 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     expect(screen.queryByRole("button", { name: /Friday 19:30/ })).toBeNull();
   });
 
+  it("shares trophies on tied votes, like the lobby", async () => {
+    override = (method, path) =>
+      method === "GET" && path === "/api/events/7/suggested_games"
+        ? new Response(
+            JSON.stringify([
+              suggestion(730, "Counter-Strike 2", 3),
+              suggestion(550, "Left 4 Dead 2", 3),
+              suggestion(548430, "Deep Rock Galactic", 0),
+            ]),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          )
+        : undefined;
+    renderPage(false);
+    expect(
+      await block(/^Counter-Strike 2, .*pinned, number 1 most voted$/),
+    ).toBeInTheDocument();
+    expect(
+      await block(/^Left 4 Dead 2, .*pinned, number 1 most voted$/),
+    ).toBeInTheDocument();
+    // No votes, no trophy.
+    expect(
+      await block(/^Deep Rock Galactic, .*suggested$/),
+    ).toBeInTheDocument();
+  });
+
+  describe("debounced timing steppers", () => {
+    afterEach(() => vi.useRealTimers());
+
+    const openDetails = async (name: RegExp) => {
+      const user = userEvent.setup();
+      const b = await block(name);
+      b.focus();
+      await user.keyboard("{Enter}");
+      return screen.findByRole("dialog");
+    };
+    const patches = () => calls.filter((c) => c.method === "PATCH");
+    const output = (dialog: HTMLElement, label: "Start" | "End") =>
+      within(dialog)
+        .getByRole("group", { name: `${label} time` })
+        .querySelector("output")!;
+
+    it("mashing + sends one PATCH and one toast after a pause", async () => {
+      renderPage(true);
+      const dialog = await openDetails(/^Left 4 Dead 2, Friday 21:30/);
+      vi.useFakeTimers();
+      const later = within(dialog).getByRole("button", {
+        name: "End 30 minutes later",
+      });
+      for (let i = 0; i < 10; i++) fireEvent.click(later);
+      // The new end shows straight away, flagged as not saved yet.
+      expect(output(dialog, "End")).toHaveTextContent("03:30");
+      expect(output(dialog, "End")).toHaveTextContent("not saved yet");
+      act(() => vi.advanceTimersByTime(STEPPER_SAVE_DELAY_MS - 1));
+      expect(patches()).toHaveLength(0);
+      act(() => vi.advanceTimersByTime(1));
+      expect(patches()).toHaveLength(1);
+      expect(patches()[0].body).toMatchObject({
+        gameId: 550,
+        startTime: iso("2026-11-13T21:30:00"),
+        durationMinutes: 360,
+      });
+      vi.useRealTimers();
+      expect(
+        await screen.findAllByText(/^Left 4 Dead 2 now runs/),
+      ).toHaveLength(1);
+      // Nothing else gets sent later.
+      await act(
+        () => new Promise((r) => setTimeout(r, STEPPER_SAVE_DELAY_MS + 50)),
+      );
+      expect(patches()).toHaveLength(1);
+      expect(screen.getAllByText(/now runs/)).toHaveLength(1);
+    });
+
+    it("refuses a clash once and reverts to the saved time", async () => {
+      renderPage(true);
+      const dialog = await openDetails(/^Counter-Strike 2, Friday 19:00/);
+      vi.useFakeTimers();
+      const later = within(dialog).getByRole("button", {
+        name: "End 30 minutes later",
+      });
+      fireEvent.click(later);
+      fireEvent.click(later);
+      expect(output(dialog, "End")).toHaveTextContent("22:00");
+      act(() => vi.advanceTimersByTime(STEPPER_SAVE_DELAY_MS));
+      vi.useRealTimers();
+      expect(
+        await screen.findAllByText(
+          /Clashes with Left 4 Dead 2 \(21:30–22:30\)\. Not moved\./,
+        ),
+      ).toHaveLength(1);
+      expect(patches()).toHaveLength(0);
+      expect(output(dialog, "End")).toHaveTextContent(/^21:00$/);
+    });
+
+    it("sends nothing when the steps cancel out", async () => {
+      renderPage(true);
+      const dialog = await openDetails(/^Left 4 Dead 2, Friday 21:30/);
+      vi.useFakeTimers();
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "End 30 minutes later" }),
+      );
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "End 30 minutes earlier" }),
+      );
+      act(() => vi.advanceTimersByTime(STEPPER_SAVE_DELAY_MS * 2));
+      expect(patches()).toHaveLength(0);
+      expect(calls.some((c) => c.url.includes("/game_schedule/pin"))).toBe(
+        false,
+      );
+    });
+
+    it("saves straight away on close, and on Enter", async () => {
+      renderPage(true);
+      let dialog = await openDetails(/^Left 4 Dead 2, Friday 21:30/);
+      // Real timers here so the drawer can animate shut; the PATCH below is
+      // sent synchronously on close, well inside the debounce delay.
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "End 30 minutes later" }),
+      );
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Close details" }),
+      );
+      expect(patches()).toHaveLength(1);
+      expect(patches()[0].body).toMatchObject({ durationMinutes: 90 });
+      await screen.findByText(/^Left 4 Dead 2 now runs/);
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+
+      dialog = await openDetails(/^Left 4 Dead 2, Friday 21:30 to 23:00/);
+      vi.useFakeTimers();
+      const later = within(dialog).getByRole("button", {
+        name: "End 30 minutes later",
+      });
+      fireEvent.click(later);
+      // Enter saves what's pending instead of taking another step.
+      fireEvent.keyDown(later, { key: "Enter" });
+      expect(patches()).toHaveLength(2);
+      expect(patches()[1].body).toMatchObject({ durationMinutes: 120 });
+      act(() => vi.advanceTimersByTime(STEPPER_SAVE_DELAY_MS * 2));
+      expect(patches()).toHaveLength(2);
+    });
+  });
+
   it("names the real day for sessions after midnight", async () => {
     schedule = [
       ...schedule,
@@ -491,7 +637,7 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
       ),
     ).toBeInTheDocument();
     const card = screen.getByRole("button", {
-      name: /^Factorio, Saturday 00:30 to 02:30 \(Friday night\), pinned(, outside the auto-schedule window)?\. /,
+      name: /^Factorio, Saturday 00:30 to 02:30 \(Friday night\), pinned\. /,
     });
     expect(card).toHaveTextContent("SAT 00:30 → 02:30");
     expect(card).toHaveTextContent("FRI NIGHT");

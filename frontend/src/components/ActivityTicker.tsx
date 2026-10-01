@@ -51,6 +51,17 @@ export function tickerKind(
 /** Minimum items per marquee half, so short feeds still fill the bar. */
 const MIN_RUN = 8;
 
+/**
+ * Seconds for the marquee to scroll one run of MIN_RUN items (75s; was 60s,
+ * slowed ~25% so it reads comfortably). Longer runs scale with their length,
+ * so every feed moves at the same per-item pace.
+ */
+export const TICKER_LOOP_SECONDS = 75;
+
+/** Marquee loop length for a run of `runLength` items, in seconds. */
+export const tickerDurationSeconds = (runLength: number) =>
+  Math.round((TICKER_LOOP_SECONDS * Math.max(runLength, MIN_RUN)) / MIN_RUN);
+
 /** Height of the LIVE bar; 44px so the pause button is a full touch target. */
 export const TICKER_HEIGHT = 44;
 
@@ -61,7 +72,7 @@ export interface ActivityTickerViewProps {
 }
 
 /**
- * The 44px LIVE bar: a chamfered LIVE tag and a 60s marquee of colour-coded
+ * The 44px LIVE bar: a chamfered LIVE tag and a slow (75s) marquee of colour-coded
  * activity. Pauses on hover/focus or with the pause button. Under
  * prefers-reduced-motion nothing moves: the feed is listed once in a strip
  * that scrolls by hand (keyboard focusable), and there is no pause button.
@@ -245,7 +256,7 @@ export function ActivityTickerView({
               sx={{
                 display: "flex",
                 width: "max-content",
-                animation: "hlTick 60s linear infinite",
+                animation: `hlTick ${tickerDurationSeconds(run.length)}s linear infinite`,
                 animationPlayState: paused ? "paused" : "running",
               }}
             >

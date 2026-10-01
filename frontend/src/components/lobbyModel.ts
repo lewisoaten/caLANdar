@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the event lobby (HlLobby): hero labels, squad summary,
- * attendance cells and the game-vote ranking. Kept free of React so they can
+ * and attendance cells (vote ranking lives in utils/voteRanking). Kept free of React so they can
  * be unit tested (see `src/__tests__/lobbyModel.test.ts`).
  */
 import moment from "moment";
@@ -208,37 +208,6 @@ export function squadSeatText(
   return floating
     ? { kind: "floating", text: ownDeskLabel(seating.unspecifiedSeatLabel) }
     : { kind: "unseated", text: "No seat yet" };
-}
-
-export interface RankedSuggestion<T> {
-  suggestion: T;
-  /** Competition rank by votes (ties share a rank: 1, 1, 3, …). */
-  rank: number;
-  /** 1-3 when the game earns a trophy (needs at least one vote), else null. */
-  trophyRank: number | null;
-}
-
-/**
- * Order suggestions by votes (most first, ties by name) and assign ranks.
- * Called after every vote so the list re-sorts live.
- */
-export function rankSuggestions<T extends { votes: number; name: string }>(
-  suggestions: readonly T[],
-): RankedSuggestion<T>[] {
-  const sorted = [...suggestions].sort(
-    (a, b) =>
-      b.votes - a.votes ||
-      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
-  );
-  let rank = 0;
-  return sorted.map((suggestion, i) => {
-    if (i === 0 || suggestion.votes !== sorted[i - 1].votes) rank = i + 1;
-    return {
-      suggestion,
-      rank,
-      trophyRank: rank <= 3 && suggestion.votes > 0 ? rank : null,
-    };
-  });
 }
 
 /** Where the event is in its lifecycle at `now`. */

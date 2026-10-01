@@ -9,7 +9,7 @@
  */
 import moment from "moment";
 import { GameScheduleEntry } from "../../types/game_schedule";
-import { GameSuggestion, Gamer } from "../../types/game_suggestions";
+import { Gamer } from "../../types/game_suggestions";
 import { InvitationLiteData, RSVP } from "../../types/invitations";
 import { getAttendanceBuckets } from "../../utils/attendanceBuckets";
 
@@ -380,15 +380,6 @@ export const findClash = (
   });
 };
 
-/** True when a placement is not fully inside one of the day's windows. */
-export const isOutsideWindow = (
-  day: LanDay | undefined,
-  st: number,
-  dur: number,
-): boolean =>
-  !day ||
-  !day.windows.some(([w0, w1]) => st >= w0 - 1e-9 && st + dur <= w1 + 1e-9);
-
 /** Why a placement falls outside the event, or null when it fits. */
 export const outsideEventReason = (
   days: LanDay[],
@@ -488,21 +479,6 @@ export const dragPlacement = (
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, v));
-
-/** Suggestions by votes (desc), earliest suggestion first on ties. */
-export const rankSuggestions = (
-  suggestions: GameSuggestion[],
-): GameSuggestion[] =>
-  [...suggestions].sort((a, b) => {
-    if (b.votes !== a.votes) return b.votes - a.votes;
-    const ta = a.requestedAt ? moment(a.requestedAt).valueOf() : 0;
-    const tb = b.requestedAt ? moment(b.requestedAt).valueOf() : 0;
-    return ta - tb;
-  });
-
-/** Map of appid to vote rank (1-based). */
-export const rankMap = (suggestions: GameSuggestion[]): Map<number, number> =>
-  new Map(rankSuggestions(suggestions).map((g, i) => [g.appid, i + 1]));
 
 /** Attendees who said yes or maybe (the same set the owner counts use). */
 export const squadOf = (invitations: InvitationLiteData[]) =>

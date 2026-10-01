@@ -39,7 +39,7 @@ import {
   tint,
   trophy,
 } from "./hl";
-import { rankSuggestions } from "./lobbyModel";
+import { formatRank, rankByVotes } from "../utils/voteRanking";
 import { RSVP } from "../types/invitations";
 import GameCoverImage from "./GameCoverImage";
 
@@ -65,12 +65,14 @@ function RankBadge({
   rank,
   trophyRank,
 }: {
-  rank: number;
-  trophyRank: number | null;
+  rank: number | null;
+  trophyRank: 1 | 2 | 3 | null;
 }) {
   const label = (
     <Box component="span" sx={srOnly}>
-      {`Rank ${rank}${trophyRank ? `, ${["gold", "silver", "bronze"][trophyRank - 1]} trophy` : ""}`}
+      {rank == null
+        ? "Unranked, no votes yet"
+        : `Rank ${rank}${trophyRank ? `, ${["gold", "silver", "bronze"][trophyRank - 1]} trophy` : ""}`}
     </Box>
   );
   if (!trophyRank) {
@@ -87,12 +89,12 @@ function RankBadge({
           color: colors.textDim,
         }}
       >
-        <span aria-hidden="true">#{rank}</span>
+        <span aria-hidden="true">{formatRank(rank)}</span>
         {label}
       </Box>
     );
   }
-  const color = trophy[trophyRank as 1 | 2 | 3];
+  const color = trophy[trophyRank];
   const fill =
     trophyRank === 1
       ? "rgba(255,210,61,0.12)"
@@ -130,7 +132,7 @@ function RankBadge({
         aria-hidden="true"
         sx={{ fontFamily: fonts.mono, fontSize: 10, fontWeight: 700, color }}
       >
-        #{rank}
+        {formatRank(rank)}
       </Box>
       {label}
     </Box>
@@ -227,7 +229,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     [],
   );
 
-  const ranked = rankSuggestions(gameSuggestions);
+  const ranked = rankByVotes(gameSuggestions);
 
   const replaceSuggestion = (data: GameSuggestion) =>
     setGameSuggestions((prev) =>
@@ -403,7 +405,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         const next = suggestionsRef.current.map((g) =>
           g.appid === data.appid ? data : g,
         );
-        const rank = rankSuggestions(next).find(
+        const rank = rankByVotes(next).find(
           (r) => r.suggestion.appid === data.appid,
         )?.rank;
         replaceSuggestion(data);
@@ -768,7 +770,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       title="Game vote"
       actions={
         <Kicker prefix={false} sx={{ letterSpacing: "0.12em" }}>
-          Top 3 earn a trophy
+          Top 3 places earn a trophy
         </Kicker>
       }
       padding="none"

@@ -123,6 +123,7 @@ const timing = (day: number, start: string, end: string): TimingControls => ({
   onStartLater: fn(),
   onEndEarlier: fn(),
   onEndLater: fn(),
+  onCommit: fn(),
 });
 
 const meta = {
@@ -175,6 +176,7 @@ export const PinnedTopRankedAdmin: Story = {
     }),
     suggestion: counterStrike,
     rank: 1,
+    trophyRank: 1,
     isAdmin: true,
     whenLabel: "SAT 14 NOV · 14:00 → 17:00",
     timing: timing(1, "14:00", "17:00"),
@@ -196,6 +198,7 @@ export const SuggestedAdmin: Story = {
     }),
     suggestion: ageOfEmpires,
     rank: 2,
+    trophyRank: 2,
     isAdmin: true,
     whenLabel: "SAT 14 NOV · 10:00 → 13:00",
     timing: timing(1, "10:00", "13:00"),
@@ -218,12 +221,16 @@ export const MemberView: Story = {
       gamerUnowned: [lagLord],
     }),
     rank: 3,
+    trophyRank: 3,
     isAdmin: false,
   },
 };
 
-/** Pinned by the host at 03:00: outside the auto-schedule window. */
-export const OffWindowAdmin: Story = {
+/**
+ * Admin mid-way through nudging the time with the steppers: the new time
+ * shows straight away (amber) and saves once they pause.
+ */
+export const PendingTimingAdmin: Story = {
   args: {
     ...commonProps,
     scheduleEntry: scheduleEntry({
@@ -241,10 +248,10 @@ export const OffWindowAdmin: Story = {
       gamerUnknown: [fragQueen],
     }),
     rank: 4,
+    trophyRank: null,
     isAdmin: true,
-    outsideWindow: true,
     whenLabel: "FRI 13 NOV · 03:00 → 05:00",
-    timing: timing(0, "03:00", "05:00"),
+    timing: { ...timing(0, "03:00", "05:00"), pending: true },
   },
 };
 

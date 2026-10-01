@@ -4,6 +4,7 @@ import BlockSharp from "@mui/icons-material/BlockSharp";
 import EmojiEventsSharp from "@mui/icons-material/EmojiEventsSharp";
 import { colors, fonts, hairline, srOnly, tint } from "../hl";
 import { getTrophyColor } from "../../utils/trophyColors";
+import type { TrophyRank, VoteRank } from "../../utils/voteRanking";
 import {
   DragMode,
   LAN_DAY_CUTOFF_HOUR,
@@ -28,7 +29,8 @@ export interface ScheduleTimelineProps {
   sessions: Session[];
   range: VisibleRange;
   isAdmin: boolean;
-  ranks: Map<number, number>;
+  /** Vote rank per appid (shared utils/voteRanking). */
+  ranks: ReadonlyMap<number, VoteRank>;
   /** True when a placement would overlap another pinned session. */
   hasClash: (day: number, st: number, dur: number, key: string) => boolean;
   onOpen: (key: string) => void;
@@ -124,8 +126,8 @@ const variantSx = {
   },
 } as const;
 
-/** Tiny trophy tile shown inside a block for the top three games. */
-function MiniTrophy({ rank }: { rank: number | undefined }) {
+/** Tiny trophy tile shown inside a block for gold / silver / bronze games. */
+function MiniTrophy({ rank }: { rank: TrophyRank | null | undefined }) {
   const color = getTrophyColor(rank);
   if (!color) return null;
   return (
@@ -505,7 +507,7 @@ export function ScheduleTimeline({
                       />
                     ))}
                     {rowSessions.map((s) => {
-                      const rank = ranks.get(s.entry.gameId);
+                      const rank = ranks.get(s.entry.gameId)?.trophyRank;
                       const isDrag = drag?.key === s.key;
                       const v = isDrag
                         ? drag.clash
@@ -516,7 +518,7 @@ export function ScheduleTimeline({
                           : "suggested";
                       const name = s.entry.gameName;
                       const aria = `${name}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}${
-                        rank && rank <= 3 ? `, number ${rank} most voted` : ""
+                        rank ? `, number ${rank} most voted` : ""
                       }`;
                       return (
                         <Box

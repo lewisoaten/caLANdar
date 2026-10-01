@@ -25,7 +25,12 @@ import {
   trophy,
 } from "./hl";
 import { OwnerChips, type OwnerIdentity } from "./GameOwners";
-import { rankSuggestions } from "./lobbyModel";
+import {
+  formatRank,
+  voteRankMap,
+  type TrophyRank,
+  type VoteRank,
+} from "../utils/voteRanking";
 import GameCoverImage from "./GameCoverImage";
 
 /** A game in the squad library plus its place in the event's vote, if any. */
@@ -33,13 +38,8 @@ export interface SquadGame extends EventGame {
   vote?: VoteInfo | null;
 }
 
-export interface VoteInfo {
-  /** Competition rank in the vote (most votes first; ties share a rank). */
-  rank: number;
-  votes: number;
-  /** 1-3 when the game earns a trophy (needs a vote), else null. */
-  trophyRank?: number | null;
-}
+/** A game's place in the vote (dense rank; see utils/voteRanking). */
+export type VoteInfo = VoteRank;
 
 export type VoteFilter = "all" | "in" | "out";
 
@@ -63,8 +63,8 @@ export function formatPlayedHours(minutes: number): string | null {
 
 /**
  * Each suggested game's place in the vote, ranked exactly like the lobby's
- * vote list (lobbyModel.rankSuggestions: competition ranking, ties by name,
- * no trophy without a vote).
+ * vote list and the schedule (shared utils/voteRanking: dense ranking, ties
+ * share a trophy, no trophy without a vote).
  */
 export function voteRanks(
   suggestions: ReadonlyArray<{
@@ -73,14 +73,7 @@ export function voteRanks(
     votes: number | null;
   }>,
 ): Map<number, VoteInfo> {
-  return new Map(
-    rankSuggestions(
-      suggestions.map((s) => ({ ...s, votes: s.votes ?? 0 })),
-    ).map(({ suggestion, rank, trophyRank }) => [
-      suggestion.appid,
-      { rank, votes: suggestion.votes, trophyRank },
-    ]),
-  );
+  return voteRankMap(suggestions);
 }
 
 /** Apply the search text and the vote filter. */
@@ -223,10 +216,10 @@ function Cover({
 
 export { Cover as GameCover };
 
-/** 26px bordered trophy tile for ranks 1-3. */
-function TrophyTile({ rank }: { rank: number | null }) {
-  const color = rank ? trophy[rank as 1 | 2 | 3] : undefined;
-  if (!color) return null;
+/** 26px bordered trophy tile for gold / silver / bronze. */
+function TrophyTile({ rank }: { rank: TrophyRank | null }) {
+  if (!rank) return null;
+  const color = trophy[rank];
   return (
     <Box
       sx={{
@@ -315,15 +308,7 @@ export const GameCard = React.memo(function GameCard({
         >
           {vote ? (
             <>
-              <TrophyTile
-                rank={
-                  vote.trophyRank !== undefined
-                    ? vote.trophyRank
-                    : vote.votes > 0
-                      ? vote.rank
-                      : null
-                }
-              />
+              <TrophyTile rank={vote.trophyRank} />
               <Box
                 sx={{
                   flex: 1,
@@ -342,7 +327,7 @@ export const GameCard = React.memo(function GameCard({
                     color: colors.lime,
                   }}
                 >
-                  IN THE VOTE · #{vote.rank}
+                  IN THE VOTE · {formatRank(vote.rank)}
                 </Box>
                 <Box
                   component="span"

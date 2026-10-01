@@ -10,12 +10,12 @@ import EmojiEventsSharp from "@mui/icons-material/EmojiEventsSharp";
 import OpenInNewSharp from "@mui/icons-material/OpenInNewSharp";
 import PushPinSharp from "@mui/icons-material/PushPinSharp";
 import RemoveSharp from "@mui/icons-material/RemoveSharp";
-import ScheduleSharp from "@mui/icons-material/ScheduleSharp";
 import moment from "moment";
 import { GameScheduleEntry } from "../types/game_schedule";
 import { GameSuggestion, Gamer } from "../types/game_suggestions";
 import { InvitationLiteData } from "../types/invitations";
 import { getTrophyColor } from "../utils/trophyColors";
+import { formatRank, type TrophyRank } from "../utils/voteRanking";
 import {
   StatCell,
   StatGrid,
@@ -23,6 +23,7 @@ import {
   colors,
   fonts,
   hairline,
+  srOnly,
   tint,
 } from "./hl";
 import { fmtDur, squadOf, whoIsAround } from "./schedule/scheduleModel";
@@ -33,6 +34,10 @@ export interface TimingControls {
   days: Array<{ label: string; active: boolean; onPick: () => void }>;
   start: string;
   end: string;
+  /** Steps taken but not saved yet (they save after a short pause). */
+  pending?: boolean;
+  /** Save pending steps now (focus left the steppers, or Enter). */
+  onCommit?: () => void;
   /** Leave a handler undefined to disable that step. */
   onStartEarlier?: () => void;
   onStartLater?: () => void;
@@ -54,13 +59,14 @@ export interface GameScheduleDetailsProps {
   onUnpin?: () => void;
   /** Admin: remove a pinned session from the schedule. */
   onRemove?: () => void;
+  /** Dense vote rank (utils/voteRanking); null when the game has no votes. */
   rank?: number | null;
+  /** Gold / silver / bronze (1-3) when the game earns a trophy. */
+  trophyRank?: TrophyRank | null;
   /** e.g. `FRI 13 NOV · 18:30 → 20:30`; defaults to the entry's own times. */
   whenLabel?: string;
   /** Admin timing controls (day + start/end in 30-minute steps). */
   timing?: TimingControls;
-  /** Session sits outside the auto-schedule window. */
-  outsideWindow?: boolean;
   /** A change is being saved: footer actions are disabled. */
   busy?: boolean;
   /** Id for the heading, so a surrounding dialog can reference it. */
@@ -251,14 +257,25 @@ export { Note as ScheduleNote };
 function Stepper({
   label,
   value,
+  pending,
   onEarlier,
   onLater,
+  onCommit,
 }: {
   label: string;
   value: string;
+  pending?: boolean;
   onEarlier?: () => void;
   onLater?: () => void;
+  onCommit?: () => void;
 }) {
+  // Enter saves what's pending instead of taking another step (Space and
+  // clicks still step).
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter" || !onCommit) return;
+    e.preventDefault();
+    onCommit();
+  };
   const btn = {
     width: 44,
     minWidth: 44,
@@ -295,6 +312,7 @@ function Stepper({
         <IconButton
           aria-label={`${label} 30 minutes earlier`}
           onClick={onEarlier}
+          onKeyDown={onKeyDown}
           disabled={!onEarlier}
           sx={btn}
         >
@@ -303,6 +321,7 @@ function Stepper({
         <Box
           component="output"
           aria-live="polite"
+          data-pending={pending ? "true" : undefined}
           sx={{
             flex: 1,
             display: "grid",
@@ -310,13 +329,20 @@ function Stepper({
             fontFamily: fonts.mono,
             fontSize: 16,
             fontWeight: 700,
+            color: pending ? colors.amber : undefined,
           }}
         >
           {value}
+          {pending && (
+            <Box component="span" sx={srOnly}>
+              , not saved yet
+            </Box>
+          )}
         </Box>
         <IconButton
           aria-label={`${label} 30 minutes later`}
           onClick={onLater}
+          onKeyDown={onKeyDown}
           disabled={!onLater}
           sx={btn}
         >
@@ -345,9 +371,9 @@ export default function GameScheduleDetails({
   onUnpin,
   onRemove,
   rank,
+  trophyRank,
   whenLabel,
   timing,
-  outsideWindow,
   busy,
   titleId,
 }: GameScheduleDetailsProps) {
@@ -357,7 +383,7 @@ export default function GameScheduleDetails({
     whenLabel ??
     `${start.format("ddd D MMM").toUpperCase()} · ${start.format("HH:mm")} → ${end.format("HH:mm")}`;
   const pinned = scheduleEntry.isPinned;
-  const trophyColor = getTrophyColor(rank);
+  const trophyColor = getTrophyColor(trophyRank);
 
   const around = React.useMemo(
     () =>
@@ -506,7 +532,7 @@ export default function GameScheduleDetails({
                       sx={{ fontSize: 20 }}
                     />
                   )}
-                  {rank ? `#${rank}` : "—"}
+                  {formatRank(rank)}
                 </Box>
               }
               sx={{ backgroundColor: colors.surfaceSolid }}
@@ -539,80 +565,93 @@ export default function GameScheduleDetails({
         </Box>
 
         {isAdmin && timing && (
-          <Section>
-            <SectionHeading>Timing · 30 min steps</SectionHeading>
-            <Box
-              role="group"
-              aria-label="Day"
-              sx={{ display: "flex", border: `1px solid ${hairline.control}` }}
-            >
-              {timing.days.map((d) => (
-                <Button
-                  key={d.label}
-                  onClick={d.onPick}
-                  aria-pressed={d.active}
-                  disabled={busy}
-                  sx={{
-                    flex: 1,
-                    minHeight: 44,
-                    minWidth: 0,
-                    fontFamily: fonts.mono,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    border: 0,
-                    ...(d.active
-                      ? {
-                          backgroundColor: colors.cyan,
-                          color: colors.ink,
-                          "&:hover": { backgroundColor: colors.cyan },
-                        }
-                      : {
-                          backgroundColor: "transparent",
-                          color: colors.textMuted,
-                          "&:hover": {
-                            color: colors.text,
-                            backgroundColor: tint("cyan", 0.06),
-                          },
-                        }),
-                  }}
-                >
-                  {d.label}
-                </Button>
-              ))}
-            </Box>
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 1.25,
-              }}
-            >
-              <Stepper
-                label="Start"
-                value={timing.start}
-                onEarlier={busy ? undefined : timing.onStartEarlier}
-                onLater={busy ? undefined : timing.onStartLater}
-              />
-              <Stepper
-                label="End"
-                value={timing.end}
-                onEarlier={busy ? undefined : timing.onEndEarlier}
-                onLater={busy ? undefined : timing.onEndLater}
-              />
-            </Box>
-            {!pinned && (
-              <Box sx={{ fontSize: 13, color: colors.textMuted }}>
-                Changing the time pins this session.
+          <Box
+            // Focus leaving the timing controls saves pending steps.
+            onBlur={(e: React.FocusEvent<HTMLElement>) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+                timing.onCommit?.();
+            }}
+          >
+            <Section>
+              <SectionHeading>Timing · 30 min steps</SectionHeading>
+              <Box
+                role="group"
+                aria-label="Day"
+                sx={{
+                  display: "flex",
+                  border: `1px solid ${hairline.control}`,
+                }}
+              >
+                {timing.days.map((d) => (
+                  <Button
+                    key={d.label}
+                    onClick={d.onPick}
+                    aria-pressed={d.active}
+                    disabled={busy}
+                    sx={{
+                      flex: 1,
+                      minHeight: 44,
+                      minWidth: 0,
+                      fontFamily: fonts.mono,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.12em",
+                      border: 0,
+                      ...(d.active
+                        ? {
+                            backgroundColor: colors.cyan,
+                            color: colors.ink,
+                            "&:hover": { backgroundColor: colors.cyan },
+                          }
+                        : {
+                            backgroundColor: "transparent",
+                            color: colors.textMuted,
+                            "&:hover": {
+                              color: colors.text,
+                              backgroundColor: tint("cyan", 0.06),
+                            },
+                          }),
+                    }}
+                  >
+                    {d.label}
+                  </Button>
+                ))}
               </Box>
-            )}
-          </Section>
-        )}
-
-        {outsideWindow && (
-          <Note tone="amber" icon={<ScheduleSharp aria-hidden="true" />}>
-            Outside the auto-schedule window. Fewer of the squad may be around.
-          </Note>
+              <Box
+                sx={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 1.25,
+                }}
+              >
+                <Stepper
+                  label="Start"
+                  value={timing.start}
+                  pending={timing.pending}
+                  onEarlier={busy ? undefined : timing.onStartEarlier}
+                  onLater={busy ? undefined : timing.onStartLater}
+                  onCommit={timing.onCommit}
+                />
+                <Stepper
+                  label="End"
+                  value={timing.end}
+                  pending={timing.pending}
+                  onEarlier={busy ? undefined : timing.onEndEarlier}
+                  onLater={busy ? undefined : timing.onEndLater}
+                  onCommit={timing.onCommit}
+                />
+              </Box>
+              <Box
+                data-testid="timing-hint"
+                sx={{ fontSize: 13, color: colors.textMuted }}
+              >
+                {timing.pending
+                  ? "Saving when you pause (or press Enter)…"
+                  : "Changes save when you pause."}
+                {!pinned && " Changing the time pins this session."}
+              </Box>
+            </Section>
+          </Box>
         )}
 
         {suggestion ? (
