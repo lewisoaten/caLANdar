@@ -7,7 +7,7 @@ import Account from "./components/Account";
 import EventSelection from "./components/EventSelection";
 import Event from "./components/Event";
 import EventManagement from "./components/EventManagement";
-import ProtectedRoutes from "./ProtectedRoutes";
+import ProtectedRoutes, { AdminRoutes } from "./ProtectedRoutes";
 import EventsAdmin from "./components/EventsAdmin";
 import GamersAdmin from "./components/GamersAdmin";
 import EventGames from "./components/EventGames";
@@ -33,13 +33,15 @@ const Views = () => {
         <Route path="/events/:id/seat-map" element={<EventSeatMap />} />
         <Route path="/events/:id/schedule" element={<EventGameSchedule />} />
         <Route path="/account" element={<Account />} />
-        <Route path="/admin/events">
-          <Route path="" element={<EventsAdmin />} />
-          <Route path=":id/rooms" element={<RoomEditor />} />
-          <Route path=":id" element={<EventManagement />} />
+        <Route element={<AdminRoutes />}>
+          <Route path="/admin/events">
+            <Route path="" element={<EventsAdmin />} />
+            <Route path=":id/rooms" element={<RoomEditor />} />
+            <Route path=":id" element={<EventManagement />} />
+          </Route>
+          <Route path="/admin/gamers" element={<GamersAdmin />} />
+          <Route path="/admin/audit" element={<AuditLog />} />
         </Route>
-        <Route path="/admin/gamers" element={<GamersAdmin />} />
-        <Route path="/admin/audit" element={<AuditLog />} />
       </Route>
     </SentryRoutes>
   );

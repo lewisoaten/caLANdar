@@ -3,7 +3,7 @@ import Box from "@mui/material/Box";
 import { ActivityTickerView } from "../components/ActivityTicker";
 import { tickerItems } from "./shellMocks";
 
-/** The 36px LIVE ticker (presentational view; the shell feeds it from the API). */
+/** The 44px LIVE ticker (presentational view; the shell feeds it from the API). */
 const meta = {
   title: "Shell/ActivityTicker",
   component: ActivityTickerView,

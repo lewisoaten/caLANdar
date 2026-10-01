@@ -179,9 +179,14 @@ export function emptyCopy(filter: EventFilter) {
   }
 }
 
-/** Default banner for events without an uploaded image. */
-export const DEFAULT_EVENT_IMAGE = "/static/lan_party_image.jpg";
+export { DEFAULT_EVENT_IMAGE, eventImageSrc } from "../utils/eventImage";
 
-export function eventImageSrc(image: string | undefined | null) {
-  return image ? `data:image/jpeg;base64,${image}` : DEFAULT_EVENT_IMAGE;
+/**
+ * The viewer's RSVP from the user events list (`myResponse`, computed by the
+ * API in the same query). `undefined` when the API didn't send it.
+ */
+export function myRsvpOf(event: { myResponse?: string | null }): MyRsvp {
+  const r = event.myResponse;
+  if (r === null) return null;
+  return r === RSVP.yes || r === RSVP.maybe || r === RSVP.no ? r : undefined;
 }

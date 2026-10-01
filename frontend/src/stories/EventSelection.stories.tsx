@@ -93,7 +93,11 @@ mockApi({
             ? past
             : upcoming;
     return {
-      events,
+      // The user list carries the viewer's own RSVP (`myResponse`).
+      events: events.map((e) => ({
+        ...e,
+        myResponse: rsvps[String(e.id)] ?? null,
+      })),
       total: events.length,
       page: 1,
       limit: 20,

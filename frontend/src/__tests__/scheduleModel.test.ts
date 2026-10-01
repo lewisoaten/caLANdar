@@ -22,6 +22,13 @@ import {
   visibleRange,
   whoIsAround,
   autoScheduleWindows,
+  clockDay,
+  spanLong,
+  spanShort,
+  whenLong,
+  whenShort,
+  SCHEDULER_WINDOW_END_UTC,
+  SCHEDULER_WINDOW_START_UTC,
 } from "../components/schedule/scheduleModel";
 import { GameScheduleEntry } from "../types/game_schedule";
 import { GameSuggestion, GameVote } from "../types/game_suggestions";
@@ -227,6 +234,51 @@ describe("formatting", () => {
   it("labels drags", () => {
     const [fri] = buildLanDays(BEGIN, END);
     expect(placementLabel(fri, 19, 3)).toBe("FRI 19:00 → 22:00 · 3h");
+    expect(placementLabel(fri, 24, 2)).toBe(
+      "SAT 00:00 → 02:00 (FRI NIGHT) · 2h",
+    );
+  });
+
+  it("names the real calendar day after midnight on a LAN day row", () => {
+    const [fri] = buildLanDays(BEGIN, END);
+    expect(clockDay(fri, 23.5)).toMatchObject({
+      short: "FRI",
+      name: "Friday",
+      dateLabel: "13 NOV",
+      nextDay: false,
+    });
+    expect(clockDay(fri, 24.5)).toMatchObject({
+      short: "SAT",
+      name: "Saturday",
+      dateLabel: "14 NOV",
+      nextDay: true,
+    });
+    expect(whenShort(fri, 19)).toBe("FRI 19:00");
+    expect(whenShort(fri, 24.5)).toBe("SAT 00:30 (FRI NIGHT)");
+    expect(whenLong(fri, 24.5)).toBe("Saturday 00:30 (Friday night)");
+    expect(spanShort(fri, 23, 2)).toBe("FRI 23:00 → 01:00");
+    expect(spanLong(fri, 24, 2)).toBe("Saturday 00:00 to 02:00 (Friday night)");
+  });
+
+  it("draws the window the backend scheduler uses (10:00Z to 01:00Z)", () => {
+    // Mirrors DAY_START_HOUR_UTC / NIGHT_START_HOUR_UTC in api/src/scheduler.rs.
+    expect(SCHEDULER_WINDOW_START_UTC).toBe(10);
+    expect(SCHEDULER_WINDOW_END_UTC).toBe(25);
+    const windows = autoScheduleWindows(
+      "2026-11-13T00:00:00Z",
+      "2026-11-14T23:00:00Z",
+    );
+    expect(
+      windows.map(([s, e]) => [
+        new Date(s).toISOString(),
+        new Date(e).toISOString(),
+      ]),
+    ).toEqual([
+      // The tail of the previous night's window, clipped to the event start.
+      ["2026-11-13T00:00:00.000Z", "2026-11-13T01:00:00.000Z"],
+      ["2026-11-13T10:00:00.000Z", "2026-11-14T01:00:00.000Z"],
+      ["2026-11-14T10:00:00.000Z", "2026-11-14T23:00:00.000Z"],
+    ]);
   });
 
   it("ticks every 2h over 12h spans and hourly otherwise", () => {

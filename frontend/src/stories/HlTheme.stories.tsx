@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import * as React from "react";
 import { useState } from "react";
-import moment from "moment";
 import {
   Alert,
   AlertTitle,
@@ -39,9 +38,6 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
-import { AdapterMoment } from "@mui/x-date-pickers/AdapterMoment";
-import { DateTimePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import AddSharp from "@mui/icons-material/AddSharp";
 import ArrowForwardSharp from "@mui/icons-material/ArrowForwardSharp";
 import DeleteSharp from "@mui/icons-material/DeleteSharp";
@@ -164,12 +160,6 @@ function ThemeShowcase() {
             <MenuItem value="all">All time</MenuItem>
           </Select>
         </FormControl>
-        <LocalizationProvider dateAdapter={AdapterMoment}>
-          <DateTimePicker
-            label="Doors open"
-            defaultValue={moment("2026-10-16T18:00:00")}
-          />
-        </LocalizationProvider>
       </Section>
 
       <Section label="Selection">
@@ -264,37 +254,6 @@ function ThemeShowcase() {
           </Table>
         </CardContent>
       </Card>
-
-      <Box sx={{ height: 260 }}>
-        <DataGrid
-          rows={[
-            {
-              id: 1,
-              email: "lewis@example.com",
-              handle: "ProGamer123",
-              games: 30,
-            },
-            {
-              id: 2,
-              email: "nia@example.com",
-              handle: "NoScope_Nia",
-              games: 112,
-            },
-            {
-              id: 3,
-              email: "rob@example.com",
-              handle: "RageQuitRob",
-              games: 7,
-            },
-          ]}
-          columns={[
-            { field: "handle", headerName: "Callsign", flex: 1 },
-            { field: "email", headerName: "Email", flex: 1 },
-            { field: "games", headerName: "Games", type: "number", width: 110 },
-          ]}
-          hideFooter
-        />
-      </Box>
 
       <Section label="Overlays">
         <Button variant="outlined" onClick={() => setOpen(true)}>

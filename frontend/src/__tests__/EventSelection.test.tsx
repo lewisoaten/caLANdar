@@ -9,8 +9,15 @@ import { UserContext } from "../UserProvider";
 const future = (days: number) =>
   new Date(Date.now() + days * 86_400_000).toISOString();
 
-const ev = (id: number, title: string, begin: number, end: number) => ({
+const ev = (
+  id: number,
+  title: string,
+  begin: number,
+  end: number,
+  myResponse: string | null = null,
+) => ({
   id,
+  myResponse,
   title,
   description: `${title} description`,
   image: null,
@@ -20,10 +27,11 @@ const ev = (id: number, title: string, begin: number, end: number) => ({
   lastModified: future(-100),
 });
 
-const upcoming = [ev(1, "Next LAN", 10, 12), ev(2, "Later LAN", 40, 42)];
-const past = [ev(3, "Old LAN", -40, -38)];
+const upcoming = [ev(1, "Next LAN", 10, 12, "yes"), ev(2, "Later LAN", 40, 42)];
+const past = [ev(3, "Old LAN", -40, -38, "yes")];
 
 const requested: string[] = [];
+const perEventRsvpCalls: string[] = [];
 const server = setupServer(
   http.get("/api/events", ({ request }) => {
     const url = new URL(request.url);
@@ -39,11 +47,10 @@ const server = setupServer(
       totalPages: 1,
     });
   }),
-  http.get("/api/events/:id/invitations/:email", ({ params }) =>
-    HttpResponse.json({
-      response: params.id === "1" ? "yes" : params.id === "3" ? "yes" : null,
-    }),
-  ),
+  http.get("/api/events/:id/invitations/:email", ({ request }) => {
+    perEventRsvpCalls.push(request.url);
+    return HttpResponse.json({ response: null });
+  }),
   http.get("/api/events/:id/invitations", () =>
     HttpResponse.json([
       { response: "yes", seatId: 1 },
@@ -60,6 +67,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => {
   server.resetHandlers();
   requested.length = 0;
+  perEventRsvpCalls.length = 0;
 });
 afterAll(() => server.close());
 
@@ -94,6 +102,8 @@ describe("EventSelection", () => {
     expect(later).toHaveAttribute("href", "/events/2");
     expect(await within(later).findByText("RSVP needed")).toBeInTheDocument();
     expect(requested[0]).toContain("filter=upcoming");
+    // RSVPs come from `myResponse` on the list: no per-event lookups.
+    expect(perEventRsvpCalls).toEqual([]);
   });
 
   test("filter tabs switch the API filter and support arrow keys", async () => {

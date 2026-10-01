@@ -1,4 +1,5 @@
-import { describe, expect, test } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
 import {
   AUDIT_GROUPS,
   auditTone,
@@ -9,6 +10,7 @@ import {
   isLibraryStale,
   isValidSteamInput,
   rangeToFromTimestamp,
+  useDebouncedValue,
 } from "../components/adminListUtils";
 
 const NOW = Date.UTC(2026, 8, 30, 12, 0);
@@ -115,4 +117,37 @@ test("formatAuditTime adds the year only for other years", () => {
   const lastYear = new Date(2025, 11, 1, 22, 38).toISOString();
   expect(formatAuditTime(sameYear, NOW)).toBe("30 SEP 09:05");
   expect(formatAuditTime(lastYear, NOW)).toBe("01 DEC 2025 22:38");
+});
+
+describe("useDebouncedValue", () => {
+  test("settles after the delay and only calls onSettle on real changes", () => {
+    vi.useFakeTimers();
+    try {
+      const onSettle = vi.fn();
+      const { result, rerender } = renderHook(
+        ({ v }) => useDebouncedValue(v, 300, onSettle),
+        { initialProps: { v: "" } },
+      );
+      // Mount never settles (would clobber a URL-restored page).
+      act(() => vi.advanceTimersByTime(1000));
+      expect(onSettle).not.toHaveBeenCalled();
+
+      rerender({ v: "ni" });
+      act(() => vi.advanceTimersByTime(299));
+      expect(result.current).toBe("");
+      rerender({ v: "nia" });
+      act(() => vi.advanceTimersByTime(300));
+      expect(result.current).toBe("nia");
+      expect(onSettle).toHaveBeenCalledTimes(1);
+      expect(onSettle).toHaveBeenLastCalledWith("nia");
+
+      // Typing and undoing within the delay is not a change.
+      rerender({ v: "niab" });
+      rerender({ v: "nia" });
+      act(() => vi.advanceTimersByTime(1000));
+      expect(onSettle).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

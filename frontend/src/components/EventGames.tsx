@@ -21,7 +21,7 @@ import { dateParser } from "../utils";
 import { apiErrorFrom, userFacingReason } from "../utils/apiError";
 import GamesList, {
   GameCover,
-  rankSuggestions,
+  voteRanks,
   type SquadGame,
   type VoteInfo,
 } from "./GamesList";
@@ -31,9 +31,75 @@ import { Kicker, colors, fonts, tint } from "./hl";
 /** Games requested per page while loading the whole squad library. */
 export const EVENT_GAMES_BATCH = 100;
 
+/** At most this many library pages are requested at once. */
+export const EVENT_GAMES_CONCURRENCY = 2;
+
+/** How long the search box waits for typing to pause before asking the server. */
+export const SEARCH_DEBOUNCE_MS = 300;
+
 interface SuggestionLite {
   appid: number;
+  name: string;
   votes: number | null;
+}
+
+const NO_GAMES: EventGame[] = [];
+
+type GamesPage = { eventGames: EventGame[]; totalCount: number };
+
+/** `/api/events/{id}/games` URL for one page, optionally name-filtered. */
+export const eventGamesUrl = (eventId: string, page: number, search = "") => {
+  const params = new URLSearchParams({
+    page: String(page),
+    count: String(EVENT_GAMES_BATCH),
+  });
+  if (search.trim()) params.set("search", search.trim());
+  return `/api/events/${eventId}/games?${params}`;
+};
+
+/**
+ * Fetch every page of a paged list: page 0 first (it says how many pages there
+ * are), then the rest with at most `concurrency` requests in flight. Stops as
+ * soon as `signal` aborts. `onProgress` gets the games so far, in page order,
+ * de-duplicated by appid.
+ */
+export async function fetchAllPages(
+  fetchPage: (page: number) => Promise<GamesPage | null>,
+  {
+    concurrency = EVENT_GAMES_CONCURRENCY,
+    signal,
+    onProgress,
+  }: {
+    concurrency?: number;
+    signal?: AbortSignal;
+    onProgress?: (games: EventGame[], done: boolean) => void;
+  } = {},
+): Promise<EventGame[]> {
+  const first = await fetchPage(0);
+  const pages: Array<EventGame[] | undefined> = [first?.eventGames ?? []];
+  const total = Math.max(1, first?.totalCount ?? 0);
+  const merged = () => {
+    const seen = new Set<number>();
+    return pages
+      .flatMap((p) => p ?? [])
+      .filter((g) => !seen.has(g.appid) && seen.add(g.appid));
+  };
+  if (signal?.aborted) return [];
+  onProgress?.(merged(), total <= 1);
+  let next = 1;
+  const worker = async () => {
+    while (next < total && !signal?.aborted) {
+      const page = next++;
+      const data = await fetchPage(page);
+      if (signal?.aborted) return;
+      pages[page] = data?.eventGames ?? [];
+      onProgress?.(merged(), pages.filter(Boolean).length >= total);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, total - 1) }, worker),
+  );
+  return merged();
 }
 
 interface InvitationLite {
@@ -138,15 +204,12 @@ function SuggestGameDialog({
       fullScreen={fullScreen}
       aria-labelledby={titleId}
       slotProps={{
-        paper: {
-          component: "form",
-          onSubmit: submit,
-          sx: { width: "min(480px, 100%)", m: { xs: 0, sm: 2 } },
-        } as object,
+        paper: { sx: { width: "min(480px, 100%)", m: { xs: 0, sm: 2 } } },
       }}
     >
+      {/* The Paper keeps role="dialog"; the form lives inside it. */}
       {shown && (
-        <>
+        <Box component="form" noValidate onSubmit={submit}>
           <Box sx={{ position: "relative" }}>
             <GameCover appid={shown.appid} />
             <IconButton
@@ -299,7 +362,7 @@ function SuggestGameDialog({
               </Button>
             </Box>
           </Box>
-        </>
+        </Box>
       )}
     </Dialog>
   );
@@ -322,6 +385,13 @@ const EventGames = () => {
   const [loading, setLoading] = React.useState(true);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Search box text, the debounced text sent to the server, and its results.
+  const [query, setQuery] = React.useState("");
+  const [serverQuery, setServerQuery] = React.useState("");
+  const [results, setResults] = React.useState<{
+    query: string;
+    games: EventGame[];
+  } | null>(null);
   const [suggestions, setSuggestions] = React.useState<SuggestionLite[]>([]);
   const [squadSize, setSquadSize] = React.useState(0);
   const [mine, setMine] = React.useState<MyInvitation | null>(null);
@@ -365,50 +435,79 @@ const EventGames = () => {
     [eventId, getJson],
   );
 
-  // Squad library: first batch, then the remaining pages in parallel.
+  // Squad library: page 0, then the rest a couple at a time, shown as they
+  // arrive. Aborted on unmount / event change.
   React.useEffect(() => {
     if (!eventId) return;
     const controller = new AbortController();
     const { signal } = controller;
-    type Page = { eventGames: EventGame[]; totalCount: number };
-    const url = (page: number) =>
-      `/api/events/${eventId}/games?page=${page}&count=${EVENT_GAMES_BATCH}`;
-
-    (async () => {
-      try {
-        const first = await getJson<Page>(url(0), signal);
-        if (signal.aborted) return;
-        setGames(first?.eventGames ?? []);
-        setError(null);
-        setLoading(false);
-        const pages = first?.totalCount ?? 0;
-        if (pages > 1) {
-          setLoadingMore(true);
-          const rest = await Promise.all(
-            Array.from({ length: pages - 1 }, (_, i) =>
-              getJson<Page>(url(i + 1), signal),
-            ),
-          );
-          if (signal.aborted) return;
-          const seen = new Set<number>();
-          const all = [first!, ...rest]
-            .flatMap((p) => p?.eventGames ?? [])
-            .filter((g) => !seen.has(g.appid) && seen.add(g.appid));
+    fetchAllPages(
+      (page) => getJson<GamesPage>(eventGamesUrl(eventId, page), signal),
+      {
+        signal,
+        onProgress: (all, done) => {
           setGames(all);
-          setLoadingMore(false);
-        }
-      } catch (e) {
-        if (signal.aborted) return;
-        console.error("Error loading event games:", e);
-        setError(
-          userFacingReason(e) ?? "Something went wrong. Please try again.",
-        );
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    })();
+          setError(null);
+          setLoading(false);
+          setLoadingMore(!done);
+        },
+      },
+    ).catch((e) => {
+      if (signal.aborted) return;
+      console.error("Error loading event games:", e);
+      setError(
+        userFacingReason(e) ?? "Something went wrong. Please try again.",
+      );
+      setLoading(false);
+      setLoadingMore(false);
+    });
     return () => controller.abort();
   }, [eventId, getJson, reload]);
+
+  // Search: debounce the box, then ask the server (it filters by name across
+  // the whole library); a newer search aborts the previous one.
+  React.useEffect(() => {
+    const t = window.setTimeout(
+      () => setServerQuery(query.trim()),
+      SEARCH_DEBOUNCE_MS,
+    );
+    return () => window.clearTimeout(t);
+  }, [query]);
+  React.useEffect(() => {
+    if (!eventId || !serverQuery) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    fetchAllPages(
+      (page) =>
+        getJson<GamesPage>(eventGamesUrl(eventId, page, serverQuery), signal),
+      { signal },
+    )
+      .then((found) => {
+        if (!signal.aborted) setResults({ query: serverQuery, games: found });
+      })
+      .catch((e) => {
+        if (signal.aborted) return;
+        console.error("Error searching event games:", e);
+        setError(userFacingReason(e) ?? "Search failed. Please try again.");
+      });
+    return () => controller.abort();
+  }, [eventId, serverQuery, getJson, reload]);
+  // A new event starts with an empty search.
+  const [searchFor, setSearchFor] = React.useState(eventId);
+  if (searchFor !== eventId) {
+    setSearchFor(eventId);
+    setResults(null);
+    setQuery("");
+    setServerQuery("");
+  }
+
+  // While a search is pending, keep showing the last results (or the library).
+  const searchText = query.trim();
+  const searching =
+    searchText !== "" &&
+    (serverQuery !== searchText || results?.query !== searchText);
+  const shownGames =
+    searchText && results ? results.games : searchText ? NO_GAMES : games;
 
   // Vote, squad size, the viewer's RSVP and the event.
   React.useEffect(() => {
@@ -448,13 +547,10 @@ const EventGames = () => {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const votes = React.useMemo(
-    () => rankSuggestions(suggestions),
-    [suggestions],
-  );
+  const votes = React.useMemo(() => voteRanks(suggestions), [suggestions]);
   const squadGames = React.useMemo(
-    () => withVotes(games, votes),
-    [games, votes],
+    () => withVotes(shownGames, votes),
+    [shownGames, votes],
   );
   const me: OwnerIdentity | null = mine
     ? { avatarUrl: mine.avatarUrl, handle: mine.handle }
@@ -477,7 +573,7 @@ const EventGames = () => {
     setSuggestions((s) =>
       s.some((x) => x.appid === game.appid)
         ? s
-        : [...s, { appid: game.appid, votes: 1 }],
+        : [...s, { appid: game.appid, name: game.name, votes: 1 }],
     );
     setSuggesting(null);
     setToast(`${game.name} added to the vote.`);
@@ -491,8 +587,11 @@ const EventGames = () => {
       <GamesList
         games={squadGames}
         squadSize={squadSize}
-        loading={loading}
+        loading={loading || (searching && !results)}
         loadingMore={loadingMore}
+        query={query}
+        onQueryChange={setQuery}
+        searching={searching}
         error={error}
         onRetry={() => {
           setLoading(true);

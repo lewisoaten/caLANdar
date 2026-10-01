@@ -12,7 +12,7 @@ use crate::{
         EventGameResponse, EventGameSuggestionRequest, EventGameSuggestionResponse, EventGames,
         GameVote, Gamer,
     },
-    util::{is_attending_event, is_event_active},
+    util::is_event_active,
 };
 
 // Implement From for GameVote from game_suggestion::GameVote
@@ -87,6 +87,85 @@ impl From<crate::repositories::user_games::UserGame> for EventGameResponse {
                 .unwrap_or_default(),
             last_modified: game.last_modified.unwrap_or_default(),
         }
+    }
+}
+
+/// Why the viewer can't take part in an event's game vote (suggest, vote or
+/// edit a pitch), or `None` when they can. Only guests who answered yes or
+/// maybe take part, and only while the event is still running.
+pub const fn participation_block(
+    event_active: bool,
+    invited: bool,
+    response: Option<&invitation::Response>,
+) -> Option<&'static str> {
+    if !invited {
+        return Some("You aren't invited to this event");
+    }
+    if !event_active {
+        return Some("This event has ended, so the game vote is closed");
+    }
+    match response {
+        Some(invitation::Response::Yes | invitation::Response::Maybe) => None,
+        Some(invitation::Response::No) => Some(
+            "You've said you can't make it. Change your RSVP to going or maybe to vote or suggest games",
+        ),
+        None => Some("RSVP going or maybe to vote or suggest games"),
+    }
+}
+
+/// Loads the event's invitations and checks the viewer may take part in the
+/// game vote, returning `Error::NotPermitted` with the reason when not.
+async fn invitations_for_participant(
+    pool: &PgPool,
+    event_id: i32,
+    email: &str,
+) -> Result<Vec<invitation::Invitation>, Error> {
+    let event_active = match is_event_active(pool, event_id).await {
+        Ok((active, _event)) => active,
+        Err(e) => {
+            return Err(Error::NotFound(format!(
+                "Unable to find event {event_id}: {e}"
+            )))
+        }
+    };
+
+    let invitations = invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
+    )
+    .await
+    .map_err(|e| Error::Controller(format!("Unable to get event invitations due to: {e}")))?;
+
+    let own = invitations
+        .iter()
+        .find(|i| i.email.eq_ignore_ascii_case(email));
+    if let Some(reason) = participation_block(
+        event_active,
+        own.is_some(),
+        own.and_then(|i| i.response.as_ref()),
+    ) {
+        return Err(Error::NotPermitted(reason.to_string()));
+    }
+    Ok(invitations)
+}
+
+/// Maps a failed suggestion write to a client error where the cause is the
+/// request (unknown game or suggestion, duplicate suggestion).
+fn suggestion_write_error(e: &sqlx::Error, action: &str) -> Error {
+    match e {
+        sqlx::Error::RowNotFound => {
+            Error::NotFound("That game hasn't been suggested for this event".to_string())
+        }
+        sqlx::Error::Database(db) if db.is_unique_violation() => {
+            Error::Conflict("That game has already been suggested for this event".to_string())
+        }
+        sqlx::Error::Database(db) if db.is_foreign_key_violation() => {
+            Error::NotFound("That game isn't in the Steam catalogue or the vote".to_string())
+        }
+        _ => Error::Controller(format!("Unable to {action} due to: {e}")),
     }
 }
 
@@ -254,50 +333,7 @@ pub async fn create(
     email: String,
     new_event_game_suggestion: EventGameSuggestionRequest,
 ) -> Result<EventGameSuggestionResponse, Error> {
-    match is_event_active(pool, event_id).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {e}"
-            )))
-        }
-        Ok((false, _)) => {
-            return Err(Error::NotPermitted(
-                "You can only respond to invitations for active events".to_string(),
-            ))
-        }
-        Ok((true, _event)) => (),
-    }
-
-    match is_attending_event(pool, event_id, email.clone()).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if attending event, due to: {e}"
-            )))
-        }
-        Ok(false) => {
-            return Err(Error::NotPermitted(
-                "You can only suggest games for events you are attending".to_string(),
-            ))
-        }
-        Ok(true) => (),
-    }
-
-    let invitations = match invitation::filter(
-        pool,
-        invitation::Filter {
-            event_id: Some(event_id),
-            email: None,
-        },
-    )
-    .await
-    {
-        Ok(invitations) => invitations,
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to get event invitations due to: {e}"
-            )))
-        }
-    };
+    let invitations = invitations_for_participant(pool, event_id, &email).await?;
 
     // Insert game suggestion
     match game_suggestion::create(
@@ -331,9 +367,7 @@ pub async fn create(
 
             Ok(result)
         }
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {e}"
-        ))),
+        Err(e) => Err(suggestion_write_error(&e, "suggest game")),
     }
 }
 
@@ -344,50 +378,7 @@ pub async fn vote(
     email: String,
     vote: GameVote,
 ) -> Result<EventGameSuggestionResponse, Error> {
-    match is_event_active(pool, event_id).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {e}"
-            )))
-        }
-        Ok((false, _)) => {
-            return Err(Error::NotPermitted(
-                "You can only respond to invitations for active events".to_string(),
-            ))
-        }
-        Ok((true, _event)) => (),
-    }
-
-    match is_attending_event(pool, event_id, email.clone()).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if attending event, due to: {e}"
-            )))
-        }
-        Ok(false) => {
-            return Err(Error::NotPermitted(
-                "You can only suggest games for events you are attending".to_string(),
-            ))
-        }
-        Ok(true) => (),
-    }
-
-    let invitations = match invitation::filter(
-        pool,
-        invitation::Filter {
-            event_id: Some(event_id),
-            email: None,
-        },
-    )
-    .await
-    {
-        Ok(invitations) => invitations,
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to get event invitations due to: {e}"
-            )))
-        }
-    };
+    let invitations = invitations_for_participant(pool, event_id, &email).await?;
 
     // Insert game suggestion
     match game_suggestion::edit(pool, event_id, game_id, email.clone(), vote.clone().into()).await {
@@ -413,9 +404,7 @@ pub async fn vote(
 
             Ok(result)
         }
-        Err(e) => Err(Error::Controller(format!(
-            "Unable to get event due to: {e}"
-        ))),
+        Err(e) => Err(suggestion_write_error(&e, "vote")),
     }
 }
 
@@ -541,50 +530,7 @@ pub async fn update_comment(
     email: String,
     comment: Option<String>,
 ) -> Result<EventGameSuggestionResponse, Error> {
-    match is_event_active(pool, event_id).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if event is active, due to: {e}"
-            )))
-        }
-        Ok((false, _)) => {
-            return Err(Error::NotPermitted(
-                "You can only update game suggestions for active events".to_string(),
-            ))
-        }
-        Ok((true, _event)) => (),
-    }
-
-    match is_attending_event(pool, event_id, email.clone()).await {
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to check if attending event, due to: {e}"
-            )))
-        }
-        Ok(false) => {
-            return Err(Error::NotPermitted(
-                "You can only update game suggestions for events you are attending".to_string(),
-            ))
-        }
-        Ok(true) => (),
-    }
-
-    let invitations = match invitation::filter(
-        pool,
-        invitation::Filter {
-            event_id: Some(event_id),
-            email: None,
-        },
-    )
-    .await
-    {
-        Ok(invitations) => invitations,
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to get event invitations due to: {e}"
-            )))
-        }
-    };
+    let invitations = invitations_for_participant(pool, event_id, &email).await?;
 
     // Update the comment
     match game_suggestion::update_comment(pool, event_id, game_id, email.clone(), comment).await {
@@ -616,5 +562,38 @@ pub async fn update_comment(
         Err(e) => Err(Error::Controller(format!(
             "Unable to update comment due to: {e}"
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn attending_guests_take_part_while_the_event_runs() {
+        assert_eq!(
+            participation_block(true, true, Some(&invitation::Response::Yes)),
+            None
+        );
+        assert_eq!(
+            participation_block(true, true, Some(&invitation::Response::Maybe)),
+            None
+        );
+    }
+
+    #[test]
+    fn declined_and_unanswered_guests_are_told_to_rsvp() {
+        let declined = participation_block(true, true, Some(&invitation::Response::No));
+        assert!(declined.is_some_and(|r| r.contains("can't make it")));
+        let pending = participation_block(true, true, None);
+        assert!(pending.is_some_and(|r| r.contains("RSVP")));
+    }
+
+    #[test]
+    fn ended_events_and_strangers_are_blocked() {
+        let ended = participation_block(false, true, Some(&invitation::Response::Yes));
+        assert!(ended.is_some_and(|r| r.contains("ended")));
+        let stranger = participation_block(true, false, None);
+        assert!(stranger.is_some_and(|r| r.contains("invited")));
     }
 }

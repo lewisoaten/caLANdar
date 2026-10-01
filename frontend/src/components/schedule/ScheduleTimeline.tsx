@@ -14,9 +14,9 @@ import {
   buildGridLines,
   buildTicks,
   dragPlacement,
-  fmtClock,
   pct,
   placementLabel,
+  spanLong,
 } from "./scheduleModel";
 
 /** Pointer travel (px) below which a press counts as a tap. */
@@ -68,9 +68,13 @@ interface DragRef {
 
 const HINT_ID = "schedule-block-hint";
 
+/** Session blocks are a full 44px touch target; tracks leave 4px around them. */
+const BLOCK_HEIGHT = 44;
+const TRACK_HEIGHT = BLOCK_HEIGHT + 8;
+
 const blockBase = {
   position: "relative",
-  height: 34,
+  height: BLOCK_HEIGHT,
   boxSizing: "border-box",
   display: "flex",
   alignItems: "center",
@@ -205,13 +209,18 @@ export function ScheduleTimeline({
       const width = track.getBoundingClientRect().width || 1;
       const dh = Math.round((dx / width) * r.span * 2) / 2;
       const next = dragPlacement(d.mode, d.session, dh, r);
-      let day = d.session.day;
+      // Change row only while the pointer is over a track; in the gaps
+      // between tracks keep the last row hit so the block doesn't jitter.
+      let day = dragStateRef.current?.day ?? d.session.day;
       if (d.mode === "move") {
-        tracks.current.forEach((t, i) => {
-          if (!t) return;
+        const hit = tracks.current.findIndex((t) => {
+          if (!t) return false;
           const b = t.getBoundingClientRect();
-          if (ev.clientY >= b.top - 8 && ev.clientY <= b.bottom + 8) day = i;
+          return ev.clientY >= b.top && ev.clientY < b.bottom;
         });
+        if (hit >= 0) day = hit;
+      } else {
+        day = d.session.day;
       }
       setDrag({
         key: d.session.key,
@@ -453,7 +462,7 @@ export function ScheduleTimeline({
                     }
                     sx={{
                       position: "relative",
-                      height: 42,
+                      height: TRACK_HEIGHT,
                       backgroundColor: tint("neutral", 0.04),
                       cursor: isAdmin ? "copy" : "default",
                     }}
@@ -504,9 +513,7 @@ export function ScheduleTimeline({
                           ? "pinned"
                           : "suggested";
                       const name = s.entry.gameName;
-                      const aria = `${name}, ${day.name} ${fmtClock(s.st)} to ${fmtClock(
-                        s.st + s.dur,
-                      )}, ${s.pinned ? "pinned" : "suggested"}${
+                      const aria = `${name}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}${
                         rank && rank <= 3 ? `, number ${rank} most voted` : ""
                       }`;
                       return (

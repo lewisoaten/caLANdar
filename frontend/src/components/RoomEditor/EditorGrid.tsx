@@ -202,8 +202,8 @@ export function EditorGrid({
       const k = cellKey(x, y);
       const cell = room.cells[k];
       const isFocus = focus.col === x && focus.row === y;
+      // `key` must be passed directly, not inside a spread (React warns).
       const common = {
-        key: k,
         role: "gridcell",
         "data-cell": k,
         tabIndex: isFocus ? 0 : -1,
@@ -216,6 +216,7 @@ export function EditorGrid({
       if (!cell) {
         cells.push(
           <Box
+            key={k}
             {...common}
             sx={{
               ...tile,
@@ -234,6 +235,7 @@ export function EditorGrid({
         const dup = dups.has(cell.label);
         cells.push(
           <Box
+            key={k}
             {...common}
             aria-selected={selected}
             aria-label={`${cellLabel(cell, k)}${dup ? ", duplicate label" : ""}`}
@@ -284,6 +286,7 @@ export function EditorGrid({
         const Icon = screen ? TvSharp : DoorFrontSharp;
         cells.push(
           <Box
+            key={k}
             {...common}
             sx={{
               ...tile,

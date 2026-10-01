@@ -88,9 +88,8 @@ pub async fn steam_game_update_v2(
                 last_refreshed: refresh.last_refreshed,
             }))
         }
-        Err(e) => Err(UpdateGameError::InternalServerError(format!(
-            "Error updating games, due to: {e}"
-        ))),
+        // The controller logs the detail; `e` is a message safe to show.
+        Err(e) => Err(UpdateGameError::InternalServerError(e.to_string())),
     }
 }
 

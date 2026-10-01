@@ -14,7 +14,11 @@ import moment from "moment";
 import { UserDispatchContext, UserContext } from "../UserProvider";
 import { UserGame } from "../types/profile";
 import { apiErrorFrom, userFacingReason } from "../utils/apiError";
-import { STEAM_ID_HELP, isValidSteamIdInput } from "../utils/steamId";
+import {
+  STEAM_ID_HELP,
+  isValidSteamIdInput,
+  parseSteamIdInput,
+} from "../utils/steamId";
 import AccountLibrary, {
   LIBRARY_PAGE_SIZE,
   type LibrarySort,
@@ -84,6 +88,28 @@ export function syncSummary(
     before == null || newSteamId ? null : Math.max(0, after - before);
   const games = `${after.toLocaleString("en-GB")} game${after === 1 ? "" : "s"}`;
   return `Library synced just now${newSteamId ? " from your new Steam ID" : ""}. ${games}${added == null ? "" : `, ${added} new`}.`;
+}
+
+/**
+ * What to tell the user when saving their Steam ID fails. Client errors carry
+ * the server's own explanation (e.g. no profile for a custom URL); server
+ * errors only ever mean Steam (or the server) couldn't be reached, so explain
+ * that in plain words instead of showing a status code.
+ */
+export function steamIdSaveError(error: unknown, input: string) {
+  const reason = userFacingReason(error);
+  if (reason) return reason;
+  if (parseSteamIdInput(input)?.kind === "vanity")
+    return "Steam couldn't look up that custom URL right now. Try again in a minute, or paste your 17-digit SteamID64 or steamcommunity.com/profiles/… link instead.";
+  return "Couldn't save your Steam ID. Please try again in a minute.";
+}
+
+/** What to tell the user when a library resync fails. */
+export function resyncError(error: unknown) {
+  return (
+    userFacingReason(error) ??
+    "Couldn't refresh your games from Steam. Check your Steam profile's game details are public, then try again."
+  );
 }
 
 const monoLabel = {
@@ -267,14 +293,8 @@ const Account = () => {
         return;
       }
       if (!response.ok) {
-        response
-          .text()
-          .then((t) => console.log(t))
-          .catch(() => {});
-        setSync({
-          state: "error",
-          message: `Failed to refresh games (status ${response.status}). Check your Steam profile's game details are public, then try again.`,
-        });
+        const err = await apiErrorFrom("Refresh games", response);
+        setSync({ state: "error", message: resyncError(err) });
         return;
       }
       // Read the new library size, then show the first page again.
@@ -346,10 +366,7 @@ const Account = () => {
       }
       if (!response.ok) {
         const err = await apiErrorFrom("Save Steam ID", response);
-        setFieldError(
-          userFacingReason(err) ??
-            `Couldn't save your Steam ID (status ${response.status}). Please try again.`,
-        );
+        setFieldError(steamIdSaveError(err, value));
         return;
       }
       const saved = (await response.json()) as ProfileResponse;
@@ -430,7 +447,14 @@ const Account = () => {
             )
           }
           description={
-            <Box component="span" sx={{ fontFamily: fonts.mono, fontSize: 13 }}>
+            <Box
+              component="span"
+              sx={{
+                fontFamily: fonts.mono,
+                fontSize: 13,
+                overflowWrap: "anywhere",
+              }}
+            >
               {email}
             </Box>
           }
@@ -641,7 +665,7 @@ const Account = () => {
                             href="https://store.steampowered.com/account/"
                             target="_blank"
                             rel="noreferrer"
-                            sx={{ color: colors.cyan }}
+                            underline="always"
                           >
                             Steam account page
                           </Link>
@@ -725,8 +749,7 @@ const Account = () => {
                       sx={{
                         fontFamily: fonts.mono,
                         fontSize: 15,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
+                        overflowWrap: "anywhere",
                       }}
                     >
                       {data?.steamId}

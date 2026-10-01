@@ -30,6 +30,7 @@ import { InvitationData, RSVP } from "../types/invitations";
 import { SeatReservation } from "../types/seat_reservations";
 import {
   EventData,
+  EventSeatingConfig,
   PaginatedEventsResponse,
   Room,
   Seat,
@@ -45,6 +46,7 @@ import {
   colors,
   fonts,
   hairline,
+  srOnly,
   tint,
   tones,
   type HlTone,
@@ -85,7 +87,11 @@ export function parseEmailList(value: string): string[] {
     });
 }
 
-/** Attendance buckets as small squares, with a text alternative. */
+/**
+ * Attendance buckets as small squares, with a text alternative. Not
+ * interactive, so it is not a tab stop: screen readers get the day/time
+ * summary as the image's name, mouse users the same text as a tooltip.
+ */
 export function AttendancePips({
   attendance,
   tone = "lime",
@@ -104,16 +110,11 @@ export function AttendancePips({
       <Box
         role="img"
         aria-label={label}
-        tabIndex={0}
         sx={{
           display: "flex",
           flexWrap: "wrap",
           gap: "3px",
           maxWidth: 140,
-          "&:focus-visible": {
-            outline: `2px solid ${colors.cyan}`,
-            outlineOffset: 2,
-          },
         }}
       >
         {attendance.map((bucket, index) => (
@@ -253,6 +254,8 @@ export default function InvitationSeatManagementTable(
   const [reservations, setReservations] = useState<SeatReservation[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [seats, setSeats] = useState<Seat[]>([]);
+  // What this event calls a reservation without a desk ("Floating / BYO").
+  const [unspecifiedLabel, setUnspecifiedLabel] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
@@ -319,6 +322,14 @@ export default function InvitationSeatManagementTable(
           if (data) setSeats(data);
         },
       ),
+      // Only used for a label: a missing/failed config isn't a roster error.
+      get<EventSeatingConfig>(
+        `/api/events/${event_id}/seating-config?as_admin=true`,
+      )
+        .then((data) => {
+          setUnspecifiedLabel(data?.unspecifiedSeatLabel?.trim() || null);
+        })
+        .catch(() => setUnspecifiedLabel(null)),
     ])
       .catch((error) => {
         console.error("Error loading the roster:", error);
@@ -389,17 +400,26 @@ export default function InvitationSeatManagementTable(
     pending: invitations.filter((i) => !i.response).length,
   };
 
-  // Seat label and room for a seat ID
-  const getSeat = (attendee: CombinedAttendeeData) => {
+  // Seat label and room for a seat ID, plus the text read by screen readers
+  // in place of the visible label.
+  const getSeat = (
+    attendee: CombinedAttendeeData,
+  ): { label: string; room: string | null; spoken: string } => {
     if (!attendee.seatId) {
-      return attendee.reservationId
-        ? { label: "No desk", room: "Unspecified seat" }
-        : { label: "—", room: null };
+      if (!attendee.reservationId)
+        return { label: "—", room: null, spoken: "No seat yet" };
+      const label = unspecifiedLabel ?? "No desk";
+      return { label, room: null, spoken: `Seat: ${label}` };
     }
     const seat = seats.find((s) => s.id === attendee.seatId);
-    if (!seat) return { label: "?", room: "Unknown seat" };
-    const room = rooms.find((r) => r.id === seat.roomId);
-    return { label: seat.label, room: room?.name ?? null };
+    if (!seat)
+      return { label: "?", room: "Unknown seat", spoken: "Unknown seat" };
+    const room = rooms.find((r) => r.id === seat.roomId)?.name ?? null;
+    return {
+      label: seat.label,
+      room,
+      spoken: room ? `Seat ${seat.label}, ${room}` : `Seat ${seat.label}`,
+    };
   };
 
   // Handle edit - open wizard
@@ -831,9 +851,7 @@ export default function InvitationSeatManagementTable(
                       ...mono,
                       fontSize: 12,
                       color: colors.textMuted,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {attendee.email}
@@ -863,15 +881,12 @@ export default function InvitationSeatManagementTable(
                   flexDirection: "column",
                 }}
               >
+                <Box component="span" sx={srOnly}>
+                  {seat.spoken}
+                </Box>
                 <Box
                   component="span"
-                  aria-label={
-                    seat.room
-                      ? `Seat ${seat.label}, ${seat.room}`
-                      : seat.label === "—"
-                        ? "No seat"
-                        : `Seat ${seat.label}`
-                  }
+                  aria-hidden="true"
                   sx={{
                     ...mono,
                     fontSize: 13,
@@ -889,9 +904,7 @@ export default function InvitationSeatManagementTable(
                     sx={{
                       fontSize: 12,
                       color: colors.textMuted,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
+                      overflowWrap: "anywhere",
                     }}
                   >
                     {seat.room}
@@ -916,21 +929,23 @@ export default function InvitationSeatManagementTable(
                 }
               >
                 <Box
-                  component="span"
-                  tabIndex={0}
+                  component="time"
+                  dateTime={attendee.lastModified.toISOString()}
                   sx={{
                     ...mono,
                     width: 110,
                     fontSize: 12,
                     color: colors.textMuted,
                     cursor: "help",
-                    "&:focus-visible": {
-                      outline: `2px solid ${colors.cyan}`,
-                      outlineOffset: 2,
-                    },
                   }}
                 >
+                  <Box component="span" sx={srOnly}>
+                    Last updated{" "}
+                  </Box>
                   {attendee.lastModified.fromNow()}
+                  <Box component="span" sx={srOnly}>
+                    {`, ${attendee.lastModified.format("ddd D MMM, HH:mm")}`}
+                  </Box>
                 </Box>
               </Tooltip>
               <Box sx={{ display: "flex", gap: "6px", ml: "auto" }}>

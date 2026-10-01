@@ -65,7 +65,14 @@ export function isValidSteamInput(input: string): boolean {
   );
 }
 
-/** Returns `value` once it has stopped changing for `delay` ms. */
+/**
+ * Returns `value` once it has stopped changing for `delay` ms.
+ *
+ * `onSettle` runs only when the settled value actually differs from the
+ * previously settled one: never on mount (so it can't clobber state restored
+ * from the URL, e.g. a page number) and not when an edit is undone before the
+ * delay elapses.
+ */
 export function useDebouncedValue<T>(
   value: T,
   delay: number,
@@ -73,11 +80,14 @@ export function useDebouncedValue<T>(
 ): T {
   const [debounced, setDebounced] = useState(value);
   const settle = useRef(onSettle);
+  const settled = useRef(value);
   useEffect(() => {
     settle.current = onSettle;
   });
   useEffect(() => {
+    if (Object.is(value, settled.current)) return undefined;
     const timer = setTimeout(() => {
+      settled.current = value;
       setDebounced(value);
       settle.current?.(value);
     }, delay);

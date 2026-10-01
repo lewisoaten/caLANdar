@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useState, useContext, useMemo } from "react";
-import { Box, CircularProgress, Typography } from "@mui/material";
+import { Box, Button, CircularProgress, Typography } from "@mui/material";
 import DeskSharp from "@mui/icons-material/DeskSharp";
 import CheckSharp from "@mui/icons-material/CheckSharp";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
@@ -8,6 +8,7 @@ import { Seat } from "../../types/events";
 import { InvitationLiteData } from "../../types/invitations";
 import { SeatAvailabilityResponse } from "../../types/seat_reservations";
 import { colors, fonts, hairline, tint } from "../hl";
+import { displayCallsign } from "../../utils/callsign";
 import {
   SeatFloorPlan,
   FloorPlanLegend,
@@ -69,6 +70,13 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
   const [availabilityLoadedFor, setAvailabilityLoadedFor] = useState<
     string | null
   >(null);
+  // Which request failed (so a retry or new attendance clears it), and a
+  // counter to re-run the requests from the error state's Retry button.
+  const [seatsFailedFor, setSeatsFailedFor] = useState<number | null>(null);
+  const [availabilityFailedFor, setAvailabilityFailedFor] = useState<
+    string | null
+  >(null);
+  const [retry, setRetry] = useState(0);
   const loading = Boolean(eventId && token) && seatsLoadedFor !== eventId;
   const availabilityLoaded = availabilityLoadedFor === availabilityKey;
 
@@ -102,16 +110,22 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
     // Fetch seats
     fetch(`/api/events/${eventId}/seats`, { headers })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok) return response.json();
+        if (response.status === 401) {
+          signOut();
+          return undefined;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
       })
       .then((data) => {
         if (data) {
           setSeats(data);
+          setSeatsFailedFor(null);
         }
       })
       .catch((error) => {
         console.error("Error fetching seats:", error);
+        setSeatsFailedFor(eventId);
       })
       .finally(() => {
         setSeatsLoadedFor(eventId);
@@ -127,7 +141,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       .catch((error) => {
         console.error("Error fetching seat occupants:", error);
       });
-  }, [eventId, token, signOut]);
+  }, [eventId, token, signOut, retry]);
 
   // Fetch seat availability
   useEffect(() => {
@@ -143,21 +157,29 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
       body: JSON.stringify({ attendanceBuckets }),
     })
       .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok) return response.json();
+        if (response.status === 401) {
+          signOut();
+          return undefined;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json() as Promise<SeatAvailabilityResponse>;
       })
-      .then((data: SeatAvailabilityResponse) => {
+      .then((data) => {
         if (data?.availableSeatIds) {
           setAvailableSeats(data.availableSeatIds);
+          setAvailabilityFailedFor(null);
         }
       })
       .catch((error) => {
         console.error("Error fetching seat availability:", error);
+        // Without availability every desk would read as taken: show an
+        // error with a retry instead of a misleading plan.
+        setAvailabilityFailedFor(`${eventId}:${attendanceBuckets.join("")}`);
       })
       .finally(() =>
         setAvailabilityLoadedFor(`${eventId}:${attendanceBuckets.join("")}`),
       );
-  }, [eventId, token, attendanceBuckets, signOut]);
+  }, [eventId, token, attendanceBuckets, signOut, retry]);
 
   const handleSeatClick = async (seatId: number) => {
     if (disabled) return;
@@ -205,7 +227,7 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
               : occupants
                   .filter((o) => o.seatId === seat.id)
                   .map((o) => ({
-                    name: o.handle || "Someone",
+                    name: displayCallsign(o.handle),
                     avatarUrl: o.avatarUrl,
                   }));
           return {
@@ -270,6 +292,52 @@ const WizardSeatSelector: React.FC<WizardSeatSelectorProps> = ({
         }}
       >
         <CircularProgress aria-hidden="true" />
+      </Box>
+    );
+  }
+
+  const loadFailed =
+    seatsFailedFor === eventId ||
+    (availabilityKey !== null && availabilityFailedFor === availabilityKey);
+  if (loadFailed) {
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box
+          role="alert"
+          sx={{
+            p: 2,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 1.5,
+            border: `1px solid ${tint("pink", 0.45)}`,
+            backgroundColor: tint("pink", 0.06),
+            color: colors.text,
+            fontSize: 15,
+          }}
+        >
+          <Box component="span" sx={{ flex: "1 1 220px" }}>
+            Couldn&apos;t check which desks are free.{" "}
+            {allowUnspecifiedSeat
+              ? "Try again, or bring your own desk."
+              : "Try again to pick your desk."}
+          </Box>
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={disabled}
+            onClick={() => {
+              setSeatsFailedFor(null);
+              setAvailabilityFailedFor(null);
+              setSeatsLoadedFor(null);
+              setAvailabilityLoadedFor(null);
+              setRetry((r) => r + 1);
+            }}
+          >
+            Retry
+          </Button>
+        </Box>
+        {byoButton}
       </Box>
     );
   }

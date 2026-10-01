@@ -25,7 +25,23 @@ export type InvitationLiteData = {
   response: RSVP | null;
   attendance: number[] | null;
   seatId: number | null;
+  /** True on the viewer's own row (absent from older APIs). */
+  isSelf?: boolean;
+  /**
+   * True when the guest holds a seat reservation, including a floating one
+   * (`seatId: null`). Absent from older APIs.
+   */
+  hasSeatReservation?: boolean;
   lastModified: moment.Moment;
+};
+
+/** `GET /events/{id}/rsvp_counts`: guests per RSVP answer (counts only). */
+export type RsvpCounts = {
+  yes: number;
+  maybe: number;
+  no: number;
+  /** Invited but not yet responded. */
+  pending: number;
 };
 
 export const defaultInvitationsData: InvitationData[] = [];

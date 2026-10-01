@@ -8,7 +8,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { SnackbarProvider } from "notistack";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import theme from "../theme";
-import EventSeatMap from "../components/EventSeatMap";
+import EventSeatMap, { isOwnInvitation } from "../components/EventSeatMap";
 import { UserProvider } from "../UserProvider";
 
 const stamp = "2026-01-01T00:00:00Z";
@@ -365,14 +365,75 @@ describe("EventSeatMap", () => {
     ).toBeInTheDocument();
   });
 
-  it("reports a failed load", async () => {
+  it("reports a failed load and retries", async () => {
+    const user = userEvent.setup();
     routes["GET /api/events/1/rooms"] = () => json({}, 500);
     renderMap();
     expect(
-      await screen.findByText(
-        "Failed to load seat map data. Please try refreshing the page.",
-      ),
+      await screen.findByText(/Couldn't load the seat map/),
     ).toBeInTheDocument();
+    routes["GET /api/events/1/rooms"] = () => json(rooms);
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await plan()).toBeInTheDocument();
+  });
+
+  it("shows a failed free-desk check with a retry instead of silently locking desks", async () => {
+    const user = userEvent.setup();
+    routes["POST /api/events/1/seat-reservations/check-availability"] = () =>
+      json({}, 500);
+    renderMap();
+    await plan();
+    expect(
+      await screen.findByText(/Couldn't check which desks are free/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "A2, free" })).toBeDisabled();
+    routes["POST /api/events/1/seat-reservations/check-availability"] = () =>
+      json({ availableSeatIds: [2, 3] });
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "A2, free" })).toBeEnabled(),
+    );
+    expect(
+      screen.queryByText(/Couldn't check which desks are free/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("uses the server's isSelf and hasSeatReservation markers", async () => {
+    routes["GET /api/events/1/invitations"] = () =>
+      json([
+        {
+          eventId: 1,
+          avatarUrl: null,
+          handle: "ProGamer123",
+          response: "yes",
+          attendance: [1, 1],
+          seatId: null,
+          isSelf: true,
+          hasSeatReservation: true,
+          lastModified: stamp,
+        },
+        {
+          eventId: 1,
+          avatarUrl: null,
+          handle: "NoDeskYet",
+          response: "maybe",
+          attendance: [1, 0],
+          seatId: null,
+          isSelf: false,
+          hasSeatReservation: false,
+          lastModified: stamp,
+        },
+      ]);
+    routes["GET /api/events/1/seat-reservations/me"] = () =>
+      json(reservation(null));
+    renderMap();
+    await plan();
+    // Only the guest who reserved the floating seat counts as "own desk".
+    expect(
+      await screen.findByRole("heading", { name: "Bring my own desk · 1" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ProGamer123\s*\(you\)/)).toBeInTheDocument();
+    expect(screen.queryByText("NoDeskYet")).not.toBeInTheDocument();
   });
 
   it("waits for data before rendering", async () => {
@@ -380,6 +441,46 @@ describe("EventSeatMap", () => {
     expect(screen.getByText("Loading seat map…")).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByText("Loading seat map…")).not.toBeInTheDocument(),
+    );
+  });
+});
+
+describe("isOwnInvitation", () => {
+  const mine = {
+    eventId: 1,
+    email: "me@example.com",
+    avatarUrl: "a",
+    handle: "Me",
+    invitedAt: null,
+    respondedAt: null,
+    response: "yes",
+    attendance: [1],
+    lastModified: null,
+  } as unknown as Parameters<typeof isOwnInvitation>[1];
+  const row = (extra: Record<string, unknown>) =>
+    ({
+      eventId: 1,
+      avatarUrl: "a",
+      handle: "Me",
+      response: "yes",
+      attendance: [1],
+      seatId: null,
+      lastModified: null,
+      ...extra,
+    }) as unknown as Parameters<typeof isOwnInvitation>[0];
+
+  it("trusts the server marker over avatar matching", () => {
+    expect(isOwnInvitation(row({ isSelf: false }), mine, null)).toBe(false);
+    expect(
+      isOwnInvitation(row({ isSelf: true, avatarUrl: "b" }), mine, null),
+    ).toBe(true);
+  });
+
+  it("falls back to avatar, then handle + seat, on an older API", () => {
+    expect(isOwnInvitation(row({}), mine, null)).toBe(true);
+    expect(isOwnInvitation(row({ avatarUrl: "b" }), mine, null)).toBe(false);
+    expect(isOwnInvitation(row({ avatarUrl: null, seatId: 4 }), mine, 4)).toBe(
+      true,
     );
   });
 });

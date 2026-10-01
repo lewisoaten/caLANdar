@@ -1,5 +1,5 @@
 import * as React from "react";
-import moment from "moment/min/moment-with-locales";
+import moment from "moment";
 import { FormEvent, ChangeEvent, useState, useContext, useRef } from "react";
 import {
   Button,
@@ -16,6 +16,7 @@ import UploadSharp from "@mui/icons-material/UploadSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
+import { eventImageSrc } from "../utils/eventImage";
 import { colors, fonts, hairline, tint } from "./hl";
 
 interface EventsAminDialogProps {
@@ -295,15 +296,7 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
     else putEvent();
   };
 
-  const locale =
-    navigator.languages && navigator.languages.length
-      ? navigator.languages[0]
-      : navigator.language;
-  moment.locale(locale);
-
-  const imageSrc =
-    (formValues.image && "data:image/png;base64," + formValues.image) ||
-    "/static/lan_party_image.jpg";
+  const imageSrc = eventImageSrc(formValues.image);
 
   const fields = (
     <>

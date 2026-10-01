@@ -10,6 +10,7 @@ import {
   formatDayBlock,
   formatFeaturedRange,
   formatSquadSummary,
+  myRsvpOf,
   summariseSquad,
 } from "../components/eventListModel";
 import { looksLikeEmail } from "../components/AuthLayout";
@@ -139,11 +140,26 @@ describe("misc", () => {
   test("image source", () => {
     expect(eventImageSrc(undefined)).toBe("/static/lan_party_image.jpg");
     expect(eventImageSrc("abc")).toBe("data:image/jpeg;base64,abc");
+    expect(eventImageSrc("iVBORw0KGgoAAA")).toBe(
+      "data:image/png;base64,iVBORw0KGgoAAA",
+    );
+    expect(eventImageSrc("/9j/4AAQ")).toBe("data:image/jpeg;base64,/9j/4AAQ");
   });
 
   test("email check", () => {
     expect(looksLikeEmail(" sam@example.com ")).toBe(true);
     expect(looksLikeEmail("sam@example")).toBe(false);
     expect(looksLikeEmail("")).toBe(false);
+  });
+});
+
+describe("myRsvpOf", () => {
+  test("reads the list's myResponse", () => {
+    expect(myRsvpOf({ myResponse: "yes" })).toBe(RSVP.yes);
+    expect(myRsvpOf({ myResponse: "no" })).toBe(RSVP.no);
+    expect(myRsvpOf({ myResponse: null })).toBeNull();
+    // Older API without the field: unknown, so no status tag is guessed.
+    expect(myRsvpOf({})).toBeUndefined();
+    expect(myRsvpOf({ myResponse: "bogus" })).toBeUndefined();
   });
 });

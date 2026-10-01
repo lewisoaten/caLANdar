@@ -40,13 +40,22 @@ import {
   trophy,
 } from "./hl";
 import { rankSuggestions } from "./lobbyModel";
+import { RSVP } from "../types/invitations";
 
 const COMMENT_MAX_LENGTH = 500;
 
 interface EventGameSuggestionsProps {
   event_id: number;
+  /** Non-zero once the viewer has responded; changes trigger a refetch. */
   responded: number;
+  /**
+   * The viewer's RSVP. Only guests who are going or maybe can vote and
+   * suggest; others see the vote read-only. Omitted = treated as going.
+   */
+  myResponse?: RSVP | null;
   disabled: boolean;
+  /** Opens the RSVP wizard, offered to guests who can't vote yet. */
+  onEditRsvp?: () => void;
 }
 
 type Status = "loading" | "ready" | "error";
@@ -153,7 +162,22 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   const [announcement, setAnnouncement] = useState("");
 
   const typingTimer = useRef<null | ReturnType<typeof setTimeout>>(null);
+  const searchAbort = useRef<AbortController | null>(null);
   const doneTypingInterval = 1000;
+  // The latest suggestions, for announcements computed after an await.
+  const suggestionsRef = useRef(gameSuggestions);
+  useEffect(() => {
+    suggestionsRef.current = gameSuggestions;
+  }, [gameSuggestions]);
+
+  // Declined guests may look at the vote but not take part (the API answers
+  // 403); `undefined` keeps older callers working as before.
+  const canTakePart =
+    props.myResponse === undefined ||
+    props.myResponse === RSVP.yes ||
+    props.myResponse === RSVP.maybe;
+  const locked = props.disabled || !canTakePart;
+  const lockedNoteId = `game-vote-locked-${props.event_id}`;
 
   const authHeaders = React.useMemo(
     () => ({
@@ -200,6 +224,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
   useEffect(
     () => () => {
       if (typingTimer.current !== null) clearTimeout(typingTimer.current);
+      searchAbort.current?.abort();
     },
     [],
   );
@@ -226,24 +251,36 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
     setInputValue(value);
     setErrorMessage("");
 
+    // A newer keystroke supersedes any search still in flight.
+    searchAbort.current?.abort();
+    searchAbort.current = null;
+
     if (reason === "input" && value.trim()) {
       setLoading(true);
       setOpen(true);
 
-      typingTimer.current = setTimeout(function () {
+      typingTimer.current = setTimeout(() => {
+        const controller = new AbortController();
+        searchAbort.current = controller;
         fetch(`/api/steam-game?query=${encodeURIComponent(value)}`, {
           headers: authHeaders,
+          signal: controller.signal,
         })
-          .then((response) => {
-            if (response.status === 401) signOut();
-            else if (response.ok)
-              return response
-                .text()
-                .then((data) => JSON.parse(data, dateParser) as Array<Game>);
+          .then(async (response) => {
+            if (response.status === 401) {
+              signOut();
+              return null;
+            }
+            if (!response.ok)
+              throw await apiErrorFrom("Steam search failed", response);
+            return response
+              .text()
+              .then((data) => JSON.parse(data, dateParser) as Array<Game>);
           })
           .then((data) => {
+            if (controller.signal.aborted || data === null) return;
             setLoading(false);
-            if (!data || data.length === 0) {
+            if (data.length === 0) {
               setErrorMessage("No games found");
               setOptions(defaultGames);
               setOpen(false);
@@ -251,9 +288,12 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
               setOptions(data);
             }
           })
-          .catch(() => {
+          .catch((error) => {
+            if (controller.signal.aborted) return;
+            console.error("Steam search failed:", error);
             setLoading(false);
             setErrorMessage("Steam search is unavailable right now");
+            setOptions(defaultGames);
             setOpen(false);
           });
       }, doneTypingInterval);
@@ -340,6 +380,8 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
 
   const handleVote = (appid: number, checked: boolean) => {
     setPendingVote(appid);
+    const name =
+      gameSuggestions.find((g) => g.appid === appid)?.name ?? "this game";
     fetch(`/api/events/${props.event_id}/suggested_games/${appid}`, {
       method: "PATCH",
       headers: authHeaders,
@@ -347,31 +389,39 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         vote: checked ? GameVote.yes : GameVote.noVote,
       }),
     })
-      .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.status === 200) {
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
-        } else {
-          throw new Error("Unable to vote");
+      .then(async (response) => {
+        if (response.status === 401) {
+          signOut();
+          return undefined;
         }
+        if (!response.ok) throw await apiErrorFrom("Unable to vote", response);
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
       })
       .then((data) => {
-        if (data) {
-          replaceSuggestion(data);
-          const next = rankSuggestions(
-            gameSuggestions.map((g) => (g.appid === data.appid ? data : g)),
-          ).find((r) => r.suggestion.appid === data.appid);
-          setAnnouncement(
-            `${checked ? "Voted for" : "Removed vote for"} ${data.name}. ${data.votes} ${data.votes === 1 ? "vote" : "votes"}, now rank ${next?.rank ?? ""}.`,
-          );
-        }
+        if (!data) return;
+        // Rank against the latest list, not the one this click closed over.
+        const next = suggestionsRef.current.map((g) =>
+          g.appid === data.appid ? data : g,
+        );
+        const rank = rankSuggestions(next).find(
+          (r) => r.suggestion.appid === data.appid,
+        )?.rank;
+        replaceSuggestion(data);
+        setAnnouncement(
+          `${checked ? "Voted for" : "Removed vote for"} ${data.name}. ${data.votes} ${data.votes === 1 ? "vote" : "votes"}${rank ? `, now rank ${rank}` : ""}.`,
+        );
       })
-      .catch(() => {
-        enqueueSnackbar("Unable to vote. Please try again.", {
-          variant: "error",
-        });
+      .catch((error) => {
+        console.error("Error voting:", error);
+        const reason = userFacingReason(error);
+        enqueueSnackbar(
+          reason
+            ? `Couldn't vote for ${name}: ${reason}`
+            : `Couldn't vote for ${name}. Please try again.`,
+          { variant: "error" },
+        );
       })
       .finally(() => setPendingVote(null));
   };
@@ -396,22 +446,16 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
         comment: trimmedComment || null,
       }),
     })
-      .then((response) => {
+      .then(async (response) => {
         if (response.status === 401) {
           signOut();
-        } else if (response.status === 403) {
-          throw new Error(
-            "Permission denied: You can only edit your own suggestions",
-          );
-        } else if (response.status === 404) {
-          throw new Error("Game suggestion not found");
-        } else if (response.ok) {
-          return response
-            .text()
-            .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
-        } else {
-          throw new Error("Unable to update comment. Please try again.");
+          return undefined;
         }
+        if (!response.ok)
+          throw await apiErrorFrom("Unable to save pitch", response);
+        return response
+          .text()
+          .then((data) => JSON.parse(data, dateParser) as GameSuggestion);
       })
       .then((data) => {
         if (data) {
@@ -421,8 +465,15 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
           setAnnouncement(`Pitch for ${data.name} saved.`);
         }
       })
-      .catch((error: Error) => {
-        enqueueSnackbar(error.message, { variant: "error" });
+      .catch((error) => {
+        console.error("Error saving pitch:", error);
+        const reason = userFacingReason(error);
+        enqueueSnackbar(
+          reason
+            ? `Couldn't save your pitch: ${reason}`
+            : "Couldn't save your pitch. Please try again.",
+          { variant: "error" },
+        );
       });
   };
 
@@ -558,6 +609,10 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                       lineHeight: 1.25,
                       overflowWrap: "anywhere",
                       alignSelf: "flex-start",
+                      // WCAG 2.5.8: at least a 24px-tall target.
+                      display: "inline-flex",
+                      alignItems: "center",
+                      minHeight: 24,
                     }}
                   >
                     {game.name}
@@ -598,7 +653,7 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                         onClick={() =>
                           handleEditClick(game.appid, game.comment)
                         }
-                        disabled={props.disabled}
+                        disabled={locked}
                         sx={{ color: colors.textMuted }}
                       >
                         <EditSharp fontSize="small" />
@@ -611,7 +666,8 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
                   type="button"
                   aria-pressed={voted}
                   aria-label={`Vote for ${game.name} (${game.votes} ${game.votes === 1 ? "vote" : "votes"})`}
-                  disabled={props.disabled || pendingVote === game.appid}
+                  aria-describedby={canTakePart ? undefined : lockedNoteId}
+                  disabled={locked || pendingVote === game.appid}
                   onClick={() => handleVote(game.appid, !voted)}
                   sx={{
                     flex: "none",
@@ -729,7 +785,42 @@ export default function EventGameSuggestions(props: EventGameSuggestionsProps) {
       <Box aria-live="polite" sx={srOnly}>
         {announcement}
       </Box>
-      {!!props.responded && (
+      {!!props.responded && !canTakePart && (
+        <Box
+          sx={{
+            p: "16px 20px",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 1.5,
+            borderTop: `1px solid ${hairline.soft}`,
+          }}
+        >
+          <Box
+            component="p"
+            id={lockedNoteId}
+            sx={{
+              m: 0,
+              flex: "1 1 240px",
+              fontSize: 14,
+              lineHeight: 1.5,
+              color: colors.textMuted,
+            }}
+          >
+            {props.disabled
+              ? "This event has ended, so voting and suggestions are closed."
+              : props.myResponse === RSVP.no
+                ? "You've said you can't make it, so you can't vote or suggest games. Change your RSVP to going or maybe to join the vote."
+                : "RSVP going or maybe to vote and suggest games."}
+          </Box>
+          {props.onEditRsvp && !props.disabled && (
+            <Button variant="outlined" onClick={props.onEditRsvp}>
+              Update RSVP
+            </Button>
+          )}
+        </Box>
+      )}
+      {!!props.responded && canTakePart && (
         <Box
           component="form"
           onSubmit={handleSubmit}

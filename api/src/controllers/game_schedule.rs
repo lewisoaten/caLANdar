@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::{
     controllers::{ensure_user_invited, Error},
-    repositories::{event, game_schedule, game_suggestion, invitation},
+    repositories::{event, game_schedule, game_suggestion, invitation, user_games},
     routes::game_schedule::{GameScheduleEntry, GameScheduleRequest},
     scheduler::{self, Game, OccupiedSlot, SchedulerInput, Voter},
 };
@@ -172,19 +172,34 @@ pub async fn schedule_suggested_games(
     .await
     .map_err(|e| Error::Controller(format!("Unable to get pinned games due to: {e}")))?;
 
-    // Create a HashSet of pinned game IDs for filtering
-    let pinned_game_ids: std::collections::HashSet<i64> =
-        pinned_games.iter().map(|g| g.game_id).collect();
-
-    // Filter out pinned games from the games to schedule
-    let games_to_schedule: Vec<_> = games_with_votes
-        .into_iter()
-        .filter(|g| !pinned_game_ids.contains(&g.game_id))
-        .collect();
+    // Pinned games stay in the list: they count towards a game's session limit
+    // (the scheduler sees them through `pinned_slots`) and may get one more
+    // suggested session.
+    let games_to_schedule = games_with_votes;
 
     if games_to_schedule.is_empty() {
         return Ok(Vec::new());
     }
+
+    // Attending guests (yes/maybe): the same set the owner counts use elsewhere
+    let attending_emails: Vec<String> = invitation::filter(
+        pool,
+        invitation::Filter {
+            event_id: Some(event_id),
+            email: None,
+        },
+    )
+    .await
+    .map_err(|e| Error::Controller(format!("Unable to get invitations due to: {e}")))?
+    .into_iter()
+    .filter(|i| {
+        matches!(
+            i.response,
+            Some(invitation::Response::Yes | invitation::Response::Maybe)
+        )
+    })
+    .map(|i| i.email)
+    .collect();
 
     // Get voters and their availability for each game
     let mut voters_map: HashMap<String, Voter> = HashMap::new();
@@ -215,11 +230,32 @@ pub async fn schedule_suggested_games(
             }
         }
 
+        let owner_count = if attending_emails.is_empty() {
+            0
+        } else {
+            user_games::filter(
+                pool,
+                user_games::Filter {
+                    appid: Some(game_record.game_id),
+                    emails: Some(attending_emails.clone()),
+                    count: 1,
+                    page: 0,
+                    search: None,
+                },
+            )
+            .await
+            .map_err(|e| Error::Controller(format!("Unable to get game owners due to: {e}")))?
+            .into_iter()
+            .map(|g| g.emails.map_or(0, |emails| emails.len()))
+            .sum()
+        };
+
         games.push(Game {
             id: game_record.game_id,
             name: game_record.game_name,
             votes: game_record.vote_count.unwrap_or(0),
             voter_ids,
+            owner_count,
         });
     }
 
@@ -227,6 +263,7 @@ pub async fn schedule_suggested_games(
     let pinned_slots: Vec<OccupiedSlot> = pinned_games
         .iter()
         .map(|schedule| OccupiedSlot {
+            game_id: schedule.game_id,
             start_time: schedule.start_time,
             duration_minutes: schedule.duration_minutes,
         })

@@ -2,8 +2,8 @@
  * The signed-in user's seat reservation for an event: load it, check which
  * seats are free for their attendance, and claim / swap / release a seat.
  *
- * Shared by the seat map page and the standalone SeatSelector so both keep
- * the same API calls, validation and error messages.
+ * Used by the seat map page; keeps its API calls, validation and error
+ * messages in one place. Release deletes the reservation (same as on main).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSnackbar } from "notistack";
@@ -36,6 +36,13 @@ export interface UseSeatReservation {
   loaded: boolean;
   /** Seats free for the user's attendance (`null` until checked). */
   availableSeatIds: number[] | null;
+  /**
+   * Why the free-seat check failed (shown with a retry), `null` otherwise.
+   * While set, `availableSeatIds` is `null`: never guess which seats are free.
+   */
+  availabilityError: string | null;
+  /** Re-run the free-seat check. */
+  retryAvailability: () => void;
   /** A claim / release request is in flight. */
   saving: boolean;
   /** Reserve `seatId` (or the unspecified seat, `null`). Resolves true on success. */
@@ -71,12 +78,42 @@ export function useSeatReservation({
   const hasSeating = Boolean(seatingConfig?.hasSeating);
 
   const [reservation, setReservation] = useState<SeatReservation | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [availableSeatIds, setAvailableSeatIds] = useState<number[] | null>(
-    null,
+  // Which event the reservation (and free seats) were loaded for: after an
+  // event switch, the previous event's answers are not shown meanwhile.
+  const [loadedFor, setLoadedFor] = useState<number | null>(null);
+  const loaded = eventId !== undefined && loadedFor === eventId;
+  const [availability, setAvailability] = useState<{
+    eventId: number;
+    seatIds: number[];
+  } | null>(null);
+  const availableSeatIds =
+    availability && availability.eventId === eventId
+      ? availability.seatIds
+      : null;
+  const setAvailableSeatIds = useCallback(
+    (update: (prev: number[] | null) => number[] | null) => {
+      if (eventId === undefined) return;
+      setAvailability((prev) => {
+        const next = update(prev?.eventId === eventId ? prev.seatIds : null);
+        return next ? { eventId, seatIds: next } : null;
+      });
+    },
+    [eventId],
   );
   const [saving, setSaving] = useState(false);
   const [availabilityTick, setAvailabilityTick] = useState(0);
+  const [availabilityFailure, setAvailabilityFailure] = useState<{
+    eventId: number;
+    message: string;
+  } | null>(null);
+  const availabilityError =
+    availabilityFailure && availabilityFailure.eventId === eventId
+      ? availabilityFailure.message
+      : null;
+  const retryAvailability = useCallback(
+    () => setAvailabilityTick((t) => t + 1),
+    [],
+  );
 
   // Current reservation
   useEffect(() => {
@@ -99,11 +136,11 @@ export function useSeatReservation({
       .then((data) => {
         if (cancelled) return;
         setReservation(data);
-        setLoaded(true);
+        setLoadedFor(eventId);
       })
       .catch((error) => {
         console.error("Error fetching seat reservation:", error);
-        if (!cancelled) setLoaded(true);
+        if (!cancelled) setLoadedFor(eventId);
       });
     return () => {
       cancelled = true;
@@ -146,29 +183,39 @@ export function useSeatReservation({
     ) {
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
     fetch(`/api/events/${eventId}/seat-reservations/check-availability`, {
       method: "POST",
       headers: headers(token),
       body: JSON.stringify({ attendanceBuckets }),
+      signal: controller.signal,
     })
-      .then((response) => {
+      .then(async (response) => {
         if (response.status === 401) {
           signOut();
           return null;
         }
-        if (!response.ok) throw new Error("Failed to check availability");
+        if (!response.ok)
+          throw await apiErrorFrom("Check seat availability", response);
         return response.json() as Promise<SeatAvailabilityResponse>;
       })
       .then((data) => {
-        if (!cancelled && data) setAvailableSeatIds(data.availableSeatIds);
+        if (controller.signal.aborted || !data) return;
+        setAvailableSeatIds(() => data.availableSeatIds);
+        setAvailabilityFailure(null);
       })
       .catch((error) => {
+        if (controller.signal.aborted) return;
         console.error("Error checking seat availability:", error);
+        setAvailableSeatIds(() => null);
+        setAvailabilityFailure({
+          eventId,
+          message:
+            userFacingReason(error) ??
+            "Couldn't check which desks are free. Check your connection and try again.",
+        });
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [
     eventId,
     token,
@@ -176,6 +223,7 @@ export function useSeatReservation({
     hasSeating,
     attendanceBuckets,
     availabilityTick,
+    setAvailableSeatIds,
   ]);
 
   const reserve = useCallback(
@@ -257,6 +305,7 @@ export function useSeatReservation({
       token,
       signOut,
       onChange,
+      setAvailableSeatIds,
     ],
   );
 
@@ -321,9 +370,11 @@ export function useSeatReservation({
   );
 
   return {
-    reservation: invalidReason ? null : reservation,
+    reservation: invalidReason || !loaded ? null : reservation,
     loaded: loaded || !hasSeating,
     availableSeatIds: canCheck ? availableSeatIds : null,
+    availabilityError: canCheck ? availabilityError : null,
+    retryAvailability,
     saving,
     reserve,
     release,

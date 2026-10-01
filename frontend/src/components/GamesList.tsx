@@ -25,6 +25,7 @@ import {
   trophy,
 } from "./hl";
 import { OwnerChips, type OwnerIdentity } from "./GameOwners";
+import { rankSuggestions } from "./lobbyModel";
 
 /** A game in the squad library plus its place in the event's vote, if any. */
 export interface SquadGame extends EventGame {
@@ -32,9 +33,11 @@ export interface SquadGame extends EventGame {
 }
 
 export interface VoteInfo {
-  /** 1-based position in the vote (most votes first). */
+  /** Competition rank in the vote (most votes first; ties share a rank). */
   rank: number;
   votes: number;
+  /** 1-3 when the game earns a trophy (needs a vote), else null. */
+  trophyRank?: number | null;
 }
 
 export type VoteFilter = "all" | "in" | "out";
@@ -61,17 +64,24 @@ export function formatPlayedHours(minutes: number): string | null {
 }
 
 /**
- * Rank suggestions by votes (most first). Ties keep the server's order, the
- * same as the lobby's vote list.
+ * Each suggested game's place in the vote, ranked exactly like the lobby's
+ * vote list (lobbyModel.rankSuggestions: competition ranking, ties by name,
+ * no trophy without a vote).
  */
-export function rankSuggestions(
-  suggestions: ReadonlyArray<{ appid: number; votes: number | null }>,
+export function voteRanks(
+  suggestions: ReadonlyArray<{
+    appid: number;
+    name: string;
+    votes: number | null;
+  }>,
 ): Map<number, VoteInfo> {
-  const ranked = suggestions
-    .map((s, i) => ({ appid: s.appid, votes: s.votes ?? 0, i }))
-    .sort((a, b) => b.votes - a.votes || a.i - b.i);
   return new Map(
-    ranked.map((s, i) => [s.appid, { rank: i + 1, votes: s.votes }]),
+    rankSuggestions(
+      suggestions.map((s) => ({ ...s, votes: s.votes ?? 0 })),
+    ).map(({ suggestion, rank, trophyRank }) => [
+      suggestion.appid,
+      { rank, votes: suggestion.votes, trophyRank },
+    ]),
   );
 }
 
@@ -244,8 +254,8 @@ function Cover({ appid, badge }: { appid: number; badge?: string | null }) {
 export { Cover as GameCover };
 
 /** 26px bordered trophy tile for ranks 1-3. */
-function TrophyTile({ rank }: { rank: number }) {
-  const color = trophy[rank as 1 | 2 | 3];
+function TrophyTile({ rank }: { rank: number | null }) {
+  const color = rank ? trophy[rank as 1 | 2 | 3] : undefined;
   if (!color) return null;
   return (
     <Box
@@ -335,7 +345,15 @@ export const GameCard = React.memo(function GameCard({
         >
           {vote ? (
             <>
-              <TrophyTile rank={vote.rank} />
+              <TrophyTile
+                rank={
+                  vote.trophyRank !== undefined
+                    ? vote.trophyRank
+                    : vote.votes > 0
+                      ? vote.rank
+                      : null
+                }
+              />
               <Box
                 sx={{
                   flex: 1,
@@ -500,6 +518,32 @@ export interface GamesListProps {
   suggestUnavailable?: string;
   /** Status content (e.g. "Valheim added to the vote.") next to the filters. */
   status?: React.ReactNode;
+  /**
+   * Server-side search: pass the search text and its setter, and `games` are
+   * taken as already matching it (no name filtering here). Without these the
+   * search box filters `games` locally.
+   */
+  query?: string;
+  onQueryChange?: (query: string) => void;
+  /** A server-side search for `query` is in flight. */
+  searching?: boolean;
+}
+
+/** How long the result count waits for typing to pause before it's announced. */
+export const ANNOUNCE_DELAY_MS = 700;
+
+/** Screen-reader summary of what the filters left on screen. */
+export function resultsAnnouncement(
+  shown: number,
+  total: number,
+  query: string,
+): string {
+  if (query.trim()) {
+    return `${countLabel(shown)} match “${query.trim()}”`;
+  }
+  return shown === total
+    ? `${countLabel(total)} shown`
+    : `${shown.toLocaleString("en-GB")} of ${countLabel(total)} shown`;
 }
 
 /**
@@ -519,16 +563,35 @@ export default function GamesList({
   onSuggest,
   suggestUnavailable,
   status,
+  query: controlledQuery,
+  onQueryChange,
+  searching = false,
 }: GamesListProps) {
-  const [query, setQuery] = React.useState("");
+  const [localQuery, setLocalQuery] = React.useState("");
+  const serverSearch = onQueryChange !== undefined;
+  const query = serverSearch ? (controlledQuery ?? "") : localQuery;
+  const setQuery = serverSearch ? onQueryChange : setLocalQuery;
   const [filter, setFilter] = React.useState<VoteFilter>("all");
   const [page, setPage] = React.useState(1);
   const topRef = React.useRef<HTMLDivElement>(null);
 
   const filtered = React.useMemo(
-    () => filterGames(games, query, filter),
-    [games, query, filter],
+    () => filterGames(games, serverSearch ? "" : query, filter),
+    [games, query, filter, serverSearch],
   );
+
+  // One polite live region for the result count, updated once typing pauses
+  // (not on every keystroke).
+  const summary =
+    !loading && !error && (games.length > 0 || query.trim())
+      ? resultsAnnouncement(filtered.length, games.length, query)
+      : "";
+  const [announced, setAnnounced] = React.useState("");
+  React.useEffect(() => {
+    if (searching) return;
+    const t = window.setTimeout(() => setAnnounced(summary), ANNOUNCE_DELAY_MS);
+    return () => window.clearTimeout(t);
+  }, [summary, searching]);
   const groupTotals = React.useMemo(() => {
     const totals = new Map<number, number>();
     for (const g of filtered)
@@ -585,7 +648,7 @@ export default function GamesList({
         }
       />
     );
-  } else if (games.length === 0) {
+  } else if (games.length === 0 && !query.trim()) {
     body = (
       <EmptyState
         variant="panel"
@@ -698,9 +761,10 @@ export default function GamesList({
             setPage(1);
           }}
         />
-        {loadingMore && !loading && (
+        {((loadingMore && !serverSearch) || searching) && !loading && (
           <Box
             component="span"
+            aria-hidden="true"
             sx={{
               fontFamily: fonts.mono,
               fontSize: 11,
@@ -708,7 +772,7 @@ export default function GamesList({
               color: colors.textMuted,
             }}
           >
-            LOADING MORE GAMES…
+            {searching ? "SEARCHING…" : "LOADING MORE GAMES…"}
           </Box>
         )}
         <Box
@@ -717,13 +781,11 @@ export default function GamesList({
           sx={{ display: "flex", minWidth: 0, maxWidth: "100%" }}
         >
           {status}
+          <Box component="span" sx={srOnly}>
+            {announced}
+          </Box>
         </Box>
       </Box>
-      {!loading && !error && games.length > 0 && (
-        <Box component="p" role="status" sx={srOnly}>
-          {`${filtered.length} of ${games.length} games shown`}
-        </Box>
-      )}
       {body}
     </Box>
   );

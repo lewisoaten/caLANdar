@@ -6,6 +6,7 @@ import { setupServer } from "msw/node";
 import AuditLog, {
   buildAuditQuery,
   getActionDescription,
+  humanizeAction,
   type AuditLogEntry,
 } from "../components/AuditLog";
 import { renderAsAdmin } from "./adminTestUtils";
@@ -106,12 +107,46 @@ describe("getActionDescription", () => {
       getActionDescription(
         entry({ action: "room.layout_update", entityType: "room" }),
       ),
-    ).toBe("Updated room layout");
+    ).toBe("Saved room layout");
+    expect(
+      getActionDescription(
+        entry({
+          action: "room.layout_update",
+          entityType: "room",
+          metadata: {
+            rooms: 2,
+            seats: 40,
+            reservations_released: ["a@example.com"],
+          },
+        }),
+      ),
+    ).toBe("Saved room layout (2 rooms, 40 seats, 1 reservation released)");
+    expect(
+      getActionDescription(
+        entry({
+          action: "room.background_update",
+          entityType: "room",
+          metadata: { content_type: "image/png", bytes: 245760 },
+        }),
+      ),
+    ).toBe("Uploaded room background (PNG, 240 KB)");
     expect(
       getActionDescription(
         entry({ action: "seat.teleport", entityType: "seat" }),
       ),
-    ).toBe("seat.teleport");
+    ).toBe("Seat teleport");
+  });
+
+  test("humanizes unknown entity.action codes", () => {
+    expect(humanizeAction("room.background_update")).toBe(
+      "Room background updated",
+    );
+    expect(humanizeAction("game_suggestion.update_comment")).toBe(
+      "Game suggestion comment updated",
+    );
+    expect(humanizeAction("steam_cache.refresh")).toBe("Steam cache refreshed");
+    expect(humanizeAction("widget.frobnicate")).toBe("Widget frobnicate");
+    expect(humanizeAction("")).toBe("");
   });
 });
 

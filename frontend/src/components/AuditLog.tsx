@@ -75,6 +75,57 @@ export function buildAuditQuery(q: {
   return params.toString();
 }
 
+const PAST_TENSE: Record<string, string> = {
+  create: "created",
+  update: "updated",
+  delete: "deleted",
+  send: "sent",
+  refresh: "refreshed",
+  login: "logged in",
+  logout: "logged out",
+};
+
+const ENTITY_WORDS: Record<string, string> = {
+  auth: "sign-in",
+  event_seating_config: "seating config",
+  rsvp: "RSVP",
+  steam_games: "Steam games",
+};
+
+/** `game_suggestion` → `game suggestion` (lower case, for running text). */
+const entityWords = (entity: string) =>
+  ENTITY_WORDS[entity] ?? entity.replace(/_/g, " ");
+
+/**
+ * Human text for any `entity.action` code, for actions without a dedicated
+ * description: `room.background_update` → "Room background updated",
+ * `game_suggestion.update_comment` → "Game suggestion comment updated",
+ * `seat.teleport` → "Seat teleport".
+ */
+export function humanizeAction(code: string): string {
+  const [entity = "", action = ""] = code.split(".");
+  const words = action.split("_").filter(Boolean);
+  const verbAt = words.findIndex((w) => w in PAST_TENSE);
+  const subject = [entityWords(entity)];
+  let verb = "";
+  words.forEach((w, i) => {
+    if (i === verbAt) verb = PAST_TENSE[w];
+    else subject.push(w.replace(/-/g, " "));
+  });
+  const text = [...subject, verb].filter(Boolean).join(" ").trim();
+  return text ? text.charAt(0).toUpperCase() + text.slice(1) : code;
+}
+
+const formatBytes = (n: unknown): string | null => {
+  if (typeof n !== "number" || !Number.isFinite(n)) return null;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const countOf = (n: unknown, unit: string): string | null =>
+  typeof n === "number" ? `${n} ${unit}${n === 1 ? "" : "s"}` : null;
+
 export const getActionDescription = (log: AuditLogEntry): string => {
   const parts = log.action.split(".");
   const entity = parts[0];
@@ -157,6 +208,12 @@ export const getActionDescription = (log: AuditLogEntry): string => {
         const gameDisplay = gameName || `game (ID: ${gameId})`;
         const commentDisplay = comment ? ` - "${comment}"` : "";
         description = `Suggested game: ${gameDisplay}${commentDisplay}`;
+      } else if (action === "update_comment") {
+        const gameName = log.metadata?.game_name as string | undefined;
+        const comment = log.metadata?.comment as string | undefined;
+        description = `Updated suggestion comment${
+          gameName ? ` on ${gameName}` : ""
+        }${comment ? `: "${comment}"` : ""}`;
       }
       break;
     case "game_vote":
@@ -196,7 +253,30 @@ export const getActionDescription = (log: AuditLogEntry): string => {
       } else if (action === "delete") {
         description = `Deleted room`;
       } else if (action === "layout_update") {
-        description = `Updated room layout`;
+        const m = log.metadata ?? {};
+        const released = Array.isArray(m.reservations_released)
+          ? m.reservations_released.length
+          : 0;
+        const details = [
+          countOf(m.rooms, "room"),
+          countOf(m.seats, "seat"),
+          released ? `${countOf(released, "reservation")} released` : null,
+        ].filter(Boolean);
+        description = details.length
+          ? `Saved room layout (${details.join(", ")})`
+          : "Saved room layout";
+      } else if (action === "background_update") {
+        const type = (log.metadata?.content_type as string | undefined)
+          ?.split("/")[1]
+          ?.toUpperCase();
+        const details = [type, formatBytes(log.metadata?.bytes)].filter(
+          Boolean,
+        );
+        description = details.length
+          ? `Uploaded room background (${details.join(", ")})`
+          : "Uploaded room background";
+      } else if (action === "background_delete") {
+        description = "Removed room background";
       }
       break;
     case "seat":
@@ -239,11 +319,11 @@ export const getActionDescription = (log: AuditLogEntry): string => {
       }
       break;
     default:
-      description = log.action;
+      break;
   }
 
-  // A known entity with an action this list doesn't describe yet.
-  return description || log.action;
+  // Anything this list doesn't describe yet still reads as words.
+  return description || humanizeAction(log.action);
 };
 
 export const getEntityTypeName = (entityType: string): string => {
@@ -369,9 +449,7 @@ function AuditRow({ log, now }: { log: AuditLogEntry; now: number }) {
           component="span"
           title={who}
           sx={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
+            overflowWrap: "anywhere",
           }}
         >
           {who}

@@ -264,6 +264,7 @@ describe("RSVPWizard", () => {
 });
 
 describe("RSVPWizard seat reservation failures", () => {
+  let directLookups: string[] = [];
   const seatingHandlers = (seatResponse: () => Response) => [
     http.get("/api/events/:eventId/seating-config", () =>
       HttpResponse.json({
@@ -275,18 +276,23 @@ describe("RSVPWizard seat reservation failures", () => {
         lastModified: "2025-01-15T10:00:00Z",
       }),
     ),
-    http.get("/api/events/:eventId/seat-reservations/me", () =>
-      HttpResponse.json({}, { status: 404 }),
-    ),
+    // The guest's own reservation comes from the squad list (no 404 for
+    // "none"); the direct lookup must not be hit at all.
+    http.get("/api/events/:eventId/invitations", () => HttpResponse.json([])),
+    http.get("/api/events/:eventId/seat-reservations/me", () => {
+      directLookups.push("GET me");
+      return HttpResponse.json({}, { status: 404 });
+    }),
     http.get("/api/events/:eventId/rooms", () => HttpResponse.json([])),
     http.get("/api/events/:eventId/seats", () => HttpResponse.json([])),
     http.post("/api/events/:eventId/seat-reservations/check-availability", () =>
       HttpResponse.json({ availableSeatIds: [] }),
     ),
-    http.delete(
-      "/api/events/:eventId/seat-reservations/me",
-      () => new HttpResponse(null, { status: 204 }),
-    ),
+    http.delete("/api/events/:eventId/seat-reservations/me", () => {
+      // Saving the RSVP already released the old reservation server-side.
+      directLookups.push("DELETE me");
+      return new HttpResponse(null, { status: 404 });
+    }),
     http.post("/api/events/:eventId/seat-reservations/me", seatResponse),
   ];
 
@@ -312,7 +318,48 @@ describe("RSVPWizard seat reservation failures", () => {
     return onSaved;
   };
 
-  beforeEach(() => vi.mocked(Sentry.captureException).mockClear());
+  beforeEach(() => {
+    vi.mocked(Sentry.captureException).mockClear();
+    directLookups = [];
+  });
+
+  test("keeps 'bring my own desk' after attendance changes and never 404s", async () => {
+    let posted: unknown = null;
+    server.use(
+      ...seatingHandlers(() => new HttpResponse(null, { status: 201 })),
+    );
+    server.use(
+      http.post(
+        "/api/events/:eventId/seat-reservations/me",
+        async ({ request }) => {
+          posted = await request.json();
+          return HttpResponse.json({ id: 1, seatId: null }, { status: 201 });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderWizard();
+    await user.click(await screen.findByRole("button", { name: /I'm in/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    // Changing attendance used to null the seat label ("Not selected").
+    const blocks = (
+      await screen.findByRole("group", { name: "Attendance blocks" })
+    ).querySelectorAll("button");
+    await user.click(blocks[0]);
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.type(
+      await screen.findByRole("textbox", { name: /Callsign/i }),
+      "Josh",
+    );
+    while (!screen.queryByRole("button", { name: /Lock it in/i })) {
+      await user.click(screen.getByRole("button", { name: /Next/i }));
+    }
+    expect(screen.getByText("Unspecified")).toBeInTheDocument();
+    expect(screen.queryByText(/Not selected/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Lock it in/i }));
+    await waitFor(() => expect(posted).toMatchObject({ seatId: null }));
+    expect(directLookups).toEqual([]);
+  });
 
   test("reports a server error to Sentry without exposing its details", async () => {
     server.use(

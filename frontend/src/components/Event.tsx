@@ -231,8 +231,8 @@ const Event = () => {
   const loaded = loadState === "ready";
 
   // Non-zero once the viewer has responded (unlocks attendees/suggestions);
-  // bumps after every save so those lists refetch.
-  const responded = (invitation.response ? 1 : 0) + savedCount;
+  // bumps after every save so those lists refetch once per save.
+  const responded = invitation.response ? 1 + savedCount : 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +313,9 @@ const Event = () => {
     return () => {
       window.removeEventListener("calandar:rsvp-updated", handleRsvpUpdate);
     };
-  }, [id, token, email, responded, signOut]);
+    // Saves announce themselves with `calandar:rsvp-updated` (above), so the
+    // invitation is refetched once per save rather than also on `responded`.
+  }, [id, token, email, signOut]);
 
   const openWizard = useCallback(() => setWizardOpen(true), []);
 
@@ -398,7 +400,9 @@ const Event = () => {
         <EventGameSuggestions
           event_id={event.id}
           responded={responded}
+          myResponse={invitation.response}
           disabled={ended}
+          onEditRsvp={ended ? undefined : openWizard}
         />
       </Box>
 

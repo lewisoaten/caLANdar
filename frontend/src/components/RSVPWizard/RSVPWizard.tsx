@@ -23,6 +23,12 @@ import AttendanceStep from "./AttendanceStep";
 import SeatSelectionStep from "./SeatSelectionStep";
 import ReviewStep from "./ReviewStep";
 import { colors, effects, fonts, hairline, tint, useIsMobile } from "../hl";
+import { ownDeskLabel } from "../seatFloorPlanModel";
+import {
+  SessionExpiredError,
+  fetchReservation,
+  fetchSeatLabel,
+} from "./ownSeat";
 
 export type WizardStep =
   "Response" | "Attendance" | "Handle" | "Seat" | "Review";
@@ -158,112 +164,63 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       });
   }, [props.event.id, token, signOut]);
 
-  // Check if user has an existing seat reservation and load it into wizard state
+  // The label the wizard shows for a floating (unspecified) reservation:
+  // the event's configured label, or "Bring my own desk" for the default.
+  const ownDesk = ownDeskLabel(unspecifiedSeatLabel);
+
+  // Load the guest's existing seat reservation into the wizard state.
   useEffect(() => {
     if (!props.open || !props.event.id || !token || !email || !hasSeating)
       return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const headers = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: "Bearer " + token,
+    };
 
-    fetch(`/api/events/${props.event.id}/seat-reservations/me`, {
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: "Bearer " + token,
-      },
-    })
-      .then((response) => {
-        if (response.status === 404) {
-          // No reservation exists
+    (async () => {
+      try {
+        const reservation = await fetchReservation(
+          props.event.id,
+          headers,
+          props.asAdmin ? email : undefined,
+          signal,
+        );
+        if (signal.aborted) return;
+        if (!reservation.exists || reservation.seatId === null) {
+          // None yet, or a floating one: preselect "bring my own desk" when
+          // the event allows it.
           setSelectedSeatId(null);
           setReservedSeatId(null);
           setSelectedSeatLabel(
-            allowUnspecifiedSeat ? unspecifiedSeatLabel : null,
+            reservation.exists || allowUnspecifiedSeat ? ownDesk : null,
           );
           setSelectedSeatRoomName(null);
-          return null;
+          return;
         }
-        if (response.status === 401) {
-          signOut();
-          return null;
-        }
-        if (response.ok) return response.json();
-        return null;
-      })
-      .then((data) => {
-        if (data?.id) {
-          // Fetch seat label if seatId is not null
-          if (data.seatId === null) {
-            // Unspecified seat
-            setSelectedSeatId(null);
-            setReservedSeatId(null);
-            setSelectedSeatLabel(unspecifiedSeatLabel);
-            setSelectedSeatRoomName(null);
-          } else if (data.seatId) {
-            // Set the selected seat ID
-            setSelectedSeatId(data.seatId);
-            setReservedSeatId(data.seatId);
-
-            // Fetch the actual seat label and room
-            fetch(`/api/events/${props.event.id}/seats/${data.seatId}`, {
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                Authorization: "Bearer " + token,
-              },
-            })
-              .then((response) => {
-                if (response.ok) return response.json();
-                return null;
-              })
-              .then((seatData) => {
-                if (seatData?.label) {
-                  setSelectedSeatLabel(seatData.label);
-                  // Fetch room name
-                  if (seatData.roomId) {
-                    fetch(
-                      `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-                      {
-                        headers: {
-                          "Content-Type": "application/json",
-                          Accept: "application/json",
-                          Authorization: "Bearer " + token,
-                        },
-                      },
-                    )
-                      .then((response) => {
-                        if (response.ok) return response.json();
-                        return null;
-                      })
-                      .then((roomData) => {
-                        if (roomData?.name) {
-                          setSelectedSeatRoomName(roomData.name);
-                        }
-                      })
-                      .catch((error) => {
-                        console.error("Error fetching room:", error);
-                      });
-                  }
-                }
-              })
-              .catch((error) => {
-                console.error("Error fetching seat:", error);
-              });
-          }
-        } else if (allowUnspecifiedSeat) {
-          // No reservation but optional seating - default to unspecified
-          setSelectedSeatId(null);
-          setReservedSeatId(null);
-          setSelectedSeatLabel(unspecifiedSeatLabel);
-          setSelectedSeatRoomName(null);
-        } else {
-          setSelectedSeatId(null);
-          setReservedSeatId(null);
-          setSelectedSeatLabel(null);
-          setSelectedSeatRoomName(null);
-        }
-      })
-      .catch((error) => {
-        console.error("Error fetching seat reservation:", error);
-      });
+        setSelectedSeatId(reservation.seatId);
+        setReservedSeatId(reservation.seatId);
+        const seat = await fetchSeatLabel(
+          props.event.id,
+          reservation.seatId,
+          headers,
+          signal,
+        );
+        if (signal.aborted) return;
+        setSelectedSeatLabel(seat.label);
+        setSelectedSeatRoomName(seat.roomName);
+      } catch (error) {
+        if (signal.aborted) return;
+        if (error instanceof SessionExpiredError) signOut();
+        else console.error("Error fetching seat reservation:", error);
+      }
+    })();
+    return () => controller.abort();
+    // The labels only seed the selection; re-running when they arrive would
+    // overwrite a seat the guest has just picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.open, props.event.id, token, email, hasSeating, signOut]);
 
   // Define steps based on response (see STEP_TITLES for the order)
@@ -399,22 +356,8 @@ export default function RSVPWizard(props: RSVPWizardProps) {
       // Step 2: Save seat reservation if seating is enabled and user is attending
       if (hasSeating && response !== RSVP.no) {
         try {
-          // Delete any existing reservation first
-          const deleteUrl = props.asAdmin
-            ? `/api/events/${
-                props.event.id
-              }/seat-reservations/${encodeURIComponent(email)}?as_admin=true`
-            : `/api/events/${props.event.id}/seat-reservations/me`;
-
-          await fetch(deleteUrl, {
-            method: "DELETE",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-              Authorization: "Bearer " + token,
-            },
-          });
-
+          // Saving the RSVP's attendance has already released any previous
+          // reservation server-side, so this only creates the new one.
           // Create new reservation with selected seat (or null for unspecified)
           const createUrl = props.asAdmin
             ? `/api/events/${props.event.id}/seat-reservations?as_admin=true`
@@ -466,6 +409,7 @@ export default function RSVPWizard(props: RSVPWizardProps) {
               : "RSVP saved, but your seat couldn't be reserved. Please try again, or contact the organiser if it keeps happening.",
             { variant: "warning" },
           );
+          window.dispatchEvent(new CustomEvent("calandar:rsvp-updated"));
           props.onSaved();
           props.onClose();
           resetWizard();
@@ -514,10 +458,13 @@ export default function RSVPWizard(props: RSVPWizardProps) {
     }
   };
 
-  // Handle attendance change - always clear any seat selection to avoid stale seats
+  // Changing attendance drops any desk pick (it may not be free for the new
+  // slots) back to the default: "bring my own desk" when allowed, else none.
   const handleAttendanceChange = (newAttendance: number[] | null) => {
     setAttendance(newAttendance);
-    clearSeatSelection();
+    setSelectedSeatId(null);
+    setSelectedSeatLabel(allowUnspecifiedSeat ? ownDesk : null);
+    setSelectedSeatRoomName(null);
   };
 
   // Handle seat selection change

@@ -29,6 +29,7 @@ import {
   MIN_DURATION_HOURS,
   Session,
   buildLanDays,
+  clockDay,
   dayIndexOf,
   findClash,
   fmtClock,
@@ -39,9 +40,11 @@ import {
   rankSuggestions,
   sessionKey,
   snap,
+  spanShort,
   squadOf,
   toSessions,
   visibleRange,
+  whenShort,
 } from "./schedule/scheduleModel";
 
 const DESCRIPTION =
@@ -199,7 +202,7 @@ export default function EventGameSchedule() {
   };
 
   const spanLabel = (day: number, st: number, dur: number) =>
-    `${days[day]?.short} ${fmtClock(st)}–${fmtClock(st + dur)}`;
+    spanShort(days[day], st, dur);
 
   const withBusy = async <T,>(fn: () => Promise<T>): Promise<T> => {
     busyRef.current = true;
@@ -292,6 +295,11 @@ export default function EventGameSchedule() {
               { gameId: s.entry.gameId, startTime, durationMinutes },
             );
         if (!response || !response.ok) {
+          // Put the session back where it was straight away; the refresh
+          // below then reconciles with whatever the server has.
+          setSchedule((prev) =>
+            prev.map((e) => (e === optimistic ? s.entry : e)),
+          );
           const text = response ? await response.text() : "";
           if (response) console.error("Failed to update schedule:", text);
           say(
@@ -413,7 +421,7 @@ export default function EventGameSchedule() {
       );
       setSelectedKey(newKey);
       say(
-        `${s.entry.gameName} pinned to ${days[s.day]?.short} ${fmtClock(s.st)}`,
+        `${s.entry.gameName} pinned to ${whenShort(days[s.day], s.st)}`,
         "success",
       );
       void refreshSchedule({ background: true });
@@ -441,8 +449,11 @@ export default function EventGameSchedule() {
       await refreshSchedule({ background: true });
       const pinnedCount = allSessions.filter((s) => s.pinned).length;
       const n = Array.isArray(planned) ? planned.length : 0;
+      // No Undo: suggested slots are never stored – the server re-plans them
+      // from votes and attendance on every load – so there is nothing to
+      // restore, and pinned sessions are never touched.
       say(
-        `Recalculated · ${n} suggested slot${n === 1 ? "" : "s"} around ${pinnedCount} pinned`,
+        `Re-planned ${n} suggested slot${n === 1 ? "" : "s"} from the latest votes and attendance. Your ${pinnedCount} pinned session${pinnedCount === 1 ? " is" : "s are"} unchanged.`,
         "success",
       );
     } finally {
@@ -483,7 +494,7 @@ export default function EventGameSchedule() {
     setSchedule((prev) => [...prev, { ...saved, isPinned: true }]);
     void refreshSchedule({ background: true });
     if (req.isNew) void refreshSuggestions();
-    const when = `${days[req.day]?.short} ${fmtClock(req.st)}`;
+    const when = whenShort(days[req.day], req.st);
     if (req.isNew && !suggestedOk) {
       say(
         `${req.name} pinned to ${when}. It couldn't be suggested (you need to have RSVP'd to suggest games).`,
@@ -615,6 +626,8 @@ export default function EventGameSchedule() {
       : undefined;
 
   const selectedDay = selected ? days[selected.day] : undefined;
+  const selectedClock =
+    selected && selectedDay ? clockDay(selectedDay, selected.st) : undefined;
   const timelineOverlay =
     scheduleState === "loading" && !schedule.length ? (
       <Box role="status" aria-label="Loading schedule" sx={{ p: 2.5 }}>
@@ -692,7 +705,6 @@ export default function EventGameSchedule() {
               <Switch
                 checked={showSuggestions}
                 onChange={(e) => setShowSuggestions(e.target.checked)}
-                size="small"
               />
             }
             label="Show suggested"
@@ -785,9 +797,11 @@ export default function EventGameSchedule() {
             onUnpin={() => void deletePinned(selected, "unpin")}
             onRemove={() => void deletePinned(selected, "remove")}
             rank={ranks.get(selected.entry.gameId) ?? null}
-            whenLabel={`${selectedDay.short} ${selectedDay.dateLabel} · ${fmtClock(
+            whenLabel={`${selectedClock?.short} ${selectedClock?.dateLabel} · ${fmtClock(
               selected.st,
-            )} → ${fmtClock(selected.st + selected.dur)}`}
+            )} → ${fmtClock(selected.st + selected.dur)}${
+              selectedClock?.nextDay ? ` (${selectedDay.short} NIGHT)` : ""
+            }`}
             timing={timing}
             outsideWindow={isOutsideWindow(
               selectedDay,

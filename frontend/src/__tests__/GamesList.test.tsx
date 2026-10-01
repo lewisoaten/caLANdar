@@ -1,16 +1,22 @@
 import { describe, test, expect, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import { render, screen, within } from "../test/test-utils";
+import { render, screen, waitFor, within } from "../test/test-utils";
 import GamesList, {
   filterGames,
   formatPlayedHours,
   groupByOwners,
   ownedByLabel,
-  rankSuggestions,
+  resultsAnnouncement,
+  voteRanks,
   type SquadGame,
 } from "../components/GamesList";
 import { isSameGamer, sortOwners } from "../components/GameOwners";
-import { suggestBlocker, withVotes } from "../components/EventGames";
+import {
+  eventGamesUrl,
+  fetchAllPages,
+  suggestBlocker,
+  withVotes,
+} from "../components/EventGames";
 import { RSVP } from "../types/invitations";
 import moment from "moment";
 
@@ -46,17 +52,73 @@ describe("GamesList helpers", () => {
     expect(formatPlayedHours(98430)).toBe("1,641 H PLAYED");
   });
 
-  test("rankSuggestions sorts by votes and keeps server order on ties", () => {
-    const ranks = rankSuggestions([
-      { appid: 10, votes: 1 },
-      { appid: 11, votes: 5 },
-      { appid: 12, votes: 1 },
-      { appid: 13, votes: null },
+  test("voteRanks ranks like the lobby: shared ranks, no trophy at 0 votes", () => {
+    const ranks = voteRanks([
+      { appid: 10, name: "Beta", votes: 1 },
+      { appid: 11, name: "Zed", votes: 5 },
+      { appid: 12, name: "Alpha", votes: 1 },
+      { appid: 13, name: "Gamma", votes: null },
     ]);
-    expect(ranks.get(11)).toEqual({ rank: 1, votes: 5 });
-    expect(ranks.get(10)?.rank).toBe(2);
-    expect(ranks.get(12)?.rank).toBe(3);
-    expect(ranks.get(13)).toEqual({ rank: 4, votes: 0 });
+    expect(ranks.get(11)).toEqual({ rank: 1, votes: 5, trophyRank: 1 });
+    // Ties share a rank (competition ranking).
+    expect(ranks.get(12)).toEqual({ rank: 2, votes: 1, trophyRank: 2 });
+    expect(ranks.get(10)).toEqual({ rank: 2, votes: 1, trophyRank: 2 });
+    expect(ranks.get(13)).toEqual({ rank: 4, votes: 0, trophyRank: null });
+  });
+
+  test("resultsAnnouncement", () => {
+    expect(resultsAnnouncement(3, 3, "")).toBe("3 games shown");
+    expect(resultsAnnouncement(1, 3, "")).toBe("1 of 3 games shown");
+    expect(resultsAnnouncement(1, 1, " val ")).toBe("1 game match “val”");
+  });
+
+  test("eventGamesUrl adds the search only when given", () => {
+    expect(eventGamesUrl("2", 0)).toBe("/api/events/2/games?page=0&count=100");
+    expect(eventGamesUrl("2", 1, " Half Life ")).toBe(
+      "/api/events/2/games?page=1&count=100&search=Half+Life",
+    );
+  });
+
+  test("fetchAllPages caps requests in flight and keeps page order", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const requested: number[] = [];
+    const page = (n: number) => ({
+      totalCount: 6,
+      eventGames: [createMockGame(n, `G${n}`)],
+    });
+    const fetchPage = async (n: number) => {
+      requested.push(n);
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, n === 1 ? 20 : 5));
+      inFlight--;
+      return page(n);
+    };
+    const progress: boolean[] = [];
+    const all = await fetchAllPages(fetchPage, {
+      concurrency: 2,
+      onProgress: (_, done) => progress.push(done),
+    });
+    expect(all.map((g) => g.appid)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(requested.sort()).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(progress.at(-1)).toBe(true);
+    expect(progress.slice(0, -1).every((d) => !d)).toBe(true);
+  });
+
+  test("fetchAllPages stops when aborted", async () => {
+    const controller = new AbortController();
+    const requested: number[] = [];
+    await fetchAllPages(
+      async (n) => {
+        requested.push(n);
+        if (n === 1) controller.abort();
+        return { totalCount: 10, eventGames: [] };
+      },
+      { concurrency: 1, signal: controller.signal },
+    );
+    expect(requested).toEqual([0, 1]);
   });
 
   test("filterGames applies search and vote filter", () => {
@@ -187,6 +249,60 @@ describe("GamesList", () => {
     expect(
       screen.queryByRole("button", { name: /for this lan/i }),
     ).not.toBeInTheDocument();
+  });
+
+  test("trophy needs a vote", () => {
+    render(
+      <GamesList
+        games={[
+          createMockGame(9, "Zero", ["a"], {
+            rank: 1,
+            votes: 0,
+            trophyRank: null,
+          }),
+        ]}
+        loading={false}
+      />,
+    );
+    const card = screen.getByRole("article", { name: "Zero" });
+    expect(within(card).getByText("IN THE VOTE · #1")).toBeInTheDocument();
+    expect(within(card).queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  test("announces the result count in one live region once typing pauses", async () => {
+    render(<GamesList games={games} squadSize={6} loading={false} />);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Filter games" }),
+      "game 3",
+    );
+    const status = screen.getByRole("status");
+    expect(status).not.toHaveTextContent("1 game match");
+    await waitFor(
+      () => expect(status).toHaveTextContent("1 game match “game 3”"),
+      { timeout: 2000 },
+    );
+  });
+
+  test("server-side search: shows the given games as-is and reports typing", async () => {
+    const onQueryChange = vi.fn();
+    render(
+      <GamesList
+        games={[games[2]]}
+        loading={false}
+        query="zzz"
+        onQueryChange={onQueryChange}
+        searching
+      />,
+    );
+    // Not filtered locally by the (server-side) query.
+    expect(screen.getByText("Game 3")).toBeInTheDocument();
+    expect(screen.getByText("SEARCHING…")).toBeInTheDocument();
+    await userEvent.type(
+      screen.getByRole("searchbox", { name: "Filter games" }),
+      "a",
+    );
+    expect(onQueryChange).toHaveBeenCalledWith("zzza");
   });
 
   test("empty and error states", async () => {

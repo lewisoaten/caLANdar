@@ -51,13 +51,15 @@ fills (`tint(...)` backgrounds) use `text`/`textMuted`/the tone's `fg`, not
   `:focus-visible` ring (offset 2, or inset -2 inside lists).
 - `Card` and `Paper variant="outlined"` = surface + hairline + corner bracket.
   Plain `Paper` is the solid surface (menus, popovers).
-- Inputs (`TextField`, `Select`, pickers via `MuiPickersTextField`), `Dialog`
-  (solid, cyan glow, blurred backdrop), `Drawer`, `Chip` (mono, square),
-  `Tabs`, `Table` (mono dim headers), `Tooltip`, `Alert`, `LinearProgress`,
-  `Pagination`, `Checkbox/Radio/Switch` (square HUD switch), `Avatar`
-  (chamfered), `DataGrid` (transparent, via `palette.DataGrid`) are all themed.
+- Inputs (`TextField`, `Select`), `Dialog` (solid, cyan glow, blurred
+  backdrop), `Drawer`, `Chip` (mono, square), `Tabs`, `Table` (mono dim
+  headers), `Tooltip`, `Alert`, `LinearProgress`, `Pagination`,
+  `Checkbox/Radio/Switch` (square HUD switch) and `Avatar` (chamfered) are all
+  themed. (MUI X pickers / DataGrid are not dependencies.)
 - Toasts: `enqueueSnackbar` as usual; `HlSnackbarProvider` (mounted in App)
-  styles notistack.
+  styles notistack: one width, bottom right (full width on mobile), stacked
+  above the shell's bottom chrome via the `--hl-toast-bottom` CSS variable the
+  shell sets (ticker 44px, mobile tab bar 64px + safe area).
 
 ## Patterns
 
@@ -75,8 +77,9 @@ fills (`tint(...)` backgrounds) use `text`/`textMuted`/the tone's `fg`, not
   `theme.breakpoints.down("md")` target mobile. Use `useIsMobile()` only when the
   markup differs (drawer vs. bottom sheet). Grids: `repeat(auto-fill, minmax(min(100%, 300px), 1fr))`.
 - **Lists**: search + `FilterChips` + list + `HlPagination`; reset page to 1 on any change.
-- **Motion**: CSS animations are cut under `prefers-reduced-motion` globally
-  (except the ticker, which slows 4x). `usePrefersReducedMotion()` for JS motion.
+- **Motion**: CSS animations are cut under `prefers-reduced-motion` globally;
+  the ticker then renders a static, hand-scrollable list (no marquee).
+  `usePrefersReducedMotion()` for JS motion.
   Keyframes available: `hlPulse` (status dots), `hlTick` (marquee).
 - **Background FX**: `<BackgroundFx />` is rendered by the shell; toggle with
   `const { enabled, setEnabled, toggle } = useBackgroundFx()` (persisted in
@@ -111,8 +114,12 @@ fills (`tint(...)` backgrounds) use `text`/`textMuted`/the tone's `fg`, not
   `<main id="main-content">` max 1400px wide, centred, padded, flex column with
   `sectionGap`. Pages should **not** add their own outer `Container`/margins.
 - Mobile: top bar with brand + avatar menu button (bottom-sheet menu), fixed
-  64px bottom tab bar when there is an active event. `<main>` already reserves
-  bottom space for it and the ticker.
+  64px bottom tab bar on the four event pages only (elsewhere the sheet lists
+  Events). `<main>` already reserves bottom space for it and the 44px ticker.
+- Locked (RSVP-gated) nav items are `aria-disabled` buttons (focusable) with
+  the reason linked by `aria-describedby` (`LockedNavButton`).
+- `/admin/*` routes sit behind `AdminRoutes` (ProtectedRoutes.tsx): non-admins
+  are redirected to `/events` with an "Admins only" toast.
 - The live ticker (`ActivityTicker`) is rendered by the shell on the four event
   pages once the user has RSVP'd; pages must not render it themselves.
 - The shell refetches the RSVP gate on the `calandar:rsvp-updated` window event.

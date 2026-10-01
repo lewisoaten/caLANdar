@@ -6,9 +6,10 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import SentimentVeryDissatisfiedSharp from "@mui/icons-material/SentimentVeryDissatisfiedSharp";
 import { Gamer } from "../types/game_suggestions";
 import { UserAvatar, colors, fonts, hairline, tint, srOnly } from "./hl";
+import { displayCallsign } from "../utils/callsign";
 
-/** Name shown for a gamer who hasn't picked a callsign yet. */
-export const gamerName = (gamer: Gamer) => gamer.handle || "Unnamed gamer";
+/** A gamer's callsign, or the shared fallback when they haven't picked one. */
+export const gamerName = (gamer: Gamer) => displayCallsign(gamer.handle);
 
 /** Who "you" are, to highlight your own chip. */
 export interface OwnerIdentity {

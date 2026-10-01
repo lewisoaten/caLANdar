@@ -25,13 +25,17 @@ export const MAX_ADD_DURATION_HOURS = 8;
 export const DEFAULT_DURATION_HOURS = 2;
 
 /**
- * The backend scheduler (`api/src/scheduler.rs`) never starts a game between
- * 01:00 and 09:59 UTC and never lets one end after 01:00 UTC, and only plans
- * inside the event. Its "window" for each UTC day is therefore
+ * The backend scheduler (`api/src/scheduler.rs`) never has a game in progress
+ * between `NIGHT_START_HOUR_UTC` (01:00) and `DAY_START_HOUR_UTC` (10:00): a
+ * session may end at exactly 01:00Z and start at exactly 10:00Z. It only plans
+ * inside the event, so its "window" for each UTC day is
  * [10:00Z, 01:00Z next day] intersected with the event.
+ * Keep these in sync with the constants in `scheduler.rs`.
  */
-export const SCHEDULER_WINDOW_START_UTC = 10;
-export const SCHEDULER_WINDOW_END_UTC = 25;
+export const SCHEDULER_DAY_START_HOUR_UTC = 10;
+export const SCHEDULER_NIGHT_START_HOUR_UTC = 1;
+export const SCHEDULER_WINDOW_START_UTC = SCHEDULER_DAY_START_HOUR_UTC;
+export const SCHEDULER_WINDOW_END_UTC = 24 + SCHEDULER_NIGHT_START_HOUR_UTC;
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -452,10 +456,81 @@ export const whoIsAround = (
   return { here, away, known: true };
 };
 
-/** `FRI 18:30 → 20:30 · 2h` */
+export interface ClockDay {
+  /** `SAT` */
+  short: string;
+  /** `Saturday` */
+  name: string;
+  /** `14 NOV` */
+  dateLabel: string;
+  /** True when `h` is past midnight, i.e. the next calendar day of the row. */
+  nextDay: boolean;
+}
+
+/**
+ * The real local calendar day of hour `h` on a LAN day row. Rows run
+ * 06:00–06:00, so 24.5 on Friday's row is Saturday 00:30.
+ */
+export const clockDay = (day: LanDay, h: number): ClockDay => {
+  const offset = Math.floor(h / 24);
+  const d = day.date.clone().add(offset, "days");
+  return {
+    short: d.format("ddd").toUpperCase(),
+    name: d.format("dddd"),
+    dateLabel: d.format("D MMM").toUpperCase(),
+    nextDay: offset > 0,
+  };
+};
+
+/**
+ * Short label for a time on a row: `FRI 18:30`, or `SAT 00:30 (FRI NIGHT)`
+ * when it is after midnight but still listed under Friday.
+ */
+export const whenShort = (day: LanDay | undefined, h: number): string => {
+  if (!day) return fmtClock(h);
+  const c = clockDay(day, h);
+  return `${c.short} ${fmtClock(h)}${c.nextDay ? ` (${day.short} NIGHT)` : ""}`;
+};
+
+/**
+ * Spoken / long label for a time on a row: `Friday 18:30`, or
+ * `Saturday 00:30 (Friday night)`.
+ */
+export const whenLong = (day: LanDay | undefined, h: number): string => {
+  if (!day) return fmtClock(h);
+  const c = clockDay(day, h);
+  return `${c.name} ${fmtClock(h)}${c.nextDay ? ` (${day.name} night)` : ""}`;
+};
+
+/** `FRI 18:30 → 20:30`, or `SAT 00:30 → 02:30 (FRI NIGHT)`. */
+export const spanShort = (
+  day: LanDay | undefined,
+  st: number,
+  dur: number,
+): string => {
+  if (!day) return `${fmtClock(st)} → ${fmtClock(st + dur)}`;
+  const c = clockDay(day, st);
+  return `${c.short} ${fmtClock(st)} → ${fmtClock(st + dur)}${
+    c.nextDay ? ` (${day.short} NIGHT)` : ""
+  }`;
+};
+
+/** `Friday 18:30 to 20:30`, or `Saturday 00:30 to 02:30 (Friday night)`. */
+export const spanLong = (
+  day: LanDay | undefined,
+  st: number,
+  dur: number,
+): string => {
+  if (!day) return `${fmtClock(st)} to ${fmtClock(st + dur)}`;
+  const c = clockDay(day, st);
+  return `${c.name} ${fmtClock(st)} to ${fmtClock(st + dur)}${
+    c.nextDay ? ` (${day.name} night)` : ""
+  }`;
+};
+
+/** `FRI 18:30 → 20:30 · 2h` (real day after midnight, see `spanShort`). */
 export const placementLabel = (
   day: LanDay | undefined,
   st: number,
   dur: number,
-) =>
-  `${day?.short ?? ""} ${fmtClock(st)} → ${fmtClock(st + dur)} · ${fmtDur(dur)}`;
+) => `${spanShort(day, st, dur)} · ${fmtDur(dur)}`;

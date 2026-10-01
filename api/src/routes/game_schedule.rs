@@ -89,7 +89,7 @@ impl SchemaExample for GameScheduleRequest {
     }
 }
 
-custom_errors!(GameScheduleGetError, Unauthorized, InternalServerError);
+custom_errors!(GameScheduleGetError, Forbidden, InternalServerError);
 
 /// Get all scheduled games for an event
 /// Returns both pinned (manually scheduled) games and suggested games from the algorithm
@@ -102,7 +102,8 @@ pub async fn get_all(
 ) -> Result<Json<Vec<GameScheduleEntry>>, GameScheduleGetError> {
     match game_schedule::get_all(pool, event_id, &user.email).await {
         Ok(schedule) => Ok(Json(schedule)),
-        Err(Error::NotPermitted(e)) => Err(GameScheduleGetError::Unauthorized(e)),
+        // Not invited: 403, so the client doesn't mistake it for an expired session
+        Err(Error::NotPermitted(e)) => Err(GameScheduleGetError::Forbidden(e)),
         Err(e) => Err(GameScheduleGetError::InternalServerError(format!(
             "Error getting game schedule, due to: {e}"
         ))),

@@ -16,6 +16,7 @@ import ScheduleSharp from "@mui/icons-material/ScheduleSharp";
 import SwapHorizSharp from "@mui/icons-material/SwapHorizSharp";
 import moment from "moment";
 import { GameSuggestion } from "../../types/game_suggestions";
+import { UserDispatchContext } from "../../UserProvider";
 import {
   Kicker,
   SearchField,
@@ -39,6 +40,8 @@ import {
   fmtDur,
   isOutsideWindow,
   outsideEventReason,
+  spanLong,
+  whenShort,
 } from "./scheduleModel";
 
 export interface AddRequest {
@@ -285,6 +288,7 @@ export function AddToScheduleDialog({
   token,
   onConfirm,
 }: AddToScheduleDialogProps) {
+  const { signOut } = React.useContext(UserDispatchContext);
   // The parent remounts the dialog (via `key`) each time it opens, so the
   // initial state below doubles as the reset.
   const [q, setQ] = React.useState("");
@@ -344,10 +348,16 @@ export function AddToScheduleDialog({
         },
       })
         .then((r) => {
+          if (r.status === 401) {
+            signOut();
+            return null;
+          }
           if (!r.ok) throw new Error(String(r.status));
           return r.json() as Promise<SteamGame[]>;
         })
-        .then((games) => setResults({ query, ok: true, games }))
+        .then((games) => {
+          if (games) setResults({ query, ok: true, games });
+        })
         .catch((e) => {
           if ((e as Error).name !== "AbortError")
             setResults({ query, ok: false, games: [] });
@@ -357,7 +367,7 @@ export function AddToScheduleDialog({
       ctrl.abort();
       window.clearTimeout(t);
     };
-  }, [open, query, token]);
+  }, [open, query, token, signOut]);
 
   const steamState: "idle" | "loading" | "ready" | "error" = !query
     ? "idle"
@@ -476,7 +486,7 @@ export function AddToScheduleDialog({
               color: colors.lime,
             }}
           >
-            SLOT · {days[prefill.day].short} {fmtClock(prefill.st)}
+            SLOT · {whenShort(days[prefill.day], prefill.st)}
           </Box>
         )}
         <IconButton
@@ -833,8 +843,10 @@ export function AddToScheduleDialog({
               color: colors.textMuted,
             }}
           >
-            {days[day]?.name.toUpperCase()} {fmtClock(effectiveSt)} →{" "}
-            {fmtClock(effectiveSt + effectiveDur)} · {fmtDur(effectiveDur)}
+            {spanLong(days[day], effectiveSt, effectiveDur)
+              .replace(" to ", " → ")
+              .toUpperCase()}{" "}
+            · {fmtDur(effectiveDur)}
           </Box>
           {outsideEvent ? (
             <ScheduleNote tone="pink" icon={<EventBusySharp />}>

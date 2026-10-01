@@ -92,7 +92,7 @@ describe("desk labels", () => {
     expect(deskAriaLabel(mine)).toBe("A4, your seat");
     expect(
       deskAriaLabel({ ...free, occupants: [{ name: "A" }, { name: null }] }),
-    ).toBe("A2, free, shared with A and Someone at other times");
+    ).toBe("A2, free, shared with A and No callsign yet at other times");
   });
 
   it("picks the tile's second line", () => {
@@ -196,6 +196,17 @@ describe("SeatFloorPlan", () => {
     expect(img).not.toBeNull();
     expect(img).toHaveAttribute("alt", "");
     expect(img).toHaveStyle({ opacity: "0.5" });
+  });
+
+  it("backs every desk with an opaque fill so labels stay readable over the plan", () => {
+    renderPlan({ onDeskSelect: undefined });
+    for (const name of [/A1, taken/, "A2, free", "A3, selected", /A4/]) {
+      const desk = screen.getByRole("button", { name });
+      const bg = getComputedStyle(desk).backgroundColor;
+      // An opaque colour (not rgba(..., <1) / transparent).
+      expect(bg).toMatch(/^(rgb\(|#)/);
+      expect(desk).not.toHaveStyle({ opacity: "0.7" });
+    }
   });
 
   it("is read-only without onDeskSelect", async () => {

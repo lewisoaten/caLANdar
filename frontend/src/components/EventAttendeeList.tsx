@@ -8,7 +8,8 @@ import GroupsSharp from "@mui/icons-material/GroupsSharp";
 import LockSharp from "@mui/icons-material/LockSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
-import { InvitationLiteData } from "../types/invitations";
+import { InvitationLiteData, RsvpCounts } from "../types/invitations";
+import { displayCallsign } from "../utils/callsign";
 import {
   EmptyState,
   Panel,
@@ -21,7 +22,13 @@ import {
   tint,
 } from "./hl";
 import AttendanceStrip from "./AttendanceStrip";
-import { RSVP_STATUS, rsvpState, summariseSquad } from "./lobbyModel";
+import {
+  RSVP_STATUS,
+  rsvpState,
+  squadSeatText,
+  summariseSquad,
+  type SquadSeating,
+} from "./lobbyModel";
 
 interface EventAttendeListProps {
   event_id: number;
@@ -33,12 +40,7 @@ interface EventAttendeListProps {
   selfHandle?: string | null;
 }
 
-interface SeatingInfo {
-  hasSeating: boolean;
-  allowUnspecifiedSeat: boolean;
-  unspecifiedSeatLabel: string;
-  labels: Map<number, string>;
-}
+type SeatingInfo = SquadSeating;
 
 type Status = "loading" | "ready" | "error";
 
@@ -51,6 +53,9 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
   const [status, setStatus] = useState<Status>("loading");
   const [retry, setRetry] = useState(0);
   const [seating, setSeating] = useState<SeatingInfo | null>(null);
+  // Totals including guests who declined or haven't replied, whom the squad
+  // list leaves out. Null until loaded (or on an API without the endpoint).
+  const [rsvpCounts, setRsvpCounts] = useState<RsvpCounts | null>(null);
 
   const headers = React.useMemo(
     () => ({
@@ -92,6 +97,24 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
     };
   }, [props.event_id, props.responded, retry, headers, signOut]);
 
+  useEffect(() => {
+    if (!props.responded) return;
+    const controller = new AbortController();
+    fetch(`/api/events/${props.event_id}/rsvp_counts`, {
+      headers,
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: RsvpCounts | null) => {
+        if (!controller.signal.aborted) setRsvpCounts(data);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          console.error("Error fetching RSVP counts:", error);
+      });
+    return () => controller.abort();
+  }, [props.event_id, props.responded, headers]);
+
   // Seat labels for the right-hand column (only when the event has seating).
   useEffect(() => {
     if (!props.responded || !token) return;
@@ -129,13 +152,15 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
     };
   }, [props.event_id, props.responded, token, headers]);
 
-  const { sorted, counts } = summariseSquad(attendees);
+  const { sorted, counts: listed } = summariseSquad(attendees);
+  const counts = rsvpCounts
+    ? { ...rsvpCounts, none: rsvpCounts.pending }
+    : listed;
   const ready = !!props.responded && status === "ready";
 
   const counters = ready ? (
     <Box
       component="p"
-      aria-label={`${counts.yes} in, ${counts.maybe} maybe, ${counts.no} out${counts.none ? `, ${counts.none} yet to reply` : ""}`}
       sx={{
         m: 0,
         display: "flex",
@@ -164,16 +189,11 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
           {counts.none} PENDING
         </Box>
       )}
+      <Box component="span" sx={srOnly}>
+        {`${counts.yes} in, ${counts.maybe} maybe, ${counts.no} out${counts.none ? `, ${counts.none} yet to reply` : ""}`}
+      </Box>
     </Box>
   ) : undefined;
-
-  const seatText = (a: InvitationLiteData): string => {
-    const st = rsvpState(a.response);
-    if (st === "no" || st === "none") return "—";
-    if (a.seatId !== null && seating?.labels.has(a.seatId))
-      return seating.labels.get(a.seatId) ?? "—";
-    return seating?.allowUnspecifiedSeat ? "BYO" : "—";
-  };
 
   let body: React.ReactNode;
   if (!props.responded) {
@@ -241,10 +261,12 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
           const st = rsvpState(attendee.response);
           const copy = RSVP_STATUS[st];
           const isSelf =
-            !!props.selfHandle &&
-            !!attendee.handle &&
-            attendee.handle === props.selfHandle;
-          const handle = attendee.handle || "Unnamed gamer";
+            attendee.isSelf ??
+            (!!props.selfHandle &&
+              !!attendee.handle &&
+              attendee.handle === props.selfHandle);
+          const handle = displayCallsign(attendee.handle);
+          const seat = seating ? squadSeatText(attendee, seating) : null;
           return (
             <Box
               component="li"
@@ -322,36 +344,34 @@ export default function EventAttendeeList(props: EventAttendeListProps) {
                   />
                 )}
               </Box>
-              {seating?.hasSeating && (
+              {seat && (
                 <Box
                   sx={{
-                    flex: "none",
+                    flex: "0 1 auto",
+                    // Narrow on phones so long callsigns keep their room;
+                    // labels wrap between words ("Floating / no desk").
+                    maxWidth: { xs: "30%", sm: "40%" },
+                    textAlign: "right",
+                    overflowWrap: "break-word",
                     fontFamily: fonts.mono,
                     fontSize: 13,
                     fontWeight: 500,
                     color:
-                      seatText(attendee) === "—" || seatText(attendee) === "BYO"
-                        ? colors.textDim
-                        : colors.text,
+                      seat.kind === "desk" ? colors.text : colors.textMuted,
                   }}
-                  title={
-                    seatText(attendee) === "BYO"
-                      ? seating.unspecifiedSeatLabel
-                      : undefined
-                  }
                 >
                   <Box component="span" sx={srOnly}>
                     Seat:{" "}
                   </Box>
-                  {seatText(attendee) === "—" ? (
+                  {seat.kind === "none" ? (
                     <>
                       <span aria-hidden="true">—</span>
                       <Box component="span" sx={srOnly}>
-                        none
+                        {seat.text}
                       </Box>
                     </>
                   ) : (
-                    seatText(attendee)
+                    seat.text
                   )}
                 </Box>
               )}

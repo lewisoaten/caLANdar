@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            COUNT(*) FILTER (WHERE response = 'yes') AS \"yes!\",\n            COUNT(*) FILTER (WHERE response = 'maybe') AS \"maybe!\",\n            COUNT(*) FILTER (WHERE response = 'no') AS \"no!\",\n            COUNT(*) FILTER (WHERE response IS NULL) AS \"pending!\"\n        FROM invitation\n        WHERE event_id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "yes!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "maybe!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "no!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "pending!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0d9246feb8f335ca94909ffa9f744e8e89e8daa579bf68bbb6b026d8e8372c90"
+}

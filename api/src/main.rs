@@ -251,6 +251,7 @@ fn build_rocket(
                 routes::event_invitations::get,
                 routes::event_invitations::get_all_user,
                 routes::event_invitations::get_all,
+                routes::event_invitations::get_rsvp_counts,
                 routes::event_invitations::delete,
                 routes::event_invitations::patch_admin,
                 routes::event_invitations::patch,

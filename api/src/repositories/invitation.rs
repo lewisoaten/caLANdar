@@ -136,3 +136,29 @@ pub async fn get_voters_for_game(
     .fetch_all(pool)
     .await
 }
+
+/// Number of invitations per RSVP answer for an event.
+pub struct ResponseCounts {
+    pub yes: i64,
+    pub maybe: i64,
+    pub no: i64,
+    pub pending: i64,
+}
+
+pub async fn response_counts(pool: &PgPool, event_id: i32) -> Result<ResponseCounts, sqlx::Error> {
+    sqlx::query_as!(
+        ResponseCounts,
+        r#"
+        SELECT
+            COUNT(*) FILTER (WHERE response = 'yes') AS "yes!",
+            COUNT(*) FILTER (WHERE response = 'maybe') AS "maybe!",
+            COUNT(*) FILTER (WHERE response = 'no') AS "no!",
+            COUNT(*) FILTER (WHERE response IS NULL) AS "pending!"
+        FROM invitation
+        WHERE event_id = $1
+        "#,
+        event_id,
+    )
+    .fetch_one(pool)
+    .await
+}

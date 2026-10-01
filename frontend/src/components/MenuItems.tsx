@@ -8,7 +8,8 @@ import LogoutSharp from "@mui/icons-material/LogoutSharp";
 import LockSharp from "@mui/icons-material/LockSharp";
 import { UserAvatar } from "./hl/UserAvatar";
 import { Kicker } from "./hl/Kicker";
-import { bracket, colors, fonts, hairline, tint } from "./hl/tokens";
+import type { SxProps, Theme } from "@mui/material/styles";
+import { bracket, colors, fonts, hairline, srOnly, tint } from "./hl/tokens";
 import { useShellState, type ShellState } from "./shell/useShellState";
 import { EventCountdownText } from "./shell/EventStatus";
 import { useNow } from "./hl/Countdown";
@@ -36,6 +37,10 @@ interface MenuItemsProps {
 
 const RSVP_TOOLTIP = 'RSVP "Yes" or "Maybe" to access this section.';
 const RSVP_LOADING_TOOLTIP = "Checking RSVP status…";
+
+/** Why an RSVP-gated nav item is locked (shown as tooltip + description). */
+export const rsvpLockReason = (loading: boolean) =>
+  loading ? RSVP_LOADING_TOOLTIP : RSVP_TOOLTIP;
 
 /** Display name for the signed-in user: callsign, else the email's local part. */
 export const displayName = (shell: Pick<ShellState, "handle" | "email">) =>
@@ -129,20 +134,7 @@ function NavRow({
   );
 
   if (locked) {
-    return (
-      <Tooltip title={lockReason} placement="right">
-        <ButtonBase
-          component="span"
-          role="link"
-          aria-disabled="true"
-          aria-label={`${item.label} (locked: ${lockReason})`}
-          tabIndex={0}
-          sx={rowSx}
-        >
-          {content}
-        </ButtonBase>
-      </Tooltip>
-    );
+    return <LockedNavButton reason={lockReason} content={content} sx={rowSx} />;
   }
 
   return (
@@ -155,6 +147,45 @@ function NavRow({
     >
       {content}
     </ButtonBase>
+  );
+}
+
+/**
+ * A nav destination the viewer cannot open yet: a focusable button with
+ * `aria-disabled` (so keyboard users can still reach it and hear why) whose
+ * reason is linked via `aria-describedby` and shown as a tooltip.
+ */
+export function LockedNavButton({
+  reason,
+  content,
+  sx,
+  tooltipPlacement = "right",
+  ariaLabel,
+}: {
+  reason: string;
+  content: React.ReactNode;
+  sx: SxProps<Theme>;
+  tooltipPlacement?: "right" | "top";
+  ariaLabel?: string;
+}) {
+  const reasonId = React.useId();
+  return (
+    <>
+      <Tooltip title={reason} placement={tooltipPlacement} describeChild>
+        <ButtonBase
+          aria-disabled="true"
+          aria-describedby={reasonId}
+          aria-label={ariaLabel}
+          onClick={(e) => e.preventDefault()}
+          sx={sx}
+        >
+          {content}
+        </ButtonBase>
+      </Tooltip>
+      <Box component="span" id={reasonId} sx={srOnly}>
+        {reason}
+      </Box>
+    </>
   );
 }
 
@@ -205,7 +236,7 @@ export default function MenuItems({
 
   if (!loggedIn) return null;
 
-  const lockReason = access.loading ? RSVP_LOADING_TOOLTIP : RSVP_TOOLTIP;
+  const lockReason = rsvpLockReason(access.loading);
   const isLocked = (item: NavItem) =>
     Boolean(item.requiresRsvp) && !access.attending;
 
@@ -433,9 +464,7 @@ export default function MenuItems({
             sx={{
               fontSize: 14,
               fontWeight: 600,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflowWrap: "anywhere",
             }}
           >
             {displayName(shell)}
@@ -445,9 +474,7 @@ export default function MenuItems({
               fontFamily: fonts.mono,
               fontSize: 11,
               color: colors.textDim,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflowWrap: "anywhere",
             }}
           >
             {shell.email}

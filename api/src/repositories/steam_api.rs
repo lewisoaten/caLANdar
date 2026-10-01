@@ -2,6 +2,14 @@ use rocket::serde::{json::serde_json, Deserialize};
 
 const MAX_RETRIES: u32 = 3;
 
+/// At most `max` characters of `text`, cut on a char boundary (Steam error
+/// pages are HTML and may contain multi-byte characters), for log lines.
+fn snippet(text: &str, max: usize) -> &str {
+    text.char_indices()
+        .nth(max)
+        .map_or(text, |(i, _)| &text[..i])
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct SteamAPIApp {
@@ -54,15 +62,20 @@ pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, St
                             .text()
                             .await
                             .unwrap_or_else(|_| "Unable to read error response".to_string());
-                        log::error!("Steam API returned status {status}: {error_text}");
+                        log::error!(
+                            "Steam API returned status {status}: {}",
+                            snippet(&error_text, 500)
+                        );
 
                         if attempts < MAX_RETRIES {
                             log::warn!("Retrying request (attempt {attempts}/{MAX_RETRIES})");
                             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                             continue;
                         }
+                        // The body is usually an HTML error page: logged above,
+                        // never returned to callers.
                         return Err(format!(
-                            "Steam API error after {MAX_RETRIES} attempts (status {status}): {error_text}"
+                            "Steam API error after {MAX_RETRIES} attempts (status {status})"
                         ));
                     }
 
@@ -92,11 +105,7 @@ pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, St
                             log::error!("Failed to parse Steam API response: {e}");
                             log::error!(
                                 "Response body (first 500 chars): {}",
-                                if response_text.len() > 500 {
-                                    &response_text[..500]
-                                } else {
-                                    &response_text
-                                }
+                                snippet(&response_text, 500)
                             );
 
                             if attempts < MAX_RETRIES {
@@ -113,13 +122,9 @@ pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, St
                                 log::info!("Total apps retrieved (partial): {}", all_apps.len());
                                 return Ok(all_apps);
                             }
-                            return Err(format!("Failed to parse Steam API response after {} attempts: {}. Response: {}",
-                                MAX_RETRIES, e,
-                                if response_text.len() > 200 {
-                                    &response_text[..200]
-                                } else {
-                                    &response_text
-                                }));
+                            return Err(format!(
+                                "Failed to parse Steam API response after {MAX_RETRIES} attempts: {e}"
+                            ));
                         }
                     }
                 }
@@ -314,7 +319,11 @@ pub async fn get_current_game(
     let player_summaries: PlayerSummaries =
         response.json().await.map_err(reqwest::Error::without_url)?;
 
-    Ok(player_summaries.response.players[0].gameid.clone())
+    Ok(player_summaries
+        .response
+        .players
+        .first()
+        .and_then(|p| p.gameid.clone()))
 }
 
 #[derive(Clone, Deserialize)]
@@ -354,4 +363,18 @@ pub async fn resolve_vanity_url(
     } else {
         None
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::snippet;
+
+    #[test]
+    fn snippet_cuts_on_char_boundaries() {
+        assert_eq!(snippet("short", 500), "short");
+        assert_eq!(snippet("abcdef", 3), "abc");
+        // Slicing bytes at 2 would split the 2-byte "é" and panic.
+        assert_eq!(snippet("aéb", 2), "aé");
+        assert_eq!(snippet("", 10), "");
+    }
 }

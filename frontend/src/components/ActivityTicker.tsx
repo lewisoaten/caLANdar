@@ -5,6 +5,7 @@ import PauseSharp from "@mui/icons-material/PauseSharp";
 import PlayArrowSharp from "@mui/icons-material/PlayArrowSharp";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { UserAvatar } from "./hl/UserAvatar";
+import { usePrefersReducedMotion } from "./hl/usePrefersReducedMotion";
 import { colors, fonts, tint, srOnly } from "./hl/tokens";
 
 export interface ActivityTickerEvent {
@@ -50,6 +51,9 @@ export function tickerKind(
 /** Minimum items per marquee half, so short feeds still fill the bar. */
 const MIN_RUN = 8;
 
+/** Height of the LIVE bar; 44px so the pause button is a full touch target. */
+export const TICKER_HEIGHT = 44;
+
 export interface ActivityTickerViewProps {
   items: ReadonlyArray<ActivityTickerEvent>;
   /** `sticky`: bottom of the content column (desktop). `fixed`: above the mobile tab bar. */
@@ -57,27 +61,40 @@ export interface ActivityTickerViewProps {
 }
 
 /**
- * The 36px LIVE bar: a chamfered LIVE tag and a 60s marquee of colour-coded
- * activity. Pauses on hover/focus or with the pause button; 4x slower under
- * prefers-reduced-motion (via the `.hl-tick` rule in the theme).
+ * The 44px LIVE bar: a chamfered LIVE tag and a 60s marquee of colour-coded
+ * activity. Pauses on hover/focus or with the pause button. Under
+ * prefers-reduced-motion nothing moves: the feed is listed once in a strip
+ * that scrolls by hand (keyboard focusable), and there is no pause button.
  */
 export function ActivityTickerView({
   items,
   placement = "sticky",
 }: ActivityTickerViewProps) {
   const [paused, setPaused] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
   if (items.length === 0) return null;
 
   const run: ActivityTickerEvent[] = [];
-  while (run.length < MIN_RUN) run.push(...items);
+  if (reducedMotion) run.push(...items);
+  else while (run.length < MIN_RUN) run.push(...items);
 
   const renderRun = (copy: number) => (
-    <Box sx={{ display: "flex", alignItems: "center", flex: "none" }}>
+    <Box
+      component={reducedMotion ? "ul" : "div"}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        flex: "none",
+        m: 0,
+        p: 0,
+        listStyle: "none",
+      }}
+    >
       {run.map((item, i) => {
         const kind = tickerKind(item);
         return (
           <Box
-            component="span"
+            component={reducedMotion ? "li" : "span"}
             key={`${copy}-${i}-${item.id}`}
             sx={{
               display: "inline-flex",
@@ -99,6 +116,11 @@ export function ActivityTickerView({
               }}
             >
               {kind.label}
+              {reducedMotion && (
+                <Box component="span" sx={srOnly}>
+                  {": "}
+                </Box>
+              )}
             </Box>
             {(item.userHandle || item.userAvatarUrl) && (
               <UserAvatar
@@ -129,7 +151,7 @@ export function ActivityTickerView({
         left: placement === "fixed" ? 0 : undefined,
         right: placement === "fixed" ? 0 : undefined,
         zIndex: 14,
-        height: 36,
+        height: TICKER_HEIGHT,
         flex: "none",
         display: "flex",
         alignItems: "stretch",
@@ -172,60 +194,87 @@ export function ActivityTickerView({
         />
         LIVE
       </Box>
-      {/* Screen readers get the feed once, as a plain list. */}
-      <Box component="ul" sx={{ ...srOnly, m: 0, p: 0 }}>
-        {items.map((item) => (
-          <li key={item.id}>
-            {tickerKind(item).label}: {item.message}
-          </li>
-        ))}
-      </Box>
-      <Box
-        aria-hidden="true"
-        sx={{
-          flex: 1,
-          minWidth: 0,
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          maskImage:
-            "linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 48px), transparent)",
-        }}
-      >
+      {reducedMotion ? (
+        // Static strip: the visible list is the accessible one; it scrolls
+        // horizontally by hand (focusable so keyboard users can scroll it).
         <Box
-          className="hl-tick"
-          data-testid="activity-ticker-track"
+          tabIndex={0}
+          aria-label="Live activity feed"
+          data-testid="activity-ticker-static"
           sx={{
+            flex: 1,
+            minWidth: 0,
+            overflowX: "auto",
+            overflowY: "hidden",
             display: "flex",
-            width: "max-content",
-            animation: "hlTick 60s linear infinite",
-            animationPlayState: paused ? "paused" : "running",
+            alignItems: "center",
+            scrollbarWidth: "thin",
+            "&:focus-visible": {
+              outline: `2px solid ${colors.cyan}`,
+              outlineOffset: -2,
+            },
           }}
         >
           {renderRun(0)}
-          {renderRun(1)}
         </Box>
-      </Box>
-      <IconButton
-        aria-label={paused ? "Resume live activity" : "Pause live activity"}
-        aria-pressed={paused}
-        onClick={() => setPaused((p) => !p)}
-        sx={{
-          flex: "none",
-          minWidth: 36,
-          minHeight: 36,
-          width: 36,
-          height: 36,
-          borderLeft: `1px solid ${tint("cyan", 0.12)}`,
-          "& svg": { fontSize: 18 },
-          "&.Mui-focusVisible": {
-            outline: `2px solid ${colors.cyan}`,
-            outlineOffset: -2,
-          },
-        }}
-      >
-        {paused ? <PlayArrowSharp /> : <PauseSharp />}
-      </IconButton>
+      ) : (
+        <>
+          {/* Screen readers get the feed once, as a plain list. */}
+          <Box component="ul" sx={{ ...srOnly, m: 0, p: 0 }}>
+            {items.map((item) => (
+              <li key={item.id}>
+                {tickerKind(item).label}: {item.message}
+              </li>
+            ))}
+          </Box>
+          <Box
+            aria-hidden="true"
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              maskImage:
+                "linear-gradient(90deg, transparent, #000 24px, #000 calc(100% - 48px), transparent)",
+            }}
+          >
+            <Box
+              className="hl-tick"
+              data-testid="activity-ticker-track"
+              sx={{
+                display: "flex",
+                width: "max-content",
+                animation: "hlTick 60s linear infinite",
+                animationPlayState: paused ? "paused" : "running",
+              }}
+            >
+              {renderRun(0)}
+              {renderRun(1)}
+            </Box>
+          </Box>
+          <IconButton
+            aria-label={paused ? "Resume live activity" : "Pause live activity"}
+            aria-pressed={paused}
+            onClick={() => setPaused((p) => !p)}
+            sx={{
+              flex: "none",
+              minWidth: TICKER_HEIGHT,
+              minHeight: TICKER_HEIGHT,
+              width: TICKER_HEIGHT,
+              height: TICKER_HEIGHT,
+              borderLeft: `1px solid ${tint("cyan", 0.12)}`,
+              "& svg": { fontSize: 20 },
+              "&.Mui-focusVisible": {
+                outline: `2px solid ${colors.cyan}`,
+                outlineOffset: -2,
+              },
+            }}
+          >
+            {paused ? <PlayArrowSharp /> : <PauseSharp />}
+          </IconButton>
+        </>
+      )}
     </Box>
   );
 }

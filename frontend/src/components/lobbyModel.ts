@@ -7,6 +7,7 @@ import moment from "moment";
 import { RSVP } from "../types/invitations";
 import { getAttendanceGrid, TIME_PERIODS } from "../utils/attendanceBuckets";
 import type { HlTone } from "./hl";
+import { ownDeskLabel } from "./seatFloorPlanModel";
 
 /** `EVT-001` style tag for an event id. */
 export const formatEventId = (id: number): string =>
@@ -158,6 +159,55 @@ export function summariseSquad<
       }),
   );
   return { sorted, counts };
+}
+
+export interface SquadSeating {
+  hasSeating: boolean;
+  allowUnspecifiedSeat: boolean;
+  /** The event's configured label for a floating (no fixed desk) seat. */
+  unspecifiedSeatLabel: string;
+  /** Desk labels by seat id. */
+  labels: Map<number, string>;
+}
+
+export interface SquadSeat {
+  /**
+   * `desk` a reserved desk, `floating` a reservation without a desk,
+   * `unseated` going but no reservation yet, `none` not going.
+   */
+  kind: "desk" | "floating" | "unseated" | "none";
+  text: string;
+}
+
+/**
+ * The squad list's seat column for one guest, or null when the event has no
+ * seating. Floating guests show the event's configured label; guests without
+ * any reservation show "No seat yet" (older APIs without
+ * `hasSeatReservation` can't tell the two apart, so they fall back to the
+ * floating label when the event allows one).
+ */
+export function squadSeatText(
+  guest: {
+    response: RSVP | null;
+    seatId: number | null;
+    hasSeatReservation?: boolean;
+  },
+  seating: SquadSeating,
+): SquadSeat | null {
+  if (!seating.hasSeating) return null;
+  const st = rsvpState(guest.response);
+  if (st === "no" || st === "none") return { kind: "none", text: "none" };
+  if (guest.seatId !== null)
+    return {
+      kind: "desk",
+      text: seating.labels.get(guest.seatId) ?? "Reserved",
+    };
+  const floating =
+    guest.hasSeatReservation ??
+    (seating.allowUnspecifiedSeat ? true : undefined);
+  return floating
+    ? { kind: "floating", text: ownDeskLabel(seating.unspecifiedSeatLabel) }
+    : { kind: "unseated", text: "No seat yet" };
 }
 
 export interface RankedSuggestion<T> {

@@ -14,7 +14,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import moment from "moment";
 import theme from "../theme";
 import EventGameSchedule from "../components/EventGameSchedule";
-import { UserContext } from "../UserProvider";
+import { UserContext, UserDispatchContext } from "../UserProvider";
 
 // Local wall-clock times so the assertions hold in any timezone.
 const iso = (local: string) => moment(local).toISOString();
@@ -72,6 +72,11 @@ const suggestion = (appid: number, name: string, votes: number) => ({
 
 let schedule: ReturnType<typeof entry>[];
 let calls: Array<{ method: string; url: string; body: unknown }>;
+/** Per-test overrides: return a Response to short-circuit the default mock. */
+let override:
+  | ((method: string, path: string) => Promise<Response> | Response | undefined)
+  | undefined;
+const signOut = vi.fn();
 
 beforeEach(() => {
   schedule = [
@@ -80,6 +85,8 @@ beforeEach(() => {
     entry(0, 548430, "Deep Rock Galactic", "2026-11-14T12:00:00", 120, false),
   ];
   calls = [];
+  override = undefined;
+  signOut.mockReset();
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -93,6 +100,8 @@ beforeEach(() => {
           headers: { "Content-Type": "application/json" },
         });
       const path = url.split("?")[0];
+      const custom = override?.(method, path);
+      if (custom) return custom;
       if (method === "GET" && path === "/api/events/7") return json(event);
       if (method === "GET" && path === "/api/events/7/game_schedule")
         return json(schedule);
@@ -166,14 +175,23 @@ const renderPage = (isAdmin: boolean) =>
             isAdmin,
           }}
         >
-          <MemoryRouter initialEntries={["/events/7/schedule"]}>
-            <Routes>
-              <Route
-                path="/events/:id/schedule"
-                element={<EventGameSchedule />}
-              />
-            </Routes>
-          </MemoryRouter>
+          <UserDispatchContext.Provider
+            value={{
+              signIn: vi.fn(),
+              verifyEmail: vi.fn(),
+              signOut,
+              isSignedIn: vi.fn(() => true),
+            }}
+          >
+            <MemoryRouter initialEntries={["/events/7/schedule"]}>
+              <Routes>
+                <Route
+                  path="/events/:id/schedule"
+                  element={<EventGameSchedule />}
+                />
+              </Routes>
+            </MemoryRouter>
+          </UserDispatchContext.Provider>
         </UserContext.Provider>
       </SnackbarProvider>
     </ThemeProvider>,
@@ -230,7 +248,7 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
       durationMinutes: 120,
     });
     expect(
-      await screen.findByText("Counter-Strike 2 moved to FRI 19:30–21:30"),
+      await screen.findByText("Counter-Strike 2 moved to FRI 19:30 → 21:30"),
     ).toBeInTheDocument();
   });
 
@@ -288,7 +306,7 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     });
     expect(
       await screen.findByText(
-        "Deep Rock Galactic moved to SAT 12:30–14:30 · now pinned",
+        "Deep Rock Galactic moved to SAT 12:30 → 14:30 · now pinned",
       ),
     ).toBeInTheDocument();
   });
@@ -433,5 +451,150 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     expect(suggestIdx).toBeGreaterThan(-1);
     expect(suggestIdx).toBeLessThan(scheduleIdx);
     expect(calls[suggestIdx].body).toEqual({ appid: 892970, comment: null });
+  });
+
+  it("puts a session back straight away when saving a move fails", async () => {
+    const user = userEvent.setup();
+    let failed = false;
+    override = (method, path) => {
+      if (method === "PATCH") {
+        failed = true;
+        return new Response("boom", { status: 500 });
+      }
+      // Hold the follow-up refresh so only the rollback can restore the block.
+      if (failed && method === "GET" && path === "/api/events/7/game_schedule")
+        return new Promise<Response>(() => undefined);
+      return undefined;
+    };
+    renderPage(true);
+    const cs = await block(/^Counter-Strike 2, Friday 19:00/);
+    cs.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(
+      await screen.findByText("Failed to update game schedule"),
+    ).toBeInTheDocument();
+    expect(
+      await block(/^Counter-Strike 2, Friday 19:00 to 21:00, pinned/),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Friday 19:30/ })).toBeNull();
+  });
+
+  it("names the real day for sessions after midnight", async () => {
+    schedule = [
+      ...schedule,
+      entry(5, 427520, "Factorio", "2026-11-14T00:30:00", 120, true),
+    ];
+    renderPage(false);
+    expect(
+      await block(
+        /^Factorio, Saturday 00:30 to 02:30 \(Friday night\), pinned/,
+      ),
+    ).toBeInTheDocument();
+    const card = screen.getByRole("button", {
+      name: /^Factorio, Saturday 00:30 to 02:30 \(Friday night\), pinned(, outside the auto-schedule window)?\. /,
+    });
+    expect(card).toHaveTextContent("SAT 00:30 → 02:30");
+    expect(card).toHaveTextContent("FRI NIGHT");
+    // Still listed under Friday's column.
+    expect(
+      within(screen.getByRole("region", { name: "Friday" })).getByRole(
+        "button",
+        { name: /^Factorio/ },
+      ),
+    ).toBe(card);
+  });
+
+  it("explains a recalculation without offering an Undo", async () => {
+    const user = userEvent.setup();
+    override = (method, path) =>
+      method === "POST" && path === "/api/events/7/game_schedule/recalculate"
+        ? new Response(JSON.stringify([schedule[2]]), { status: 200 })
+        : undefined;
+    renderPage(true);
+    await block(/^Counter-Strike 2/);
+    await user.click(screen.getByRole("button", { name: /Recalculate/ }));
+    expect(
+      await screen.findByText(
+        "Re-planned 1 suggested slot from the latest votes and attendance. Your 2 pinned sessions are unchanged.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("keeps the last row while dragging through the gap between rows", async () => {
+    renderPage(true);
+    const cs = await block(/^Counter-Strike 2, Friday 19:00/);
+    const rect = (top: number) => ({
+      left: 0,
+      top,
+      right: 1600,
+      bottom: top + 52,
+      width: 1600,
+      height: 52,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    });
+    [0, 1, 2].forEach((i) =>
+      vi
+        .spyOn(
+          screen.getByTestId(`timeline-track-${i}`),
+          "getBoundingClientRect",
+        )
+        .mockReturnValue(rect(i * 66)),
+    );
+    fireEvent.pointerDown(cs, {
+      pointerType: "mouse",
+      button: 0,
+      clientX: 100,
+      clientY: 20,
+    });
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 100, clientY: 90 }),
+      );
+    });
+    expect(
+      await screen.findByText(/^SAT 19:00 → 21:00 · 2h/),
+    ).toBeInTheDocument();
+    // 60px is in the gap between Friday (0–52) and Saturday (66–118).
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("pointermove", { clientX: 100, clientY: 60 }),
+      );
+    });
+    expect(screen.getByText(/^SAT 19:00 → 21:00 · 2h/)).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new MouseEvent("pointerup"));
+    });
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
+        startTime: iso("2026-11-14T19:00:00"),
+      }),
+    );
+  });
+
+  it("signs out when the Steam search reports an expired session", async () => {
+    const user = userEvent.setup();
+    override = (_method, path) =>
+      path === "/api/steam-game"
+        ? new Response("", { status: 401 })
+        : undefined;
+    renderPage(true);
+    await block(/^Counter-Strike 2/);
+    await user.click(screen.getByRole("button", { name: /Add to schedule/ }));
+    await user.type(
+      await screen.findByRole("searchbox", { name: "Search games" }),
+      "val",
+    );
+    await waitFor(() => expect(signOut).toHaveBeenCalled());
+  });
+
+  it("gives the Show suggested switch a full-size target", async () => {
+    renderPage(false);
+    const toggle = await screen.findByLabelText("Show suggested");
+    expect(toggle.closest(".MuiSwitch-root")).not.toHaveClass(
+      "MuiSwitch-sizeSmall",
+    );
   });
 });

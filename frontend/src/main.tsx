@@ -15,51 +15,55 @@ import theme from "./theme";
 import "./fonts";
 import { shouldShowReportDialog } from "./utils/sentryReporting";
 
-Sentry.init({
-  dsn: "https://923bbfe5a18542a2abce46873d376d65@o159962.ingest.sentry.io/4504028795371520",
-  integrations: [
-    Sentry.browserProfilingIntegration(),
-    Sentry.reactRouterV6BrowserTracingIntegration({
-      useEffect: React.useEffect,
-      useLocation,
-      useNavigationType,
-      createRoutesFromChildren,
-      matchRoutes,
-    }),
-    Sentry.replayIntegration({
-      maskAllText: false,
-      blockAllMedia: false,
-    }),
-  ],
+// Only production builds report to Sentry: dev servers would otherwise send
+// noise (and profiler console errors) to the production project.
+if (import.meta.env.PROD) {
+  Sentry.init({
+    dsn: "https://923bbfe5a18542a2abce46873d376d65@o159962.ingest.sentry.io/4504028795371520",
+    integrations: [
+      Sentry.browserProfilingIntegration(),
+      Sentry.reactRouterV6BrowserTracingIntegration({
+        useEffect: React.useEffect,
+        useLocation,
+        useNavigationType,
+        createRoutesFromChildren,
+        matchRoutes,
+      }),
+      Sentry.replayIntegration({
+        maskAllText: false,
+        blockAllMedia: false,
+      }),
+    ],
 
-  beforeSend(event, hint) {
-    // Ask for a crash report on exceptions, except handled client errors
-    // (4xx), which the UI has already explained to the user.
-    if (shouldShowReportDialog(event, hint)) {
-      Sentry.showReportDialog({ eventId: event.event_id });
-    }
-    return event;
-  },
+    beforeSend(event, hint) {
+      // Ask for a crash report on exceptions, except handled client errors
+      // (4xx), which the UI has already explained to the user.
+      if (shouldShowReportDialog(event, hint)) {
+        Sentry.showReportDialog({ eventId: event.event_id });
+      }
+      return event;
+    },
 
-  // Set tracesSampleRate to 1.0 to capture 100%
-  // of transactions for performance monitoring.
-  tracesSampleRate: 1.0,
+    // Set tracesSampleRate to 1.0 to capture 100%
+    // of transactions for performance monitoring.
+    tracesSampleRate: 1.0,
 
-  // Set `tracePropagationTargets` to control for which URLs distributed tracing should be enabled
-  tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
+    // Set `tracePropagationTargets` to control for which URLs distributed tracing should be enabled
+    tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
 
-  // Capture Replay for 10% of all sessions,
-  // plus for 100% of sessions with an error
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
+    // Capture Replay for 10% of all sessions,
+    // plus for 100% of sessions with an error
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
 
-  // Set profilesSampleRate to 1.0 to profile every transaction.
-  // Since profilesSampleRate is relative to tracesSampleRate,
-  // the final profiling rate can be computed as tracesSampleRate * profilesSampleRate
-  // For example, a tracesSampleRate of 0.5 and profilesSampleRate of 0.5 would
-  // results in 25% of transactions being profiled (0.5*0.5=0.25)
-  profilesSampleRate: 1.0,
-});
+    // Set profilesSampleRate to 1.0 to profile every transaction.
+    // Since profilesSampleRate is relative to tracesSampleRate,
+    // the final profiling rate can be computed as tracesSampleRate * profilesSampleRate
+    // For example, a tracesSampleRate of 0.5 and profilesSampleRate of 0.5 would
+    // results in 25% of transactions being profiled (0.5*0.5=0.25)
+    profilesSampleRate: 1.0,
+  });
+}
 
 const rootElement = document.getElementById("root");
 const root = createRoot(rootElement!);

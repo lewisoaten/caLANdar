@@ -39,6 +39,8 @@ const mockSeats = [
 let mockAvailability: { availableSeatIds: number[] } = {
   availableSeatIds: [],
 };
+// Number of check-availability calls left to fail with a 500.
+let availabilityFailures = 0;
 
 const mockInvitations = [
   {
@@ -96,6 +98,14 @@ describe("WizardSeatSelector reserved seat handling", () => {
         }
 
         if (url.includes("seat-reservations/check-availability")) {
+          if (availabilityFailures > 0) {
+            availabilityFailures--;
+            return Promise.resolve({
+              ok: false,
+              status: 500,
+              json: async () => ({}),
+            } as Response);
+          }
           return jsonResponse(mockAvailability);
         }
 
@@ -106,6 +116,7 @@ describe("WizardSeatSelector reserved seat handling", () => {
 
   afterEach(() => {
     mockAvailability = { availableSeatIds: [] };
+    availabilityFailures = 0;
     localStorage.clear();
     vi.restoreAllMocks();
   });
@@ -218,5 +229,28 @@ describe("WizardSeatSelector reserved seat handling", () => {
     expect(
       screen.queryByRole("button", { name: /Bring my own desk/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows an error with a retry instead of marking every desk taken", async () => {
+    availabilityFailures = 1;
+    mockAvailability = { availableSeatIds: [10] };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    renderSelector(null, { allowUnspecifiedSeat: true });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Couldn't check which desks are free/,
+    );
+    expect(
+      screen.queryByRole("button", { name: /Seat 10/ }),
+    ).not.toBeInTheDocument();
+    // Bring-your-own stays available while the plan is unavailable.
+    expect(
+      screen.getByRole("button", { name: /Bring my own desk/ }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("button", { name: /Seat 10, free/ }),
+    ).toBeEnabled();
   });
 });

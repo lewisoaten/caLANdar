@@ -90,9 +90,14 @@ function mockGamesApi(eventId: number, opts: { ended?: boolean } = {}) {
     [`GET /api/events/${eventId}/games`]: ({ query }: MockRequest) => {
       const page = Number(query.get("page") ?? 0);
       const count = Number(query.get("count") ?? 10);
+      // Server-side name search, like the API's `search` param.
+      const search = (query.get("search") ?? "").trim().toLowerCase();
+      const matching = search
+        ? eventGames.filter((g) => g.name.toLowerCase().includes(search))
+        : eventGames;
       return {
-        eventGames: eventGames.slice(page * count, (page + 1) * count),
-        totalCount: Math.ceil(eventGames.length / count),
+        eventGames: matching.slice(page * count, (page + 1) * count),
+        totalCount: Math.ceil(matching.length / count),
       };
     },
     [`GET /api/events/${eventId}/suggested_games`]: () =>

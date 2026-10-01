@@ -4,12 +4,18 @@ import { Link as RouterLink, useLocation } from "react-router-dom";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Drawer from "@mui/material/Drawer";
+import GlobalStyles from "@mui/material/GlobalStyles";
 import IconButton from "@mui/material/IconButton";
 import CloseSharp from "@mui/icons-material/CloseSharp";
-import MenuItems, { displayName } from "./MenuItems";
-import ActivityTicker from "./ActivityTicker";
+import MenuItems, {
+  displayName,
+  LockedNavButton,
+  rsvpLockReason,
+} from "./MenuItems";
+import ActivityTicker, { TICKER_HEIGHT } from "./ActivityTicker";
 import { BackgroundFx } from "./hl/BackgroundFx";
 import { BrandMark } from "./hl/BrandMark";
+import { TOAST_BOTTOM_VAR } from "./hl/HlSnackbarProvider";
 import { UserAvatar } from "./hl/UserAvatar";
 import { useIsMobile } from "./hl/useIsMobile";
 import { colors, fonts, hairline, sectionGap, tint } from "./hl/tokens";
@@ -32,7 +38,6 @@ export declare interface AppProps {
 const SIDEBAR_WIDTH = 256;
 const TOPBAR_HEIGHT = 64;
 const TABBAR_HEIGHT = 64;
-const TICKER_HEIGHT = 36;
 /** Content column max width; centred beyond it on large screens. */
 export const CONTENT_MAX_WIDTH = 1400;
 
@@ -83,10 +88,18 @@ function Breadcrumb({ crumbs }: { crumbs: Crumb[] }) {
           overflow: "hidden",
           textOverflow: "ellipsis",
           "& li": { display: "inline" },
+          // Inline links: vertical padding grows the hit area to 44px
+          // without changing the line box (keeps the ellipsis working).
           "& a": {
             color: "inherit",
             textDecoration: "none",
+            py: "14px",
+            px: "2px",
             "&:hover": { color: colors.cyan },
+            "&:focus-visible": {
+              outline: `2px solid ${colors.cyan}`,
+              outlineOffset: 0,
+            },
           },
         }}
       >
@@ -163,19 +176,19 @@ function MobileTabBar({ shell }: { shell: ShellState }) {
           },
         } as const;
         return locked ? (
-          <ButtonBase
+          <LockedNavButton
             key={item.key}
-            component="span"
-            role="link"
-            aria-disabled="true"
-            aria-label={`${item.label} (RSVP Yes or Maybe to unlock)`}
-            title='RSVP "Yes" or "Maybe" to access this section.'
-            tabIndex={0}
+            ariaLabel={item.label}
+            reason={rsvpLockReason(access.loading)}
+            tooltipPlacement="top"
             sx={sx}
-          >
-            <Icon aria-hidden="true" />
-            <span aria-hidden="true">{item.short}</span>
-          </ButtonBase>
+            content={
+              <>
+                <Icon aria-hidden="true" />
+                <span aria-hidden="true">{item.short}</span>
+              </>
+            }
+          />
         ) : (
           <ButtonBase
             key={item.key}
@@ -198,10 +211,13 @@ function MenuSheet({
   shell,
   open,
   onClose,
+  includeEvents,
 }: {
   shell: ShellState;
   open: boolean;
   onClose: () => void;
+  /** List Events in the sheet (when there is no bottom tab bar). */
+  includeEvents: boolean;
 }) {
   return (
     <Drawer
@@ -243,8 +259,7 @@ function MenuSheet({
               fontFamily: fonts.mono,
               fontSize: 11,
               color: colors.textDim,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
+              overflowWrap: "anywhere",
             }}
           >
             {shell.email}
@@ -262,7 +277,7 @@ function MenuSheet({
         shell={shell}
         variant="sheet"
         onNavigate={onClose}
-        includeEvents={!shell.activeEvent}
+        includeEvents={includeEvents}
       />
     </Drawer>
   );
@@ -322,7 +337,9 @@ export default function Dashboard({ children }: AppProps) {
     access.responded &&
     activeEvent != null &&
     String(activeEvent.id) === route.eventId;
-  const showTabBar = isMobile && activeEvent != null;
+  // The tab bar is event navigation, so only event pages get it; other
+  // pages use the top bar's menu sheet (which then lists Events too).
+  const showTabBar = isMobile && onEventPage && activeEvent != null;
   // Shown wherever there is an active event (the design shows it on every
   // page); the next/live event is never "ended", a viewed past one says so.
   const showPill = activeEvent != null;
@@ -331,8 +348,15 @@ export default function Dashboard({ children }: AppProps) {
     onEventPage ? TICKER_HEIGHT : 0
   }px + env(safe-area-inset-bottom) + 40px)`;
 
+  // Bottom chrome toasts must clear: the ticker (desktop and mobile) and the
+  // mobile tab bar with its safe-area padding.
+  const toastBottom = `calc(${showTicker ? TICKER_HEIGHT : 0}px + ${
+    showTabBar ? `${TABBAR_HEIGHT}px + env(safe-area-inset-bottom)` : "0px"
+  })`;
+
   return (
     <>
+      <GlobalStyles styles={{ ":root": { [TOAST_BOTTOM_VAR]: toastBottom } }} />
       <BackgroundFx />
       <SkipLink />
       <Box sx={{ display: "flex", minHeight: "100vh" }}>
@@ -369,6 +393,8 @@ export default function Dashboard({ children }: AppProps) {
                 to="/events"
                 aria-label="caLANdar home"
                 sx={{
+                  minHeight: 48,
+                  justifyContent: "flex-start",
                   "&.Mui-focusVisible": {
                     outline: `2px solid ${colors.cyan}`,
                     outlineOffset: 4,
@@ -495,6 +521,7 @@ export default function Dashboard({ children }: AppProps) {
           shell={shell}
           open={sheetVisible}
           onClose={() => setSheetOpen(false)}
+          includeEvents={!showTabBar}
         />
       )}
     </>

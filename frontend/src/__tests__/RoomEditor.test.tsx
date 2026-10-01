@@ -231,4 +231,131 @@ describe("RoomEditor", { timeout: 20000 }, () => {
     );
     expect(await screen.findByText("Event page")).toBeInTheDocument();
   });
+
+  it("asks to release reserved desks on a 409 and retries with releaseReserved", async () => {
+    const base = globalThis.fetch;
+    let attempt = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (
+          url.startsWith("/api/events/7/room-layout") &&
+          init?.method === "PUT"
+        ) {
+          attempt++;
+          const body = JSON.parse(init.body as string) as LayoutSubmit;
+          if (!body.releaseReserved) {
+            puts.push(body);
+            return new Response(
+              JSON.stringify({
+                error: {
+                  code: 409,
+                  reason: "Conflict",
+                  description: "Desk A1 was reserved by NoScope_Nia meanwhile.",
+                },
+              }),
+              { status: 409 },
+            );
+          }
+        }
+        return base(url, init);
+      }),
+    );
+    renderEditor();
+    fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
+    fireEvent.click(cell(/Empty square, column 6, row 3/));
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      "Desk A1 was reserved by NoScope_Nia meanwhile.",
+    );
+    expect(puts[0].releaseReserved).toBe(false);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save anyway" }),
+    );
+    expect(
+      await screen.findByText("Saved · seat map updated"),
+    ).toBeInTheDocument();
+    expect(attempt).toBe(2);
+    expect(puts).toHaveLength(2);
+    expect(puts[1].releaseReserved).toBe(true);
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  it("uploads a picked background after the layout save", async () => {
+    // jsdom has no object URLs.
+    URL.createObjectURL = vi.fn(() => "blob:preview");
+    URL.revokeObjectURL = vi.fn();
+    const base = globalThis.fetch;
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (init?.method === "PUT") calls.push(url.split("?")[0]);
+        if (url.startsWith("/api/events/7/rooms/1/background")) {
+          const l = layout();
+          return new Response(
+            JSON.stringify({ ...l.rooms[0], backgroundUrl: "/bg/1.png" }),
+          );
+        }
+        return base(url, init);
+      }),
+    );
+    renderEditor();
+    const input = await screen.findByLabelText("Upload floor plan or photo");
+    const png = new File([new Uint8Array([137, 80, 78, 71])], "plan.png", {
+      type: "image/png",
+    });
+    fireEvent.change(input, { target: { files: [png] } });
+    expect(await screen.findByText("Unsaved changes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    expect(
+      await screen.findByText("Saved · seat map updated"),
+    ).toBeInTheDocument();
+    expect(calls).toEqual([
+      "/api/events/7/room-layout",
+      "/api/events/7/rooms/1/background",
+    ]);
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+  });
+
+  it("locks editing while a save is in flight", async () => {
+    const base = globalThis.fetch;
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (
+          url.startsWith("/api/events/7/room-layout") &&
+          init?.method === "PUT"
+        )
+          await gate;
+        return base(url, init);
+      }),
+    );
+    renderEditor();
+    fireEvent.click(await screen.findByRole("button", { name: "Desk" }));
+    fireEvent.click(cell(/Empty square, column 6, row 3/));
+    fireEvent.click(screen.getByRole("button", { name: "Save rooms" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("room-editor-body")).toHaveAttribute(
+        "aria-busy",
+        "true",
+      ),
+    );
+    // An edit attempted mid-save is ignored rather than lost silently.
+    fireEvent.click(cell(/Empty square, column 1, row 4/));
+    expect(cell(/Empty square, column 1, row 4/)).toBeInTheDocument();
+    release();
+    expect(
+      await screen.findByText("Saved · seat map updated"),
+    ).toBeInTheDocument();
+    expect(puts).toHaveLength(1);
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.getByTestId("room-editor-body")).toHaveAttribute(
+      "aria-busy",
+      "false",
+    );
+  });
 });

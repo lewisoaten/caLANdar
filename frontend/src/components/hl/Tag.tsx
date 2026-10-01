@@ -43,7 +43,8 @@ export function Tag({
           gap: size === "sm" ? "5px" : "8px",
           flex: "none",
           maxWidth: "100%",
-          whiteSpace: "nowrap",
+          // One line when it fits; wraps (never truncates) when squeezed.
+          whiteSpace: "normal",
           fontFamily: fonts.mono,
           fontSize: size === "sm" ? 10 : 11,
           fontWeight: solid ? 700 : 500,
@@ -83,10 +84,7 @@ export function Tag({
           {icon}
         </Box>
       )}
-      <Box
-        component="span"
-        sx={{ overflow: "hidden", textOverflow: "ellipsis" }}
-      >
+      <Box component="span" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
         {children}
       </Box>
     </Box>

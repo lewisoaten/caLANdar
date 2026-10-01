@@ -1,8 +1,4 @@
 import { createTheme, type Theme } from "@mui/material/styles";
-import type {} from "@mui/x-date-pickers/themeAugmentation";
-// Official DataGrid augmentation: types `MuiDataGrid` overrides and the
-// `palette.DataGrid` colours used below.
-import type {} from "@mui/x-data-grid/themeAugmentation";
 import {
   bracket,
   colors as c,
@@ -50,7 +46,7 @@ declare module "@mui/material/Typography" {
   }
 }
 
-// Shared by TextField/OutlinedInput and the date pickers' PickersTextField.
+// Shared input surface for TextField/OutlinedInput.
 const inputSurface = {
   backgroundColor: c.surface,
   borderRadius: 0,
@@ -178,11 +174,6 @@ const theme: Theme = createTheme({
       disabled: c.textDim,
       disabledBackground: tint("neutral", 0.12),
     },
-    DataGrid: {
-      bg: "transparent",
-      headerBg: "transparent",
-      pinnedBg: c.surfaceSolid,
-    },
   },
   shape: { borderRadius: 0 },
   typography: {
@@ -301,11 +292,9 @@ const theme: Theme = createTheme({
             transitionDuration: "0.01ms !important",
             scrollBehavior: "auto !important",
           },
-          // The ticker keeps moving, just 4x slower (240s instead of 60s).
-          ".hl-tick": {
-            animationDuration: "240s !important",
-            animationIterationCount: "infinite !important",
-          },
+          // The ticker is static under reduced motion (no marquee at all):
+          // ActivityTicker renders the feed once, scrollable by hand.
+          ".hl-tick": { animation: "none !important" },
         },
       },
     },
@@ -808,52 +797,6 @@ const theme: Theme = createTheme({
         icon: { color: c.cyan },
       },
     },
-    // Date and time pickers render their own field (PickersTextField) rather
-    // than a TextField, so the MuiOutlinedInput overrides above do not reach
-    // them. Mirror them here so pickers match every other outlined input.
-    MuiPickersTextField: {
-      styleOverrides: {
-        root: {
-          "& .MuiPickersOutlinedInput-root": {
-            ...inputSurface,
-            minHeight: 48,
-            "& .MuiPickersOutlinedInput-notchedOutline": {
-              borderColor: hairline.control,
-            },
-            "&:hover .MuiPickersOutlinedInput-notchedOutline": {
-              borderColor: hairline.strong,
-            },
-            "&.Mui-focused .MuiPickersOutlinedInput-notchedOutline": {
-              borderColor: c.cyan,
-              borderWidth: 1,
-            },
-            "&.Mui-focused": { boxShadow: `0 0 0 3px ${tint("cyan", 0.18)}` },
-            "&.Mui-error .MuiPickersOutlinedInput-notchedOutline": {
-              borderColor: c.pink,
-            },
-          },
-          "& .MuiInputLabel-root": inputLabelStyles,
-        },
-      },
-    },
-    MuiPickerPopper: {
-      styleOverrides: {
-        paper: {
-          backgroundColor: c.surfaceSolid,
-          border: `1px solid ${hairline.control}`,
-          boxShadow: effects.dialog,
-        },
-      },
-    },
-    MuiPickerDay: {
-      styleOverrides: {
-        root: {
-          borderRadius: 0,
-          fontFamily: fonts.mono,
-          "&.Mui-selected": { color: c.ink, fontWeight: 700 },
-        },
-      },
-    },
     MuiCheckbox: {
       styleOverrides: {
         root: {
@@ -1206,37 +1149,6 @@ const theme: Theme = createTheme({
     MuiSkeleton: {
       styleOverrides: {
         root: { borderRadius: 0, backgroundColor: tint("cyan", 0.06) },
-      },
-    },
-    MuiDataGrid: {
-      styleOverrides: {
-        root: {
-          border: `1px solid ${hairline.panel}`,
-          borderRadius: 0,
-          backgroundColor: "transparent",
-          "--DataGrid-rowBorderColor": hairline.faint,
-          "& .MuiDataGrid-columnHeaders, & .MuiDataGrid-columnHeader": {
-            borderColor: hairline.soft,
-          },
-          "& .MuiDataGrid-columnSeparator": { color: hairline.soft },
-          "& .MuiDataGrid-cell": { borderColor: hairline.faint },
-          "& .MuiDataGrid-footerContainer": { borderColor: hairline.soft },
-          "& .MuiDataGrid-withBorderColor": { borderColor: hairline.soft },
-          "& .MuiDataGrid-row:hover": { backgroundColor: tint("cyan", 0.04) },
-          "& .MuiDataGrid-row.Mui-selected": {
-            backgroundColor: tint("cyan", 0.08),
-          },
-          "& .MuiDataGrid-cell:focus-within, & .MuiDataGrid-columnHeader:focus-within":
-            { outline: `2px solid ${c.cyan}`, outlineOffset: -2 },
-        },
-        columnHeaderTitle: {
-          fontFamily: fonts.mono,
-          fontSize: 11,
-          fontWeight: 500,
-          letterSpacing: "0.16em",
-          textTransform: "uppercase",
-          color: c.textDim,
-        },
       },
     },
   },

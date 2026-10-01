@@ -8,9 +8,11 @@ import { TrophyBadge } from "./AddToScheduleDialog";
 import {
   LanDay,
   Session,
+  clockDay,
   fmtClock,
   fmtDur,
   isOutsideWindow,
+  spanLong,
 } from "./scheduleModel";
 
 export interface ScheduleDayCardsProps {
@@ -172,13 +174,16 @@ function SessionCard({
     ? `${fmtDur(s.dur)} · ${suggestion.gamerOwned.length} of ${squadSize} own it · ${votes} vote${votes === 1 ? "" : "s"}`
     : `${fmtDur(s.dur)} · not in the vote`;
   const outside = isOutsideWindow(day, s.st, s.dur);
+  // After midnight the card still sits under the LAN day it belongs to, so
+  // name the real calendar day ("SAT 00:30") to avoid reading as Friday 00:30.
+  const startDay = clockDay(day, s.st);
   return (
     <Box component="li">
       <Box
         component="button"
         type="button"
         onClick={() => onOpen(s.key)}
-        aria-label={`${s.entry.gameName}, ${day.name} ${fmtClock(s.st)} to ${fmtClock(s.st + s.dur)}, ${s.pinned ? "pinned" : "suggested"}${outside ? ", outside the auto-schedule window" : ""}. ${meta}`}
+        aria-label={`${s.entry.gameName}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}${outside ? ", outside the auto-schedule window" : ""}. ${meta}`}
         sx={{
           width: "100%",
           display: "flex",
@@ -233,8 +238,14 @@ function SessionCard({
               component="span"
               sx={{ fontFamily: fonts.mono, fontSize: 14, fontWeight: 700 }}
             >
+              {startDay.nextDay ? `${startDay.short} ` : ""}
               {fmtClock(s.st)} → {fmtClock(s.st + s.dur)}
             </Box>
+            {startDay.nextDay && (
+              <Box component="span" sx={tagSx(colors.textMuted)}>
+                {day.short} NIGHT
+              </Box>
+            )}
             <Box
               component="span"
               sx={tagSx(s.pinned ? colors.cyan : colors.violetLight)}

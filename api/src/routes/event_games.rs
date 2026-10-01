@@ -105,7 +105,13 @@ pub async fn get_all_suggested(
     }
 }
 
-custom_errors!(EventGameSuggestionError, InternalServerError);
+custom_errors!(
+    EventGameSuggestionError,
+    Forbidden,
+    NotFound,
+    Conflict,
+    InternalServerError
+);
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde")]
@@ -132,8 +138,11 @@ pub async fn post(
             event_id, event_game_suggestion.appid
         ))
         .body(Json(event_game_suggestion))),
+        Err(Error::NotPermitted(e)) => Err(EventGameSuggestionError::Forbidden(e)),
+        Err(Error::NotFound(e)) => Err(EventGameSuggestionError::NotFound(e)),
+        Err(Error::Conflict(e)) => Err(EventGameSuggestionError::Conflict(e)),
         Err(e) => Err(EventGameSuggestionError::InternalServerError(format!(
-            "Error creating event, due to: {e}"
+            "Error suggesting game, due to: {e}"
         ))),
     }
 }
@@ -153,6 +162,11 @@ pub struct EventGameSuggestionPatch {
     vote: GameVote,
 }
 
+custom_errors!(EventGameVoteError, Forbidden, NotFound, InternalServerError);
+
+/// Vote for (or withdraw a vote from) a suggested game.
+/// 403 with the reason when the viewer can't vote (declined, not yet
+/// responded, event ended); 404 when the game isn't in the vote.
 #[openapi(tag = "Event Games")]
 #[patch(
     "/events/<event_id>/suggested_games/<game_id>",
@@ -165,8 +179,7 @@ pub async fn patch(
     game_patch: Json<EventGameSuggestionPatch>,
     pool: &State<PgPool>,
     user: User,
-) -> Result<Json<EventGameSuggestionResponse>, rocket::response::status::Unauthorized<String>> {
-    #[allow(clippy::option_if_let_else)]
+) -> Result<Json<EventGameSuggestionResponse>, EventGameVoteError> {
     match game_suggestion::vote(
         pool,
         event_id,
@@ -177,15 +190,18 @@ pub async fn patch(
     .await
     {
         Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
-        Err(_) => Err(rocket::response::status::Unauthorized(
-            "Error updating game vote in the database".to_string(),
-        )),
+        Err(Error::NotPermitted(e)) => Err(EventGameVoteError::Forbidden(e)),
+        Err(Error::NotFound(e)) => Err(EventGameVoteError::NotFound(e)),
+        Err(e) => Err(EventGameVoteError::InternalServerError(format!(
+            "Error updating game vote, due to: {e}"
+        ))),
     }
 }
 
 custom_errors!(
     EventGameCommentUpdateError,
-    Unauthorized,
+    Forbidden,
+    NotFound,
     InternalServerError
 );
 
@@ -218,7 +234,8 @@ pub async fn update_comment(
     .await
     {
         Ok(updated_game_suggestion) => Ok(Json(updated_game_suggestion)),
-        Err(Error::NotPermitted(e)) => Err(EventGameCommentUpdateError::Unauthorized(e)),
+        Err(Error::NotPermitted(e)) => Err(EventGameCommentUpdateError::Forbidden(e)),
+        Err(Error::NotFound(e)) => Err(EventGameCommentUpdateError::NotFound(e)),
         Err(e) => Err(EventGameCommentUpdateError::InternalServerError(format!(
             "Error updating comment: {e}"
         ))),

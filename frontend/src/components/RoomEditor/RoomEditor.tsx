@@ -180,6 +180,9 @@ const RoomEditor = () => {
   const [focus, setFocus] = useState({ col: 0, row: 0 });
   const [confirm, setConfirm] = useState<Confirm>(null);
   const [saving, setSaving] = useState(false);
+  // Edits are locked while a save is in flight: the save replaces `rooms`
+  // with the server's copy, which would silently drop anything typed meanwhile.
+  const savingRef = useRef(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -262,6 +265,7 @@ const RoomEditor = () => {
   };
 
   const updateRoom = (next: EditorRoom) => {
+    if (savingRef.current) return;
     setRooms((rs) => rs.map((r, i) => (i === cur ? next : r)));
     if (status?.tone !== "error") setStatus(null);
   };
@@ -280,7 +284,7 @@ const RoomEditor = () => {
   };
 
   const activate = (key: string) => {
-    if (!room) return;
+    if (!room || savingRef.current) return;
     const out = applyTool(room, tool, key, sel);
     if (out.type === "select") {
       setSel(out.sel);
@@ -303,7 +307,7 @@ const RoomEditor = () => {
   };
 
   const erase = (key: string) => {
-    if (!room || !room.cells[key]) return;
+    if (!room || !room.cells[key] || savingRef.current) return;
     const out = applyTool(room, "erase", key, sel);
     if (out.type === "update") {
       updateRoom(out.room);
@@ -322,7 +326,7 @@ const RoomEditor = () => {
   };
 
   const forceRemoveDesk = (key: string) => {
-    if (!room) return;
+    if (!room || savingRef.current) return;
     const c = room.cells[key];
     updateRoom(removeCell(room, key));
     setSel(null);
@@ -331,6 +335,7 @@ const RoomEditor = () => {
   };
 
   const addRoom = () => {
+    if (savingRef.current) return;
     const key = `new-${++roomKeyCounter}`;
     const r = newRoom(rooms, key);
     setRooms((rs) => [...rs, r]);
@@ -343,7 +348,7 @@ const RoomEditor = () => {
   };
 
   const deleteRoom = () => {
-    if (!room) return;
+    if (!room || savingRef.current) return;
     const p = pending[room.key];
     if (p && p !== "remove") URL.revokeObjectURL(p.preview);
     setPending(({ [room.key]: _drop, ...rest }) => rest);
@@ -357,7 +362,7 @@ const RoomEditor = () => {
 
   // Backgrounds -------------------------------------------------------------
   const pickBackground = (file: File) => {
-    if (!room) return;
+    if (!room || savingRef.current) return;
     const problem = validateBackgroundFile(file);
     if (problem) {
       setBgErrors((e) => ({ ...e, [room.key]: problem }));
@@ -375,7 +380,7 @@ const RoomEditor = () => {
   };
 
   const removeBackground = () => {
-    if (!room) return;
+    if (!room || savingRef.current) return;
     const old = pending[room.key];
     if (old && old !== "remove") URL.revokeObjectURL(old.preview);
     setBgErrors(({ [room.key]: _drop, ...rest }) => rest);
@@ -397,6 +402,7 @@ const RoomEditor = () => {
 
   // Save --------------------------------------------------------------------
   const save = async (forceRelease = false) => {
+    if (savingRef.current) return;
     setConfirm(null);
     const problems = validateRooms(rooms);
     if (problems.length) {
@@ -407,6 +413,7 @@ const RoomEditor = () => {
       });
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     setStatus({ tone: "info", text: "Saving…" });
     const release =
@@ -491,6 +498,7 @@ const RoomEditor = () => {
         });
       }
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -744,271 +752,287 @@ const RoomEditor = () => {
     <Page>
       {header}
 
+      {/* Locked while saving (see savingRef). */}
       <Box
+        inert={saving}
+        aria-busy={saving}
+        data-testid="room-editor-body"
         sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: "8px",
+          display: "contents",
+          "& > *": { opacity: saving ? 0.6 : 1, transition: "opacity 120ms" },
         }}
       >
-        {rooms.length > 0 && (
-          <Box
-            role="tablist"
-            aria-label="Rooms"
-            sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              border: `1px solid ${hairline.control}`,
-              backgroundColor: "rgba(12,15,24,0.8)",
-            }}
-          >
-            {rooms.map((r, i) => {
-              const on = i === cur;
-              const n = Object.values(r.cells).filter(
-                (c) => c.t === "desk",
-              ).length;
-              return (
-                <Box
-                  key={r.key}
-                  component="button"
-                  type="button"
-                  role="tab"
-                  id={`${uid}-tab-${r.key}`}
-                  aria-selected={on}
-                  aria-controls={`${uid}-panel`}
-                  tabIndex={on ? 0 : -1}
-                  ref={(el: HTMLButtonElement | null) => {
-                    tabRefs.current[r.key] = el;
-                  }}
-                  onClick={() => selectRoom(i)}
-                  onKeyDown={(e: React.KeyboardEvent) => onTabKeyDown(e, i)}
-                  sx={{
-                    minHeight: 44,
-                    padding: "0 16px",
-                    border: 0,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    fontFamily: fonts.ui,
-                    fontWeight: 600,
-                    fontSize: 13,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    backgroundColor: on ? colors.cyan : "transparent",
-                    color: on ? colors.ink : colors.textMuted,
-                    "&:hover": on ? {} : { color: colors.text },
-                    "&:focus-visible": {
-                      outline: `2px solid ${colors.cyan}`,
-                      outlineOffset: "2px",
-                      zIndex: 1,
-                    },
-                  }}
-                >
-                  {r.name.trim() || "Untitled"}
-                  <Box
-                    component="span"
-                    sx={{ fontFamily: fonts.mono, fontSize: 11 }}
-                  >
-                    <Box component="span" sx={srOnly}>
-                      ,{" "}
-                    </Box>
-                    {n}
-                    <Box component="span" sx={srOnly}>
-                      {n === 1 ? " desk" : " desks"}
-                    </Box>
-                  </Box>
-                </Box>
-              );
-            })}
-          </Box>
-        )}
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={addRoom}
-          startIcon={<AddSharp aria-hidden />}
-          sx={{ borderStyle: "dashed", fontSize: 12 }}
-        >
-          Add room
-        </Button>
-      </Box>
-
-      {!room ? (
-        <EmptyState
-          variant="panel"
-          title="No rooms yet"
-          description="Add a room, then drop desks, screens and entrances on its grid. Attendees pick their seats from this plan."
-          action={
-            <Button
-              variant="contained"
-              onClick={addRoom}
-              startIcon={<AddSharp aria-hidden />}
-            >
-              Add room
-            </Button>
-          }
-        />
-      ) : (
         <Box
-          id={`${uid}-panel`}
-          role="tabpanel"
-          aria-labelledby={`${uid}-tab-${room.key}`}
           sx={{
             display: "flex",
             flexWrap: "wrap",
-            gap: "clamp(16px,2vw,24px)",
-            alignItems: "flex-start",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          <Box
-            component="section"
-            aria-label="Floor plan editor"
-            sx={{
-              flex: "2 1 540px",
-              minWidth: 0,
-              position: "relative",
-              border: `1px solid ${tint("cyan", 0.2)}`,
-              backgroundColor: colors.surface,
-              ...bracket(),
-            }}
-          >
+          {rooms.length > 0 && (
             <Box
-              role="toolbar"
-              aria-label="Tools"
-              aria-orientation="horizontal"
-              onKeyDown={onToolKeyDown}
+              role="tablist"
+              aria-label="Rooms"
               sx={{
                 display: "flex",
                 flexWrap: "wrap",
-                gap: "6px",
-                padding: "12px 14px",
-                borderBottom: `1px solid ${hairline.soft}`,
+                border: `1px solid ${hairline.control}`,
+                backgroundColor: "rgba(12,15,24,0.8)",
               }}
             >
-              {TOOLS.map((t) => {
-                const on = t === tool;
-                const Icon = TOOL_ICONS[t];
+              {rooms.map((r, i) => {
+                const on = i === cur;
+                const n = Object.values(r.cells).filter(
+                  (c) => c.t === "desk",
+                ).length;
                 return (
                   <Box
-                    key={t}
+                    key={r.key}
                     component="button"
                     type="button"
-                    aria-pressed={on}
-                    aria-keyshortcuts={TOOL_SHORTCUTS[t]}
-                    title={`${TOOL_HINTS[t]} (${TOOL_SHORTCUTS[t]})`}
+                    role="tab"
+                    id={`${uid}-tab-${r.key}`}
+                    aria-selected={on}
+                    aria-controls={`${uid}-panel`}
                     tabIndex={on ? 0 : -1}
                     ref={(el: HTMLButtonElement | null) => {
-                      toolRefs.current[t] = el;
+                      tabRefs.current[r.key] = el;
                     }}
-                    onClick={() => pickTool(t)}
+                    onClick={() => selectRoom(i)}
+                    onKeyDown={(e: React.KeyboardEvent) => onTabKeyDown(e, i)}
                     sx={{
                       minHeight: 44,
-                      padding: "0 12px",
+                      padding: "0 16px",
+                      border: 0,
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
-                      gap: "7px",
+                      gap: "8px",
                       fontFamily: fonts.ui,
                       fontWeight: 600,
                       fontSize: 13,
-                      letterSpacing: "0.08em",
+                      letterSpacing: "0.1em",
                       textTransform: "uppercase",
-                      border: `1px solid ${on ? colors.cyan : tint("cyan", 0.2)}`,
-                      backgroundColor: on ? tint("cyan", 0.14) : "transparent",
-                      color: on ? colors.cyan : colors.textMuted,
-                      "&:hover": on
-                        ? {}
-                        : { color: colors.text, borderColor: hairline.strong },
+                      backgroundColor: on ? colors.cyan : "transparent",
+                      color: on ? colors.ink : colors.textMuted,
+                      "&:hover": on ? {} : { color: colors.text },
                       "&:focus-visible": {
                         outline: `2px solid ${colors.cyan}`,
                         outlineOffset: "2px",
+                        zIndex: 1,
                       },
                     }}
                   >
-                    <Icon aria-hidden sx={{ fontSize: 19 }} />
-                    {TOOL_LABELS[t]}
+                    {r.name.trim() || "Untitled"}
+                    <Box
+                      component="span"
+                      sx={{ fontFamily: fonts.mono, fontSize: 11 }}
+                    >
+                      <Box component="span" sx={srOnly}>
+                        ,{" "}
+                      </Box>
+                      {n}
+                      <Box component="span" sx={srOnly}>
+                        {n === 1 ? " desk" : " desks"}
+                      </Box>
+                    </Box>
                   </Box>
                 );
               })}
             </Box>
-            <Box
-              id={hintId}
-              sx={{
-                padding: "10px 14px 0",
-                fontSize: 13,
-                color: colors.textMuted,
-              }}
-            >
-              <Box component="span" sx={srOnly}>
-                {TOOL_LABELS[tool]} tool:{" "}
-              </Box>
-              {TOOL_HINTS[tool]}
-            </Box>
-            <Box id={kbdId} sx={srOnly}>
-              Use the arrow keys to move between squares and Enter or Space to
-              use the tool. Delete clears a square. Tool shortcuts: V select, D
-              desk, S screen, E entrance, X erase.
-            </Box>
-            <EditorGrid
-              room={room}
-              tool={tool}
-              sel={sel}
-              focus={focus}
-              onFocusChange={setFocus}
-              onActivate={activate}
-              onErase={erase}
-              onToolShortcut={(t) => pickTool(t, true)}
-              describedBy={`${hintId} ${kbdId}`}
-              background={(() => {
-                const src = backgroundSrc(room);
-                return src
-                  ? {
-                      src,
-                      style: room.backgroundStyle,
-                      opacity: room.backgroundOpacity,
-                    }
-                  : null;
-              })()}
-            />
-            <GridLegend />
-          </Box>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={addRoom}
+            startIcon={<AddSharp aria-hidden />}
+            sx={{ borderStyle: "dashed", fontSize: 12 }}
+          >
+            Add room
+          </Button>
+        </Box>
 
+        {!room ? (
+          <EmptyState
+            variant="panel"
+            title="No rooms yet"
+            description="Add a room, then drop desks, screens and entrances on its grid. Attendees pick their seats from this plan."
+            action={
+              <Button
+                variant="contained"
+                onClick={addRoom}
+                startIcon={<AddSharp aria-hidden />}
+              >
+                Add room
+              </Button>
+            }
+          />
+        ) : (
           <Box
-            component="aside"
-            aria-label="Room settings"
+            id={`${uid}-panel`}
+            role="tabpanel"
+            aria-labelledby={`${uid}-tab-${room.key}`}
             sx={{
-              flex: "1 1 280px",
-              minWidth: 0,
               display: "flex",
-              flexDirection: "column",
-              gap: "16px",
+              flexWrap: "wrap",
+              gap: "clamp(16px,2vw,24px)",
+              alignItems: "flex-start",
             }}
           >
-            <RoomPanel
-              room={room}
-              onChange={updateRoom}
-              backgroundSrc={backgroundSrc(room)}
-              pendingName={(() => {
-                const p = pending[room.key];
-                return p && p !== "remove" ? p.file.name : null;
-              })()}
-              pendingRemove={pending[room.key] === "remove"}
-              backgroundError={bgErrors[room.key] ?? null}
-              onPickBackground={pickBackground}
-              onRemoveBackground={removeBackground}
-              onDeleteRoom={() => setConfirm({ kind: "room" })}
-            />
-            <DeskPanel
-              desk={selDesk}
-              duplicate={!!sel && isDuplicateLabel(room, sel)}
-              onRename={(v) => sel && updateRoom(renameDesk(room, sel, v))}
-              onRemove={removeSelected}
-            />
+            <Box
+              component="section"
+              aria-label="Floor plan editor"
+              sx={{
+                flex: "2 1 540px",
+                minWidth: 0,
+                position: "relative",
+                border: `1px solid ${tint("cyan", 0.2)}`,
+                backgroundColor: colors.surface,
+                ...bracket(),
+              }}
+            >
+              <Box
+                role="toolbar"
+                aria-label="Tools"
+                aria-orientation="horizontal"
+                onKeyDown={onToolKeyDown}
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "6px",
+                  padding: "12px 14px",
+                  borderBottom: `1px solid ${hairline.soft}`,
+                }}
+              >
+                {TOOLS.map((t) => {
+                  const on = t === tool;
+                  const Icon = TOOL_ICONS[t];
+                  return (
+                    <Box
+                      key={t}
+                      component="button"
+                      type="button"
+                      aria-pressed={on}
+                      aria-keyshortcuts={TOOL_SHORTCUTS[t]}
+                      title={`${TOOL_HINTS[t]} (${TOOL_SHORTCUTS[t]})`}
+                      tabIndex={on ? 0 : -1}
+                      ref={(el: HTMLButtonElement | null) => {
+                        toolRefs.current[t] = el;
+                      }}
+                      onClick={() => pickTool(t)}
+                      sx={{
+                        minHeight: 44,
+                        padding: "0 12px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "7px",
+                        fontFamily: fonts.ui,
+                        fontWeight: 600,
+                        fontSize: 13,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        border: `1px solid ${on ? colors.cyan : tint("cyan", 0.2)}`,
+                        backgroundColor: on
+                          ? tint("cyan", 0.14)
+                          : "transparent",
+                        color: on ? colors.cyan : colors.textMuted,
+                        "&:hover": on
+                          ? {}
+                          : {
+                              color: colors.text,
+                              borderColor: hairline.strong,
+                            },
+                        "&:focus-visible": {
+                          outline: `2px solid ${colors.cyan}`,
+                          outlineOffset: "2px",
+                        },
+                      }}
+                    >
+                      <Icon aria-hidden sx={{ fontSize: 19 }} />
+                      {TOOL_LABELS[t]}
+                    </Box>
+                  );
+                })}
+              </Box>
+              <Box
+                id={hintId}
+                sx={{
+                  padding: "10px 14px 0",
+                  fontSize: 13,
+                  color: colors.textMuted,
+                }}
+              >
+                <Box component="span" sx={srOnly}>
+                  {TOOL_LABELS[tool]} tool:{" "}
+                </Box>
+                {TOOL_HINTS[tool]}
+              </Box>
+              <Box id={kbdId} sx={srOnly}>
+                Use the arrow keys to move between squares and Enter or Space to
+                use the tool. Delete clears a square. Tool shortcuts: V select,
+                D desk, S screen, E entrance, X erase.
+              </Box>
+              <EditorGrid
+                room={room}
+                tool={tool}
+                sel={sel}
+                focus={focus}
+                onFocusChange={setFocus}
+                onActivate={activate}
+                onErase={erase}
+                onToolShortcut={(t) => pickTool(t, true)}
+                describedBy={`${hintId} ${kbdId}`}
+                background={(() => {
+                  const src = backgroundSrc(room);
+                  return src
+                    ? {
+                        src,
+                        style: room.backgroundStyle,
+                        opacity: room.backgroundOpacity,
+                      }
+                    : null;
+                })()}
+              />
+              <GridLegend />
+            </Box>
+
+            <Box
+              component="aside"
+              aria-label="Room settings"
+              sx={{
+                flex: "1 1 280px",
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+              }}
+            >
+              <RoomPanel
+                room={room}
+                onChange={updateRoom}
+                backgroundSrc={backgroundSrc(room)}
+                pendingName={(() => {
+                  const p = pending[room.key];
+                  return p && p !== "remove" ? p.file.name : null;
+                })()}
+                pendingRemove={pending[room.key] === "remove"}
+                backgroundError={bgErrors[room.key] ?? null}
+                onPickBackground={pickBackground}
+                onRemoveBackground={removeBackground}
+                onDeleteRoom={() => setConfirm({ kind: "room" })}
+              />
+              <DeskPanel
+                desk={selDesk}
+                duplicate={!!sel && isDuplicateLabel(room, sel)}
+                onRename={(v) => sel && updateRoom(renameDesk(room, sel, v))}
+                onRemove={removeSelected}
+              />
+            </Box>
           </Box>
-        </Box>
-      )}
+        )}
+      </Box>
 
       <Box aria-live="polite" sx={srOnly}>
         {announcement}

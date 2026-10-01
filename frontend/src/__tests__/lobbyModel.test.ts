@@ -8,6 +8,7 @@ import {
   rankSuggestions,
   rsvpState,
   splitTitleAccent,
+  squadSeatText,
   summariseSquad,
 } from "../components/lobbyModel";
 import { RSVP } from "../types/invitations";
@@ -148,5 +149,58 @@ describe("eventPhase", () => {
     expect(eventPhase(begin, end, begin.valueOf() - 1)).toBe("upcoming");
     expect(eventPhase(begin, end, begin.valueOf())).toBe("live");
     expect(eventPhase(begin, end, end.valueOf())).toBe("ended");
+  });
+});
+
+describe("squadSeatText", () => {
+  const seating = {
+    hasSeating: true,
+    allowUnspecifiedSeat: true,
+    unspecifiedSeatLabel: "Floating / no desk",
+    labels: new Map([[3, "A3"]]),
+  };
+  const guest = (
+    seatId: number | null,
+    hasSeatReservation?: boolean,
+    response: RSVP | null = RSVP.yes,
+  ) => ({ response, seatId, hasSeatReservation });
+
+  test("is null without seating", () => {
+    expect(
+      squadSeatText(guest(3, true), { ...seating, hasSeating: false }),
+    ).toBeNull();
+  });
+
+  test("shows the desk label", () => {
+    expect(squadSeatText(guest(3, true), seating)).toEqual({
+      kind: "desk",
+      text: "A3",
+    });
+  });
+
+  test("uses the event's label for a floating reservation", () => {
+    expect(squadSeatText(guest(null, true), seating)).toEqual({
+      kind: "floating",
+      text: "Floating / no desk",
+    });
+  });
+
+  test("tells a guest without any reservation apart from a floating one", () => {
+    expect(squadSeatText(guest(null, false), seating)).toEqual({
+      kind: "unseated",
+      text: "No seat yet",
+    });
+  });
+
+  test("falls back to the floating label on older APIs when allowed", () => {
+    expect(squadSeatText(guest(null), seating)?.kind).toBe("floating");
+    expect(
+      squadSeatText(guest(null), { ...seating, allowUnspecifiedSeat: false })
+        ?.kind,
+    ).toBe("unseated");
+  });
+
+  test("shows nothing for guests who aren't going", () => {
+    expect(squadSeatText(guest(3, true, RSVP.no), seating)?.kind).toBe("none");
   });
 });

@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import RefreshGamesButton, {
   SteamGameCacheCard,
+  safeDescription,
 } from "../components/RefreshGamesButton";
 import { renderAsAdmin } from "./adminTestUtils";
 
@@ -136,10 +137,39 @@ describe("SteamGameCacheCard", () => {
     expect(
       await screen.findByText(/Refresh failed \(error 500\)/),
     ).toBeInTheDocument();
+    // Reported once, inline in the card's live region: no duplicate toast.
+    expect(screen.getAllByText(/refresh failed/i)).toHaveLength(1);
+    expect(screen.queryByText(/Couldn't refresh/)).toBeNull();
     expect(screen.getByText(/48,213 games cached/)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /refresh cache/i }),
     ).toBeEnabled();
+  });
+
+  test("shows the server's explanation when it gives one", async () => {
+    server.use(
+      refreshWith(
+        {
+          error: {
+            code: 500,
+            reason: "Internal Server Error",
+            description: "Couldn't fetch the game list from Steam.",
+          },
+        },
+        500,
+      ),
+    );
+    renderAsAdmin(<SteamGameCacheCard />);
+    await screen.findByText(/48,213 games cached/);
+    await userEvent.click(
+      screen.getByRole("button", { name: /refresh cache/i }),
+    );
+    expect(
+      await screen.findByText(
+        "Refresh failed: Couldn't fetch the game list from Steam.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/Couldn't fetch/)).toHaveLength(1);
   });
 
   test("still offers the refresh when stats are unavailable", async () => {
@@ -155,5 +185,16 @@ describe("SteamGameCacheCard", () => {
     expect(
       screen.getByRole("button", { name: /refresh cache/i }),
     ).toBeEnabled();
+  });
+});
+
+describe("safeDescription", () => {
+  test("keeps short plain explanations, drops markup and walls of text", () => {
+    expect(safeDescription(" Steam is down. ")).toBe("Steam is down.");
+    expect(safeDescription(undefined)).toBeUndefined();
+    expect(
+      safeDescription("Error: status 403: <html><body>Forbidden</body></html>"),
+    ).toBeUndefined();
+    expect(safeDescription("x".repeat(201))).toBeUndefined();
   });
 });

@@ -3,7 +3,12 @@ import { render, screen, waitFor, within } from "../test/test-utils";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import Account, { syncSummary } from "../components/Account";
+import Account, {
+  resyncError,
+  steamIdSaveError,
+  syncSummary,
+} from "../components/Account";
+import { ApiError } from "../utils/apiError";
 import {
   formatLibraryHours,
   playtimePercent,
@@ -82,6 +87,32 @@ describe("Account helpers", () => {
     );
     expect(syncSummary(1, null, true)).toBe(
       "Library synced just now from your new Steam ID. 1 game.",
+    );
+  });
+});
+
+describe("Account error messages", () => {
+  test("steamIdSaveError prefers the server's client-error reason", () => {
+    const err = new ApiError("Save", 400, "No Steam profile found");
+    expect(steamIdSaveError(err, "x")).toBe("No Steam profile found");
+  });
+
+  test("steamIdSaveError explains Steam lookups failing without a status", () => {
+    const err = new ApiError("Save", 500, "Error updating profile, due to: db");
+    const vanity = steamIdSaveError(err, "steamcommunity.com/id/someone");
+    expect(vanity).toMatch(/couldn't look up that custom url/i);
+    expect(vanity).not.toMatch(/500|db/);
+    expect(steamIdSaveError(err, "76561197960287930")).toMatch(
+      /couldn't save your steam id/i,
+    );
+  });
+
+  test("resyncError hides server internals", () => {
+    expect(resyncError(new ApiError("Refresh", 500, "panic"))).toMatch(
+      /couldn't refresh your games/i,
+    );
+    expect(resyncError(new ApiError("Refresh", 400, "Link Steam first"))).toBe(
+      "Link Steam first",
     );
   });
 });
@@ -187,6 +218,49 @@ describe("Account", { timeout: 15000 }, () => {
     expect(
       await screen.findByText(/no steam profile found for custom url/i),
     ).toBeInTheDocument();
+  });
+
+  test("a failed custom-URL lookup (500) explains itself without a status code", async () => {
+    server.use(
+      http.put("/api/profile", () =>
+        HttpResponse.json(
+          { error: { code: 500, description: "Error updating profile" } },
+          { status: 500 },
+        ),
+      ),
+    );
+    render(<Account />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Change Steam ID" }),
+    );
+    const input = screen.getByRole("textbox", {
+      name: /steam id or profile url/i,
+    });
+    await userEvent.clear(input);
+    await userEvent.click(input);
+    await userEvent.paste("https://steamcommunity.com/id/nobody");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Save Steam ID" }),
+    );
+    await waitFor(() =>
+      expect(input).toHaveAccessibleDescription(
+        /couldn't look up that custom url/i,
+      ),
+    );
+    expect(screen.queryByText(/status 500/i)).not.toBeInTheDocument();
+  });
+
+  test("the Steam account page link is underlined in its sentence", async () => {
+    server.use(
+      http.get("/api/profile", () =>
+        HttpResponse.json({ error: { code: 404 } }, { status: 404 }),
+      ),
+    );
+    render(<Account />);
+    const link = await screen.findByRole("link", {
+      name: "Steam account page",
+    });
+    expect(link.className).toMatch(/underlineAlways/);
   });
 
   test("saving a new Steam ID triggers a resync", async () => {
@@ -299,7 +373,7 @@ describe("Account - Resync library button", { timeout: 15000 }, () => {
     await userEvent.click(button);
 
     expect(
-      await screen.findByText(/failed to refresh games/i),
+      await screen.findByText(/couldn't refresh your games from steam/i),
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(button).toBeEnabled();

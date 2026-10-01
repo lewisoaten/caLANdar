@@ -4,6 +4,7 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import TvSharp from "@mui/icons-material/TvSharp";
 import DoorFrontSharp from "@mui/icons-material/DoorFrontSharp";
 import { UserAvatar, colors, effects, fonts, srOnly, tint } from "./hl";
+import { displayCallsign } from "../utils/callsign";
 import {
   GRID_COLS,
   joinNames,
@@ -58,7 +59,7 @@ export interface SeatFloorPlanProps {
   sx?: SxProps<Theme>;
 }
 
-const who = (o: DeskOccupant) => o.name || "Someone";
+const who = (o: DeskOccupant) => displayCallsign(o.name);
 
 const GAP = 4;
 const PAD = 6;
@@ -104,6 +105,19 @@ export function deskSubLabel(desk: FloorPlanDesk): string {
   }
 }
 
+/** Base of the plan, under desks and strips so a background never shows through them. */
+const GRID_BASE = "#0a0d15";
+
+/**
+ * A tinted fill laid over the opaque grid base: keeps desk labels readable
+ * (>= 4.5:1) over any background plan, e.g. the cyan "retro" treatment.
+ * Same treatment as the room editor's tiles.
+ */
+const fill = (color: string) => ({
+  backgroundColor: GRID_BASE,
+  backgroundImage: `linear-gradient(${color}, ${color})`,
+});
+
 const tileStyles: Record<DeskState, Record<string, unknown>> = {
   mine: {
     border: `1px solid ${colors.lime}`,
@@ -119,12 +133,12 @@ const tileStyles: Record<DeskState, Record<string, unknown>> = {
   },
   taken: {
     border: "1px solid rgba(165,139,255,0.5)",
-    backgroundColor: tint("violet", 0.18),
+    ...fill(tint("violet", 0.18)),
     color: colors.violetText,
   },
   free: {
     border: `1px solid ${colors.cyan}`,
-    backgroundColor: tint("cyan", 0.06),
+    ...fill(tint("cyan", 0.06)),
     color: colors.cyan,
   },
 };
@@ -145,7 +159,7 @@ function Strip({ strip }: { strip: FeatureStrip }) {
         gap: 0.75,
         overflow: "hidden",
         border: `1px solid ${screen ? "rgba(165,139,255,0.5)" : tint("lime", 0.6)}`,
-        backgroundColor: screen ? tint("violet", 0.12) : tint("lime", 0.12),
+        ...fill(screen ? tint("violet", 0.12) : tint("lime", 0.12)),
         color: screen ? colors.violetText : colors.lime,
         fontFamily: fonts.mono,
         fontSize: "clamp(9px, 1.1cqi, 11px)",
@@ -313,7 +327,7 @@ export function SeatFloorPlan({
             aspectRatio: `${GRID_COLS} / ${layout.rows}`,
             gap: `${GAP}px`,
             p: `${PAD}px`,
-            backgroundColor: "#0a0d15",
+            backgroundColor: GRID_BASE,
             border: `1px solid ${tint("cyan", 0.12)}`,
           }}
         >
@@ -389,12 +403,14 @@ export function SeatFloorPlan({
                   transition:
                     "background-color .15s ease, box-shadow .15s ease",
                   ...tileStyles[desk.state],
+                  // Not pickable right now: dashed outline rather than fading
+                  // the tile, which would let a background plan show through.
                   ...(desk.state === "free" && desk.disabled
-                    ? { opacity: 0.7 }
+                    ? { borderStyle: "dashed" }
                     : {}),
                   "&:hover":
                     enabled && desk.state === "free"
-                      ? { backgroundColor: tint("cyan", 0.16) }
+                      ? fill(tint("cyan", 0.16))
                       : {},
                   "&:focus-visible": {
                     outline: `2px solid ${colors.cyan}`,

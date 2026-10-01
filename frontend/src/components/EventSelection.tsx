@@ -37,6 +37,7 @@ import {
   summariseSquad,
   type AttendeeLite,
   type EventFilter,
+  myRsvpOf,
   type MyRsvp,
   type SquadSummary,
 } from "./eventListModel";
@@ -49,9 +50,12 @@ const jsonHeaders = (token: string) => ({
   Authorization: "Bearer " + token,
 });
 
+/** An event in the user list, with the viewer's own RSVP (API §4a). */
+type ListedEvent = EventData & { myResponse?: RSVP | null };
+
 interface ListResult {
   key: string;
-  events: EventData[];
+  events: ListedEvent[];
   total: number;
   error: boolean;
 }
@@ -392,7 +396,6 @@ const Event = () => {
   const { signOut } = useContext(UserDispatchContext);
   const userDetails = useContext(UserContext);
   const token = userDetails?.token;
-  const email = userDetails?.email;
 
   const panelId = useId();
   const [filter, setFilter] = useState<EventFilter>("upcoming");
@@ -435,7 +438,7 @@ const Event = () => {
         if (!text) return done({ events: [], total: 0, error: false });
         // Parse the JSON with date conversion
         const data = JSON.parse(text, dateParser) as PaginatedEventsResponse;
-        const events = (data.events ?? []) as EventData[];
+        const events = (data.events ?? []) as ListedEvent[];
         done({
           events,
           total: data.total ?? events.length,
@@ -459,39 +462,11 @@ const Event = () => {
     page === 1 && filter !== "past" ? pickActiveEvent(events, now) : null;
   const rest = featured ? events.filter((e) => e.id !== featured.id) : events;
 
-  // The user's RSVP for every event on the page (for the status tags).
-  const idsKey = events.map((e) => e.id).join(",");
-  const [rsvps, setRsvps] = useState<{
-    key: string;
-    map: Record<number, RSVP | null>;
-  } | null>(null);
-  useEffect(() => {
-    if (!idsKey || !email) return;
-    const controller = new AbortController();
-    const ids = idsKey.split(",").map(Number);
-    Promise.all(
-      ids.map((id) =>
-        fetch(`/api/events/${id}/invitations/${encodeURIComponent(email)}`, {
-          headers: jsonHeaders(token),
-          signal: controller.signal,
-        })
-          .then((r) => (r.ok ? r.json() : null))
-          .then(
-            (d: { response?: RSVP | null } | null) =>
-              [id, d ? (d.response ?? null) : undefined] as const,
-          )
-          .catch(() => [id, undefined] as const),
-      ),
-    ).then((pairs) => {
-      if (controller.signal.aborted) return;
-      const map: Record<number, RSVP | null> = {};
-      for (const [id, r] of pairs) if (r !== undefined) map[id] = r;
-      setRsvps({ key: idsKey, map });
-    });
-    return () => controller.abort();
-  }, [idsKey, email, token]);
-  const rsvpFor = (id: number): MyRsvp =>
-    rsvps?.key === idsKey && id in rsvps.map ? rsvps.map[id] : undefined;
+  // The user's RSVP for each event comes with the list (`myResponse`).
+  const rsvpFor = (id: number): MyRsvp => {
+    const event = events.find((e) => e.id === id);
+    return event ? myRsvpOf(event) : undefined;
+  };
 
   // Squad size and free seats for the featured event.
   const featuredId = featured?.id ?? null;

@@ -237,9 +237,7 @@ function GamerCard({ gamer, now, onEdit }: GamerCardProps) {
               fontFamily: fonts.mono,
               fontSize: 12,
               color: colors.textMuted,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflowWrap: "anywhere",
             }}
           >
             {gamer.email}
@@ -250,9 +248,7 @@ function GamerCard({ gamer, now, onEdit }: GamerCardProps) {
               sx={{
                 fontSize: 12,
                 color: colors.textMuted,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                overflowWrap: "anywhere",
               }}
               title={others.join(", ")}
             >

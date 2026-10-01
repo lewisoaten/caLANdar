@@ -14,6 +14,7 @@ import MarkEmailUnreadSharp from "@mui/icons-material/MarkEmailUnreadSharp";
 import { RSVP, InvitationData } from "../../types/invitations";
 import { EventData } from "../../types/events";
 import { UserContext, UserDispatchContext } from "../../UserProvider";
+import { displayCallsign } from "../../utils/callsign";
 import {
   bracket,
   colors,
@@ -25,6 +26,12 @@ import {
   type HlTone,
 } from "../hl";
 import AttendanceStrip from "../AttendanceStrip";
+import { ownDeskLabel } from "../seatFloorPlanModel";
+import {
+  SessionExpiredError,
+  fetchReservation,
+  fetchSeatLabel,
+} from "./ownSeat";
 import {
   RSVP_STATUS,
   attendanceCells,
@@ -65,88 +72,77 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
   const [seatRoomName, setSeatRoomName] = useState<string | null>(null);
   const [seatLoading, setSeatLoading] = useState(false);
   const [hasSeating, setHasSeating] = useState(false);
+  // Bumped whenever an RSVP is saved, so a changed seat shows even when the
+  // answer itself (and so `invitation.response`) didn't change.
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const onUpdate = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("calandar:rsvp-updated", onUpdate);
+    return () => window.removeEventListener("calandar:rsvp-updated", onUpdate);
+  }, []);
 
   // Fetch seating config and seat reservation
   useEffect(() => {
     if (!props.event.id || !token) return;
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
     const headers = {
       "Content-Type": "application/json",
       Accept: "application/json",
       Authorization: "Bearer " + token,
     };
+    const going =
+      invitation.response === RSVP.yes || invitation.response === RSVP.maybe;
 
-    fetch(`/api/events/${props.event.id}/seating-config`, { headers })
-      .then((response) => {
-        if (response.status === 401) signOut();
-        else if (response.ok) return response.json();
-      })
-      .then(async (data) => {
-        if (!data || cancelled) return;
-        setHasSeating(data.hasSeating || false);
-        const unspecifiedLabel =
-          data.unspecifiedSeatLabel || "Unspecified Seat";
-        const allowUnspecifiedSeat = data.allowUnspecifiedSeat || false;
-
-        // If seating is enabled and user has responded, fetch seat reservation
-        if (
-          !data.hasSeating ||
-          !invitation.response ||
-          invitation.response === RSVP.no
-        )
-          return;
+    (async () => {
+      try {
+        const cfgRes = await fetch(
+          `/api/events/${props.event.id}/seating-config`,
+          { headers, signal },
+        );
+        if (cfgRes.status === 401) throw new SessionExpiredError();
+        if (!cfgRes.ok) return;
+        const cfg = await cfgRes.json();
+        if (signal.aborted) return;
+        setHasSeating(Boolean(cfg.hasSeating));
+        if (!cfg.hasSeating || !going) return;
 
         setSeatLoading(true);
-        try {
-          const response = await fetch(
-            `/api/events/${props.event.id}/seat-reservations/me`,
-            { headers },
+        const reservation = await fetchReservation(
+          props.event.id,
+          headers,
+          undefined,
+          signal,
+        );
+        if (signal.aborted) return;
+        if (!reservation.exists) {
+          setSeatLabel(null);
+          setSeatRoomName(null);
+        } else if (reservation.seatId === null) {
+          setSeatLabel(ownDeskLabel(cfg.unspecifiedSeatLabel));
+          setSeatRoomName(null);
+        } else {
+          const seat = await fetchSeatLabel(
+            props.event.id,
+            reservation.seatId,
+            headers,
+            signal,
           );
-          if (cancelled) return;
-          const reservation =
-            response.status !== 404 && response.ok
-              ? await response.json()
-              : null;
-          if (cancelled) return;
-          if (!reservation) {
-            // No reservation - if optional seating, default to unspecified
-            setSeatLabel(allowUnspecifiedSeat ? unspecifiedLabel : null);
-            setSeatRoomName(null);
-            return;
-          }
-          if (reservation.seatId === null || reservation.seatId === undefined) {
-            setSeatLabel(unspecifiedLabel);
-            setSeatRoomName(null);
-            return;
-          }
-          const seatRes = await fetch(
-            `/api/events/${props.event.id}/seats/${reservation.seatId}`,
-            { headers },
-          );
-          const seatData = seatRes.ok ? await seatRes.json() : null;
-          if (cancelled || !seatData?.label) return;
-          setSeatLabel(seatData.label);
-          if (seatData.roomId) {
-            const roomRes = await fetch(
-              `/api/events/${props.event.id}/rooms/${seatData.roomId}`,
-              { headers },
-            );
-            const roomData = roomRes.ok ? await roomRes.json() : null;
-            if (!cancelled && roomData?.name) setSeatRoomName(roomData.name);
-          }
-        } catch (error) {
-          console.error("Error fetching seat reservation:", error);
-        } finally {
-          if (!cancelled) setSeatLoading(false);
+          if (signal.aborted) return;
+          setSeatLabel(seat.label);
+          setSeatRoomName(seat.roomName);
         }
-      })
-      .catch((error) => {
-        console.error("Error fetching seating config:", error);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.event.id, token, invitation.response, signOut]);
+      } catch (error) {
+        if (signal.aborted) return;
+        if (error instanceof SessionExpiredError) signOut();
+        else console.error("Error fetching seat reservation:", error);
+      } finally {
+        if (!signal.aborted) setSeatLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [props.event.id, token, invitation.response, refreshKey, signOut]);
 
   const state = rsvpState(invitation.response);
   const status = RSVP_STATUS[state];
@@ -164,7 +160,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
     ? seatRoomName
       ? `${seatLabel} · ${seatRoomName}`
       : seatLabel
-    : "Not chosen";
+    : "No seat yet";
 
   return (
     <Box
@@ -264,7 +260,7 @@ export default function RSVPSummary(props: RSVPSummaryProps) {
                   overflowWrap: "anywhere",
                 }}
               >
-                {invitation.handle || "—"}
+                {displayCallsign(invitation.handle)}
               </Box>
             </Box>
             {hasSeating && (

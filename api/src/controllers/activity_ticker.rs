@@ -6,7 +6,10 @@ use sqlx::PgPool;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::repositories::audit_log;
+use crate::repositories::{audit_log, event_seating_config};
+
+/// What seat reservation audit entries record when no desk was chosen.
+const UNSPECIFIED_SEAT: &str = "unspecified seat";
 
 #[derive(Debug, Clone)]
 pub struct ActivityTickerEvent {
@@ -482,17 +485,19 @@ async fn format_seat_reservation_event(
 
     let display_name = user_handle.clone().unwrap_or_else(|| "Someone".to_string());
 
-    // Phrase variations for seat reservations
-    let phrases = [
-        "{name} claimed {seat}! 🪑",
-        "{name} reserved {seat}",
-        "{name} grabbed {seat}!",
-        "{name} snagged {seat}",
-    ];
-    let template = get_phrase(&phrases, &event.id);
-    let message = template
-        .replace("{name}", &display_name)
-        .replace("{seat}", seat);
+    // Reservations without a desk are logged as "unspecified seat"; say what
+    // the event actually calls that option (e.g. "Floating / no desk").
+    let unspecified_label = if seat == UNSPECIFIED_SEAT {
+        event_seating_config::get(pool, event_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|config| config.unspecified_seat_label)
+    } else {
+        None
+    };
+    let message =
+        seat_reservation_message(&display_name, seat, unspecified_label.as_deref(), &event.id);
 
     Some(ActivityTickerEvent {
         id: event.id,
@@ -504,4 +509,69 @@ async fn format_seat_reservation_event(
         user_avatar_url,
         game_id: None,
     })
+}
+
+/// Ticker text for a seat reservation. `unspecified_label` is the event's
+/// configured name for "no desk", used when `seat` is [`UNSPECIFIED_SEAT`].
+#[allow(clippy::literal_string_with_formatting_args)]
+fn seat_reservation_message<T: Hash>(
+    name: &str,
+    seat: &str,
+    unspecified_label: Option<&str>,
+    seed: &T,
+) -> String {
+    if seat == UNSPECIFIED_SEAT {
+        let label = unspecified_label
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .unwrap_or("no fixed seat");
+        let phrases = ["{name} picked {label} 🪑", "{name} chose {label}"];
+        return get_phrase(&phrases, seed)
+            .replace("{name}", name)
+            .replace("{label}", label);
+    }
+    let phrases = [
+        "{name} claimed {seat}! 🪑",
+        "{name} reserved {seat}",
+        "{name} grabbed {seat}!",
+        "{name} snagged {seat}",
+    ];
+    get_phrase(&phrases, seed)
+        .replace("{name}", name)
+        .replace("{seat}", seat)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{seat_reservation_message, UNSPECIFIED_SEAT};
+
+    #[test]
+    fn unspecified_seat_uses_the_event_label() {
+        for seed in 0..8_i64 {
+            let msg = seat_reservation_message(
+                "Nia",
+                UNSPECIFIED_SEAT,
+                Some("Floating / no desk"),
+                &seed,
+            );
+            assert!(msg.starts_with("Nia "), "{msg}");
+            assert!(msg.contains("Floating / no desk"), "{msg}");
+            assert!(!msg.contains(UNSPECIFIED_SEAT), "{msg}");
+        }
+    }
+
+    #[test]
+    fn unspecified_seat_without_a_label_avoids_the_raw_marker() {
+        for label in [None, Some("  ")] {
+            let msg = seat_reservation_message("Nia", UNSPECIFIED_SEAT, label, &1_i64);
+            assert!(msg.contains("no fixed seat"), "{msg}");
+        }
+    }
+
+    #[test]
+    fn real_seats_are_named() {
+        let msg = seat_reservation_message("Sam", "Main Hall - B3", None, &3_i64);
+        assert!(msg.starts_with("Sam "), "{msg}");
+        assert!(msg.contains("Main Hall - B3"), "{msg}");
+    }
 }

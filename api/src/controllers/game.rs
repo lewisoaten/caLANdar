@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use sqlx::PgPool;
 
 use crate::{
@@ -51,21 +53,28 @@ pub async fn cache_stats(pool: &PgPool) -> Result<game::CacheStats, Error> {
         .map_err(|e| Error::Controller(format!("Unable to get Steam game cache stats: {e}")))
 }
 
-pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefresh, Error> {
-    let Ok(steam_game_update) = game_update::create(pool).await else {
-        return Err(Error::Controller(
-            "Unable to create game update log".to_string(),
-        ));
-    };
+/// Shown to admins when Steam's app list can't be fetched. The underlying
+/// error (often Steam's HTML error page) is logged, never returned.
+pub const REFRESH_STEAM_UNAVAILABLE: &str =
+    "Couldn't fetch the game list from Steam. The cache was not changed; try again later.";
+/// Shown to admins when saving the fetched list fails part-way.
+pub const REFRESH_SAVE_FAILED: &str =
+    "Couldn't save the Steam game list. Some games may not have been updated; try again.";
 
-    let steam_games = match steam_api::get_app_list(steam_api_key).await {
-        Ok(steam_games) => steam_games,
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Error fetching steam game list: {e}"
-            )))
-        }
-    };
+/// Log `detail` and return a controller error carrying only `message`.
+fn refresh_failed(message: &str, detail: impl Display) -> Error {
+    log::error!("Steam game cache refresh failed: {detail}");
+    Error::Controller(message.to_string())
+}
+
+pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefresh, Error> {
+    let steam_game_update = game_update::create(pool)
+        .await
+        .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("creating update log: {e}")))?;
+
+    let steam_games = steam_api::get_app_list(steam_api_key)
+        .await
+        .map_err(|e| refresh_failed(REFRESH_STEAM_UNAVAILABLE, e))?;
 
     log::info!("Retrieved {} games from Steam API", steam_games.len());
 
@@ -76,14 +85,14 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefres
 
         games_added += game::upsert_many(pool, steam_game_update.id, &appids, &names)
             .await
-            .map_err(|e| Error::Controller(format!("Failed to insert games: {e}")))?;
+            .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("inserting games: {e}")))?;
 
         log::info!("Upserted {} games.", chunk.len());
     }
 
     game_update::complete(pool, steam_game_update.id)
         .await
-        .map_err(|e| Error::Controller(format!("Unable to complete game update log: {e}")))?;
+        .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("completing update log: {e}")))?;
 
     let stats = cache_stats(pool).await?;
 

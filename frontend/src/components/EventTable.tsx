@@ -20,6 +20,7 @@ import { Link as RouterLink } from "react-router-dom";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
+import { useDebouncedValue } from "./adminListUtils";
 import {
   EmptyState,
   FilterChips,
@@ -146,16 +147,6 @@ const STATUS_STYLE: Record<AdminEventStatus, { label: string; color: string }> =
     ended: { label: "ENDED", color: colors.textDim },
   };
 
-/** Debounce a changing value (search box). */
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return debounced;
-}
-
 // ---------------------------------------------------------------------------
 // Row pieces
 // ---------------------------------------------------------------------------
@@ -205,9 +196,11 @@ const rowSx = {
   gap: "12px 16px",
   alignItems: "center",
   px: "20px",
+  // Narrow panels: the same fixed areas for every row, so a long status
+  // ("LIVE RSVPS") never wraps differently from a short one ("ENDED").
   [stacked]: {
-    display: "flex",
-    flexWrap: "wrap",
+    gridTemplateColumns: "minmax(0,1fr) auto",
+    gridTemplateAreas: `"title status" "rsvp rsvp" "invited action"`,
   },
 } as const;
 
@@ -239,7 +232,7 @@ function EventRow({
           display: "flex",
           flexDirection: "column",
           gap: "4px",
-          [stacked]: { flex: "1 1 100%" },
+          [stacked]: { gridArea: "title" },
         }}
       >
         <Typography
@@ -262,7 +255,13 @@ function EventRow({
       </Box>
       <Box
         role="cell"
-        sx={{ ...mono, fontSize: 15, fontWeight: 700, color: colors.text }}
+        sx={{
+          ...mono,
+          fontSize: 15,
+          fontWeight: 700,
+          color: colors.text,
+          [stacked]: { gridArea: "invited" },
+        }}
       >
         {invited === undefined ? (
           "—"
@@ -285,7 +284,13 @@ function EventRow({
           </>
         )}
       </Box>
-      <Box role="cell" sx={{ minWidth: 0, [stacked]: { flex: "1 1 160px" } }}>
+      <Box
+        role="cell"
+        sx={{
+          minWidth: 0,
+          [stacked]: showRsvp ? { gridArea: "rsvp" } : { display: "none" },
+        }}
+      >
         {showRsvp ? <RsvpBar rsvp={event.rsvp} /> : null}
       </Box>
       <Box
@@ -295,6 +300,12 @@ function EventRow({
           fontSize: 11,
           letterSpacing: "0.12em",
           color: st.color,
+          [stacked]: {
+            gridArea: "status",
+            alignSelf: "start",
+            whiteSpace: "nowrap",
+            pt: "4px",
+          },
         }}
       >
         {st.label}
@@ -304,7 +315,7 @@ function EventRow({
         sx={{
           display: "flex",
           justifyContent: "flex-end",
-          [stacked]: { ml: "auto" },
+          [stacked]: { gridArea: "action" },
         }}
       >
         <Button
@@ -336,17 +347,30 @@ function SkeletonRows({ count }: { count: number }) {
             borderBottom: `1px solid ${hairline.faint}`,
           }}
         >
-          <Box sx={{ flex: "1 1 100%" }}>
+          <Box sx={{ [stacked]: { gridArea: "title" } }}>
             <Skeleton width="60%" height={24} />
             <Skeleton width="40%" height={16} />
           </Box>
-          <Skeleton width={24} height={20} />
-          <Box sx={{ flex: "1 1 160px" }}>
+          <Skeleton
+            width={24}
+            height={20}
+            sx={{ [stacked]: { gridArea: "invited" } }}
+          />
+          <Box sx={{ [stacked]: { gridArea: "rsvp" } }}>
             <Skeleton height={6} variant="rectangular" />
             <Skeleton width="80%" height={16} />
           </Box>
-          <Skeleton width={70} height={16} />
-          <Skeleton width={110} height={44} variant="rectangular" />
+          <Skeleton
+            width={70}
+            height={16}
+            sx={{ [stacked]: { gridArea: "status" } }}
+          />
+          <Skeleton
+            width={110}
+            height={44}
+            variant="rectangular"
+            sx={{ [stacked]: { gridArea: "action" } }}
+          />
         </Box>
       ))}
     </>
@@ -393,7 +417,9 @@ export default function EventTable(props: EventTableProps) {
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<StatusCounts | null>(null);
   const [retry, setRetry] = useState(0);
-  const debouncedSearch = useDebounced(search, 300);
+  // Back to page 1 once the search settles (not per keystroke, which would
+  // fire an extra request for the stale term on page 1).
+  const debouncedSearch = useDebouncedValue(search, 300, () => setPage(1));
 
   let filter: "all" | "upcoming" | "past" = "all";
   if (liveEvents && !pastEvents) filter = "upcoming";
@@ -491,10 +517,7 @@ export default function EventTable(props: EventTableProps) {
       >
         <SearchField
           value={search}
-          onChange={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
+          onChange={setSearch}
           label="Search events"
           sx={{ flex: "1 1 260px", maxWidth: 420 }}
         />

@@ -4,13 +4,7 @@ use rocket_dyn_templates::tera::{Context, Tera};
 use rusty_paseto::prelude::*;
 use sqlx::PgPool;
 
-use crate::{
-    controllers::event,
-    routes::{
-        event_invitations::{InvitationResponse, InvitationsResponse},
-        events::Event,
-    },
-};
+use crate::{controllers::event, routes::events::Event};
 
 pub async fn send_email(
     sender: &Resend,
@@ -159,35 +153,6 @@ pub async fn send_preauth_email(
         Ok(()) => Ok(()),
         Err(e) => Err(format!("Error sending email: {e}")),
     }
-}
-
-pub async fn is_attending_event(
-    pool: &PgPool,
-    event_id: i32,
-    email: String,
-) -> Result<bool, String> {
-    // Check that the user has RSVP'd to this event
-    let invitation: InvitationsResponse = match sqlx::query_as!(
-        InvitationsResponse,
-        r#"SELECT event_id, email, 'https://www.gravatar.com/avatar/' || MD5(LOWER(email)) || '?d=robohash' AS avatar_url, handle, invited_at, responded_at, response AS "response: _", attendance, last_modified
-        FROM invitation
-        WHERE event_id = $1 AND LOWER(email) = LOWER($2)"#,
-        event_id,
-        email,
-    )
-    .fetch_one(pool)
-    .await
-    {
-        Ok(invitation) => invitation,
-        Err(_) => {
-            return Err("Can't get logged-in users RSVP for the event".to_string())
-        }
-    };
-
-    Ok(matches!(
-        invitation.response,
-        Some(InvitationResponse::Yes | InvitationResponse::Maybe)
-    ))
 }
 
 pub async fn is_event_active(pool: &PgPool, id: i32) -> Result<(bool, Event), String> {

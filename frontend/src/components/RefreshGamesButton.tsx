@@ -11,6 +11,7 @@ import { useSnackbar } from "notistack";
 import { UserContext, UserDispatchContext } from "../UserProvider";
 import { colors, fonts, tint, useNow } from "./hl";
 import { formatAgo, formatCount } from "./adminListUtils";
+import { apiErrorFrom } from "../utils/apiError";
 
 type BoolState = [boolean, React.Dispatch<React.SetStateAction<boolean>>];
 
@@ -34,8 +35,27 @@ interface RefreshGamesButtonProps {
   label?: string;
   /** Called with the refreshed cache stats when the POST succeeds. */
   onRefreshed?: (result: SteamCacheRefreshResult | null) => void;
-  /** Called with the HTTP status (0 for a network error) when it fails. */
-  onError?: (status: number) => void;
+  /**
+   * Called with the HTTP status (0 for a network error) and the server's
+   * explanation, if any, when it fails.
+   */
+  onError?: (status: number, description?: string) => void;
+  /**
+   * Announce the outcome with a toast (default). Callers that show the
+   * outcome inline in a live region pass `false` so it is reported once.
+   */
+  toasts?: boolean;
+}
+
+/**
+ * The API's short explanation of a failed refresh. Older servers embedded
+ * Steam's HTML error page in it, so anything markup-like or long is dropped
+ * in favour of the generic message.
+ */
+export function safeDescription(text: string | undefined): string | undefined {
+  const t = text?.trim();
+  if (!t || t.length > 200 || /<[a-z!/]/i.test(t)) return undefined;
+  return t;
 }
 
 const REFRESH_URL = "/api/steam-game-update-v2?as_admin=true";
@@ -57,12 +77,13 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   const ownDone = useState(false);
   const [loading, setLoading] = props.loadingState ?? ownLoading;
   const [done, setDone] = props.doneState ?? ownDone;
-  const { onRefreshed, onError } = props;
+  const { onRefreshed, onError, toasts = true } = props;
 
   async function handleClick() {
     setLoading(true);
     setDone(false);
     let status = 0;
+    let description: string | undefined;
     try {
       const response = await fetch(REFRESH_URL, {
         method: "POST",
@@ -87,25 +108,33 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
         }
         setLoading(false);
         setDone(true);
-        enqueueSnackbar(
-          result && typeof result.gamesCached === "number"
-            ? `Steam game cache refreshed: ${formatCount(result.gamesCached)} games`
-            : "Steam game cache refreshed",
-          { variant: "success" },
-        );
+        if (toasts) {
+          enqueueSnackbar(
+            result && typeof result.gamesCached === "number"
+              ? `Steam game cache refreshed: ${formatCount(result.gamesCached)} games`
+              : "Steam game cache refreshed",
+            { variant: "success" },
+          );
+        }
         onRefreshed?.(result);
         return;
       }
-      console.error("Steam cache refresh failed", await response.text());
+      description = safeDescription(
+        (await apiErrorFrom("Steam cache refresh failed", response))
+          .description,
+      );
     } catch (error) {
       console.error("Steam cache refresh failed", error);
     }
     setLoading(false);
-    enqueueSnackbar(
-      `Couldn't refresh the Steam game cache${status ? ` (error ${status})` : ""}. Please try again.`,
-      { variant: "error" },
-    );
-    onError?.(status);
+    if (toasts) {
+      enqueueSnackbar(
+        description ??
+          `Couldn't refresh the Steam game cache${status ? ` (error ${status})` : ""}. Please try again.`,
+        { variant: "error" },
+      );
+    }
+    onError?.(status, description);
   }
 
   return (
@@ -160,7 +189,10 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
   const [statsFailed, setStatsFailed] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [added, setAdded] = useState<number | null>(null);
-  const [errorStatus, setErrorStatus] = useState(0);
+  const [failure, setFailure] = useState<{
+    status: number;
+    description?: string;
+  }>({ status: 0 });
   const loadingState = useState(false);
   const doneState = useState(false);
   const busy = loadingState[0];
@@ -228,8 +260,11 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
   } else if (!busy && phase === "error") {
     sub = (
       <Box component="span" sx={{ color: colors.pinkText }}>
-        Refresh failed{errorStatus ? ` (error ${errorStatus})` : ""}. The cache
-        was not changed. Try again.
+        {failure.description
+          ? `Refresh failed: ${failure.description}`
+          : `Refresh failed${
+              failure.status ? ` (error ${failure.status})` : ""
+            }. The cache was not changed. Try again.`}
       </Box>
     );
   }
@@ -311,6 +346,7 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
       <RefreshGamesButton
         loadingState={loadingState}
         doneState={doneState}
+        toasts={false}
         onRefreshed={(result) => {
           setPhase("done");
           if (result && typeof result.gamesCached === "number") {
@@ -327,9 +363,9 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
             setStatsReload((n) => n + 1);
           }
         }}
-        onError={(status) => {
+        onError={(status, description) => {
           setPhase("error");
-          setErrorStatus(status);
+          setFailure({ status, description });
         }}
       />
     </Box>

@@ -7,7 +7,7 @@ use crate::{
         invitation::{self, Response},
         seat_reservation,
     },
-    routes::event_invitations::{InvitationResponse, InvitationsPatchRequest},
+    routes::event_invitations::{InvitationResponse, InvitationsPatchRequest, RsvpCounts},
     util::is_event_active,
 };
 
@@ -172,6 +172,19 @@ pub async fn respond(
             "Unable to create event due to: {e}"
         ))),
     }
+}
+
+/// RSVP totals for an event (see `GET /events/<id>/rsvp_counts`).
+pub async fn rsvp_counts(pool: &PgPool, event_id: i32) -> Result<RsvpCounts, Error> {
+    invitation::response_counts(pool, event_id)
+        .await
+        .map(|c| RsvpCounts {
+            yes: c.yes,
+            maybe: c.maybe,
+            no: c.no,
+            pending: c.pending,
+        })
+        .map_err(|e| Error::Controller(format!("Unable to count RSVPs due to: {e}")))
 }
 
 #[cfg(test)]

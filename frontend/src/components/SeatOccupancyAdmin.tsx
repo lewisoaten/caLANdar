@@ -1,5 +1,12 @@
 import * as React from "react";
-import { useEffect, useState, useContext, useCallback, useMemo } from "react";
+import {
+  useEffect,
+  useState,
+  useContext,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   Typography,
   Box,
@@ -91,6 +98,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
     useState<ReservationWithDetails | null>(null);
   const [newSeatId, setNewSeatId] = useState<number | null>(null);
   const [moveInProgress, setMoveInProgress] = useState(false);
+  const [clearInProgress, setClearInProgress] = useState(false);
+  // Synchronous guard: a double click fires twice before state re-renders.
+  const clearing = useRef(false);
 
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -431,13 +441,16 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
 
   // Handle closing delete dialog
   const handleCloseDeleteDialog = () => {
+    if (clearing.current) return;
     setDeleteDialogOpen(false);
     setEmailToDelete(null);
   };
 
   // Handle clearing a reservation
   const handleClearReservation = async () => {
-    if (!token || !emailToDelete) return;
+    if (!token || !emailToDelete || clearing.current) return;
+    clearing.current = true;
+    setClearInProgress(true);
 
     try {
       const response = await fetch(
@@ -466,11 +479,15 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
       enqueueSnackbar("Seat assignment cleared successfully", {
         variant: "success",
       });
+      clearing.current = false;
       handleCloseDeleteDialog();
       fetchReservations(); // Refresh the list
     } catch (error) {
       console.error("Error clearing reservation:", error);
       enqueueSnackbar("Failed to clear seat assignment", { variant: "error" });
+    } finally {
+      clearing.current = false;
+      setClearInProgress(false);
     }
   };
 
@@ -574,9 +591,7 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
               fontFamily: fonts.mono,
               fontSize: 12,
               color: colors.textMuted,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              overflowWrap: "anywhere",
             }}
           >
             {reservation.invitationEmail}
@@ -998,7 +1013,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
             onClick={handleMoveReservation}
             variant="contained"
             disabled={
-              moveInProgress || newSeatId === selectedReservation?.seatId
+              moveInProgress ||
+              newSeatId === selectedReservation?.seatId ||
+              (newSeatId === null && !seatingConfig?.allowUnspecifiedSeat)
             }
           >
             {moveInProgress ? "Moving…" : "Confirm move"}
@@ -1010,8 +1027,9 @@ const SeatOccupancyAdmin: React.FC<SeatOccupancyAdminProps> = ({
         open={deleteDialogOpen}
         title="Clear seat assignment?"
         confirmLabel="Clear assignment"
+        busy={clearInProgress}
         onCancel={handleCloseDeleteDialog}
-        onConfirm={handleClearReservation}
+        onConfirm={() => void handleClearReservation()}
       >
         Clear the seat assignment for <strong>{emailToDelete}</strong>? They
         will need to select a seat again if they want one.

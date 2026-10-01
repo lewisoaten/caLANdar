@@ -1,5 +1,30 @@
-use chrono::{DateTime, Duration, Timelike, Utc};
+//! Greedy auto-scheduler for an event's voted games.
+//!
+//! Rules (they mirror the `HyperLAN` handoff, "Recalculate" behaviour):
+//! - games are planned in vote order (most votes first);
+//! - games owned by fewer than [`MIN_OWNERS`] attendees are skipped;
+//! - a game gets at most [`MAX_SESSIONS_PER_GAME`] sessions, pinned ones included;
+//! - sessions keep a [`BUFFER_MINUTES`] gap from every other session (pinned too);
+//! - nothing is in progress during the night: a session may end at exactly
+//!   [`NIGHT_START_HOUR_UTC`]:00 and may start at exactly [`DAY_START_HOUR_UTC`]:00
+//!   but never overlaps the hours in between. The frontend draws the same
+//!   window (`SCHEDULER_WINDOW_*_UTC` in `frontend/src/components/schedule/scheduleModel.ts`),
+//!   so keep both in sync.
+use chrono::{DateTime, Duration, Utc};
 use std::collections::HashMap;
+
+/// UTC hour at which the scheduler's night starts (no session may run past it).
+pub const NIGHT_START_HOUR_UTC: i64 = 1;
+/// UTC hour at which the scheduler's day starts again (earliest start after the night).
+pub const DAY_START_HOUR_UTC: i64 = 10;
+/// Games owned by fewer attendees than this are not auto-scheduled.
+pub const MIN_OWNERS: usize = 2;
+/// Most sessions (pinned + suggested) a single game gets.
+pub const MAX_SESSIONS_PER_GAME: usize = 2;
+/// Minimum gap between any two sessions, in minutes.
+pub const BUFFER_MINUTES: i64 = 30;
+/// Granularity of candidate start times, in minutes.
+pub const SLOT_STEP_MINUTES: i64 = 30;
 
 /// Represents a game that can be scheduled
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -9,6 +34,8 @@ pub struct Game {
     pub votes: i32,
     /// IDs of voters who voted yes for this game
     pub voter_ids: Vec<String>,
+    /// Number of attending (yes/maybe) guests whose Steam library contains the game
+    pub owner_count: usize,
 }
 
 /// Represents a voter and their availability
@@ -23,6 +50,8 @@ pub struct Voter {
 /// Represents a time slot that is already occupied (pinned games)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OccupiedSlot {
+    /// The game pinned in this slot (counts towards its session limit)
+    pub game_id: i64,
     pub start_time: DateTime<Utc>,
     pub duration_minutes: i32,
 }
@@ -61,148 +90,159 @@ pub struct SchedulerOutput {
     pub suggested_schedules: Vec<SuggestedSchedule>,
 }
 
-/// Main scheduling function - uses a greedy algorithm to maximize voter availability
+/// Main scheduling function - uses a greedy algorithm to maximize voter availability.
+///
+/// Runs up to [`MAX_SESSIONS_PER_GAME`] rounds; each round walks the eligible games
+/// in vote order and gives each one (that is still under its limit) the start time
+/// where the most of its voters are around.
 pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
     let mut suggested_schedules = Vec::new();
-    let mut occupied_slots: HashMap<DateTime<Utc>, i32> = HashMap::new();
+    let duration = Duration::minutes(i64::from(input.default_game_duration));
 
-    // Add pinned slots to occupied slots
-    for pinned in &input.pinned_slots {
-        occupied_slots.insert(pinned.start_time, pinned.duration_minutes);
-    }
-
-    // Build available time slots (30-minute intervals)
-    let available_slots = build_time_slots(
-        input.event_start,
-        input.event_end,
-        &input.pinned_slots,
-        30, // 30-minute slots
-    );
-
-    if available_slots.is_empty() {
+    if input.default_game_duration <= 0 || input.event_end <= input.event_start {
         return SchedulerOutput {
             suggested_schedules,
         };
     }
 
-    // Sort games by votes (descending) to prioritize higher-voted games
-    let mut sorted_games = input.games.clone();
+    // Every session placed so far, as [start, end)
+    let mut occupied: Vec<(DateTime<Utc>, DateTime<Utc>)> = input
+        .pinned_slots
+        .iter()
+        .map(|p| {
+            (
+                p.start_time,
+                p.start_time + Duration::minutes(i64::from(p.duration_minutes)),
+            )
+        })
+        .collect();
+
+    // Sessions per game so far (pinned ones count)
+    let mut uses: HashMap<i64, usize> = HashMap::new();
+    for pinned in &input.pinned_slots {
+        *uses.entry(pinned.game_id).or_default() += 1;
+    }
+
+    // Sort games by votes (descending, stable) and drop games too few people own
+    let mut sorted_games: Vec<&Game> = input
+        .games
+        .iter()
+        .filter(|g| g.owner_count >= MIN_OWNERS)
+        .collect();
     sorted_games.sort_by_key(|game| std::cmp::Reverse(game.votes));
 
-    // For each game (sorted by votes), find the best time slot
-    for game in &sorted_games {
-        let mut best_slot: Option<(DateTime<Utc>, i32)> = None;
-        let mut best_score = -1;
+    let candidates = build_start_times(input.event_start, input.event_end);
 
-        // Try each slot as a potential start time
-        for slot_start in &available_slots {
-            // Skip if game would start during nighttime (after 1am and before 10am)
-            // Starting at exactly 1am is invalid, but starting at exactly 10am is valid
-            let start_hour = slot_start.hour();
-            if (1..10).contains(&start_hour) {
+    for _round in 0..MAX_SESSIONS_PER_GAME {
+        let mut placed_any = false;
+
+        for game in &sorted_games {
+            if uses.get(&game.id).copied().unwrap_or(0) >= MAX_SESSIONS_PER_GAME {
                 continue;
             }
 
-            // Check if game fits within event
-            let candidate_end =
-                *slot_start + Duration::minutes(i64::from(input.default_game_duration));
-            if candidate_end > input.event_end {
-                continue;
+            let mut best: Option<(DateTime<Utc>, i32)> = None;
+
+            for &start in &candidates {
+                let end = start + duration;
+                if end > input.event_end || overlaps_night(start, end) {
+                    continue;
+                }
+                if clashes(&occupied, start, end) {
+                    continue;
+                }
+
+                let score = calculate_availability_score(
+                    &input.voters,
+                    &game.voter_ids,
+                    input.event_start,
+                    start,
+                    input.default_game_duration,
+                );
+
+                // Strictly greater: the earliest best slot wins ties
+                if best.is_none_or(|(_, best_score)| score > best_score) {
+                    best = Some((start, score));
+                }
             }
 
-            // Skip if game would end during nighttime (after 1am and before 10am)
-            // Ending at exactly 1am is VALID (we allow it), but ending after 1am (1:01am-9:59am) is invalid
-            // So we check if hour is in range 2..10 (hours 2am through 9am)
-            let end_hour = candidate_end.hour();
-            if (2..10).contains(&end_hour) {
-                continue;
-            }
-
-            // Check if this time range overlaps with already-suggested games
-            if overlaps_with_any(&occupied_slots, *slot_start, input.default_game_duration) {
-                continue;
-            }
-
-            // Calculate availability score for this slot
-            let score = calculate_availability_score(
-                &input.voters,
-                &game.voter_ids,
-                input.event_start,
-                *slot_start,
-                input.default_game_duration,
-            );
-
-            if score > best_score {
-                best_score = score;
-                best_slot = Some((*slot_start, input.default_game_duration));
+            // Only schedule when at least one voter is around
+            if let Some((start_time, score)) = best {
+                if score > 0 {
+                    occupied.push((start_time, start_time + duration));
+                    *uses.entry(game.id).or_default() += 1;
+                    placed_any = true;
+                    suggested_schedules.push(SuggestedSchedule {
+                        game_id: game.id,
+                        game_name: game.name.clone(),
+                        start_time,
+                        duration_minutes: input.default_game_duration,
+                        availability_score: score,
+                    });
+                }
             }
         }
 
-        // If we found a good slot with at least one voter available, add this game
-        if let Some((start_time, duration)) = best_slot {
-            if best_score > 0 {
-                occupied_slots.insert(start_time, duration);
-                suggested_schedules.push(SuggestedSchedule {
-                    game_id: game.id,
-                    game_name: game.name.clone(),
-                    start_time,
-                    duration_minutes: duration,
-                    availability_score: best_score,
-                });
-            }
+        if !placed_any {
+            break;
         }
     }
+
+    suggested_schedules.sort_by_key(|s| s.start_time);
 
     SchedulerOutput {
         suggested_schedules,
     }
 }
 
-/// Build a list of potential start times (30-minute intervals)
-fn build_time_slots(
-    event_start: DateTime<Utc>,
-    event_end: DateTime<Utc>,
-    pinned_slots: &[OccupiedSlot],
-    slot_duration_minutes: i64,
-) -> Vec<DateTime<Utc>> {
+/// Candidate start times: every [`SLOT_STEP_MINUTES`] from the event start.
+fn build_start_times(event_start: DateTime<Utc>, event_end: DateTime<Utc>) -> Vec<DateTime<Utc>> {
     let mut slots = Vec::new();
     let mut current = event_start;
-
     while current < event_end {
-        let next = current + Duration::minutes(slot_duration_minutes);
-        let slot_end = next.min(event_end);
-
-        // Check if this slot overlaps with any pinned game
-        let overlaps = pinned_slots.iter().any(|pinned| {
-            let pinned_end =
-                pinned.start_time + Duration::minutes(i64::from(pinned.duration_minutes));
-            // Overlap if slot starts before pinned ends AND slot ends after pinned starts
-            current < pinned_end && slot_end > pinned.start_time
-        });
-
-        if !overlaps {
-            slots.push(current);
-        }
-
-        current = next;
+        slots.push(current);
+        current += Duration::minutes(SLOT_STEP_MINUTES);
     }
-
     slots
 }
 
-/// Check if a time range overlaps with any already-occupied slot
-fn overlaps_with_any(
-    occupied: &HashMap<DateTime<Utc>, i32>,
-    start_time: DateTime<Utc>,
-    duration_minutes: i32,
+/// True when [start, end) comes within [`BUFFER_MINUTES`] of any occupied session.
+fn clashes(
+    occupied: &[(DateTime<Utc>, DateTime<Utc>)],
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
 ) -> bool {
-    let end_time = start_time + Duration::minutes(i64::from(duration_minutes));
+    let buffer = Duration::minutes(BUFFER_MINUTES);
+    occupied
+        .iter()
+        .any(|&(os, oe)| start < oe + buffer && os < end + buffer)
+}
 
-    occupied.iter().any(|(occupied_start, occupied_duration)| {
-        let occupied_end = *occupied_start + Duration::minutes(i64::from(*occupied_duration));
-        // Overlap check
-        start_time < occupied_end && end_time > *occupied_start
-    })
+/// True when [start, end) overlaps any night, i.e. the hours between
+/// [`NIGHT_START_HOUR_UTC`]:00 and [`DAY_START_HOUR_UTC`]:00 UTC.
+/// Touching a boundary (ending at 01:00, starting at 10:00) is allowed.
+fn overlaps_night(start: DateTime<Utc>, end: DateTime<Utc>) -> bool {
+    let mut day = start
+        .date_naive()
+        .pred_opt()
+        .unwrap_or_else(|| start.date_naive());
+    let last = end.date_naive();
+    while day <= last {
+        let Some(midnight) = day.and_hms_opt(0, 0, 0) else {
+            return true;
+        };
+        let midnight = midnight.and_utc();
+        let night_start = midnight + Duration::hours(NIGHT_START_HOUR_UTC);
+        let night_end = midnight + Duration::hours(DAY_START_HOUR_UTC);
+        if start < night_end && end > night_start {
+            return true;
+        }
+        let Some(next) = day.succ_opt() else {
+            return true;
+        };
+        day = next;
+    }
+    false
 }
 
 /// Calculate how many voters are available during a time slot
@@ -287,9 +327,51 @@ fn calculate_availability_score(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{Datelike, TimeZone};
+    use chrono::{Datelike, TimeZone, Timelike};
+
+    fn end_of(s: &SuggestedSchedule) -> DateTime<Utc> {
+        s.start_time + Duration::minutes(i64::from(s.duration_minutes))
+    }
+
+    /// No two sessions overlap or sit closer than the buffer.
+    fn assert_buffered(sessions: &[SuggestedSchedule]) {
+        let buffer = Duration::minutes(BUFFER_MINUTES);
+        for (i, a) in sessions.iter().enumerate() {
+            for b in sessions.iter().skip(i + 1) {
+                assert!(
+                    end_of(a) + buffer <= b.start_time || end_of(b) + buffer <= a.start_time,
+                    "{} at {} and {} at {} are closer than the buffer",
+                    a.game_name,
+                    a.start_time,
+                    b.game_name,
+                    b.start_time
+                );
+            }
+        }
+    }
+
+    fn voter(id: &str, attendance: Vec<u8>) -> (String, Voter) {
+        (
+            id.to_string(),
+            Voter {
+                id: id.to_string(),
+                attendance,
+            },
+        )
+    }
+
+    fn game(id: i64, votes: i32, voted_by: &[&str], owner_count: usize) -> Game {
+        Game {
+            id,
+            name: format!("Game {id}"),
+            votes,
+            voter_ids: voted_by.iter().map(ToString::to_string).collect(),
+            owner_count,
+        }
+    }
 
     #[test]
+    #[allow(clippy::similar_names)]
     fn test_two_gamers_different_availability() {
         // Test case: 2 gamers, one available for 2 days, other only available on second day
         // Both want Game A, only Gamer 1 wants Game B
@@ -305,6 +387,7 @@ mod tests {
             name: "Game A".to_string(),
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
+            owner_count: 2,
         };
 
         // Game B: Only Gamer 1 wants it (votes: 1)
@@ -313,6 +396,7 @@ mod tests {
             name: "Game B".to_string(),
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         // Gamer 1: Available both days (Day 1: 10am-10pm, Day 2: 10am-10pm)
@@ -351,53 +435,34 @@ mod tests {
 
         let output = schedule_games(&input);
 
-        // We should get both games scheduled
-        assert_eq!(output.suggested_schedules.len(), 2);
+        // Both games are scheduled twice (MAX_SESSIONS_PER_GAME)
+        assert_eq!(output.suggested_schedules.len(), 4);
 
-        // Game A (higher votes) should be scheduled first
-        let schedule_a = output
+        let sessions_a: Vec<_> = output
             .suggested_schedules
             .iter()
-            .find(|s| s.game_id == 1)
-            .expect("Game A should be scheduled");
-
-        // Game A should be scheduled on Day 2 (when both gamers available)
-        assert!(
-            schedule_a.start_time.day() == 25,
-            "Game A should be on Day 2 (Nov 25)"
-        );
-        assert_eq!(
-            schedule_a.availability_score, 2,
-            "Game A should have 2 voters available"
-        );
-
-        // Game B should be scheduled
-        let schedule_b = output
+            .filter(|s| s.game_id == 1)
+            .collect();
+        let sessions_b: Vec<_> = output
             .suggested_schedules
             .iter()
-            .find(|s| s.game_id == 2)
-            .expect("Game B should be scheduled");
+            .filter(|s| s.game_id == 2)
+            .collect();
+        assert_eq!(sessions_a.len(), 2, "Game A should get two sessions");
+        assert_eq!(sessions_b.len(), 2, "Game B should get two sessions");
 
-        // Game B should be scheduled on Day 1 (when Gamer 1 available)
-        assert!(
-            schedule_b.start_time.day() == 24,
-            "Game B should be on Day 1 (Nov 24)"
-        );
-        assert_eq!(
-            schedule_b.availability_score, 1,
-            "Game B should have 1 voter available"
-        );
+        // Game A is scheduled on Day 2 (when both gamers are available)
+        for s in &sessions_a {
+            assert_eq!(s.start_time.day(), 25, "Game A should be on Day 2 (Nov 25)");
+            assert_eq!(s.availability_score, 2, "Game A should have 2 voters");
+        }
+        // Game B is scheduled on Day 1 (when Gamer 1 is available)
+        for s in &sessions_b {
+            assert_eq!(s.start_time.day(), 24, "Game B should be on Day 1 (Nov 24)");
+            assert_eq!(s.availability_score, 1, "Game B should have 1 voter");
+        }
 
-        // Games should not overlap
-        let end_time_a =
-            schedule_a.start_time + Duration::minutes(i64::from(schedule_a.duration_minutes));
-        let end_time_b =
-            schedule_b.start_time + Duration::minutes(i64::from(schedule_b.duration_minutes));
-
-        let no_overlap =
-            (schedule_a.start_time >= end_time_b) || (schedule_b.start_time >= end_time_a);
-
-        assert!(no_overlap, "Games should not overlap");
+        assert_buffered(&output.suggested_schedules);
     }
 
     #[test]
@@ -417,6 +482,7 @@ mod tests {
             name: "Game A".to_string(),
             votes: 3,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         let game_b = Game {
@@ -424,6 +490,7 @@ mod tests {
             name: "Game B".to_string(),
             votes: 2,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         let game_c = Game {
@@ -431,6 +498,7 @@ mod tests {
             name: "Game C".to_string(),
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         // Gamer available 24/7 across the overnight period
@@ -521,7 +589,8 @@ mod tests {
         // Game 3: 2 votes (should be scheduled - second priority)
 
         let event_start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap(); // 10am
-        let event_end = Utc.with_ymd_and_hms(2024, 11, 24, 14, 0, 0).unwrap(); // 2pm (4 hours)
+                                                                                 // 4.5 hours: two 2h games plus the 30-min buffer between them
+        let event_end = Utc.with_ymd_and_hms(2024, 11, 24, 14, 30, 0).unwrap();
 
         // Game with lowest votes (1 vote) - should NOT be scheduled
         let game_low_priority = Game {
@@ -529,6 +598,7 @@ mod tests {
             name: "Game Low Priority".to_string(),
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         // Game with highest votes (3 votes) - SHOULD be scheduled
@@ -541,6 +611,7 @@ mod tests {
                 "gamer2".to_string(),
                 "gamer3".to_string(),
             ],
+            owner_count: 2,
         };
 
         // Game with medium votes (2 votes) - SHOULD be scheduled
@@ -549,6 +620,7 @@ mod tests {
             name: "Game Medium Priority".to_string(),
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
+            owner_count: 2,
         };
 
         // All gamers available the entire time
@@ -583,7 +655,7 @@ mod tests {
 
         let output = schedule_games(&input);
 
-        // Should only schedule 2 games (4 hours available / 2 hours per game)
+        // Should only schedule 2 games (4.5 hours available / 2 hours per game + buffer)
         assert_eq!(
             output.suggested_schedules.len(),
             2,
@@ -648,6 +720,7 @@ mod tests {
             name: "Game To Schedule".to_string(),
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
+            owner_count: 2,
         };
 
         // Gamers available the entire time
@@ -667,6 +740,7 @@ mod tests {
 
         // Pinned slot: Some game (not in games list) occupies 10am-11am
         let pinned_slot = OccupiedSlot {
+            game_id: 99,
             start_time: Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap(),
             duration_minutes: 60, // 1 hour
         };
@@ -696,11 +770,11 @@ mod tests {
             .find(|s| s.game_id == 2)
             .expect("Game 2 should be scheduled");
 
-        // Verify the game doesn't overlap with the pinned slot (starts at or after 11am)
-        let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 11, 0, 0).unwrap();
+        // Verify the game keeps the buffer after the pinned slot (starts at or after 11:30)
+        let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 11, 30, 0).unwrap();
         assert!(
             game_schedule.start_time >= pinned_end,
-            "Scheduled game should not overlap with pinned slot. Expected start >= 11:00, got {}",
+            "Scheduled game should not overlap with pinned slot + buffer. Expected start >= 11:30, got {}",
             game_schedule.start_time
         );
 
@@ -738,6 +812,7 @@ mod tests {
             name: "Game 1".to_string(),
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         let game_3 = Game {
@@ -745,6 +820,7 @@ mod tests {
             name: "Game 3".to_string(),
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
+            owner_count: 2,
         };
 
         // Gamer available 24/7
@@ -762,6 +838,7 @@ mod tests {
 
         // Pinned slot: Game 2 (without vote) occupies 1am-4am
         let pinned_slot = OccupiedSlot {
+            game_id: 99,
             start_time: Utc.with_ymd_and_hms(2024, 11, 25, 1, 0, 0).unwrap(), // 1am
             duration_minutes: 180,                                            // 3 hours
         };
@@ -814,69 +891,22 @@ mod tests {
             + Duration::minutes(i64::from(game_1_schedule.duration_minutes));
         assert_eq!(game_1_end.hour(), 23, "Game 1 should end at 11pm (23:00)");
 
-        // Verify Game 3 is scheduled at 11pm (NOT 10am)
-        // There's a 2-hour gap from 11pm-1am that should be used
+        // Game 3 cannot follow at 23:00: the 30-min buffer pushes it to 23:30,
+        // which would run past 01:00, so it waits for the morning window.
         assert_eq!(
-            game_3_schedule.start_time.hour(),
-            23,
-            "Game 3 should start at 11pm (23:00), not wait until 10am"
+            game_3_schedule.start_time,
+            Utc.with_ymd_and_hms(2024, 11, 25, 10, 0, 0).unwrap(),
+            "Game 3 should start at 10:00 the next morning"
         );
-        assert_eq!(
-            game_3_schedule.start_time.day(),
-            24,
-            "Game 3 should be on the same day as Game 1 (Nov 24)"
-        );
-        assert_eq!(
-            game_3_schedule.duration_minutes, 120,
-            "Game 3 should be 2 hours long"
-        );
+        let game_3_end = end_of(game_3_schedule);
 
-        // Calculate Game 3 end time (should be 1am)
-        let game_3_end = game_3_schedule.start_time
-            + Duration::minutes(i64::from(game_3_schedule.duration_minutes));
-        assert_eq!(
-            game_3_end.hour(),
-            1,
-            "Game 3 should end at 1am (01:00), which is valid (exactly 1am is allowed)"
-        );
-
-        // Verify neither game overlaps with the pinned slot (1am-4am)
+        // Neither game overlaps the pinned slot (1am-4am)
         let pinned_start = Utc.with_ymd_and_hms(2024, 11, 25, 1, 0, 0).unwrap();
         let pinned_end = Utc.with_ymd_and_hms(2024, 11, 25, 4, 0, 0).unwrap();
-
-        // Game 1 should end before or at pinned slot start (11pm ends, much earlier than 1am)
-        assert!(
-            game_1_end <= pinned_start,
-            "Game 1 should not overlap with pinned slot. Game 1 ends at {game_1_end}, pinned starts at {pinned_start}"
-        );
-
-        // Game 3 should end at or before pinned slot starts (ends exactly at 1am, pinned starts at 1am)
-        // This is valid - they touch but don't overlap
-        assert!(
-            game_3_end <= pinned_start,
-            "Game 3 should not overlap with pinned slot. Game 3 ends at {game_3_end}, pinned starts at {pinned_start}"
-        );
-
-        // Verify both games respect the nighttime restriction (not in progress 1am-10am)
-        // Game 1: 9pm-11pm - OK (ends before 1am)
-        assert!(
-            !(1..10).contains(&game_1_schedule.start_time.hour()),
-            "Game 1 should not start during nighttime"
-        );
-        assert!(
-            !(2..10).contains(&game_1_end.hour()),
-            "Game 1 should not end during nighttime (2am-9:59am). Ending at 1am is allowed."
-        );
-
-        // Game 3: 11pm-1am - OK (starts before 1am, ends at exactly 1am which is allowed)
-        assert!(
-            !(1..10).contains(&game_3_schedule.start_time.hour()),
-            "Game 3 should not start during nighttime"
-        );
-        assert!(
-            !(2..10).contains(&game_3_end.hour()),
-            "Game 3 should not end during nighttime (2am-9:59am). Ending at exactly 1am is allowed."
-        );
+        assert!(game_1_end <= pinned_start);
+        assert!(game_3_schedule.start_time >= pinned_end);
+        assert!(game_3_end <= event_end);
+        assert_buffered(&output.suggested_schedules);
 
         println!(
             "Game 1 scheduled: {} to {}",
@@ -887,5 +917,144 @@ mod tests {
             "Game 3 scheduled: {} to {}",
             game_3_schedule.start_time, game_3_end
         );
+    }
+
+    fn all_day_voters(ids: &[&str]) -> HashMap<String, Voter> {
+        ids.iter().map(|id| voter(id, vec![1; 16])).collect()
+    }
+
+    fn input_for(
+        games: Vec<Game>,
+        voters: HashMap<String, Voter>,
+        event_start: DateTime<Utc>,
+        event_end: DateTime<Utc>,
+        pinned_slots: Vec<OccupiedSlot>,
+    ) -> SchedulerInput {
+        SchedulerInput {
+            games,
+            voters,
+            event_start,
+            event_end,
+            pinned_slots,
+            default_game_duration: 120,
+        }
+    }
+
+    #[test]
+    fn test_skips_games_owned_by_fewer_than_two() {
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 24, 22, 0, 0).unwrap();
+        let output = schedule_games(&input_for(
+            vec![
+                game(1, 5, &["a", "b"], 1), // e.g. AoE II: most votes, only one owner
+                game(2, 1, &["a"], 2),
+                game(3, 1, &["a"], 0),
+            ],
+            all_day_voters(&["a", "b"]),
+            start,
+            end,
+            vec![],
+        ));
+        assert!(!output.suggested_schedules.is_empty());
+        assert!(
+            output.suggested_schedules.iter().all(|s| s.game_id == 2),
+            "only the game owned by 2+ attendees is planned: {:?}",
+            output.suggested_schedules
+        );
+    }
+
+    #[test]
+    fn test_at_most_two_sessions_per_game_including_pinned() {
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 26, 22, 0, 0).unwrap();
+        let pinned = OccupiedSlot {
+            game_id: 2,
+            start_time: Utc.with_ymd_and_hms(2024, 11, 24, 18, 0, 0).unwrap(),
+            duration_minutes: 120,
+        };
+        let output = schedule_games(&input_for(
+            vec![game(1, 3, &["a", "b"], 2), game(2, 2, &["a", "b"], 2)],
+            all_day_voters(&["a", "b"]),
+            start,
+            end,
+            vec![pinned],
+        ));
+        let count = |id| {
+            output
+                .suggested_schedules
+                .iter()
+                .filter(|s| s.game_id == id)
+                .count()
+        };
+        assert_eq!(count(1), MAX_SESSIONS_PER_GAME, "unpinned game gets two");
+        assert_eq!(count(2), 1, "pinned once, so only one more suggestion");
+        assert_buffered(&output.suggested_schedules);
+        let pinned_end = Utc.with_ymd_and_hms(2024, 11, 24, 20, 0, 0).unwrap();
+        for s in &output.suggested_schedules {
+            assert!(
+                end_of(s) + Duration::minutes(BUFFER_MINUTES)
+                    <= Utc.with_ymd_and_hms(2024, 11, 24, 18, 0, 0).unwrap()
+                    || s.start_time >= pinned_end + Duration::minutes(BUFFER_MINUTES),
+                "{s:?} is within the buffer of the pinned session"
+            );
+        }
+    }
+
+    #[test]
+    fn test_buffer_between_back_to_back_sessions() {
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 24, 14, 0, 0).unwrap();
+        // 4 hours would fit two 2h games back to back, but not with the buffer
+        let output = schedule_games(&input_for(
+            vec![game(1, 2, &["a"], 2), game(2, 1, &["a"], 2)],
+            all_day_voters(&["a"]),
+            start,
+            end,
+            vec![],
+        ));
+        assert_eq!(output.suggested_schedules.len(), 1);
+        assert_eq!(output.suggested_schedules[0].game_id, 1);
+    }
+
+    #[test]
+    fn test_never_runs_past_one_am() {
+        // Starting at 23:30 would end at 01:30 – not allowed
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 23, 30, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 25, 12, 0, 0).unwrap();
+        let output = schedule_games(&input_for(
+            vec![game(1, 1, &["a"], 2)],
+            all_day_voters(&["a"]),
+            start,
+            end,
+            vec![],
+        ));
+        assert_eq!(output.suggested_schedules.len(), 1);
+        assert_eq!(
+            output.suggested_schedules[0].start_time,
+            Utc.with_ymd_and_hms(2024, 11, 25, 10, 0, 0).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_overlaps_night() {
+        let at = |d, h, m| Utc.with_ymd_and_hms(2024, 11, d, h, m, 0).unwrap();
+        assert!(
+            !overlaps_night(at(24, 23, 0), at(25, 1, 0)),
+            "ends at 01:00"
+        );
+        assert!(overlaps_night(at(24, 23, 30), at(25, 1, 30)), "ends 01:30");
+        assert!(
+            !overlaps_night(at(25, 10, 0), at(25, 12, 0)),
+            "starts 10:00"
+        );
+        assert!(
+            overlaps_night(at(25, 9, 30), at(25, 11, 30)),
+            "starts 09:30"
+        );
+        assert!(
+            overlaps_night(at(25, 0, 0), at(25, 12, 0)),
+            "spans the night"
+        );
+        assert!(!overlaps_night(at(24, 12, 0), at(24, 23, 0)), "afternoon");
     }
 }

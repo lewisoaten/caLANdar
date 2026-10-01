@@ -8,10 +8,16 @@ import {
   afterEach,
 } from "vitest";
 import type { ContextType } from "react";
-import { render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import SeatOccupancyAdmin from "../components/SeatOccupancyAdmin";
 import { UserContext, UserDispatchContext } from "../UserProvider";
@@ -172,6 +178,63 @@ describe("SeatOccupancyAdmin", () => {
     expect(
       await screen.findByRole("dialog", { name: "Move to a different seat" }),
     ).toBeInTheDocument();
+  });
+
+  it("clears an assignment once, however often Confirm is clicked", async () => {
+    useData();
+    let deletes = 0;
+    server.use(
+      http.delete("/api/events/1/seat-reservations/:email", async () => {
+        deletes += 1;
+        await delay(50);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+    const u = userEvent.setup();
+    renderComponent();
+    await u.click(
+      await screen.findByRole("button", {
+        name: "Clear seat assignment for nia@example.com",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Clear seat assignment?",
+    });
+    const confirm = within(dialog).getByRole("button", {
+      name: "Clear assignment",
+    });
+    // Rapid clicks, before the dialog can re-render as busy.
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(deletes).toBe(1);
+  });
+
+  it("does not offer 'no seat' in the move dialog when it isn't allowed", async () => {
+    useData();
+    server.use(
+      http.get("/api/events/1/seating-config", () =>
+        HttpResponse.json({ ...config(true), allowUnspecifiedSeat: false }),
+      ),
+    );
+    const u = userEvent.setup();
+    renderComponent();
+    await u.click(
+      await screen.findByRole("button", {
+        name: "Move nia@example.com to different seat",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Move to a different seat",
+    });
+    await u.click(within(dialog).getByRole("combobox", { name: "New seat" }));
+    expect(await screen.findAllByRole("option")).not.toHaveLength(0);
+    expect(
+      screen.queryByRole("option", { name: "Bring my own desk" }),
+    ).not.toBeInTheDocument();
   });
 
   it("explains when seating is off", async () => {

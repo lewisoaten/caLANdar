@@ -37,34 +37,3 @@ export const defaultGameScheduleRequest: GameScheduleRequest = {
   startTime: moment(),
   durationMinutes: 120,
 };
-
-// Helper function to convert GameScheduleEntry to react-big-calendar event format
-export interface CalendarEvent {
-  id: number;
-  title: string;
-  start: Date;
-  end: Date;
-  resource: GameScheduleEntry;
-}
-
-export function toCalendarEvent(entry: GameScheduleEntry): CalendarEvent {
-  const start = entry.startTime.toDate();
-  const end = entry.startTime
-    .clone()
-    .add(entry.durationMinutes, "minutes")
-    .toDate();
-
-  return {
-    id: entry.id,
-    title: entry.gameName,
-    start,
-    end,
-    resource: entry,
-  };
-}
-
-export function toCalendarEvents(
-  entries: GameScheduleEntry[],
-): CalendarEvent[] {
-  return entries.map(toCalendarEvent);
-}

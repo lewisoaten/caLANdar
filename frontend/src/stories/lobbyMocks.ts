@@ -62,9 +62,43 @@ function lite(
     response,
     attendance,
     seatId,
+    // The viewer in every lobby story is ProGamer123.
+    isSelf: handle === "ProGamer123",
+    // Dan_the_Man is floating (reservation without a desk).
+    hasSeatReservation: seatId !== null || handle === "Dan_the_Man",
     lastModified: iso(base - DAY),
   };
 }
+
+/** What the user squad list returns: only yes/maybe guests, as the API does. */
+const squadList = (
+  eventId: number,
+  response: LobbyMockOptions["response"],
+  seatId: LobbyMockOptions["seatId"],
+) =>
+  squad(eventId)
+    .map((a) =>
+      a.isSelf
+        ? {
+            ...a,
+            response: response ?? null,
+            seatId: seatId ?? null,
+            hasSeatReservation: seatId !== undefined,
+          }
+        : a,
+    )
+    .filter((a) => a.response === "yes" || a.response === "maybe");
+
+const rsvpCounts = (
+  eventId: number,
+  response: LobbyMockOptions["response"],
+) => {
+  const all = squad(eventId).map((a) =>
+    a.isSelf ? { ...a, response: response ?? null } : a,
+  );
+  const n = (r: string | null) => all.filter((a) => a.response === r).length;
+  return { yes: n("yes"), maybe: n("maybe"), no: n("no"), pending: n(null) };
+};
 
 const gamer = (handle: string) => ({ handle, avatarUrl: null });
 const G = [
@@ -214,7 +248,8 @@ export function mockLobbyApi(eventId: number, opts: LobbyMockOptions = {}) {
     [`PATCH ${p}/invitations/:email`]: () => mockResponse(204, undefined),
     [`GET ${p}/invitations`]: failLists
       ? () => mockResponse(500, { error: { code: 500 } })
-      : squad(eventId).filter((a) => response || a.handle !== "ProGamer123"),
+      : squadList(eventId, response, seatId),
+    [`GET ${p}/rsvp_counts`]: rsvpCounts(eventId, response),
     [`GET ${p}/suggested_games`]: failLists
       ? () => mockResponse(500, { error: { code: 500 } })
       : suggestions(),

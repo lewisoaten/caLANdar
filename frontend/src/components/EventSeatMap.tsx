@@ -47,11 +47,50 @@ import {
   type FloorPlanSeat,
 } from "./seatFloorPlanModel";
 import { useSeatReservation } from "./useSeatReservation";
+import { displayCallsign } from "../utils/callsign";
 
 const isGoing = (r: RSVP | null | undefined) =>
   r === RSVP.yes || r === RSVP.maybe;
 
-const displayName = (inv: { handle: string | null }) => inv.handle || "Someone";
+const displayName = (inv: { handle: string | null }) =>
+  displayCallsign(inv.handle);
+
+/**
+ * An attendee row from `GET /events/{id}/invitations`. Newer APIs mark the
+ * viewer's own row (`isSelf`) and say whether a guest holds any reservation,
+ * floating included (`hasSeatReservation`); both are optional so an older API
+ * still works (we then fall back to matching by avatar / handle).
+ */
+export type SeatMapInvitation = InvitationLiteData & {
+  isSelf?: boolean;
+  hasSeatReservation?: boolean;
+};
+
+/**
+ * Whether `inv` is the signed-in user: the server's `isSelf` marker when
+ * present, else their (email-derived) avatar, else handle + seat.
+ */
+export function isOwnInvitation(
+  inv: SeatMapInvitation,
+  mine: InvitationData | null,
+  mySeatId: number | null,
+): boolean {
+  if (typeof inv.isSelf === "boolean") return inv.isSelf;
+  if (!mine || !isGoing(mine.response)) return false;
+  if (mine.avatarUrl && inv.avatarUrl) return inv.avatarUrl === mine.avatarUrl;
+  return (
+    Boolean(inv.handle) && inv.handle === mine.handle && inv.seatId === mySeatId
+  );
+}
+
+/** Everything the seat map loads for one event, set in one go. */
+interface SeatMapData {
+  eventId: number;
+  event: EventData;
+  seatingConfig: EventSeatingConfig;
+  rooms: FloorPlanRoom[];
+  seats: FloorPlanSeat[];
+}
 
 interface DeskInfo extends FloorPlanDesk {
   seat: FloorPlanSeat;
@@ -106,29 +145,45 @@ const EventSeatMap: React.FC = () => {
   const { id: eventIdParam } = useParams<{ id: string }>();
   const eventId = eventIdParam ? Number(eventIdParam) : undefined;
 
-  const [event, setEvent] = useState<EventData | null>(null);
-  const [rooms, setRooms] = useState<FloorPlanRoom[]>([]);
-  const [seats, setSeats] = useState<FloorPlanSeat[]>([]);
-  const [seatingConfig, setSeatingConfig] = useState<EventSeatingConfig | null>(
-    null,
+  // Data for one event at a time: a response for a previous event (after
+  // switching events) is dropped rather than shown under the new one.
+  const [data, setData] = useState<SeatMapData | null>(null);
+  const [invitationsFor, setInvitationsFor] = useState<{
+    eventId: number;
+    list: SeatMapInvitation[];
+  } | null>(null);
+  const [fetchError, setFetchError] = useState<{
+    eventId: number;
+    message: string;
+  } | null>(null);
+  const [reload, setReload] = useState(0);
+  const current = eventId !== undefined && data?.eventId === eventId;
+  const event = current ? data.event : null;
+  const seatingConfig = current ? data.seatingConfig : null;
+  const rooms = useMemo(() => (current ? data.rooms : []), [current, data]);
+  const seats = useMemo(() => (current ? data.seats : []), [current, data]);
+  const invitations = useMemo(
+    () =>
+      eventId !== undefined && invitationsFor?.eventId === eventId
+        ? invitationsFor.list
+        : [],
+    [eventId, invitationsFor],
   );
-  const [invitations, setInvitations] = useState<InvitationLiteData[]>([]);
-  const [myInvitation, setMyInvitation] = useState<InvitationData | null>(null);
-  // Which event the loaded data (and any error) belongs to.
-  const [loadedFor, setLoadedFor] = useState<number | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const dataLoaded = eventId !== undefined && loadedFor === eventId;
+  const error =
+    fetchError && fetchError.eventId === eventId ? fetchError.message : null;
+  const dataLoaded = current || error !== null;
   const [activeRoomId, setActiveRoomId] = useState<number | null>(null);
   const [selectedSeatId, setSelectedSeatId] = useState<number | null>(null);
 
   const getJson = useCallback(
-    async <T,>(url: string, what: string): Promise<T> => {
+    async <T,>(url: string, what: string, signal?: AbortSignal): Promise<T> => {
       const response = await fetch(url, {
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
           Authorization: "Bearer " + token,
         },
+        signal,
       });
       if (response.status === 401) {
         signOut();
@@ -140,77 +195,107 @@ const EventSeatMap: React.FC = () => {
     [token, signOut],
   );
 
-  const fetchInvitations = useCallback(() => {
-    if (!eventId || !token) return Promise.resolve();
-    return getJson<InvitationLiteData[]>(
-      `/api/events/${eventId}/invitations`,
-      "invitations",
-    ).then((data) => setInvitations(data ?? []));
-  }, [eventId, token, getJson]);
+  const fetchInvitations = useCallback(
+    (signal?: AbortSignal) => {
+      if (!eventId || !token) return Promise.resolve();
+      return getJson<SeatMapInvitation[]>(
+        `/api/events/${eventId}/invitations`,
+        "invitations",
+        signal,
+      ).then((list) => {
+        if (!signal?.aborted) setInvitationsFor({ eventId, list: list ?? [] });
+      });
+    },
+    [eventId, token, getJson],
+  );
 
   // Load all data
   useEffect(() => {
     if (!eventId || !token) return;
+    const controller = new AbortController();
+    const { signal } = controller;
     const base = `/api/events/${eventId}`;
     Promise.all([
-      getJson<EventData>(base, "event").then(setEvent),
+      getJson<EventData>(base, "event", signal),
       getJson<EventSeatingConfig>(
         `${base}/seating-config`,
         "seating config",
-      ).then(setSeatingConfig),
-      getJson<FloorPlanRoom[]>(`${base}/rooms`, "rooms").then((data) =>
-        setRooms(data ?? []),
+        signal,
       ),
-      getJson<FloorPlanSeat[]>(`${base}/seats`, "seats").then((data) =>
-        setSeats(data ?? []),
-      ),
-      fetchInvitations(),
+      getJson<FloorPlanRoom[]>(`${base}/rooms`, "rooms", signal),
+      getJson<FloorPlanSeat[]>(`${base}/seats`, "seats", signal),
+      fetchInvitations(signal),
     ])
-      .then(() => {
+      .then(([event, seatingConfig, rooms, seats]) => {
+        if (signal.aborted) return;
         setFetchError(null);
-        setLoadedFor(eventId);
+        setData({
+          eventId,
+          event,
+          seatingConfig,
+          rooms: rooms ?? [],
+          seats: seats ?? [],
+        });
       })
       .catch((error) => {
+        if (signal.aborted) return;
         console.error("Error loading data:", error);
-        setFetchError(
-          "Failed to load seat map data. Please try refreshing the page.",
-        );
-        setLoadedFor(eventId);
+        setFetchError({
+          eventId,
+          message:
+            "Couldn't load the seat map. Check your connection and try again.",
+        });
       });
-  }, [eventId, token, getJson, fetchInvitations]);
+    return () => controller.abort();
+  }, [eventId, token, getJson, fetchInvitations, reload]);
+
+  // Room and pick belong to one event: reset them when it changes.
+  const [pickFor, setPickFor] = useState(eventId);
+  if (pickFor !== eventId) {
+    setPickFor(eventId);
+    setActiveRoomId(null);
+    setSelectedSeatId(null);
+  }
 
   // The signed-in user's own invitation: RSVP, attendance, avatar.
-  const [myInvitationLoaded, setMyInvitationLoaded] = useState(false);
+  const [mine, setMine] = useState<{
+    eventId: number;
+    invitation: InvitationData | null;
+  } | null>(null);
   useEffect(() => {
     if (!eventId || !token || !email) return;
-    let cancelled = false;
+    const controller = new AbortController();
     fetch(`/api/events/${eventId}/invitations/${encodeURIComponent(email)}`, {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: "Bearer " + token,
       },
+      signal: controller.signal,
     })
-      .then((response) =>
-        response.ok
+      .then((response) => {
+        if (response.status === 401) {
+          signOut();
+          return null;
+        }
+        return response.ok
           ? response
               .text()
               .then((data) => JSON.parse(data, dateParser) as InvitationData)
-          : null,
-      )
-      .then((data) => {
-        if (!cancelled) setMyInvitation(data);
+          : null;
+      })
+      .then((invitation) => {
+        if (!controller.signal.aborted) setMine({ eventId, invitation });
       })
       .catch((error) => {
+        if (controller.signal.aborted) return;
         console.error("Error fetching your invitation:", error);
-      })
-      .finally(() => {
-        if (!cancelled) setMyInvitationLoaded(true);
+        setMine({ eventId, invitation: null });
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId, token, email]);
+    return () => controller.abort();
+  }, [eventId, token, email, signOut]);
+  const myInvitationLoaded = mine !== null && mine.eventId === eventId;
+  const myInvitation = myInvitationLoaded ? mine.invitation : null;
 
   const going = isGoing(myInvitation?.response);
   const attendanceBuckets = useMemo(
@@ -232,6 +317,8 @@ const EventSeatMap: React.FC = () => {
     reservation,
     loaded: reservationLoaded,
     availableSeatIds,
+    availabilityError,
+    retryAvailability,
     saving,
     reserve,
     release,
@@ -249,20 +336,9 @@ const EventSeatMap: React.FC = () => {
 
   const canPick = going && hasTimes && availableSeatIds !== null;
 
-  // The attendee list has no emails: recognise yourself by your (email-derived)
-  // avatar, or by handle and seat when there is no avatar.
   const isMe = useCallback(
-    (inv: InvitationLiteData) => {
-      if (!myInvitation || !isGoing(myInvitation.response)) return false;
-      if (myInvitation.avatarUrl && inv.avatarUrl) {
-        return inv.avatarUrl === myInvitation.avatarUrl;
-      }
-      return (
-        Boolean(inv.handle) &&
-        inv.handle === myInvitation.handle &&
-        inv.seatId === (reservation?.seatId ?? null)
-      );
-    },
+    (inv: SeatMapInvitation) =>
+      isOwnInvitation(inv, myInvitation, reservation?.seatId ?? null),
     [myInvitation, reservation],
   );
 
@@ -411,12 +487,24 @@ const EventSeatMap: React.FC = () => {
     );
   }
 
-  if (fetchError) {
+  if (error) {
     return (
       <>
         {header()}
-        <Alert severity="error" role="alert">
-          {fetchError}
+        <Alert
+          severity="error"
+          role="alert"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => setReload((r) => r + 1)}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {error}
         </Alert>
       </>
     );
@@ -476,8 +564,9 @@ const EventSeatMap: React.FC = () => {
     (inv) =>
       inv.seatId === null &&
       isGoing(inv.response) &&
-      // You only count as "own desk" once you've actually reserved it.
-      !(isMe(inv) && !reservation),
+      // Only guests who actually reserved the floating seat count; with an
+      // older API (no `hasSeatReservation`) we can only tell for yourself.
+      (inv.hasSeatReservation ?? !(isMe(inv) && !reservation)),
   );
 
   const tabs = (
@@ -486,8 +575,10 @@ const EventSeatMap: React.FC = () => {
       aria-label="Rooms"
       sx={{
         display: "flex",
+        // Many rooms wrap onto more rows instead of widening the page (1.4.10).
+        flexWrap: "wrap",
         maxWidth: "100%",
-        overflowX: "auto",
+        minWidth: 0,
         border: `1px solid ${hairline.control}`,
         backgroundColor: "rgba(12,15,24,0.8)",
       }}
@@ -511,7 +602,9 @@ const EventSeatMap: React.FC = () => {
             onClick={() => switchRoom(room.id)}
             onKeyDown={(e: React.KeyboardEvent) => onTabKeyDown(e, i)}
             sx={{
-              flex: "none",
+              // Grow to fill a wrapped row; never shrink below the label.
+              flex: "1 0 auto",
+              justifyContent: "center",
               minHeight: 44,
               px: "18px",
               border: 0,
@@ -527,7 +620,9 @@ const EventSeatMap: React.FC = () => {
               display: "flex",
               alignItems: "center",
               gap: 1,
-              whiteSpace: "nowrap",
+              maxWidth: "100%",
+              textAlign: "center",
+              overflowWrap: "anywhere",
               "&:hover": on ? {} : { color: colors.text },
               "&:focus-visible": {
                 outline: `2px solid ${colors.cyan}`,
@@ -539,7 +634,12 @@ const EventSeatMap: React.FC = () => {
             {room.name}
             <Box
               component="span"
-              sx={{ fontFamily: fonts.mono, fontSize: 11, opacity: 0.85 }}
+              sx={{
+                fontFamily: fonts.mono,
+                fontSize: 11,
+                opacity: 0.85,
+                whiteSpace: "nowrap",
+              }}
             >
               {freeCount(room.id)} FREE
             </Box>
@@ -647,7 +747,11 @@ const EventSeatMap: React.FC = () => {
   } else {
     kicker = "NO SEAT YET";
     title = "Pick a desk";
-    sub = "Tap any free desk on the plan to select it.";
+    sub = availabilityError
+      ? "Desks can be picked once we know which are free for your times."
+      : availableSeatIds === null
+        ? "Checking which desks are free for your times…"
+        : "Tap any free desk on the plan to select it.";
   }
 
   const showOwnDesk =
@@ -811,6 +915,23 @@ const EventSeatMap: React.FC = () => {
                 {sub}
               </Typography>
             </Box>
+            {availabilityError && (
+              <Alert
+                severity="error"
+                role="alert"
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={retryAvailability}
+                  >
+                    Retry
+                  </Button>
+                }
+              >
+                {availabilityError}
+              </Alert>
+            )}
             {actions.length > 0 && (
               <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
                 {actions}
@@ -878,6 +999,9 @@ const EventSeatMap: React.FC = () => {
                             key={i}
                             sx={{
                               display: "flex",
+                              // Attendance pips drop below a long name rather
+                              // than squeezing it into mid-word breaks.
+                              flexWrap: "wrap",
                               alignItems: "center",
                               gap: 1.25,
                               minWidth: 0,
@@ -893,9 +1017,7 @@ const EventSeatMap: React.FC = () => {
                               sx={{
                                 fontSize: 14,
                                 color: colors.text,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                overflowWrap: "anywhere",
                                 minWidth: 0,
                               }}
                             >
@@ -968,9 +1090,7 @@ const EventSeatMap: React.FC = () => {
                           minWidth: 0,
                           fontSize: 14,
                           color: colors.text,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
+                          overflowWrap: "anywhere",
                         }}
                       >
                         {displayName(inv)}

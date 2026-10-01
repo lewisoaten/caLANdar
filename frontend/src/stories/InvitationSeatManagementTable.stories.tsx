@@ -128,7 +128,7 @@ const seats = (id: number) => [
 const reservation = (
   id: number,
   resId: number,
-  seatId: number,
+  seatId: number | null,
   email: string,
   attendanceBuckets: number[],
 ) => ({
@@ -170,6 +170,8 @@ const reservationsFor = (id: number) => [
     "pete.pixel@example.com",
     [0, 0, 1, 1, 1, 0, 0, 0],
   ),
+  // Floating: shown with the event's configured "no desk" label.
+  reservation(id, 5, null, "laglord@example.com", [0, 0, 0, 1, 1, 0, 0, 0]),
 ];
 
 // Other events offered by the "pre-fill from another event" picker.
@@ -208,8 +210,8 @@ const otherEvents = {
 const seatingConfig = (id: number, hasSeating: boolean) => ({
   eventId: id,
   hasSeating,
-  allowUnspecifiedSeat: false,
-  unspecifiedSeatLabel: "Unspecified Seat",
+  allowUnspecifiedSeat: hasSeating,
+  unspecifiedSeatLabel: "Floating / no desk",
   createdAt: "2026-09-02T10:00:00",
   lastModified: "2026-09-02T10:00:00",
 });

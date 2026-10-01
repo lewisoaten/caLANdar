@@ -373,6 +373,11 @@ pub struct InvitationsResponseLite {
     pub response: Option<InvitationResponse>,
     pub attendance: Option<Vec<u8>>,
     pub seat_id: Option<i32>,
+    /// True on the viewer's own row, so clients needn't match by handle.
+    pub is_self: bool,
+    /// True when the guest holds a seat reservation, including a floating
+    /// (unspecified) one, which `seat_id: null` alone can't distinguish.
+    pub has_seat_reservation: bool,
     pub last_modified: DateTime<Utc>,
 }
 
@@ -400,11 +405,14 @@ pub async fn get_all_user(
             i.response AS "response: _",
             i.attendance,
             sr.seat_id,
+            LOWER(i.email) = LOWER($2) AS "is_self!",
+            (sr.id IS NOT NULL) AS "has_seat_reservation!",
             i.last_modified
         FROM invitation i
         LEFT JOIN seat_reservation sr ON i.event_id = sr.event_id AND i.email = sr.invitation_email
         WHERE i.event_id=$1 AND i.response IN ('yes', 'maybe')"#,
         event_id,
+        user.email,
     )
     .fetch_all(pool.inner())
     .await
@@ -418,6 +426,39 @@ pub async fn get_all_user(
     };
 
     Ok(Json(invitations))
+}
+
+/// How many guests gave each RSVP answer. Counts only, so guests can see how
+/// many are out (or yet to reply) without learning who.
+#[derive(Serialize, JsonSchema, Debug, PartialEq, Eq)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct RsvpCounts {
+    pub yes: i64,
+    pub maybe: i64,
+    pub no: i64,
+    /// Invited but not yet responded.
+    pub pending: i64,
+}
+
+custom_errors!(RsvpCountsError, Forbidden, InternalServerError);
+
+/// RSVP totals for an event, for any invited guest.
+#[openapi(tag = "Event Invitations")]
+#[get("/events/<event_id>/rsvp_counts", format = "json")]
+pub async fn get_rsvp_counts(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<RsvpCounts>, RsvpCountsError> {
+    match ensure_user_invited(pool.inner(), event_id, &user.email).await {
+        Err(Error::NotPermitted(e)) => return Err(RsvpCountsError::Forbidden(e)),
+        Err(e) => return Err(RsvpCountsError::InternalServerError(e.to_string())),
+        Ok(()) => {}
+    }
+    event_invitation::rsvp_counts(pool.inner(), event_id)
+        .await
+        .map(Json)
+        .map_err(|e| RsvpCountsError::InternalServerError(e.to_string()))
 }
 
 #[openapi(tag = "Event Invitations")]
