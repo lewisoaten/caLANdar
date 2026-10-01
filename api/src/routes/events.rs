@@ -15,7 +15,7 @@ use rocket_okapi::okapi::schemars::JsonSchema;
 use rocket_okapi::openapi;
 use sqlx::postgres::PgPool;
 
-use super::SchemaExample;
+use super::{event_invitations::InvitationResponse, SchemaExample};
 
 /// The response for the `GET /events` endpoint.
 #[derive(Clone, Serialize, JsonSchema, Hash, Eq, PartialEq)]
@@ -87,11 +87,21 @@ impl SchemaExample for EventSubmit {
     }
 }
 
+/// An event on the user's own list: the event plus the caller's RSVP.
+#[derive(Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct UserEvent {
+    #[serde(flatten)]
+    pub event: Event,
+    /// The caller's own RSVP: "yes" | "maybe" | "no", or null if not yet responded.
+    pub my_response: Option<InvitationResponse>,
+}
+
 /// The response for paginated events
 #[derive(Clone, Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct PaginatedEventsResponse {
-    pub events: Vec<Event>,
+    pub events: Vec<UserEvent>,
     pub total: i64,
     pub page: i64,
     pub limit: i64,
@@ -194,7 +204,8 @@ pub async fn get_all(
     }
 }
 
-/// Return all events the user is invited to.
+/// Return all events the user is invited to, each with the caller's own RSVP
+/// (`myResponse`: "yes" | "maybe" | "no" | null).
 /// Supports pagination via query parameters.
 /// - page: Page number (default: 1, must be >= 1)
 /// - limit: Items per page (default: 20, range: 1-100)
@@ -236,14 +247,14 @@ pub async fn get_all_user(
 
             // Apply filter
             let now = chrono::Utc::now();
-            let filtered_events: Vec<Event> = match event_filter {
+            let filtered_events: Vec<UserEvent> = match event_filter {
                 EventFilter::Upcoming => all_events
                     .into_iter()
-                    .filter(|e| e.time_end > now)
+                    .filter(|e| e.event.time_end > now)
                     .collect(),
                 EventFilter::Past => all_events
                     .into_iter()
-                    .filter(|e| e.time_end <= now)
+                    .filter(|e| e.event.time_end <= now)
                     .collect(),
                 EventFilter::All => all_events,
             };

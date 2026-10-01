@@ -40,19 +40,25 @@ pub struct EventGames {
 
 custom_errors!(EventGameError, Unauthorized, InternalServerError);
 
+/// Games owned by the event's attending (yes/maybe) gamers, most-owned first.
+/// - `page`: 0-based page (default 0); `count`: page size (default 10)
+/// - `search`: optional case-insensitive substring of the game name
 #[openapi(tag = "Event Games")]
-#[get("/events/<event_id>/games?<page>&<count>", format = "json")]
+#[get("/events/<event_id>/games?<page>&<count>&<search>", format = "json")]
 pub async fn get_all(
     event_id: i32,
     pool: &State<PgPool>,
     page: Option<i64>,
     count: Option<i64>,
+    search: Option<String>,
 ) -> Result<Json<EventGames>, EventGameError> {
-    let page = page.unwrap_or(0);
-    let count = count.unwrap_or(10);
+    let page = page.unwrap_or(0).max(0);
+    // Guard the page-count division in the controller against `count=0`.
+    let count = count.unwrap_or(10).max(1);
+    let search = crate::util::non_blank(search);
 
     // Return all games
-    match game_suggestion::get_all_event_games(pool, event_id, count, page).await {
+    match game_suggestion::get_all_event_games(pool, event_id, count, page, search).await {
         Ok(game_suggestions) => Ok(Json(game_suggestions)),
         Err(Error::NotPermitted(e)) => Err(EventGameError::Unauthorized(e)),
         Err(e) => Err(EventGameError::InternalServerError(format!(

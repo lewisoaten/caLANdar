@@ -5,8 +5,12 @@ use base64::{engine::general_purpose, Engine as _};
 use crate::{
     controllers::Error,
     repositories::{event, invitation},
-    routes::events::{
-        AdminEvent, AdminPaginatedEventsResponse, Event, EventStatusCounts, EventSubmit, RsvpTotals,
+    routes::{
+        event_invitations::InvitationResponse,
+        events::{
+            AdminEvent, AdminPaginatedEventsResponse, Event, EventStatusCounts, EventSubmit,
+            RsvpTotals, UserEvent,
+        },
     },
 };
 
@@ -78,37 +82,20 @@ pub async fn get_all_admin(
     }
 }
 
-pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<Event>, Error> {
-    let invitation_filter_values = invitation::Filter {
-        event_id: None,
-        email: Some(user_email),
-    };
-
-    let invitations: Vec<i32> = match invitation::filter(pool, invitation_filter_values).await {
-        Ok(invitations) => {
-            // Return list of event IDs
-            invitations
-                .into_iter()
-                .map(|invitation| invitation.event_id)
-                .collect()
-        }
-        Err(e) => {
-            return Err(Error::Controller(format!(
-                "Unable to get user's invitations due to: {e}"
-            )))
-        }
-    };
-
-    // Build new EventFilter
-    let event_filter_values = event::Filter {
-        ids: Some(invitations),
-    };
-    // Return all events
-    match event::filter(pool, event_filter_values).await {
-        Ok(events) => {
-            // Convert vector of Event structs to vector of EventsGetResponse structs
-            Ok(events.into_iter().map(Event::from).collect())
-        }
+/// All events the user is invited to, each with the user's own RSVP.
+pub async fn get_all_user(pool: &PgPool, user_email: String) -> Result<Vec<UserEvent>, Error> {
+    match event::index_for_user(pool, &user_email).await {
+        Ok(events) => Ok(events
+            .into_iter()
+            .map(|e| UserEvent {
+                event: Event::from(e.event),
+                my_response: e.my_response.map(|r| match r {
+                    invitation::Response::Yes => InvitationResponse::Yes,
+                    invitation::Response::Maybe => InvitationResponse::Maybe,
+                    invitation::Response::No => InvitationResponse::No,
+                }),
+            })
+            .collect()),
         Err(e) => Err(Error::Controller(format!(
             "Unable to get users's events due to: {e}"
         ))),

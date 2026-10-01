@@ -91,6 +91,53 @@ pub async fn index(pool: &PgPool) -> Result<Vec<Event>, sqlx::Error> {
     .await
 }
 
+/// An event the user is invited to, with their own RSVP.
+pub struct UserEvent {
+    pub event: Event,
+    pub my_response: Option<crate::repositories::invitation::Response>,
+}
+
+/// All events `email` is invited to, with the caller's RSVP, in one query.
+pub async fn index_for_user(pool: &PgPool, email: &str) -> Result<Vec<UserEvent>, sqlx::Error> {
+    let rows = sqlx::query!(
+        r#"
+        SELECT
+            e.id,
+            e.created_at,
+            e.last_modified,
+            e.title,
+            e.description,
+            e.image,
+            e.time_begin,
+            e.time_end,
+            i.response AS "my_response: crate::repositories::invitation::Response"
+        FROM event e
+        INNER JOIN invitation i ON i.event_id = e.id
+        WHERE LOWER(i.email) = LOWER($1)
+        "#,
+        email
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| UserEvent {
+            event: Event {
+                id: r.id,
+                created_at: r.created_at,
+                last_modified: r.last_modified,
+                title: r.title,
+                description: r.description,
+                image: r.image,
+                time_begin: r.time_begin,
+                time_end: r.time_end,
+            },
+            my_response: r.my_response,
+        })
+        .collect())
+}
+
 pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<Event>, sqlx::Error> {
     let ids = filter
         .ids

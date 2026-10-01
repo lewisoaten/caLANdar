@@ -95,6 +95,7 @@ pub async fn get_all_event_games(
     event_id: i32,
     count: i64,
     page: i64,
+    search: Option<String>,
 ) -> Result<EventGames, Error> {
     let invitations = match invitation::filter(
         pool,
@@ -144,6 +145,7 @@ pub async fn get_all_event_games(
         emails: Some(emails.clone()),
         count,
         page,
+        search,
     };
 
     let event_games = match user_games::filter(pool, user_games_filter_values.clone()).await {
@@ -450,6 +452,7 @@ async fn add_owners_to_game(
             emails: Some(attending_emails.clone()),
             count: 1000, // Large enough to handle events with many attendees
             page: 0,
+            search: None,
         },
     )
     .await

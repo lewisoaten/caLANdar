@@ -102,12 +102,16 @@ pub struct AuditLogsQueryParams {
 
 custom_errors!(AuditLogsGetError, Unauthorized, InternalServerError);
 
+const DEFAULT_LIMIT: i64 = 50;
+const MAX_LIMIT: i64 = 100;
+
 /// Get audit logs (admin only)
 ///
 /// - `user_id`: exact user email (case-insensitive)
 /// - `user_search`: case-insensitive substring of the user email
 /// - `entity_type`: exact entity type; `entity_types`: comma-separated list of entity types
-/// - `action`, `from_timestamp` / `to_timestamp` (RFC 3339), `limit` (default 50), `offset`
+/// - `action`, `from_timestamp` / `to_timestamp` (RFC 3339), `limit` (default 50,
+///   clamped to 1..=100), `offset` (negative treated as 0)
 #[allow(clippy::too_many_arguments)]
 #[openapi(tag = "Audit")]
 #[get("/audit-logs?<user_id>&<user_search>&<entity_type>&<entity_types>&<action>&<from_timestamp>&<to_timestamp>&<limit>&<offset>&<_as_admin>")]
@@ -136,6 +140,9 @@ pub async fn get_audit_logs(
         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
         .map(|dt| dt.with_timezone(&Utc));
 
+    let limit = limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let offset = offset.unwrap_or(0).max(0);
+
     let filter = AuditLogFilter {
         user_id,
         user_search: crate::util::non_blank(user_search),
@@ -144,16 +151,16 @@ pub async fn get_audit_logs(
         action,
         from_timestamp: from_ts,
         to_timestamp: to_ts,
-        limit,
-        offset,
+        limit: Some(limit),
+        offset: Some(offset),
     };
 
     match audit_log::get_logs(pool, filter).await {
         Ok(result) => Ok(Json(AuditLogsResponse {
             logs: result.logs.into_iter().map(AuditLogEntry::from).collect(),
             total_count: result.total_count,
-            limit: limit.unwrap_or(50),
-            offset: offset.unwrap_or(0),
+            limit,
+            offset,
         })),
         Err(e) => Err(AuditLogsGetError::InternalServerError(format!(
             "Error retrieving audit logs: {e}"

@@ -246,6 +246,30 @@ pub async fn reservers_by_event<'e, E: sqlx::PgExecutor<'e>>(
     .await
 }
 
+/// Row-lock the given seats and any reservations on them for the rest of the
+/// transaction. Holding `FOR UPDATE` on the seat rows blocks concurrent
+/// inserts/updates of `seat_reservation` that reference them (their foreign
+/// key check needs `FOR KEY SHARE`), so a subsequent read of reservers is
+/// race-free until commit.
+pub async fn lock_for_removal(
+    tx: &mut sqlx::PgConnection,
+    seat_ids: &[i32],
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "SELECT id FROM seat WHERE id = ANY($1) ORDER BY id FOR UPDATE",
+        seat_ids
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "SELECT id FROM seat_reservation WHERE seat_id = ANY($1) ORDER BY id FOR UPDATE",
+        seat_ids
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    Ok(())
+}
+
 /// Move reservations off the given seats (the attendee keeps their RSVP and
 /// attendance but has to pick another seat).
 pub async fn release_reservations<'e, E: sqlx::PgExecutor<'e>>(

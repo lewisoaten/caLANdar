@@ -15,8 +15,18 @@ pub enum SteamIdInput {
     Vanity(String),
 }
 
+/// Lowest individual-account `SteamID64` (universe Public, type Individual,
+/// instance Desktop, account number 0).
+const STEAM_ID64_MIN: i64 = 76_561_197_960_265_728;
+/// Highest individual-account `SteamID64` (32-bit account number exhausted).
+const STEAM_ID64_MAX: i64 = STEAM_ID64_MIN + u32::MAX as i64;
+
 fn is_steam_id64(value: &str) -> bool {
-    value.len() == 17 && value.bytes().all(|b| b.is_ascii_digit())
+    value.len() == 17
+        && value.bytes().all(|b| b.is_ascii_digit())
+        && value
+            .parse::<i64>()
+            .is_ok_and(|id| (STEAM_ID64_MIN..=STEAM_ID64_MAX).contains(&id))
 }
 
 /// Parse a 17-digit `SteamID64` or a `steamcommunity.com/id|profiles/...` URL.
@@ -84,9 +94,16 @@ async fn resolve_steam_id(input: &str, steam_api_key: &String) -> Result<i64, Er
                 Ok(None) => Err(Error::BadInput(format!(
                     "No Steam profile found for custom URL \"{vanity}\""
                 ))),
-                Err(e) => Err(Error::Controller(format!(
-                    "Unable to resolve Steam custom URL due to: {e}"
-                ))),
+                Err(e) => {
+                    // Detail stays server-side; the URL (with API key) is stripped.
+                    log::error!(
+                        "Unable to resolve Steam custom URL {vanity}: {}",
+                        e.without_url()
+                    );
+                    Err(Error::Controller(
+                        "Unable to resolve Steam custom URL; Steam may be unavailable".to_string(),
+                    ))
+                }
             }
         }
     }
@@ -111,7 +128,10 @@ impl From<crate::repositories::profile::Profile> for Profile {
 
 impl From<reqwest::Error> for Error {
     fn from(error: reqwest::Error) -> Self {
-        Error::Controller(format!("Request error: {error}"))
+        // reqwest errors embed the request URL, which carries the Steam API
+        // key: log the detail (URL stripped) and return a generic message.
+        log::error!("Steam API request failed: {}", error.without_url());
+        Error::Controller("Steam API request failed".to_string())
     }
 }
 
@@ -349,6 +369,16 @@ mod tests {
     }
 
     #[test]
+    fn accepts_steam_id64_range_bounds() {
+        for (input, id) in [
+            ("76561197960265728", 76_561_197_960_265_728),
+            ("76561202255233023", 76_561_202_255_233_023),
+        ] {
+            assert_eq!(parse_steam_id_input(input), Ok(SteamIdInput::Id(id)));
+        }
+    }
+
+    #[test]
     fn accepts_vanity_urls() {
         assert_eq!(
             parse_steam_id_input("https://steamcommunity.com/id/the_last-anomaly/"),
@@ -371,6 +401,11 @@ mod tests {
             "https://steamcommunity.com.evil.example/id/foo",
             "https://steamcommunity.com/id/foo?x=1",
             "https://steamcommunity.com/id/f%20oo",
+            "00000000000000000",
+            "76561197960265727",
+            "76561202255233024",
+            "99999999999999999",
+            "https://steamcommunity.com/profiles/00000000000000000",
         ] {
             assert!(
                 parse_steam_id_input(bad).is_err(),

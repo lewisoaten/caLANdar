@@ -246,6 +246,15 @@ pub async fn save_layout(
         .await
         .map_err(|e| Error::Controller(format!("Unable to start transaction: {e}")))?;
 
+    // Lock the seats being removed (and their reservations) first, so no
+    // reservation can be made or moved onto them between the check below and
+    // the delete (which would otherwise cascade it away silently).
+    if !removed_seats.is_empty() {
+        seat::lock_for_removal(&mut tx, &removed_seats)
+            .await
+            .map_err(|e| Error::Controller(format!("Unable to lock seats due to: {e}")))?;
+    }
+
     // Checked inside the transaction so a reservation made meanwhile is not lost silently.
     let affected: Vec<seat::SeatReserver> = seat::reservers_by_event(&mut *tx, event_id)
         .await

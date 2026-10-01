@@ -125,6 +125,7 @@ pub async fn get_all(pool: &PgPool) -> Result<Vec<Gamer>, Error> {
                     appid: None,
                     count: 9999,
                     page: 0,
+                    search: None,
                 };
                 match user_games::filter(pool, filter).await {
                     Ok(user_games) => {

@@ -15,6 +15,8 @@ pub struct Filter {
     pub emails: Option<Vec<String>>,
     pub count: i64,
     pub page: i64,
+    /// Optional case-insensitive substring of the game name (wildcards escaped).
+    pub search: Option<String>,
 }
 
 pub async fn create(
@@ -43,6 +45,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<UserGame>, sqlx
         || (vec![], true),
         |emails| (emails.iter().map(|s| s.to_lowercase()).collect(), false),
     );
+    let pattern = filter.search.as_deref().map(crate::util::like_pattern);
 
     sqlx::query_as!(
         UserGame,
@@ -57,6 +60,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<UserGame>, sqlx
         INNER JOIN steam_game USING(appid)
         WHERE (appid = $1 OR $2)
         AND (LOWER(email) = ANY($3) OR $4)
+        AND ($7::text IS NULL OR name ILIKE $7)
         GROUP BY
             appid,
             name
@@ -72,6 +76,7 @@ pub async fn filter(pool: &PgPool, filter: Filter) -> Result<Vec<UserGame>, sqlx
         emails.1,
         filter.count,
         filter.page * filter.count,
+        pattern,
     )
     .fetch_all(pool)
     .await
@@ -83,6 +88,7 @@ pub async fn count(pool: &PgPool, filter: Filter) -> Result<Option<i64>, sqlx::E
         || (vec![], true),
         |emails| (emails.iter().map(|s| s.to_lowercase()).collect(), false),
     );
+    let pattern = filter.search.as_deref().map(crate::util::like_pattern);
 
     sqlx::query_scalar!(
         r#"
@@ -93,6 +99,7 @@ pub async fn count(pool: &PgPool, filter: Filter) -> Result<Option<i64>, sqlx::E
                 INNER JOIN steam_game USING(appid)
                 WHERE (appid = $1 OR $2)
                 AND (LOWER(email) = ANY($3) OR $4)
+                AND ($5::text IS NULL OR name ILIKE $5)
                 GROUP BY
                     appid,
                     name
@@ -105,6 +112,7 @@ pub async fn count(pool: &PgPool, filter: Filter) -> Result<Option<i64>, sqlx::E
         appid.1,
         &emails.0[..],
         emails.1,
+        pattern,
     )
     .fetch_one(pool)
     .await

@@ -195,6 +195,7 @@ pub async fn set_background(
     content_type: &str,
     data: &[u8],
 ) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query!(
         r#"
         INSERT INTO room_background (room_id, token, content_type, data)
@@ -210,28 +211,29 @@ pub async fn set_background(
         content_type,
         data,
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
     sqlx::query!(
         "UPDATE room SET last_modified = NOW() WHERE id = $1",
         room_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(())
+    tx.commit().await
 }
 
 pub async fn delete_background(pool: &PgPool, room_id: i32) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
     sqlx::query!("DELETE FROM room_background WHERE room_id = $1", room_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     sqlx::query!(
         "UPDATE room SET last_modified = NOW() WHERE id = $1",
         room_id
     )
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
-    Ok(())
+    tx.commit().await
 }
 
 pub struct Background {

@@ -70,6 +70,8 @@ pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, St
                     let response_text = match response.text().await {
                         Ok(text) => text,
                         Err(e) => {
+                            // `without_url` keeps the API key out of logs and errors.
+                            let e = e.without_url();
                             log::error!("Failed to read response body: {e}");
 
                             if attempts < MAX_RETRIES {
@@ -122,6 +124,7 @@ pub async fn get_app_list(steam_api_key: &String) -> Result<Vec<SteamAPIApp>, St
                     }
                 }
                 Err(e) => {
+                    let e = e.without_url();
                     log::error!("Network error requesting Steam API: {e}");
 
                     if attempts < MAX_RETRIES {
@@ -198,17 +201,15 @@ pub async fn get_owned_games(
         "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={steam_api_key}&steamid={steam_id}&include_played_free_games={include_played_free_games}&include_free_sub={include_free_sub}",
     );
 
-    log::info!("Requesting owned games from steam API using url: {request_url}");
+    log::info!("Requesting owned games from Steam API for {steam_id}");
 
-    let response = match reqwest::get(&request_url).await {
-        Ok(response) => response,
-        Err(e) => return Err(e),
-    };
-
-    match response.json().await {
-        Ok(owned_games) => Ok(owned_games),
-        Err(e) => Err(e),
-    }
+    // The request URL carries the API key; strip it from any error.
+    reqwest::get(&request_url)
+        .await
+        .map_err(reqwest::Error::without_url)?
+        .json()
+        .await
+        .map_err(reqwest::Error::without_url)
 }
 
 #[derive(Clone, Deserialize)]
@@ -304,11 +305,14 @@ pub async fn get_current_game(
         "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={steam_id}",
     );
 
-    log::info!("Requesting current game from steam API using url: {request_url}");
+    log::info!("Requesting current game from Steam API for {steam_id}");
 
-    let response = reqwest::get(&request_url).await?;
+    let response = reqwest::get(&request_url)
+        .await
+        .map_err(reqwest::Error::without_url)?;
 
-    let player_summaries: PlayerSummaries = response.json().await?;
+    let player_summaries: PlayerSummaries =
+        response.json().await.map_err(reqwest::Error::without_url)?;
 
     Ok(player_summaries.response.players[0].gameid.clone())
 }
@@ -338,7 +342,12 @@ pub async fn resolve_vanity_url(
 
     log::info!("Resolving Steam vanity URL {vanity}");
 
-    let resolved: ResolveVanityUrl = reqwest::get(&request_url).await?.json().await?;
+    let resolved: ResolveVanityUrl = reqwest::get(&request_url)
+        .await
+        .map_err(reqwest::Error::without_url)?
+        .json()
+        .await
+        .map_err(reqwest::Error::without_url)?;
 
     Ok(if resolved.response.success == 1 {
         resolved.response.steamid
