@@ -9,8 +9,7 @@
   "extraFonts": ["fonts/montserrat.css"],
   "titleMap": {
     "Button": null,
-    "Header": null,
-    "RoomManager": "RoomManagerPanel"
+    "Header": null
   },
   "provider": {
     "component": "ThemeProvider",
