@@ -218,8 +218,13 @@ describe("EventSeatMap", () => {
     expect(who).toBeInTheDocument();
     expect(screen.getAllByText("NoScope_Nia").length).toBeGreaterThan(0);
     // Attendees without a seat are listed under the own-seat label.
+    const own = screen
+      .getByRole("heading", { name: "Bring my own seat · 1" })
+      .closest("section")!;
+    expect(within(own).getByText("CasualGamer")).toBeInTheDocument();
+    // ...and, like the seated guests, show when they will be there.
     expect(
-      screen.getByRole("heading", { name: "Bring my own seat · 1" }),
+      within(own).getByRole("img", { name: /^Attending: / }),
     ).toBeInTheDocument();
   });
 

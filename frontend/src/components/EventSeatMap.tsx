@@ -1115,7 +1115,13 @@ const EventSeatMap: React.FC = () => {
                 </Kicker>
                 <Box component="ul" sx={{ listStyle: "none", m: 0, p: 0 }}>
                   {unspecifiedInvitations.map((inv, i) => (
-                    <Box component="li" key={i} sx={listRowSx}>
+                    <Box
+                      component="li"
+                      key={i}
+                      // Attendance pips drop below a long name, as in the
+                      // seated list above.
+                      sx={{ ...listRowSx, flexWrap: "wrap" }}
+                    >
                       <UserAvatar
                         name={displayName(inv)}
                         src={inv.avatarUrl}
@@ -1139,6 +1145,11 @@ const EventSeatMap: React.FC = () => {
                           MAYBE
                         </Tag>
                       )}
+                      <AttendancePips
+                        attendance={inv.attendance}
+                        response={inv.response}
+                        event={event}
+                      />
                     </Box>
                   ))}
                 </Box>
