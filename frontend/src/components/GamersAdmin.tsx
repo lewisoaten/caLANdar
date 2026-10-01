@@ -322,6 +322,7 @@ function GamerCard({ gamer, now, onEdit, onRefreshed }: GamerCardProps) {
               aria-label={`Refresh games for ${gamer.email}`}
               onClick={refreshGames}
               disabled={refreshing || !linked}
+              aria-busy={refreshing || undefined}
               sx={{
                 color: colors.textMuted,
                 "&:hover": { color: colors.cyan },
@@ -331,7 +332,7 @@ function GamerCard({ gamer, now, onEdit, onRefreshed }: GamerCardProps) {
                 <CircularProgress
                   size={18}
                   color="inherit"
-                  aria-label="Refreshing games"
+                  aria-hidden="true"
                 />
               ) : (
                 <SyncSharp sx={{ fontSize: 18 }} />

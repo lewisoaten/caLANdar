@@ -218,12 +218,17 @@ describe("GamersAdmin", () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
     let email: unknown = null;
+    let asAdmin: string | null = null;
     server.use(
-      http.post("/api/profile/:email/games/update", async ({ params }) => {
-        email = params.email;
-        await gate;
-        return HttpResponse.json({});
-      }),
+      http.post(
+        "/api/profile/:email/games/update",
+        async ({ params, request }) => {
+          email = params.email;
+          asAdmin = new URL(request.url).searchParams.get("as_admin");
+          await gate;
+          return HttpResponse.json({});
+        },
+      ),
     );
     renderAsAdmin(<GamersAdmin />);
     const button = await screen.findByRole("button", {
@@ -231,10 +236,12 @@ describe("GamersAdmin", () => {
     });
     await userEvent.click(button);
     await waitFor(() => expect(button).toBeDisabled());
-    expect(screen.getByLabelText("Refreshing games")).toBeInTheDocument();
+    expect(button).toHaveAttribute("aria-busy", "true");
     release();
     await waitFor(() => expect(button).toBeEnabled());
     expect(email).toBe("nia@example.com");
+    expect(asAdmin).toBe("true");
+    expect(button).not.toHaveAttribute("aria-busy");
     expect(
       await screen.findByText("Games refreshed for nia@example.com"),
     ).toBeInTheDocument();
