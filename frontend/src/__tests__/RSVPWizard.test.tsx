@@ -63,7 +63,7 @@ const server = setupServer(
   }),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: "warn" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "warn" }));
 beforeEach(() => {
   localStorage.clear();
   // UserProvider restores the session from "user_context"; storing it under
