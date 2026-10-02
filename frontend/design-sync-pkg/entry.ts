@@ -8,7 +8,10 @@ export { default as EventTable } from "../src/components/EventTable";
 export { default as EventsAdmin } from "../src/components/EventsAdmin";
 export { default as EventsAdminDialog } from "../src/components/EventsAdminDialog";
 export { default as MenuItems } from "../src/components/MenuItems";
-export { default as RefreshGamesButton } from "../src/components/RefreshGamesButton";
+export {
+  default as RefreshGamesButton,
+  SteamGameCacheCard,
+} from "../src/components/RefreshGamesButton";
 export { default as SignIn } from "../src/components/SignIn";
 export { default as VerifyEmail } from "../src/components/VerifyEmail";
 
@@ -29,12 +32,67 @@ export { default as EventSeatMap } from "../src/components/EventSeatMap";
 export { default as EventSeatingConfig } from "../src/components/EventSeatingConfig";
 export { default as EventSelection } from "../src/components/EventSelection";
 export { default as RoomEditor } from "../src/components/RoomEditor/RoomEditor";
-export { default as GameOwners } from "../src/components/GameOwners";
+export { default as GameOwners, OwnerChips } from "../src/components/GameOwners";
 export { default as GameScheduleDetails } from "../src/components/GameScheduleDetails";
 export { default as GamersAdmin } from "../src/components/GamersAdmin";
 export { default as GamesList } from "../src/components/GamesList";
 export { default as InvitationSeatManagementTable } from "../src/components/InvitationSeatManagementTable";
 export { default as SendEmailDialog } from "../src/components/SendEmailDialog";
+// HyperLAN redesign: design-system primitives, shell/page components, and the
+// providers the Storybook decorator mounts (explicit names so they win over
+// the MUI star export below, e.g. `colors`).
+export {
+  hl,
+  colors,
+  tint,
+  hairline,
+  fonts,
+  effects,
+  sectionGap,
+  BackgroundFx,
+  BackgroundFxProvider,
+  useBackgroundFx,
+  BrandMark,
+  Panel,
+  Kicker,
+  PageHeader,
+  Tag,
+  StatCell,
+  StatGrid,
+  UserAvatar,
+  HlPagination,
+  FilterChips,
+  SearchField,
+  EmptyState,
+  Countdown,
+  Trophy,
+  HlSnackbarProvider,
+} from "../src/components/hl";
+export {
+  default as ActivityTicker,
+  ActivityTickerView,
+} from "../src/components/ActivityTicker";
+export { AuthHeroArt } from "../src/components/auth/AuthHeroArt";
+export { default as GameCoverImage } from "../src/components/GameCoverImage";
+export {
+  default as SeatFloorPlan,
+  FloorPlanLegend,
+} from "../src/components/SeatFloorPlan";
+export { default as SeatOccupancyAdmin } from "../src/components/SeatOccupancyAdmin";
+export { default as Event } from "../src/components/Event";
+export { default as EventGames } from "../src/components/EventGames";
+export { default as WizardSeatSelector } from "../src/components/RSVPWizard/WizardSeatSelector";
+// Cover-art state shared between GameCoverImage and its stories (they mark
+// header URLs as failed at import time; two bundled copies wouldn't share it).
+export {
+  steamHeaderUrl,
+  markLegacyHeaderFailed,
+  legacyHeaderFailed,
+  resolvedCover,
+  markResolvedCoverFailed,
+  resolveCover,
+  resetGameCoverCache,
+} from "../src/utils/gameCover";
 // One shared copy of MUI + react-router for components, providers and stories
 // (context identity). `Link` exists in both; the ambiguous name is dropped.
 export * from "@mui/material";

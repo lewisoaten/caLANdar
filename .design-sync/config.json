@@ -6,10 +6,11 @@
   "pkg": "calandar",
   "globalName": "CaLANdar",
   "buildCmd": "sh frontend/design-sync-pkg/build-types.sh",
-  "extraFonts": ["fonts/montserrat.css"],
   "titleMap": {
     "Button": null,
-    "Header": null
+    "Header": null,
+    "Eventlobby": "Event",
+    "Theme": null
   },
   "provider": {
     "component": "ThemeProvider",
@@ -21,16 +22,16 @@
     "inner": {
       "component": "CssBaseline",
       "inner": {
-        "component": "SnackbarProvider",
-        "inner": {
-          "component": "MemoryRouter"
-        }
+        "component": "HlSnackbarProvider"
       }
     }
   },
   "overrides": {
     "VerifyEmail": {
-      "skip": ["components-verifyemail--with-token"]
+      "skip": [
+        "components-verifyemail--with-token"
+      ],
+      "viewport": "1400x900"
     },
     "Dashboard": {
       "cardMode": "single",
@@ -51,7 +52,9 @@
         "components-rsvpwizard--new-rsvp",
         "components-rsvpwizard--edit-existing-yes",
         "components-rsvpwizard--edit-existing-maybe",
-        "components-rsvpwizard--edit-existing-no"
+        "components-rsvpwizard--edit-existing-no",
+        "components-rsvpwizard--no-seating",
+        "components-rsvpwizard--seat-conflict"
       ]
     },
     "SeatSelector": {
@@ -72,7 +75,9 @@
       ]
     },
     "EventGameSuggestions": {
-      "skip": ["example-eventgamesuggestions--default"]
+      "skip": [
+        "example-eventgamesuggestions--default"
+      ]
     },
     "EventAttendeeList": {
       "cardMode": "column"
@@ -82,7 +87,8 @@
     },
     "EventGameSchedule": {
       "cardMode": "single",
-      "primaryStory": "PopulatedAdmin"
+      "primaryStory": "PopulatedAdmin",
+      "viewport": "1280x1600"
     },
     "SendEmailDialog": {
       "skip": [
@@ -94,19 +100,138 @@
       "primaryStory": "Open"
     },
     "GameOwners": {
-      "skip": ["components-gameowners--no-owners-hidden"]
+      "skip": [
+        "components-gameowners--no-owners-hidden"
+      ]
     },
     "AuditLog": {
       "skip": [
         "components-auditlog--filtered-by-entity-type",
         "components-auditlog--filtered-by-user",
-        "components-auditlog--no-results"
+        "components-auditlog--no-results",
+        "components-auditlog--all-time"
+      ],
+      "viewport": "1100x1200"
+    },
+    "EventSeatMap": {
+      "cardMode": "column",
+      "viewport": "1280x1000"
+    },
+    "GamersAdmin": {
+      "cardMode": "column",
+      "skip": [
+        "components-gamersadmin--search-by-callsign",
+        "components-gamersadmin--stale-libraries",
+        "components-gamersadmin--no-results",
+        "components-gamersadmin--refresh-cache",
+        "components-gamersadmin--refreshing",
+        "components-gamersadmin--refresh-fails",
+        "components-gamersadmin--edit-steam-id"
+      ],
+      "viewport": "1280x1600"
+    },
+    "GamesList": {
+      "cardMode": "column",
+      "viewport": "1280x1800"
+    },
+    "Account": {
+      "cardMode": "single",
+      "primaryStory": "InShell",
+      "viewport": "1280x1400"
+    },
+    "EventsAdmin": {
+      "cardMode": "single",
+      "primaryStory": "InShell",
+      "skip": [
+        "components-eventsadmin--new-event-open",
+        "components-eventsadmin--drafts-only",
+        "components-eventsadmin--no-matches"
+      ],
+      "viewport": "1600x1000"
+    },
+    "EventGames": {
+      "cardMode": "single",
+      "primaryStory": "InShell",
+      "viewport": "1600x1400"
+    },
+    "Event": {
+      "cardMode": "single",
+      "primaryStory": "Lobby",
+      "viewport": "1600x1400"
+    },
+    "GameCoverImage": {
+      "cardMode": "column"
+    },
+    "HlPagination": {
+      "cardMode": "column"
+    },
+    "PageHeader": {
+      "cardMode": "column"
+    },
+    "EventSelection": {
+      "skip": [
+        "components-eventselection--all-events",
+        "components-eventselection--past-events",
+        "components-eventselection--loading",
+        "components-eventselection--empty",
+        "components-eventselection--load-error"
+      ]
+    },
+    "InvitationSeatManagementTable": {
+      "skip": [
+        "components-invitationseatmanagementtable--send-invitations-dialog-open",
+        "components-invitationseatmanagementtable--remove-confirm"
+      ],
+      "viewport": "1280x1200"
+    },
+    "EventManagement": {
+      "skip": [
+        "components-eventmanagement--delete-confirm"
+      ],
+      "viewport": "1280x1400",
+      "cardMode": "single",
+      "primaryStory": "InShell"
+    },
+    "Countdown": {
+      "skip": [
+        "hyperlan-countdown--done"
+      ]
+    },
+    "RoomEditor": {
+      "viewport": "1280x1400"
+    },
+    "SeatOccupancyAdmin": {
+      "viewport": "1280x1200"
+    },
+    "WizardSeatSelector": {
+      "viewport": "1280x1400"
+    },
+    "SignIn": {
+      "viewport": "1280x1000",
+      "skip": [
+        "components-signin--link-sent",
+        "components-signin--invalid-email"
+      ]
+    },
+    "GameScheduleDetails": {
+      "viewport": "900x1100"
+    },
+    "RefreshGamesButton": {
+      "skip": [
+        "components-refreshgamesbutton--cache-card",
+        "components-refreshgamesbutton--cache-card-refreshed",
+        "components-refreshgamesbutton--cache-card-error"
       ]
     }
   },
   "storyImports": {
-    "shim": ["react-router-dom", "@mui/material"]
+    "shim": [
+      "react-router-dom",
+      "@mui/material"
+    ]
   },
   "readmeHeader": ".design-sync/conventions.md",
-  "cssEntry": "dist/frontend.css"
+  "libOverrides": {
+    "preview-gen-storybook.mjs": "Wrap each story like .storybook/preview.tsx: BackgroundFxProvider + MemoryRouter unless parameters.router===false; merge meta+story parameters"
+  }
 }
