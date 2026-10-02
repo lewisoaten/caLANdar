@@ -2,7 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import moment from "moment";
 import { Box } from "@mui/material";
 import EventsAdminDialog from "../components/EventsAdminDialog";
-import { withUser } from "./mockApi";
+import { stubImages, withUser } from "./mockApi";
+
+stubImages();
 
 const event = {
   id: 501,

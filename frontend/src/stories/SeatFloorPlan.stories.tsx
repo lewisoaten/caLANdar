@@ -15,6 +15,9 @@ import {
   roomPhoto,
   stamp,
 } from "./seatMapFixtures";
+import { stubImages } from "./mockApi";
+
+stubImages();
 
 const seats = designSeats(1);
 const hall = seats.filter((s) => s.roomId === 1);

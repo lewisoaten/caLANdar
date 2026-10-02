@@ -106,6 +106,12 @@ const isStale = (g: MockGamer) =>
 const time = (v: string | null) => (v ? Date.parse(v) : -Infinity);
 
 mockApi({
+  // Same response as the MSW `statsHandler` below, so static previews (no MSW)
+  // show the cache banner too.
+  "GET /api/steam-game-update-v2/stats": () => ({
+    gamesCached: 48213,
+    lastRefreshed: ago(72),
+  }),
   "GET /api/gamers": (req: MockRequest) => {
     const page = Number(req.query.get("page") ?? "1");
     const limit = Number(req.query.get("limit") ?? "20");

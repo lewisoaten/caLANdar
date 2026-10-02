@@ -7,7 +7,15 @@ import Dashboard from "../components/Dashboard";
 import { sectionGap } from "../components/hl";
 import { atPath, mockShellApi } from "./shellMocks";
 import { getAttendanceBucketCount } from "../utils/attendanceBuckets";
-import { mockApi, mockResponse, withRoute, withUser } from "./mockApi";
+import {
+  mockApi,
+  mockResponse,
+  stubImages,
+  withRoute,
+  withUser,
+} from "./mockApi";
+
+stubImages();
 
 const meta = {
   title: "Components/EventManagement",

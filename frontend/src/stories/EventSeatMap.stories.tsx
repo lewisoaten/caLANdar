@@ -11,10 +11,13 @@ import { designSeats, gamesRoom, mainHall, roomPhoto } from "./seatMapFixtures";
 import {
   mockApi,
   mockResponse,
+  stubImages,
   withRoute,
   withUser,
   type MockRequest,
 } from "./mockApi";
+
+stubImages();
 
 const ME = "sam@example.com";
 

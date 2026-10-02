@@ -8,7 +8,15 @@ import type {
   ApiReservedBy,
   LayoutSubmit,
 } from "../components/RoomEditor/layout";
-import { mockApi, mockResponse, withRoute, withUser } from "./mockApi";
+import {
+  mockApi,
+  stubImages,
+  mockResponse,
+  withRoute,
+  withUser,
+} from "./mockApi";
+
+stubImages();
 
 const svgUri = (svg: string) =>
   `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;

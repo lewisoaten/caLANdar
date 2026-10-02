@@ -4,7 +4,9 @@ import * as React from "react";
 import Box from "@mui/material/Box";
 import WizardSeatSelector from "../components/RSVPWizard/WizardSeatSelector";
 import { RSVP, type InvitationLiteData } from "../types/invitations";
-import { mockApi, withUser } from "./mockApi";
+import { mockApi, stubImages, withUser } from "./mockApi";
+
+stubImages();
 import {
   designSeats,
   gamesRoom,

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import SeatOccupancyAdmin from "../components/SeatOccupancyAdmin";
-import { mockApi, mockResponse, withUser } from "./mockApi";
+import { mockApi, stubImages, mockResponse, withUser } from "./mockApi";
+
+stubImages();
 
 const STAMP = "2026-09-01T10:00:00Z";
 
