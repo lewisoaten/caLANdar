@@ -32,7 +32,10 @@ export { default as EventSeatMap } from "../src/components/EventSeatMap";
 export { default as EventSeatingConfig } from "../src/components/EventSeatingConfig";
 export { default as EventSelection } from "../src/components/EventSelection";
 export { default as RoomEditor } from "../src/components/RoomEditor/RoomEditor";
-export { default as GameOwners, OwnerChips } from "../src/components/GameOwners";
+export {
+  default as GameOwners,
+  OwnerChips,
+} from "../src/components/GameOwners";
 export { default as GameScheduleDetails } from "../src/components/GameScheduleDetails";
 export { default as GamersAdmin } from "../src/components/GamersAdmin";
 export { default as GamesList } from "../src/components/GamesList";

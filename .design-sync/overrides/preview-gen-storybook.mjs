@@ -17,8 +17,8 @@
 // re-syncs leave them alone. Fork seam: resolution policy lives in
 // lib/story-imports.mjs.
 
-import { relative } from 'node:path';
-import { exportName } from '../../.ds-sync/lib/common.mjs';
+import { relative } from "node:path";
+import { exportName } from "../../.ds-sync/lib/common.mjs";
 
 // The composeStories-equivalent embedded in every wrapper. Storybook
 // semantics, minimally: merged args (meta <- story), render precedence
@@ -88,7 +88,9 @@ export function generatePreviewSource(c, opts) {
   const paired = visible.filter((s) => s.exportKey);
   if (!c.storySrc || paired.length === 0) {
     if (c.storySrc && visible.length > 0) {
-      console.error(`  (preview: ${c.name} \u2014 no story exports paired (storyName overrides?); showing the floor card)`);
+      console.error(
+        `  (preview: ${c.name} \u2014 no story exports paired (storyName overrides?); showing the floor card)`,
+      );
     }
     return null;
   }
@@ -101,12 +103,13 @@ export function generatePreviewSource(c, opts) {
   // story module, in first-paired order; S is the first (and for
   // single-module components the only) one.
   const toSpec = (p) => {
-    const rel = relative(process.cwd(), p).replace(/\\/g, '/');
-    return JSON.stringify(`@ds-stories/${rel}`.replace(/\.[cm]?[jt]sx?$/, ''));
+    const rel = relative(process.cwd(), p).replace(/\\/g, "/");
+    return JSON.stringify(`@ds-stories/${rel}`.replace(/\.[cm]?[jt]sx?$/, ""));
   };
   const modVars = new Map(); // story source path -> import identifier
   const modVarFor = (p) => {
-    if (!modVars.has(p)) modVars.set(p, modVars.size === 0 ? 'S' : `S${modVars.size + 1}`);
+    if (!modVars.has(p))
+      modVars.set(p, modVars.size === 0 ? "S" : `S${modVars.size + 1}`);
     return modVars.get(p);
   };
   // Emitted export names are PascalCased via exportName (the html mount loop
@@ -126,22 +129,26 @@ export function generatePreviewSource(c, opts) {
     const mod = modVarFor(s.storySrc ?? c.storySrc);
     const dupKey = `${mod}:${s.exportKey}`;
     if (seen.has(dupKey)) {
-      console.error(`  (preview: ${c.name} \u2014 story "${s.name}" pairs to already-emitted export ${s.exportKey}; skipping duplicate)`);
+      console.error(
+        `  (preview: ${c.name} \u2014 story "${s.name}" pairs to already-emitted export ${s.exportKey}; skipping duplicate)`,
+      );
       continue;
     }
     seen.add(dupKey);
     const label = exportName(s.exportKey, used);
     s.emitted = label;
-    lines.push(`export const ${label} = /* ${s.name} */ compose(${mod}, ${JSON.stringify(s.exportKey)});`);
+    lines.push(
+      `export const ${label} = /* ${s.name} */ compose(${mod}, ${JSON.stringify(s.exportKey)});`,
+    );
   }
   const imports = [...modVars.entries()]
     .map(([p, v]) => `import * as ${v} from ${toSpec(p)};`)
-    .join('\n');
+    .join("\n");
   return `import * as React from 'react';
 ${imports}
 
 ${COMPOSE}
 
-${lines.join('\n')}
+${lines.join("\n")}
 `;
 }

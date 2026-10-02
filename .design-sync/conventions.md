@@ -7,16 +7,46 @@ caLANdar uses the **HyperLAN** look: a dark HUD UI built on **MUI v7** plus a sm
 Without `ThemeProvider` components render unstyled (white/Roboto); without a Router, components that call `useNavigate`/`useLocation` throw "may be used only in the context of a <Router>". `HlSnackbarProvider` styles toasts. Add `BackgroundFxProvider` + `<BackgroundFx />` only if you want the grid/glow backdrop.
 
 ```jsx
-const { theme, ThemeProvider, CssBaseline, HlSnackbarProvider, MemoryRouter,
-  Box, Panel, PageHeader, Tag, StatCell, StatGrid, EventCard } = window.CaLANdar;
+const {
+  theme,
+  ThemeProvider,
+  CssBaseline,
+  HlSnackbarProvider,
+  MemoryRouter,
+  Box,
+  Panel,
+  PageHeader,
+  Tag,
+  StatCell,
+  StatGrid,
+  EventCard,
+} = window.CaLANdar;
 
 <ThemeProvider theme={theme}>
   <CssBaseline />
   <HlSnackbarProvider>
     <MemoryRouter>
-      <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: "clamp(18px,2.4vw,28px)" }}>
-        <PageHeader kicker="Squad library" title="Games" description="What the squad owns." />
-        <Panel title="Squad" actions={<Tag tone="lime" dot>Live</Tag>}>
+      <Box
+        sx={{
+          p: 3,
+          display: "flex",
+          flexDirection: "column",
+          gap: "clamp(18px,2.4vw,28px)",
+        }}
+      >
+        <PageHeader
+          kicker="Squad library"
+          title="Games"
+          description="What the squad owns."
+        />
+        <Panel
+          title="Squad"
+          actions={
+            <Tag tone="lime" dot>
+              Live
+            </Tag>
+          }
+        >
           <StatGrid columns={2}>
             <StatCell value="6" label="Going" tone="lime" />
             <StatCell value="2" label="Maybe" tone="amber" />
