@@ -25,7 +25,7 @@ const server = setupServer(
   }),
 );
 
-beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
+beforeAll(() => server.listen({ onUnhandledFrame: "bypass" }));
 beforeEach(() => {
   // Clear localStorage before each test to ensure clean state
   localStorage.clear();

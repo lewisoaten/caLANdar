@@ -19,7 +19,9 @@ const startWorker = async () => {
   const worker = setupWorker();
   await worker.start({
     quiet: true,
-    onUnhandledRequest: ({ url, method }) => {
+    onUnhandledFrame: ({ frame }) => {
+      if (frame.protocol !== "http") return;
+      const { url, method } = frame.data.request as Request;
       const pathname = new URL(url).pathname;
       if (pathname.startsWith("/api")) {
         console.error(`Unhandled ${method} request to ${url}.
