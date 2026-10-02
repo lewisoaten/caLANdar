@@ -11,6 +11,7 @@
 - `Button`/`Header` (Storybook boilerplate) and `HyperLAN/Theme` (docs only) are excluded via `titleMap: null`.
 - `src/stories/mockApi.tsx`: stories use a page-level fetch fake (not MSW, which can't run in static previews). `stubImages()` swaps Steam covers / the default banner (`/static/lan_party_image.jpg`, a storybook staticDirs asset the preview doesn't serve) for SVGs and forces `loading=lazy` images eager. **Every story that renders images must call `stubImages()` at module level**, or (a) the default banner is a broken image in the preview and (b) `compare.mjs`'s `settleRender` waits forever on a lazy image that never decodes - the 2026-10 sync hung for 13 h on EventSeatMap this way. Check a new image-bearing story by loading its preview and calling `img.decode()` on every `document.images` with a timeout.
 - Run the driver under `timeout 7200` so a stall can't go unnoticed.
+- [GENERAL] **Don't let prettier (or any formatter) touch `.design-sync/overrides/` or `.design-sync/previews/`.** The converter hashes forks and owned previews byte-for-byte into every preview's grade key, so reformatting `overrides/preview-gen-storybook.mjs` (whitespace and quotes only) cleared all 48 grades and flagged every component as changed. Both folders are in `.prettierignore` for this reason. If a sync reports every component changed with an unchanged bundle, diff those two folders against the commit you last synced from and restore the bytes rather than re-grading.
 
 ## Capture viewport (full-page components)
 
