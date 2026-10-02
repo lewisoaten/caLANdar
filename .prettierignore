@@ -1,2 +1,7 @@
 api/.sqlx/*
 frontend/public/mockServiceWorker.js
+
+# design-sync hashes these byte-for-byte to decide which previews need re-verifying;
+# reformatting them would invalidate every grade, so leave them as authored.
+.design-sync/overrides/
+.design-sync/previews/
