@@ -76,8 +76,8 @@ const STATS_URL = "/api/steam-game-update-v2/stats?as_admin=true";
 
 /** How often to ask the server whether the refresh has finished. */
 const POLL_MS = 3_000;
-/** Give up waiting (the server presumes a refresh dead after 30 minutes). */
-const POLL_LIMIT_MS = 10 * 60_000;
+/** Give up waiting once the server itself presumes a refresh dead. */
+const POLL_LIMIT_MS = 30 * 60_000;
 
 /**
  * Admin action: refresh the server's Steam game cache. The POST

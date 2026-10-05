@@ -271,7 +271,9 @@ cloudrun-deploy image_url:
 
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	# --no-cpu-throttling: the Steam cache refresh keeps running in the background
-	# after its request has returned, which request-based CPU would starve.
+	# after its request has returned, which request-based CPU would starve. This
+	# bills for instance time rather than per request; if that becomes costly, move
+	# the refresh to a Cloud Run Job.
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
 		--region "${GCP_REGION}" \

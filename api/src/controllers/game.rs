@@ -65,6 +65,9 @@ pub const REFRESH_STEAM_UNAVAILABLE: &str =
 pub const REFRESH_SAVE_FAILED: &str =
     "Couldn't save the Steam game list. Some games may not have been updated; try again.";
 
+/// Shown to admins when the refresh status can't be read.
+pub const REFRESH_STATUS_FAILED: &str = "Couldn't check the Steam game cache refresh status.";
+
 /// Log `detail` and return a controller error carrying only `message`.
 fn refresh_failed(message: &str, detail: impl Display) -> Error {
     log::error!("Steam game cache refresh failed: {detail}");
@@ -170,9 +173,12 @@ pub struct RefreshStatus {
 }
 
 pub async fn refresh_status(pool: &PgPool) -> Result<RefreshStatus, Error> {
-    let latest = game_update::latest(pool)
-        .await
-        .map_err(|e| Error::Controller(format!("Unable to get Steam refresh status: {e}")))?;
+    let latest = game_update::latest(pool).await.map_err(|e| {
+        refresh_failed(
+            REFRESH_STATUS_FAILED,
+            format!("reading refresh status: {e}"),
+        )
+    })?;
     Ok(match latest {
         None => RefreshStatus {
             running: false,

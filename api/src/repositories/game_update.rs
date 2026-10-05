@@ -87,3 +87,33 @@ impl Latest {
             && Utc::now() - self.update_time < chrono::Duration::minutes(STALE_AFTER_MINUTES.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Latest, STALE_AFTER_MINUTES};
+    use chrono::{Duration, Utc};
+
+    fn latest(age_minutes: i64, completed: bool, error: Option<&str>) -> Latest {
+        let update_time = Utc::now() - Duration::minutes(age_minutes);
+        Latest {
+            update_time,
+            completed_at: completed.then_some(update_time),
+            games_added: None,
+            error: error.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn running_until_it_is_stale() {
+        let stale = i64::from(STALE_AFTER_MINUTES);
+        assert!(latest(0, false, None).is_running());
+        assert!(latest(stale - 1, false, None).is_running());
+        assert!(!latest(stale + 1, false, None).is_running());
+    }
+
+    #[test]
+    fn finished_or_failed_is_not_running() {
+        assert!(!latest(1, true, None).is_running());
+        assert!(!latest(1, false, Some("boom")).is_running());
+    }
+}
