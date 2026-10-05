@@ -9,7 +9,7 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::{game, game_update, steam_api},
+    repositories::{cloud_run_job, game, game_update, steam_api},
     routes::games::SteamGameResponse,
 };
 
@@ -80,9 +80,18 @@ fn steam_unavailable(detail: impl Display) -> Error {
     Error::Upstream(REFRESH_STEAM_UNAVAILABLE.to_string())
 }
 
-/// Begin a refresh in the background. Returns `false` if one is already
-/// running. The work outlives the request (Netlify's proxy gives up on
-/// requests after ~26s); poll [`refresh_status`] for the outcome.
+/// Env var naming the Cloud Run Job (`projects/<p>/locations/<r>/jobs/<name>`)
+/// that performs refreshes. Unset (local development), they run in-process.
+pub const REFRESH_JOB_ENV: &str = "STEAM_REFRESH_JOB";
+
+/// Shown to admins when the refresh couldn't be started.
+pub const REFRESH_START_FAILED: &str = "Couldn't start the Steam game cache refresh. Try again.";
+
+/// Begin a refresh without waiting for it. Returns `false` if one is already
+/// running. A full refresh outlasts Netlify's ~26s proxy timeout, and a
+/// background task in the service would need CPU kept allocated between
+/// requests, so on Cloud Run it runs as a Cloud Run Job (billed only while it
+/// runs). Poll [`refresh_status`] for the outcome.
 pub async fn start_update(
     pool: &PgPool,
     steam_api_key: &str,
@@ -94,37 +103,72 @@ pub async fn start_update(
     else {
         return Ok(false);
     };
+    let update_id = steam_game_update.id;
+
+    if let Ok(job) = std::env::var(REFRESH_JOB_ENV) {
+        let env = [
+            (REFRESH_UPDATE_ID_ENV, update_id.to_string()),
+            (REFRESH_STARTED_BY_ENV, started_by),
+        ];
+        if let Err(e) = cloud_run_job::run(&job, &env).await {
+            if let Err(e) = game_update::fail(pool, update_id, REFRESH_START_FAILED).await {
+                log::error!("Unable to record Steam game cache refresh failure: {e}");
+            }
+            return Err(refresh_failed(
+                REFRESH_START_FAILED,
+                format!("starting job: {e}"),
+            ));
+        }
+        return Ok(true);
+    }
 
     let pool = pool.clone();
     let steam_api_key = steam_api_key.to_string();
     tokio::spawn(async move {
-        let update_id = steam_game_update.id;
-        match run_update(&pool, &steam_api_key, update_id).await {
-            Ok(refresh) => {
-                crate::util::log_audit(
-                    &pool,
-                    Some(started_by),
-                    "steam_games.update".to_string(),
-                    "steam_games".to_string(),
-                    None,
-                    Some(rocket::serde::json::serde_json::json!({
-                        "games_cached": refresh.games_cached,
-                        "games_added": refresh.games_added,
-                    })),
-                )
-                .await;
-            }
-            Err(e) => {
-                let (Error::Controller(message) | Error::Upstream(message)) = e else {
-                    return;
-                };
-                if let Err(e) = game_update::fail(&pool, update_id, &message).await {
-                    log::error!("Unable to record Steam game cache refresh failure: {e}");
-                }
-            }
-        }
+        run_refresh(&pool, &steam_api_key, update_id, started_by).await;
     });
     Ok(true)
+}
+
+/// Env vars the job reads: which `steam_game_update` row it is finishing, and
+/// who to credit in the audit log.
+pub const REFRESH_UPDATE_ID_ENV: &str = "STEAM_REFRESH_UPDATE_ID";
+pub const REFRESH_STARTED_BY_ENV: &str = "STEAM_REFRESH_STARTED_BY";
+
+/// Perform a claimed refresh, recording its outcome on the update row and
+/// in the audit log. Returns whether it succeeded.
+pub async fn run_refresh(
+    pool: &PgPool,
+    steam_api_key: &String,
+    update_id: i32,
+    started_by: String,
+) -> bool {
+    match run_update(pool, steam_api_key, update_id).await {
+        Ok(refresh) => {
+            crate::util::log_audit(
+                pool,
+                Some(started_by),
+                "steam_games.update".to_string(),
+                "steam_games".to_string(),
+                None,
+                Some(rocket::serde::json::serde_json::json!({
+                    "games_cached": refresh.games_cached,
+                    "games_added": refresh.games_added,
+                })),
+            )
+            .await;
+            true
+        }
+        Err(e) => {
+            let (Error::Controller(message) | Error::Upstream(message)) = e else {
+                return false;
+            };
+            if let Err(e) = game_update::fail(pool, update_id, &message).await {
+                log::error!("Unable to record Steam game cache refresh failure: {e}");
+            }
+            false
+        }
+    }
 }
 
 async fn run_update(

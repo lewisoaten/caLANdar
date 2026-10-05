@@ -325,6 +325,29 @@ fn build_rocket(
     rocket
 }
 
+/// Finish the Steam game cache refresh the service started (see
+/// `controllers::game::start_update`). Migrations are the service's job.
+async fn run_steam_refresh_job() -> Result<(), Box<dyn std::error::Error>> {
+    use controllers::game::{REFRESH_STARTED_BY_ENV, REFRESH_UPDATE_ID_ENV};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| "DATABASE_URL environment variable must be set")?;
+    let steam_api_key = std::env::var("STEAM_API_KEY")
+        .map_err(|_| "STEAM_API_KEY environment variable must be set")?;
+    let update_id: i32 = std::env::var(REFRESH_UPDATE_ID_ENV)
+        .map_err(|_| format!("{REFRESH_UPDATE_ID_ENV} environment variable must be set"))?
+        .parse()
+        .map_err(|_| format!("{REFRESH_UPDATE_ID_ENV} must be a number"))?;
+    let started_by = std::env::var(REFRESH_STARTED_BY_ENV).unwrap_or_default();
+
+    let pool = PgPool::connect(&database_url).await?;
+    if controllers::game::run_refresh(&pool, &steam_api_key, update_id, started_by).await {
+        Ok(())
+    } else {
+        Err("Steam game cache refresh failed".into())
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
@@ -334,6 +357,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Load environment variables from .env file if present
     dotenvy::dotenv().ok();
+
+    // The Cloud Run Job runs this same binary as `calandar-api refresh-steam-games`.
+    if std::env::args().nth(1).as_deref() == Some("refresh-steam-games") {
+        return run_steam_refresh_job().await;
+    }
 
     // Get database URL from environment
     let database_url = std::env::var("DATABASE_URL")

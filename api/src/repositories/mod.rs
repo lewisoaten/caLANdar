@@ -1,4 +1,5 @@
 pub mod audit_log;
+pub mod cloud_run_job;
 pub mod event;
 pub mod event_seating_config;
 pub mod game;

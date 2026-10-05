@@ -269,11 +269,42 @@ cloudrun-deploy image_url:
 		NO_TRAFFIC_FLAG=""
 	fi
 
+	# The Steam game cache refresh runs as a Cloud Run Job (same image), so it is
+	# billed only while it runs and doesn't need CPU kept allocated to the service
+	# between requests. The service starts it (see controllers::game::start_update).
+	REFRESH_JOB_NAME="${SERVICE_NAME}-steam-refresh"
+	gcloud run jobs deploy "${REFRESH_JOB_NAME}" \
+		--image "${IMAGE_URL}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--command /app/calandar-api \
+		--args refresh-steam-games \
+		--set-env-vars "RUST_LOG=info" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--max-retries 0 \
+		--task-timeout 15m \
+		--memory 512Mi \
+		--cpu 1
+
+	# Let the service's identity start the job (idempotent). Best effort: if the
+	# deployer can't set IAM, grant roles/run.developer on the job to the
+	# service account by hand; until then refreshes report "Couldn't start".
+	SERVICE_ACCOUNT=$(gcloud run services describe "${SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(spec.template.spec.serviceAccountName)' 2>/dev/null || echo "")
+	if [ -z "${SERVICE_ACCOUNT}" ]; then
+		PROJECT_NUMBER=$(gcloud projects describe "${GCP_PROJECT_ID}" --format 'value(projectNumber)')
+		SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+	fi
+	gcloud run jobs add-iam-policy-binding "${REFRESH_JOB_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--member "serviceAccount:${SERVICE_ACCOUNT}" \
+		--role roles/run.developer \
+		|| echo "WARNING: could not grant ${SERVICE_ACCOUNT} permission to run ${REFRESH_JOB_NAME}"
+
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
-	# --no-cpu-throttling: the Steam cache refresh keeps running in the background
-	# after its request has returned, which request-based CPU would starve. This
-	# bills for instance time rather than per request; if that becomes costly, move
-	# the refresh to a Cloud Run Job.
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
 		--region "${GCP_REGION}" \
@@ -281,13 +312,12 @@ cloudrun-deploy image_url:
 		--platform managed \
 		--allow-unauthenticated \
 		--port 8080 \
-		--set-env-vars "RUST_LOG=info" \
+		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME}" \
 		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
 		--min-instances 0 \
 		--max-instances 10 \
 		--memory 512Mi \
 		--cpu 1 \
-		--no-cpu-throttling \
 		--timeout 60s \
 		${NO_TRAFFIC_FLAG}
 
