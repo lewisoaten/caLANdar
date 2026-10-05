@@ -9,7 +9,7 @@ use sqlx::PgPool;
 
 use crate::{
     controllers::Error,
-    repositories::{game, game_update, steam_api},
+    repositories::{cloud_run_job, game, game_update, steam_api},
     routes::games::SteamGameResponse,
 };
 
@@ -46,7 +46,6 @@ pub async fn get(
 pub struct CacheRefresh {
     pub games_cached: i64,
     pub games_added: i64,
-    pub last_refreshed: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Rows per batched upsert; keeps each statement well under Postgres' limits.
@@ -66,6 +65,9 @@ pub const REFRESH_STEAM_UNAVAILABLE: &str =
 pub const REFRESH_SAVE_FAILED: &str =
     "Couldn't save the Steam game list. Some games may not have been updated; try again.";
 
+/// Shown to admins when the refresh status can't be read.
+pub const REFRESH_STATUS_FAILED: &str = "Couldn't check the Steam game cache refresh status.";
+
 /// Log `detail` and return a controller error carrying only `message`.
 fn refresh_failed(message: &str, detail: impl Display) -> Error {
     log::error!("Steam game cache refresh failed: {detail}");
@@ -78,11 +80,102 @@ fn steam_unavailable(detail: impl Display) -> Error {
     Error::Upstream(REFRESH_STEAM_UNAVAILABLE.to_string())
 }
 
-pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefresh, Error> {
-    let steam_game_update = game_update::create(pool)
-        .await
-        .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("creating update log: {e}")))?;
+/// Env var naming the Cloud Run Job (`projects/<p>/locations/<r>/jobs/<name>`)
+/// that performs refreshes. Unset (local development), they run in-process.
+pub const REFRESH_JOB_ENV: &str = "STEAM_REFRESH_JOB";
 
+/// Shown to admins when the refresh couldn't be started.
+pub const REFRESH_START_FAILED: &str = "Couldn't start the Steam game cache refresh. Try again.";
+
+/// Begin a refresh without waiting for it. Returns `false` if one is already
+/// running. A full refresh outlasts Netlify's ~26s proxy timeout, and a
+/// background task in the service would need CPU kept allocated between
+/// requests, so on Cloud Run it runs as a Cloud Run Job (billed only while it
+/// runs). Poll [`refresh_status`] for the outcome.
+pub async fn start_update(
+    pool: &PgPool,
+    steam_api_key: &str,
+    started_by: String,
+) -> Result<bool, Error> {
+    let Some(steam_game_update) = game_update::start(pool)
+        .await
+        .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("creating update log: {e}")))?
+    else {
+        return Ok(false);
+    };
+    let update_id = steam_game_update.id;
+
+    if let Ok(job) = std::env::var(REFRESH_JOB_ENV) {
+        let env = [
+            (REFRESH_UPDATE_ID_ENV, update_id.to_string()),
+            (REFRESH_STARTED_BY_ENV, started_by),
+        ];
+        if let Err(e) = cloud_run_job::run(&job, &env).await {
+            if let Err(e) = game_update::fail(pool, update_id, REFRESH_START_FAILED).await {
+                log::error!("Unable to record Steam game cache refresh failure: {e}");
+            }
+            return Err(refresh_failed(
+                REFRESH_START_FAILED,
+                format!("starting job: {e}"),
+            ));
+        }
+        return Ok(true);
+    }
+
+    let pool = pool.clone();
+    let steam_api_key = steam_api_key.to_string();
+    tokio::spawn(async move {
+        run_refresh(&pool, &steam_api_key, update_id, started_by).await;
+    });
+    Ok(true)
+}
+
+/// Env vars the job reads: which `steam_game_update` row it is finishing, and
+/// who to credit in the audit log.
+pub const REFRESH_UPDATE_ID_ENV: &str = "STEAM_REFRESH_UPDATE_ID";
+pub const REFRESH_STARTED_BY_ENV: &str = "STEAM_REFRESH_STARTED_BY";
+
+/// Perform a claimed refresh, recording its outcome on the update row and
+/// in the audit log. Returns whether it succeeded.
+pub async fn run_refresh(
+    pool: &PgPool,
+    steam_api_key: &String,
+    update_id: i32,
+    started_by: String,
+) -> bool {
+    match run_update(pool, steam_api_key, update_id).await {
+        Ok(refresh) => {
+            crate::util::log_audit(
+                pool,
+                Some(started_by),
+                "steam_games.update".to_string(),
+                "steam_games".to_string(),
+                None,
+                Some(rocket::serde::json::serde_json::json!({
+                    "games_cached": refresh.games_cached,
+                    "games_added": refresh.games_added,
+                })),
+            )
+            .await;
+            true
+        }
+        Err(e) => {
+            let (Error::Controller(message) | Error::Upstream(message)) = e else {
+                return false;
+            };
+            if let Err(e) = game_update::fail(pool, update_id, &message).await {
+                log::error!("Unable to record Steam game cache refresh failure: {e}");
+            }
+            false
+        }
+    }
+}
+
+async fn run_update(
+    pool: &PgPool,
+    steam_api_key: &String,
+    update_id: i32,
+) -> Result<CacheRefresh, Error> {
     let steam_games = steam_api::get_app_list(steam_api_key)
         .await
         .map_err(steam_unavailable)?;
@@ -94,14 +187,14 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefres
         let appids: Vec<i64> = chunk.iter().map(|g| g.appid).collect();
         let names: Vec<String> = chunk.iter().map(|g| g.name.clone()).collect();
 
-        games_added += game::upsert_many(pool, steam_game_update.id, &appids, &names)
+        games_added += game::upsert_many(pool, update_id, &appids, &names)
             .await
             .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("inserting games: {e}")))?;
 
         log::info!("Upserted {} games.", chunk.len());
     }
 
-    game_update::complete(pool, steam_game_update.id)
+    game_update::complete(pool, update_id, games_added)
         .await
         .map_err(|e| refresh_failed(REFRESH_SAVE_FAILED, format!("completing update log: {e}")))?;
 
@@ -110,7 +203,39 @@ pub async fn update(pool: &PgPool, steam_api_key: &String) -> Result<CacheRefres
     Ok(CacheRefresh {
         games_cached: stats.games_cached,
         games_added,
-        last_refreshed: stats.last_refreshed,
+    })
+}
+
+/// Where the most recent refresh got to.
+pub struct RefreshStatus {
+    pub running: bool,
+    pub started_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// Games added by the latest refresh, once it has finished.
+    pub games_added: Option<i64>,
+    /// Why the latest refresh failed, if it did. Safe to show.
+    pub error: Option<String>,
+}
+
+pub async fn refresh_status(pool: &PgPool) -> Result<RefreshStatus, Error> {
+    let latest = game_update::latest(pool).await.map_err(|e| {
+        refresh_failed(
+            REFRESH_STATUS_FAILED,
+            format!("reading refresh status: {e}"),
+        )
+    })?;
+    Ok(match latest {
+        None => RefreshStatus {
+            running: false,
+            started_at: None,
+            games_added: None,
+            error: None,
+        },
+        Some(l) => RefreshStatus {
+            running: l.is_running(),
+            started_at: Some(l.update_time),
+            games_added: l.games_added,
+            error: l.error,
+        },
     })
 }
 

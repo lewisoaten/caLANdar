@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { delay, http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import { expect, userEvent, within } from "storybook/test";
 import RefreshGamesButton, {
   SteamGameCacheCard,
@@ -23,20 +23,48 @@ const RefreshGamesButtonInState = ({
   );
 };
 
+/**
+ * Fake of the background refresh: the POST starts it (202), the stats report
+ * it running until `ms` have passed, then the new numbers. Results expire
+ * after a minute so later stories start from the original cache again.
+ */
+let refreshStarted = 0;
+let refreshLasts = 0;
+const refreshState = () => {
+  const age = Date.now() - refreshStarted;
+  const running = refreshStarted > 0 && age < refreshLasts;
+  const done = refreshStarted > 0 && !running && age < 60_000;
+  return {
+    gamesCached: done ? 48297 : 48213,
+    lastRefreshed: done
+      ? new Date().toISOString()
+      : new Date(Date.now() - 3 * 86_400_000).toISOString(),
+    refresh: {
+      running,
+      startedAt:
+        running || done ? new Date(refreshStarted).toISOString() : null,
+      gamesAdded: done ? 84 : null,
+      error: null,
+    },
+  };
+};
+
 const stats = http.get("/api/steam-game-update-v2/stats", () =>
-  HttpResponse.json({
-    gamesCached: 48213,
-    lastRefreshed: new Date(Date.now() - 3 * 86_400_000).toISOString(),
-  }),
+  HttpResponse.json(refreshState()),
 );
 
-const refreshOk = http.post("/api/steam-game-update-v2", async () => {
-  await delay(1200);
-  return HttpResponse.json({
-    gamesCached: 48297,
-    gamesAdded: 84,
-    lastRefreshed: new Date().toISOString(),
-  });
+const refreshOk = http.post("/api/steam-game-update-v2", () => {
+  refreshStarted = Date.now();
+  refreshLasts = 1200;
+  return HttpResponse.json(
+    {
+      running: true,
+      startedAt: new Date().toISOString(),
+      gamesAdded: null,
+      error: null,
+    },
+    { status: 202 },
+  );
 });
 
 const meta = {

@@ -15,15 +15,28 @@ import { apiErrorFrom } from "../utils/apiError";
 
 type BoolState = [boolean, React.Dispatch<React.SetStateAction<boolean>>];
 
+/** The most recent refresh, which runs in the background on the server. */
+export interface SteamCacheRefreshState {
+  running: boolean;
+  startedAt: string | null;
+  /** Games added by the last finished refresh. */
+  gamesAdded: number | null;
+  /** Why the last refresh failed, if it did. */
+  error: string | null;
+}
+
 /** `GET /steam-game-update-v2/stats` */
 export interface SteamCacheStats {
   gamesCached: number;
   lastRefreshed: string | null;
+  refresh?: SteamCacheRefreshState;
 }
 
-/** `POST /steam-game-update-v2` */
-export interface SteamCacheRefreshResult extends SteamCacheStats {
-  gamesAdded: number;
+/** What a finished refresh reports back to the caller. */
+export interface SteamCacheRefreshResult {
+  gamesCached: number;
+  lastRefreshed: string | null;
+  gamesAdded?: number | null;
 }
 
 interface RefreshGamesButtonProps {
@@ -61,11 +74,19 @@ export function safeDescription(text: string | undefined): string | undefined {
 const REFRESH_URL = "/api/steam-game-update-v2?as_admin=true";
 const STATS_URL = "/api/steam-game-update-v2/stats?as_admin=true";
 
+/** How often to ask the server whether the refresh has finished. */
+const POLL_MS = 3_000;
+/** Give up waiting once the server itself presumes a refresh dead. */
+const POLL_LIMIT_MS = 30 * 60_000;
+
 /**
- * Admin action: refresh the server's Steam game cache
- * (`POST /api/steam-game-update-v2?as_admin=true`). The request is a single
- * blocking call with no progress reporting, so callers show an indeterminate
- * bar while `loading` is true (see {@link SteamGameCacheCard}).
+ * Admin action: refresh the server's Steam game cache. The POST
+ * (`/api/steam-game-update-v2?as_admin=true`) only starts the refresh, since
+ * a full refresh outlasts the proxy's request timeout; the button then polls
+ * the stats endpoint until it finishes. There is no finer progress, so
+ * callers show an indeterminate bar while `loading` is true (see
+ * {@link SteamGameCacheCard}). Setting `loadingState` to true from outside
+ * resumes polling, e.g. for a refresh that was already running.
  */
 export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   const { signOut } = useContext(UserDispatchContext);
@@ -78,6 +99,96 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
   const [loading, setLoading] = props.loadingState ?? ownLoading;
   const [done, setDone] = props.doneState ?? ownDone;
   const { onRefreshed, onError, toasts = true } = props;
+
+  const latest = React.useRef({ onRefreshed, onError, toasts });
+
+  function succeed(result: SteamCacheRefreshResult | null) {
+    setLoading(false);
+    setDone(true);
+    if (latest.current.toasts) {
+      enqueueSnackbar(
+        result && typeof result.gamesCached === "number"
+          ? `Steam game cache refreshed: ${formatCount(result.gamesCached)} games`
+          : "Steam game cache refreshed",
+        { variant: "success" },
+      );
+    }
+    latest.current.onRefreshed?.(result);
+  }
+
+  function fail(status: number, description?: string) {
+    setLoading(false);
+    if (latest.current.toasts) {
+      enqueueSnackbar(
+        description ??
+          `Couldn't refresh the Steam game cache${status ? ` (error ${status})` : ""}. Please try again.`,
+        { variant: "error" },
+      );
+    }
+    latest.current.onError?.(status, description);
+  }
+  const outcome = React.useRef({ succeed, fail });
+  // The polling effect outlives renders; give it the current handlers.
+  useEffect(() => {
+    latest.current = { onRefreshed, onError, toasts };
+    outcome.current = { succeed, fail };
+  });
+
+  // While a refresh is in flight, poll the server for its outcome.
+  useEffect(() => {
+    if (!loading || !token) return undefined;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const started = Date.now();
+    const tick = async () => {
+      let stats: SteamCacheStats | null = null;
+      try {
+        const response = await fetch(STATS_URL, {
+          headers: {
+            Accept: "application/json",
+            Authorization: "Bearer " + token,
+          },
+        });
+        if (cancelled) return;
+        if (response.status === 401) {
+          setLoading(false);
+          signOut();
+          return;
+        }
+        if (response.ok) stats = (await response.json()) as SteamCacheStats;
+      } catch (error) {
+        // Transient; keep waiting.
+        console.error("Couldn't check the Steam cache refresh", error);
+      }
+      if (cancelled) return;
+      const refresh = stats?.refresh;
+      if (stats && refresh && !refresh.running) {
+        if (refresh.error) {
+          outcome.current.fail(0, safeDescription(refresh.error));
+        } else {
+          outcome.current.succeed({
+            gamesCached: stats.gamesCached,
+            lastRefreshed: stats.lastRefreshed,
+            gamesAdded: refresh.gamesAdded,
+          });
+        }
+        return;
+      }
+      if (Date.now() - started > POLL_LIMIT_MS) {
+        outcome.current.fail(
+          0,
+          "The refresh is taking too long; check back later.",
+        );
+        return;
+      }
+      timer = setTimeout(() => void tick(), POLL_MS);
+    };
+    timer = setTimeout(() => void tick(), POLL_MS / 3);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [loading, token, signOut, setLoading]);
 
   async function handleClick() {
     setLoading(true);
@@ -100,23 +211,17 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
         return;
       }
       if (response.ok) {
-        let result: SteamCacheRefreshResult | null = null;
-        try {
-          result = (await response.json()) as SteamCacheRefreshResult | null;
-        } catch {
-          result = null;
+        // Started (202); the polling effect reports the outcome. A server
+        // that still refreshes inside the request answers 200 with the result.
+        if (response.status === 200) {
+          let result: SteamCacheRefreshResult | null = null;
+          try {
+            result = (await response.json()) as SteamCacheRefreshResult | null;
+          } catch {
+            result = null;
+          }
+          succeed(result);
         }
-        setLoading(false);
-        setDone(true);
-        if (toasts) {
-          enqueueSnackbar(
-            result && typeof result.gamesCached === "number"
-              ? `Steam game cache refreshed: ${formatCount(result.gamesCached)} games`
-              : "Steam game cache refreshed",
-            { variant: "success" },
-          );
-        }
-        onRefreshed?.(result);
         return;
       }
       description = safeDescription(
@@ -126,15 +231,7 @@ export default function RefreshGamesButton(props: RefreshGamesButtonProps) {
     } catch (error) {
       console.error("Steam cache refresh failed", error);
     }
-    setLoading(false);
-    if (toasts) {
-      enqueueSnackbar(
-        description ??
-          `Couldn't refresh the Steam game cache${status ? ` (error ${status})` : ""}. Please try again.`,
-        { variant: "error" },
-      );
-    }
-    onError?.(status, description);
+    fail(status, description);
   }
 
   return (
@@ -195,7 +292,7 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
   }>({ status: 0 });
   const loadingState = useState(false);
   const doneState = useState(false);
-  const busy = loadingState[0];
+  const [busy, setBusy] = loadingState;
 
   const [statsReload, setStatsReload] = useState(0);
   const clockNow = useNow(60_000);
@@ -222,6 +319,8 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
         if (cancelled) return;
         setStats(body);
         setStatsFailed(false);
+        // Someone already started a refresh (maybe before a reload): follow it.
+        if (body.refresh?.running) setBusy(true);
       } catch (error) {
         console.error("Couldn't load Steam cache stats", error);
         if (!cancelled) setStatsFailed(true);
@@ -230,7 +329,7 @@ export function SteamGameCacheCard({ now }: SteamGameCacheCardProps) {
     return () => {
       cancelled = true;
     };
-  }, [token, signOut, statsReload]);
+  }, [token, signOut, statsReload, setBusy]);
 
   const summary = (s: SteamCacheStats) =>
     `${formatCount(s.gamesCached)} games cached · ${
