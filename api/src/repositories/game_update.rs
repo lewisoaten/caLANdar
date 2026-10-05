@@ -8,23 +8,82 @@ pub struct SteamGameUpdate {
     pub update_time: DateTime<Utc>,
 }
 
-pub async fn create(pool: &PgPool) -> Result<SteamGameUpdate, sqlx::Error> {
-    // Insert new game suggestion
-    sqlx::query_as!(
-        SteamGameUpdate,
-        "INSERT INTO steam_game_update DEFAULT VALUES RETURNING id, update_time",
+/// A refresh with no result yet is treated as dead after this long (the
+/// instance running it was probably shut down), so it can't block forever.
+const STALE_AFTER_MINUTES: i32 = 30;
+
+/// Start a refresh unless one is already running. `None` means one is.
+pub async fn start(pool: &PgPool) -> Result<Option<SteamGameUpdate>, sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    // Serialise concurrent starts so two admins can't both pass the check.
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('steam_game_update'))")
+        .execute(&mut *tx)
+        .await?;
+    let started = sqlx::query_as::<_, (i32, DateTime<Utc>)>(
+        r"
+        INSERT INTO steam_game_update (update_time)
+        SELECT NOW()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM steam_game_update
+            WHERE completed_at IS NULL
+              AND error IS NULL
+              AND update_time > NOW() - make_interval(mins => $1)
+        )
+        RETURNING id, update_time
+        ",
     )
-    .fetch_one(pool)
-    .await
+    .bind(STALE_AFTER_MINUTES)
+    .fetch_optional(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(started.map(|(id, update_time)| SteamGameUpdate { id, update_time }))
 }
 
 /// Mark a refresh as finished.
-pub async fn complete(pool: &PgPool, id: i32) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        "UPDATE steam_game_update SET completed_at = NOW() WHERE id = $1",
-        id
+pub async fn complete(pool: &PgPool, id: i32, games_added: i64) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE steam_game_update SET completed_at = NOW(), games_added = $2 WHERE id = $1",
     )
+    .bind(id)
+    .bind(games_added)
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Mark a refresh as failed. `error` is shown to admins, so keep it safe.
+pub async fn fail(pool: &PgPool, id: i32, error: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE steam_game_update SET error = $2 WHERE id = $1")
+        .bind(id)
+        .bind(error)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[derive(sqlx::FromRow)]
+pub struct Latest {
+    pub update_time: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+    pub games_added: Option<i64>,
+    pub error: Option<String>,
+}
+
+/// The most recent refresh, running, finished or failed.
+pub async fn latest(pool: &PgPool) -> Result<Option<Latest>, sqlx::Error> {
+    sqlx::query_as::<_, Latest>(
+        "SELECT update_time, completed_at, games_added, error \
+         FROM steam_game_update ORDER BY id DESC LIMIT 1",
+    )
+    .fetch_optional(pool)
+    .await
+}
+
+impl Latest {
+    /// Still going: no result yet and not old enough to be presumed dead.
+    pub fn is_running(&self) -> bool {
+        self.completed_at.is_none()
+            && self.error.is_none()
+            && Utc::now() - self.update_time < chrono::Duration::minutes(STALE_AFTER_MINUTES.into())
+    }
 }

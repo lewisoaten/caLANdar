@@ -2,7 +2,7 @@ import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
 import Box from "@mui/material/Box";
 import { sectionGap } from "../components/hl";
 import { expect, userEvent, waitFor, within } from "storybook/test";
-import { delay, http, HttpResponse } from "msw";
+import { http, HttpResponse } from "msw";
 import GamersAdmin from "../components/GamersAdmin";
 import { mockApi, withUser, type MockRequest } from "./mockApi";
 
@@ -111,6 +111,7 @@ mockApi({
   "GET /api/steam-game-update-v2/stats": () => ({
     gamesCached: 48213,
     lastRefreshed: ago(72),
+    refresh: { running: false, startedAt: null, gamesAdded: null, error: null },
   }),
   "GET /api/gamers": (req: MockRequest) => {
     const page = Number(req.query.get("page") ?? "1");
@@ -168,21 +169,47 @@ mockApi({
   },
 });
 
+/**
+ * Fake of the background refresh: the POST starts it (202), the stats report
+ * it running until `ms` have passed, then the new numbers. Results expire
+ * after a minute so later stories start from the original cache again.
+ */
+let refreshStarted = 0;
+let refreshLasts = 0;
+const refreshState = () => {
+  const age = Date.now() - refreshStarted;
+  const running = refreshStarted > 0 && age < refreshLasts;
+  const done = refreshStarted > 0 && !running && age < 60_000;
+  return {
+    gamesCached: done ? 48297 : 48213,
+    lastRefreshed: done ? new Date().toISOString() : ago(72),
+    refresh: {
+      running,
+      startedAt:
+        running || done ? new Date(refreshStarted).toISOString() : null,
+      gamesAdded: done ? 84 : null,
+      error: null,
+    },
+  };
+};
+
 const statsHandler = http.get("/api/steam-game-update-v2/stats", () =>
-  HttpResponse.json({
-    gamesCached: 48213,
-    lastRefreshed: ago(72),
-  }),
+  HttpResponse.json(refreshState()),
 );
 
 const refreshOk = (ms: number) =>
-  http.post("/api/steam-game-update-v2", async () => {
-    await delay(ms);
-    return HttpResponse.json({
-      gamesCached: 48297,
-      gamesAdded: 84,
-      lastRefreshed: new Date().toISOString(),
-    });
+  http.post("/api/steam-game-update-v2", () => {
+    refreshStarted = Date.now();
+    refreshLasts = ms;
+    return HttpResponse.json(
+      {
+        running: true,
+        startedAt: new Date().toISOString(),
+        gamesAdded: null,
+        error: null,
+      },
+      { status: 202 },
+    );
   });
 
 /** Mimics the shell's <main>: a flex column with the section gap. */

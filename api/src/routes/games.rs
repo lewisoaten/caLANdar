@@ -1,6 +1,7 @@
 use chrono::{prelude::Utc, DateTime};
 use rocket::{
     get, post,
+    response::status::Accepted,
     serde::{json::Json, Deserialize, Serialize},
     State,
 };
@@ -22,16 +23,32 @@ pub struct SteamGameCacheStats {
     pub games_cached: i64,
     /// When the last successful refresh finished.
     pub last_refreshed: Option<DateTime<Utc>>,
+    /// The most recent refresh attempt.
+    pub refresh: SteamGameCacheRefresh,
 }
 
-/// Result of refreshing the Steam game cache.
+/// State of the most recent Steam game cache refresh. Refreshes run in the
+/// background; poll the stats endpoint until `running` is false.
 #[derive(Serialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct SteamGameCacheRefresh {
-    pub games_cached: i64,
-    /// Games that were not in the cache before this refresh.
-    pub games_added: i64,
-    pub last_refreshed: Option<DateTime<Utc>>,
+    pub running: bool,
+    pub started_at: Option<DateTime<Utc>>,
+    /// Games that were not in the cache before the last finished refresh.
+    pub games_added: Option<i64>,
+    /// Why the last refresh failed, if it did.
+    pub error: Option<String>,
+}
+
+impl From<game::RefreshStatus> for SteamGameCacheRefresh {
+    fn from(status: game::RefreshStatus) -> Self {
+        Self {
+            running: status.running,
+            started_at: status.started_at,
+            games_added: status.games_added,
+            error: status.error,
+        }
+    }
 }
 
 custom_errors!(SteamGameCacheStatsError, Unauthorized, InternalServerError);
@@ -44,66 +61,41 @@ pub async fn steam_game_cache_stats(
     _as_admin: Option<bool>,
     _user: AdminUser,
 ) -> Result<Json<SteamGameCacheStats>, SteamGameCacheStatsError> {
-    game::cache_stats(pool)
+    let stats = game::cache_stats(pool)
         .await
-        .map(|stats| {
-            Json(SteamGameCacheStats {
-                games_cached: stats.games_cached,
-                last_refreshed: stats.last_refreshed,
-            })
-        })
-        .map_err(|e| SteamGameCacheStatsError::InternalServerError(e.to_string()))
+        .map_err(|e| SteamGameCacheStatsError::InternalServerError(e.to_string()))?;
+    let refresh = game::refresh_status(pool)
+        .await
+        .map_err(|e| SteamGameCacheStatsError::InternalServerError(e.to_string()))?;
+    Ok(Json(SteamGameCacheStats {
+        games_cached: stats.games_cached,
+        last_refreshed: stats.last_refreshed,
+        refresh: refresh.into(),
+    }))
 }
 
-custom_errors!(
-    UpdateGameError,
-    Unauthorized,
-    BadGateway,
-    InternalServerError
-);
-
-/// Map a controller error from `game::update`: Steam failures are 502.
-/// The controller logs the detail; the message is safe to show.
-fn update_game_error(e: Error) -> UpdateGameError {
-    match e {
-        Error::Upstream(msg) => UpdateGameError::BadGateway(msg),
-        e => UpdateGameError::InternalServerError(e.to_string()),
-    }
-}
+custom_errors!(UpdateGameError, Unauthorized, InternalServerError);
 
 #[openapi(tag = "Games")]
 #[post("/steam-game-update-v2?<_as_admin>")]
-/// Update the list of games from the Steam API v2
+/// Start refreshing the list of games from the Steam API (admin only).
+///
+/// Returns 202 at once; the refresh continues in the background and its
+/// progress is reported by the stats endpoint. Starting one while another is
+/// running is a no-op.
 pub async fn steam_game_update_v2(
     pool: &State<PgPool>,
     steam_api_key: &State<String>,
     _as_admin: Option<bool>,
     user: AdminUser,
-) -> Result<Json<SteamGameCacheRefresh>, UpdateGameError> {
-    match game::update(pool, steam_api_key.inner()).await {
-        Ok(refresh) => {
-            // Log audit entry
-            crate::util::log_audit(
-                pool.inner(),
-                Some(user.email),
-                "steam_games.update".to_string(),
-                "steam_games".to_string(),
-                None,
-                Some(rocket::serde::json::serde_json::json!({
-                    "games_cached": refresh.games_cached,
-                    "games_added": refresh.games_added,
-                })),
-            )
-            .await;
-
-            Ok(Json(SteamGameCacheRefresh {
-                games_cached: refresh.games_cached,
-                games_added: refresh.games_added,
-                last_refreshed: refresh.last_refreshed,
-            }))
-        }
-        Err(e) => Err(update_game_error(e)),
-    }
+) -> Result<Accepted<Json<SteamGameCacheRefresh>>, UpdateGameError> {
+    game::start_update(pool, steam_api_key.inner(), user.email)
+        .await
+        .map_err(|e| UpdateGameError::InternalServerError(e.to_string()))?;
+    let status = game::refresh_status(pool)
+        .await
+        .map_err(|e| UpdateGameError::InternalServerError(e.to_string()))?;
+    Ok(Accepted(Json(status.into())))
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug)]
@@ -183,7 +175,7 @@ pub async fn get_steam_game_cover(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_appid, update_game_error, Error, UpdateGameError};
+    use super::parse_appid;
 
     #[test]
     fn appid_must_be_a_positive_integer() {
@@ -192,22 +184,5 @@ mod tests {
         for bad in ["0", "", "-1", "+1", "1.5", "abc", " 1", "99999999999"] {
             assert_eq!(parse_appid(bad), None, "{bad}");
         }
-    }
-    use crate::controllers::game::{REFRESH_SAVE_FAILED, REFRESH_STEAM_UNAVAILABLE};
-
-    #[test]
-    fn steam_failure_is_bad_gateway() {
-        assert!(matches!(
-            update_game_error(Error::Upstream(REFRESH_STEAM_UNAVAILABLE.to_string())),
-            UpdateGameError::BadGateway(ref m) if m == REFRESH_STEAM_UNAVAILABLE
-        ));
-    }
-
-    #[test]
-    fn save_failure_is_internal() {
-        assert!(matches!(
-            update_game_error(Error::Controller(REFRESH_SAVE_FAILED.to_string())),
-            UpdateGameError::InternalServerError(ref m) if m == REFRESH_SAVE_FAILED
-        ));
     }
 }
