@@ -304,6 +304,37 @@ cloudrun-deploy image_url:
 		--role roles/run.developer \
 		|| echo "WARNING: could not grant ${SERVICE_ACCOUNT} permission to run ${REFRESH_JOB_NAME}"
 
+	# caLANdar Live streams are served by a dedicated service from the same
+	# image (docs/live-event/DESIGN.md §3.8): long request timeout for SSE,
+	# high concurrency (an open stream costs a task, not a thread), scale to
+	# zero when nobody is watching, and at most two instances so there is
+	# effectively one stream instance doing the live ticks. The API service
+	# below keeps its 60s timeout. Streams hold no pooled connection; each
+	# instance has one LISTEN connection (session pooler, port 5432).
+	LIVE_SERVICE_NAME="${SERVICE_NAME}-live"
+	gcloud run deploy "${LIVE_SERVICE_NAME}" \
+		--image "${IMAGE_URL}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--platform managed \
+		--allow-unauthenticated \
+		--port 8080 \
+		--command /app/calandar-api \
+		--args serve-live \
+		--set-env-vars "RUST_LOG=info" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--min-instances 0 \
+		--max-instances 2 \
+		--concurrency 1000 \
+		--memory 512Mi \
+		--cpu 1 \
+		--timeout 3600
+	LIVE_STREAM_ORIGIN=$(gcloud run services describe "${LIVE_SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(status.url)')
+	echo "Live stream origin: ${LIVE_STREAM_ORIGIN}"
+
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
@@ -312,7 +343,7 @@ cloudrun-deploy image_url:
 		--platform managed \
 		--allow-unauthenticated \
 		--port 8080 \
-		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME}" \
+		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME},LIVE_STREAM_ORIGIN=${LIVE_STREAM_ORIGIN}" \
 		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
 		--min-instances 0 \
 		--max-instances 10 \

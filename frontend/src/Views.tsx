@@ -15,6 +15,7 @@ import EventSeatMap from "./components/EventSeatMap";
 import EventGameSchedule from "./components/EventGameSchedule";
 import AuditLog from "./components/AuditLog";
 import RoomEditor from "./components/RoomEditor";
+import LivePage from "./components/live/LivePage";
 
 export const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
@@ -29,6 +30,7 @@ const Views = () => {
       <Route element={<ProtectedRoutes />}>
         <Route path="/events" element={<EventSelection />} />
         <Route path="/events/:id" element={<Event />} />
+        <Route path="/events/:id/live" element={<LivePage />} />
         <Route path="/events/:id/games" element={<EventGames />} />
         <Route path="/events/:id/seat-map" element={<EventSeatMap />} />
         <Route path="/events/:id/schedule" element={<EventGameSchedule />} />

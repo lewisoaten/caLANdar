@@ -9,6 +9,7 @@ export type ShellSection =
   | "verify"
   | "events"
   | "lobby"
+  | "live"
   | "games"
   | "seatmap"
   | "schedule"
@@ -27,9 +28,10 @@ export interface ShellRoute {
   rooms?: boolean;
 }
 
-/** The four per-event pages (they get the event sub-nav and live ticker). */
+/** The per-event pages (they get the event sub-nav and live ticker). */
 export const EVENT_SECTIONS = [
   "lobby",
+  "live",
   "games",
   "seatmap",
   "schedule",
@@ -46,7 +48,9 @@ export function parseRoute(pathname: string): ShellRoute {
   if (path === "/verify_email" || path.startsWith("/verify_email/"))
     return { section: "verify" };
   if (path === "/events") return { section: "events" };
-  const ev = /^\/events\/([^/]+)(?:\/(games|seat-map|schedule))?$/.exec(path);
+  const ev = /^\/events\/([^/]+)(?:\/(games|seat-map|schedule|live))?$/.exec(
+    path,
+  );
   if (ev) {
     const sub = ev[2];
     const section: EventSection =
@@ -56,7 +60,9 @@ export function parseRoute(pathname: string): ShellRoute {
           ? "seatmap"
           : sub === "schedule"
             ? "schedule"
-            : "lobby";
+            : sub === "live"
+              ? "live"
+              : "lobby";
     return { section, eventId: ev[1] };
   }
   if (path === "/account") return { section: "account" };
@@ -82,6 +88,7 @@ const LABELS: Record<ShellSection, string> = {
   verify: "Verify",
   events: "Events",
   lobby: "Lobby",
+  live: "Live",
   games: "Games",
   seatmap: "Seat map",
   schedule: "Schedule",
@@ -156,6 +163,13 @@ export interface NavItem {
 
 export const eventNavItems = (eventId: string | number): NavItem[] => [
   { key: "lobby", label: "Lobby", short: "Lobby", to: `/events/${eventId}` },
+  {
+    key: "live",
+    label: "Live",
+    short: "Live",
+    to: `/events/${eventId}/live`,
+    requiresRsvp: true,
+  },
   {
     key: "games",
     label: "Games",

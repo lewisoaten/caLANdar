@@ -18,6 +18,7 @@ describe("parseRoute", () => {
     ["/events", "events", undefined],
     ["/events/", "events", undefined],
     ["/events/7", "lobby", "7"],
+    ["/events/7/live", "live", "7"],
     ["/events/7/games", "games", "7"],
     ["/events/7/seat-map", "seatmap", "7"],
     ["/events/7/schedule", "schedule", "7"],
@@ -80,7 +81,9 @@ describe("breadcrumb", () => {
 
 describe("nav items", () => {
   test("event items only match the event being shown", () => {
-    const [lobby, games] = eventNavItems(7);
+    const [lobby, live, games] = eventNavItems(7);
+    expect(live.to).toBe("/events/7/live");
+    expect(live.requiresRsvp).toBe(true);
     expect(isActiveItem(lobby, parseRoute("/events/7"), 7)).toBe(true);
     expect(isActiveItem(lobby, parseRoute("/events/8"), 7)).toBe(false);
     expect(isActiveItem(games, parseRoute("/events/7/games"), 7)).toBe(true);
