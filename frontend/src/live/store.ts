@@ -197,7 +197,14 @@ export interface EntityBatch {
 
 export function applyEntities(state: LiveState, batch: EntityBatch): LiveState {
   let lobbies = state.lobbies;
-  for (const l of batch.lobbies ?? []) lobbies = upsertLobby(lobbies, l);
+  for (const l of batch.lobbies ?? []) {
+    lobbies = upsertLobby(lobbies, l);
+    // A suggestion just stored: drop its virtual twin.
+    if (!l.virtual)
+      for (const [id, v] of Object.entries(lobbies))
+        if (v.virtual && v.gameId === l.gameId && v.start === l.start)
+          lobbies = without(lobbies, id);
+  }
   for (const id of batch.deletedLobbies ?? []) lobbies = without(lobbies, id);
   let votes = state.votes;
   for (const v of batch.votes ?? []) votes = { ...votes, [v.id]: v };

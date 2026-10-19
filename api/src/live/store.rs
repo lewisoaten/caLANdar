@@ -14,10 +14,10 @@ use sqlx::PgConnection;
 
 use super::{
     engine::{FeedEntry, Outcome},
-    log::NewLogRow,
+    log::{Audience, NewLogRow},
     model::{
         pid, CheckIn, EventInfo, Food, GameDefaults, LiveState, Lobby, LobbyKind, LobbySource,
-        LobbyStatus, Person, Rsvp, SeatRef, Team, Typical,
+        LobbyStatus, Member, Person, Prejoin, Presence, Rsvp, SeatRef, Team, Typical, Via,
     },
     views::{self, LobbyView, PersonView},
 };
@@ -101,6 +101,50 @@ struct DefaultsRow {
     max_players: Option<i32>,
     teams: Option<JsonValue>,
     duration_minutes: Option<i32>,
+    set_by: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MemberRow {
+    id: i64,
+    lobby_id: i32,
+    email: String,
+    team: Option<String>,
+    via: String,
+    joined_at: DateTime<Utc>,
+    left_at: Option<DateTime<Utc>>,
+    left_reason: Option<String>,
+    manual_expires_at: Option<DateTime<Utc>>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PrejoinRow {
+    lobby_id: i32,
+    email: String,
+    team: Option<String>,
+    random_team: bool,
+    created_at: DateTime<Utc>,
+    dropped_at: Option<DateTime<Utc>>,
+    drop_reason: Option<String>,
+}
+
+#[derive(sqlx::FromRow)]
+struct PresenceRow {
+    email: String,
+    game_id: Option<i64>,
+    game_name: Option<String>,
+    persona_state: i32,
+    visibility: i32,
+    observed_at: Option<DateTime<Utc>>,
+    pending_game_id: Option<i64>,
+    pending_game_name: Option<String>,
+    pending_since: Option<DateTime<Utc>>,
+    afk_since: Option<DateTime<Utc>>,
+    afk_noted: bool,
+    ignore_game_id: Option<i64>,
+    switch_lobby_id: Option<i32>,
+    switch_grace_until: Option<DateTime<Utc>>,
+    private_hint_sent: bool,
 }
 
 #[derive(sqlx::FromRow)]
@@ -260,6 +304,7 @@ pub async fn load(
         let lobby = lobby_from_row(row);
         state.lobbies.insert(lobby.id, lobby);
     }
+    load_presence(&mut *conn, &mut state).await?;
 
     // Defaults and learned lengths for the games on this event's schedule
     // and suggestion list.
@@ -284,6 +329,101 @@ pub async fn load(
     Ok(Some(state))
 }
 
+/// Members, pre-joins and presence of an event's lobbies.
+async fn load_presence(conn: &mut PgConnection, state: &mut LiveState) -> Result<(), sqlx::Error> {
+    let event_id = state.event.id;
+    let members = sqlx::query_as::<_, MemberRow>(
+        r"
+        SELECT m.id, m.lobby_id, m.email, m.team, m.via, m.joined_at, m.left_at,
+            m.left_reason, m.manual_expires_at
+        FROM lobby_member m
+        JOIN event_game_schedule egs ON egs.id = m.lobby_id
+        WHERE egs.event_id = $1 AND egs.status <> 'removed'
+        ",
+    )
+    .bind(event_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for row in members {
+        state.members.insert(
+            row.id,
+            Member {
+                id: row.id,
+                lobby_id: row.lobby_id,
+                email: row.email,
+                team: row.team,
+                via: Via::parse(&row.via).unwrap_or(Via::Manual),
+                joined_at: row.joined_at,
+                left_at: row.left_at,
+                left_reason: row.left_reason,
+                manual_expires_at: row.manual_expires_at,
+            },
+        );
+    }
+
+    let prejoins = sqlx::query_as::<_, PrejoinRow>(
+        r"
+        SELECT p.lobby_id, p.email, p.team, p.random_team, p.created_at, p.dropped_at,
+            p.drop_reason
+        FROM lobby_prejoin p
+        JOIN event_game_schedule egs ON egs.id = p.lobby_id
+        WHERE egs.event_id = $1 AND egs.status <> 'removed'
+        ",
+    )
+    .bind(event_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for row in prejoins {
+        state.prejoins.insert(
+            (row.lobby_id, row.email.clone()),
+            Prejoin {
+                lobby_id: row.lobby_id,
+                email: row.email,
+                team: row.team,
+                random_team: row.random_team,
+                created_at: row.created_at,
+                dropped_at: row.dropped_at,
+                drop_reason: row.drop_reason,
+            },
+        );
+    }
+
+    let presence = sqlx::query_as::<_, PresenceRow>(
+        r"
+        SELECT email, game_id, game_name, persona_state, visibility, observed_at,
+            pending_game_id, pending_game_name, pending_since, afk_since, afk_noted,
+            ignore_game_id, switch_lobby_id, switch_grace_until, private_hint_sent
+        FROM live_presence WHERE event_id = $1
+        ",
+    )
+    .bind(event_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for row in presence {
+        state.presence.insert(
+            row.email.clone(),
+            Presence {
+                email: row.email,
+                game_id: row.game_id,
+                game_name: row.game_name,
+                persona_state: row.persona_state,
+                visibility: row.visibility,
+                observed_at: row.observed_at,
+                pending_game_id: row.pending_game_id,
+                pending_game_name: row.pending_game_name,
+                pending_since: row.pending_since,
+                afk_since: row.afk_since,
+                afk_noted: row.afk_noted,
+                ignore_game_id: row.ignore_game_id,
+                switch_lobby_id: row.switch_lobby_id,
+                switch_grace_until: row.switch_grace_until,
+                private_hint_sent: row.private_hint_sent,
+            },
+        );
+    }
+    Ok(())
+}
+
 /// Saved defaults and learned typical lengths for some games (§5.6).
 pub async fn load_game_knowledge(
     conn: &mut PgConnection,
@@ -295,7 +435,7 @@ pub async fn load_game_knowledge(
         return Ok(());
     }
     let rows = sqlx::query_as::<_, DefaultsRow>(
-        "SELECT game_id, max_players, teams, duration_minutes FROM game_lobby_defaults WHERE game_id = ANY($1)",
+        "SELECT game_id, max_players, teams, duration_minutes, set_by FROM game_lobby_defaults WHERE game_id = ANY($1)",
     )
     .bind(game_ids)
     .fetch_all(&mut *conn)
@@ -307,6 +447,7 @@ pub async fn load_game_knowledge(
                 max_players: row.max_players,
                 teams: parse_teams(row.teams),
                 duration_minutes: row.duration_minutes,
+                set_by: row.set_by,
             },
         );
     }
@@ -492,7 +633,8 @@ pub async fn persist(
     let event_id = after.event.id;
     let mut remap = Remap::default();
 
-    // Lobbies: deletes, inserts (new ids), updates.
+    // Lobbies first: deleted ones (their members and pre-joins cascade),
+    // then new ones, whose real ids everything else needs.
     for id in before.lobbies.keys() {
         if !after.lobbies.contains_key(id) {
             sqlx::query("DELETE FROM event_game_schedule WHERE id = $1")
@@ -505,10 +647,19 @@ pub async fn persist(
         if *id < 0 {
             let real = insert_lobby(&mut *conn, event_id, lobby).await?;
             remap.lobbies.insert(*id, real);
-        } else if before.lobbies.get(id) != Some(lobby) {
+        }
+    }
+    apply_remap(after, outcome, &remap);
+    for (id, lobby) in &after.lobbies {
+        if before.lobbies.get(id).is_some_and(|b| b != lobby) {
             update_lobby(&mut *conn, lobby).await?;
         }
     }
+
+    persist_members(conn, before, after).await?;
+    persist_prejoins(conn, before, after).await?;
+    persist_presence(conn, before, after).await?;
+    persist_defaults(conn, before, after).await?;
 
     // Check-ins only ever get added.
     for (email, checkin) in &after.checkins {
@@ -528,12 +679,197 @@ pub async fn persist(
             .await?;
         }
     }
-
-    apply_remap(after, outcome, &remap);
     Ok(remap)
 }
 
-/// Swap temporary ids for real ones in the state and the outcome.
+async fn persist_members(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &mut LiveState,
+) -> Result<(), sqlx::Error> {
+    for id in before.members.keys() {
+        if !after.members.contains_key(id)
+            && after.lobbies.contains_key(&before.members[id].lobby_id)
+        {
+            sqlx::query("DELETE FROM lobby_member WHERE id = $1")
+                .bind(id)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    let mut inserted = Vec::new();
+    for (id, m) in &after.members {
+        if *id < 0 {
+            let real: i64 = sqlx::query_scalar(
+                r"
+                INSERT INTO lobby_member (lobby_id, email, team, via, joined_at, left_at,
+                    left_reason, manual_expires_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                ",
+            )
+            .bind(m.lobby_id)
+            .bind(&m.email)
+            .bind(&m.team)
+            .bind(m.via.as_str())
+            .bind(m.joined_at)
+            .bind(m.left_at)
+            .bind(&m.left_reason)
+            .bind(m.manual_expires_at)
+            .fetch_one(&mut *conn)
+            .await?;
+            inserted.push((*id, real));
+        } else if before.members.get(id).is_some_and(|b| b != m) {
+            sqlx::query(
+                r"
+                UPDATE lobby_member SET team = $2, via = $3, left_at = $4, left_reason = $5,
+                    manual_expires_at = $6
+                WHERE id = $1
+                ",
+            )
+            .bind(id)
+            .bind(&m.team)
+            .bind(m.via.as_str())
+            .bind(m.left_at)
+            .bind(&m.left_reason)
+            .bind(m.manual_expires_at)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+    for (temp, real) in inserted {
+        if let Some(mut m) = after.members.remove(&temp) {
+            m.id = real;
+            after.members.insert(real, m);
+        }
+    }
+    Ok(())
+}
+
+async fn persist_prejoins(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &LiveState,
+) -> Result<(), sqlx::Error> {
+    for key in before.prejoins.keys() {
+        if !after.prejoins.contains_key(key) && after.lobbies.contains_key(&key.0) {
+            sqlx::query("DELETE FROM lobby_prejoin WHERE lobby_id = $1 AND email = $2")
+                .bind(key.0)
+                .bind(&key.1)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    for (key, p) in &after.prejoins {
+        if before.prejoins.get(key) != Some(p) {
+            sqlx::query(
+                r"
+                INSERT INTO lobby_prejoin (lobby_id, email, team, random_team, created_at,
+                    dropped_at, drop_reason)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (lobby_id, email) DO UPDATE SET team = $3, random_team = $4,
+                    created_at = $5, dropped_at = $6, drop_reason = $7
+                ",
+            )
+            .bind(p.lobby_id)
+            .bind(&p.email)
+            .bind(&p.team)
+            .bind(p.random_team)
+            .bind(p.created_at)
+            .bind(p.dropped_at)
+            .bind(&p.drop_reason)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+    Ok(())
+}
+
+async fn persist_presence(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &LiveState,
+) -> Result<(), sqlx::Error> {
+    let event_id = after.event.id;
+    for email in before.presence.keys() {
+        if !after.presence.contains_key(email) {
+            sqlx::query("DELETE FROM live_presence WHERE event_id = $1 AND email = $2")
+                .bind(event_id)
+                .bind(email)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    for (email, p) in &after.presence {
+        if before.presence.get(email) == Some(p) {
+            continue;
+        }
+        sqlx::query(
+            r"
+            INSERT INTO live_presence (event_id, email, game_id, game_name, persona_state,
+                visibility, observed_at, pending_game_id, pending_game_name, pending_since,
+                afk_since, afk_noted, ignore_game_id, switch_lobby_id, switch_grace_until,
+                private_hint_sent)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+            ON CONFLICT (event_id, email) DO UPDATE SET game_id = $3, game_name = $4,
+                persona_state = $5, visibility = $6, observed_at = $7, pending_game_id = $8,
+                pending_game_name = $9, pending_since = $10, afk_since = $11, afk_noted = $12,
+                ignore_game_id = $13, switch_lobby_id = $14, switch_grace_until = $15,
+                private_hint_sent = $16
+            ",
+        )
+        .bind(event_id)
+        .bind(email)
+        .bind(p.game_id)
+        .bind(&p.game_name)
+        .bind(p.persona_state)
+        .bind(p.visibility)
+        .bind(p.observed_at)
+        .bind(p.pending_game_id)
+        .bind(&p.pending_game_name)
+        .bind(p.pending_since)
+        .bind(p.afk_since)
+        .bind(p.afk_noted)
+        .bind(p.ignore_game_id)
+        .bind(p.switch_lobby_id)
+        .bind(p.switch_grace_until)
+        .bind(p.private_hint_sent)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn persist_defaults(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &LiveState,
+) -> Result<(), sqlx::Error> {
+    for (game_id, d) in &after.defaults {
+        if before.defaults.get(game_id) == Some(d) {
+            continue;
+        }
+        sqlx::query(
+            r"
+            INSERT INTO game_lobby_defaults (game_id, max_players, teams, duration_minutes,
+                set_by, set_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            ON CONFLICT (game_id) DO UPDATE SET max_players = $2, teams = $3,
+                duration_minutes = $4, set_by = $5, set_at = NOW()
+            ",
+        )
+        .bind(game_id)
+        .bind(d.max_players)
+        .bind(teams_json(d.teams.as_ref()))
+        .bind(d.duration_minutes)
+        .bind(&d.set_by)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
+/// Swap temporary lobby ids for real ones in the state and the outcome.
 fn apply_remap(state: &mut LiveState, outcome: &mut Outcome, remap: &Remap) {
     if remap.lobbies.is_empty() {
         return;
@@ -547,6 +883,23 @@ fn apply_remap(state: &mut LiveState, outcome: &mut Outcome, remap: &Remap) {
             (real, lobby)
         })
         .collect();
+    for member in state.members.values_mut() {
+        member.lobby_id = remap.lobby(member.lobby_id);
+    }
+    let prejoins = std::mem::take(&mut state.prejoins);
+    state.prejoins = prejoins
+        .into_iter()
+        .map(|((lobby, email), mut p)| {
+            let real = remap.lobby(lobby);
+            p.lobby_id = real;
+            ((real, email), p)
+        })
+        .collect();
+    for p in state.presence.values_mut() {
+        if let Some(id) = p.switch_lobby_id {
+            p.switch_lobby_id = Some(remap.lobby(id));
+        }
+    }
     for entry in &mut outcome.feed {
         if let Some(id) = entry.lobby_id {
             entry.lobby_id = Some(remap.lobby(id));
@@ -627,8 +980,8 @@ pub fn delta_rows(
         }
     }
 
-    let before_people = views::people_views(before);
-    let after_people = views::people_views(after);
+    let before_people = views::people_views(before, now);
+    let after_people = views::people_views(after, now);
     for (email, view) in &after_people {
         if before_people.get(email) != Some(view) {
             deltas.rows.push(with_actor(NewLogRow::new("person", view)));
@@ -643,6 +996,23 @@ pub fn delta_rows(
         );
         deltas.rows.push(with_actor(
             NewLogRow::new("feed", feed_payload(after, entry, &key)).tier(entry.tier),
+        ));
+    }
+    let before_queue = views::admin_queue(before);
+    let after_queue = views::admin_queue(after);
+    if before_queue != after_queue {
+        deltas.rows.push(with_actor(
+            NewLogRow::new("admin.queue", json!({ "items": after_queue }))
+                .audience(Audience::Admins),
+        ));
+    }
+    for toast in &outcome.personal {
+        deltas.rows.push(with_actor(
+            NewLogRow::new(
+                "toast.personal",
+                json!({ "kind": toast.kind, "data": toast.data, "key": format!("{}:{}", toast.kind, now.timestamp_millis()) }),
+            )
+            .audience(Audience::Person(toast.to.clone())),
         ));
     }
     for (kind, lobby_id) in &outcome.feed_deletes {

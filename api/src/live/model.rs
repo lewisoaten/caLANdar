@@ -113,23 +113,10 @@ string_enum!(LobbyStatus {
     Removed = "removed",
 });
 
-#[allow(dead_code)] // The presence and start-time rules (phases 2-3) use these.
 impl LobbyStatus {
-    /// Not started yet.
-    pub const fn is_future(self) -> bool {
-        matches!(
-            self,
-            Self::Planned | Self::Proposed | Self::Confirmed | Self::Delayed
-        )
-    }
-
     /// Past its start: someone can be in it now.
     pub const fn is_running(self) -> bool {
         matches!(self, Self::Waiting | Self::Grace | Self::Live | Self::Empty)
-    }
-
-    pub const fn is_over(self) -> bool {
-        matches!(self, Self::Done | Self::Removed)
     }
 }
 
@@ -198,7 +185,6 @@ pub struct Lobby {
 }
 
 impl Lobby {
-    #[allow(dead_code)]
     pub fn end(&self) -> DateTime<Utc> {
         self.start + Duration::minutes(i64::from(self.minutes))
     }
@@ -218,6 +204,93 @@ pub struct GameDefaults {
     pub max_players: Option<i32>,
     pub teams: Option<Vec<Team>>,
     pub duration_minutes: Option<i32>,
+    pub set_by: Option<Email>,
+}
+
+string_enum!(Via {
+    Steam = "steam",
+    Manual = "manual",
+    Admin = "admin",
+});
+
+/// One stay in a lobby (`lobby_member`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Member {
+    /// Negative until stored.
+    pub id: i64,
+    pub lobby_id: i32,
+    pub email: Email,
+    pub team: Option<String>,
+    pub via: Via,
+    pub joined_at: DateTime<Utc>,
+    pub left_at: Option<DateTime<Utc>>,
+    pub left_reason: Option<String>,
+    pub manual_expires_at: Option<DateTime<Utc>>,
+}
+
+impl Member {
+    pub const fn is_open(&self) -> bool {
+        self.left_at.is_none()
+    }
+}
+
+/// A pre-join (`lobby_prejoin`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Prejoin {
+    pub lobby_id: i32,
+    pub email: Email,
+    pub team: Option<String>,
+    pub random_team: bool,
+    pub created_at: DateTime<Utc>,
+    pub dropped_at: Option<DateTime<Utc>>,
+    pub drop_reason: Option<String>,
+}
+
+impl Prejoin {
+    pub const fn is_active(&self) -> bool {
+        self.dropped_at.is_none()
+    }
+}
+
+/// Steam persona states that mean "away" (Away, Snooze).
+pub const AFK_STATES: [i32; 2] = [3, 4];
+/// How long someone must be away before the floor fades their seat.
+pub const AFK_AFTER: Duration = Duration::minutes(10);
+
+/// Latest presence of a person (`live_presence`).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Presence {
+    pub email: Email,
+    /// The game Steam says they're playing (after the debounce).
+    pub game_id: Option<i64>,
+    pub game_name: Option<String>,
+    pub persona_state: i32,
+    /// Steam `communityvisibilitystate`: 3 is public.
+    pub visibility: i32,
+    pub observed_at: Option<DateTime<Utc>>,
+    pub pending_game_id: Option<i64>,
+    pub pending_game_name: Option<String>,
+    pub pending_since: Option<DateTime<Utc>>,
+    pub afk_since: Option<DateTime<Utc>>,
+    pub afk_noted: bool,
+    pub ignore_game_id: Option<i64>,
+    pub switch_lobby_id: Option<i32>,
+    pub switch_grace_until: Option<DateTime<Utc>>,
+    pub private_hint_sent: bool,
+}
+
+impl Presence {
+    pub fn new(email: &str) -> Self {
+        Self {
+            email: email.to_string(),
+            visibility: 3,
+            ..Self::default()
+        }
+    }
+
+    pub fn is_afk(&self, now: DateTime<Utc>) -> bool {
+        self.afk_since.is_some_and(|since| now - since >= AFK_AFTER)
+    }
 }
 
 /// How long a game is typically played for, learned from history (§5.6).
@@ -235,6 +308,9 @@ pub struct LiveState {
     pub people: BTreeMap<Email, Person>,
     pub checkins: BTreeMap<Email, CheckIn>,
     pub lobbies: BTreeMap<i32, Lobby>,
+    pub members: BTreeMap<i64, Member>,
+    pub prejoins: BTreeMap<(i32, Email), Prejoin>,
+    pub presence: BTreeMap<Email, Presence>,
     pub defaults: BTreeMap<i64, GameDefaults>,
     pub typical: BTreeMap<i64, Typical>,
     /// Next temporary id (counting down from -1) for new rows.
@@ -248,6 +324,9 @@ impl LiveState {
             people: BTreeMap::new(),
             checkins: BTreeMap::new(),
             lobbies: BTreeMap::new(),
+            members: BTreeMap::new(),
+            prejoins: BTreeMap::new(),
+            presence: BTreeMap::new(),
             defaults: BTreeMap::new(),
             typical: BTreeMap::new(),
             next_temp_id: -1,
@@ -267,6 +346,42 @@ impl LiveState {
 
     pub fn is_checked_in(&self, email: &str) -> bool {
         self.checkins.contains_key(email)
+    }
+
+    /// The lobby someone is in right now, as `(member id, lobby id)`.
+    pub fn current_membership(&self, email: &str) -> Option<(i64, i32)> {
+        self.members
+            .values()
+            .find(|m| m.email == email && m.is_open())
+            .map(|m| (m.id, m.lobby_id))
+    }
+
+    /// Open members of a lobby.
+    pub fn members_of(&self, lobby_id: i32) -> impl Iterator<Item = &Member> {
+        self.members
+            .values()
+            .filter(move |m| m.lobby_id == lobby_id && m.is_open())
+    }
+
+    /// Active pre-joins of a lobby.
+    pub fn prejoins_of(&self, lobby_id: i32) -> impl Iterator<Item = &Prejoin> {
+        self.prejoins
+            .values()
+            .filter(move |p| p.lobby_id == lobby_id && p.is_active())
+    }
+
+    /// People in or pre-joined to a lobby (each once).
+    pub fn lobby_headcount(&self, lobby_id: i32) -> usize {
+        let mut people: Vec<&str> = self
+            .members_of(lobby_id)
+            .map(|m| m.email.as_str())
+            .collect();
+        for p in self.prejoins_of(lobby_id) {
+            if !people.contains(&p.email.as_str()) {
+                people.push(&p.email);
+            }
+        }
+        people.len()
     }
 
     /// Typical length for a game, with the fallbacks of §5.6.
@@ -326,9 +441,8 @@ mod tests {
 
     #[test]
     fn status_groups() {
-        assert!(LobbyStatus::Planned.is_future());
         assert!(LobbyStatus::Grace.is_running());
-        assert!(LobbyStatus::Done.is_over());
+        assert!(!LobbyStatus::Done.is_running());
         assert_eq!(LobbyStatus::parse("grace"), Some(LobbyStatus::Grace));
         assert_eq!(LobbyStatus::parse("nope"), None);
     }

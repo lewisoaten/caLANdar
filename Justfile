@@ -335,6 +335,20 @@ cloudrun-deploy image_url:
 		--format 'value(status.url)')
 	echo "Live stream origin: ${LIVE_STREAM_ORIGIN}"
 
+	# Live's backstop (docs/live-event/DESIGN.md §3.6): with nobody watching,
+	# Cloud Scheduler ticks live events once a minute (graces, deadlines,
+	# Steam presence), authorised by a shared secret. Best effort: the
+	# deployer may lack Secret Manager or Scheduler permissions.
+	if ! gcloud secrets describe LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+		head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | gcloud secrets create LIVE_TICK_SECRET \
+			--project "${GCP_PROJECT_ID}" --data-file=- \
+			|| echo "WARNING: could not create LIVE_TICK_SECRET"
+	fi
+	LIVE_SECRETS=""
+	if gcloud secrets describe LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+		LIVE_SECRETS=",LIVE_TICK_SECRET=LIVE_TICK_SECRET:latest"
+	fi
+
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
@@ -344,7 +358,7 @@ cloudrun-deploy image_url:
 		--allow-unauthenticated \
 		--port 8080 \
 		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME},LIVE_STREAM_ORIGIN=${LIVE_STREAM_ORIGIN}" \
-		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${LIVE_SECRETS}" \
 		--min-instances 0 \
 		--max-instances 10 \
 		--memory 512Mi \
@@ -363,6 +377,20 @@ cloudrun-deploy image_url:
 		--region "${GCP_REGION}" \
 		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
+
+	if [ -n "${LIVE_SECRETS}" ]; then
+		# The recipe traces commands (set -x): keep the secret out of the logs.
+		set +x
+		TICK_SECRET=$(gcloud secrets versions access latest --secret LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}")
+		TICK_JOB="${SERVICE_NAME}-live-tick"
+		SCHEDULER_ARGS=(--project "${GCP_PROJECT_ID}" --location "${GCP_REGION}" --schedule "* * * * *" \
+			--uri "${SERVICE_URL}/api/internal/live/tick" --http-method POST \
+			--headers "X-Live-Tick-Secret=${TICK_SECRET}" --attempt-deadline 60s)
+		gcloud scheduler jobs update http "${TICK_JOB}" "${SCHEDULER_ARGS[@]}" >/dev/null 2>&1 \
+			|| gcloud scheduler jobs create http "${TICK_JOB}" "${SCHEDULER_ARGS[@]}" >/dev/null \
+			|| echo "WARNING: could not set up the Cloud Scheduler job ${TICK_JOB}"
+		set -x
+	fi
 
 	# Create/Update a traffic tag that points at the new revision.
 	# This gives us a stable, direct URL to the new revision for health checks.

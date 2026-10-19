@@ -44,6 +44,8 @@ export interface LobbyDetailsProps {
   teams?: React.ReactNode;
   /** Log rows for past lobbies (phase 2). */
   log?: React.ReactNode;
+  /** The first-time Steam setup (players and teams). */
+  setup?: React.ReactNode;
 }
 
 function Section({
@@ -107,6 +109,7 @@ export function LobbyDetails({
   adminActions,
   teams,
   log,
+  setup,
 }: LobbyDetailsProps) {
   if (!lobby) {
     return (
@@ -210,6 +213,7 @@ export function LobbyDetails({
           gap: 2,
         }}
       >
+        {setup}
         {teams}
         {!teams && (
           <Section
@@ -294,7 +298,7 @@ export function LobbyDetails({
           </Section>
         )}
 
-        {log}
+        {(past || lobby.status === "live" || lobby.status === "empty") && log}
 
         {actions && (
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>

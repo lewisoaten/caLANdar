@@ -13,7 +13,11 @@
     clippy::single_option_map,
     clippy::too_many_lines,
     clippy::missing_const_for_fn,
-    clippy::derive_partial_eq_without_eq
+    clippy::derive_partial_eq_without_eq,
+    // Engine rules share one `Result` shape and pass the step's context.
+    clippy::unnecessary_wraps,
+    clippy::too_many_arguments,
+    clippy::redundant_pub_crate
 )]
 
 pub mod engine;
@@ -22,6 +26,7 @@ pub mod log;
 pub mod model;
 pub mod store;
 pub mod stream;
+pub mod ticker;
 pub mod token;
 pub mod views;
 

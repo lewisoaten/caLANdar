@@ -368,6 +368,8 @@ pub async fn schedule_suggested_games(
         pinned_slots,
         default_game_duration: 120, // 2 hours default
         tz,
+        // During the event, plan only what's left (DESIGN.md §4.5).
+        plan_from: Some(Utc::now()).filter(|now| *now > event_start),
     };
 
     let scheduler_output = scheduler::schedule_games(&scheduler_input);

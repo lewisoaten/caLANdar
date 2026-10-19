@@ -10,7 +10,9 @@ use chrono::{DateTime, Utc};
 use rocket::serde::{Deserialize, Serialize};
 use rocket_okapi::okapi::schemars::{self, JsonSchema};
 
-use super::model::{pid, Email, Food, LiveState, Lobby, Team, Typical};
+use super::model::{
+    pid, Email, Food, LiveState, Lobby, LobbySource, Member, Prejoin, Team, Typical,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
@@ -160,9 +162,27 @@ const fn typical_view(t: Typical) -> TypicalView {
     }
 }
 
-pub fn person_view(state: &LiveState, email: &str) -> Option<PersonView> {
+pub fn person_view(state: &LiveState, email: &str, now: DateTime<Utc>) -> Option<PersonView> {
     let person = state.people.get(email)?;
     let checkin = state.checkins.get(email);
+    let presence = checkin.and_then(|_| {
+        let p = state.presence.get(email);
+        let via = state
+            .current_membership(email)
+            .and_then(|(member, _)| state.members.get(&member))
+            .map(|m| m.via.as_str().to_string());
+        if p.is_none() && via.is_none() {
+            return None;
+        }
+        Some(PresenceView {
+            game_id: p.and_then(|p| p.game_id),
+            game_name: p.and_then(|p| p.game_name.clone()),
+            via,
+            afk: p.is_some_and(|p| p.is_afk(now)),
+            switch_lobby_id: p.and_then(|p| p.switch_lobby_id).map(|id| id.to_string()),
+            switch_grace_until: p.and_then(|p| p.switch_grace_until),
+        })
+    });
     Some(PersonView {
         pid: pid(email),
         handle: person.display_name(),
@@ -177,7 +197,7 @@ pub fn person_view(state: &LiveState, email: &str) -> Option<PersonView> {
         checked_in: checkin.is_some(),
         checked_in_at: checkin.map(|c| c.at),
         has_steam: person.steam_id.is_some(),
-        presence: None,
+        presence,
     })
 }
 
@@ -203,9 +223,50 @@ pub fn lobby_view(state: &LiveState, lobby: &Lobby) -> LobbyView {
         grace_until: lobby.grace_until,
         grace_locked: lobby.grace_locked,
         empty_since: lobby.empty_since,
-        members: Vec::new(),
-        prejoins: Vec::new(),
-        needs_setup: false,
+        members: {
+            let mut members: Vec<&Member> = state
+                .members
+                .values()
+                .filter(|m| m.lobby_id == lobby.id)
+                .collect();
+            members.sort_by_key(|m| (m.joined_at, m.id));
+            members
+                .into_iter()
+                .map(|m| MemberView {
+                    pid: pid(&m.email),
+                    team: m.team.clone(),
+                    via: m.via.as_str().to_string(),
+                    joined_at: m.joined_at,
+                    left_at: m.left_at,
+                    left_reason: m.left_reason.clone(),
+                })
+                .collect()
+        },
+        prejoins: {
+            let mut prejoins: Vec<&Prejoin> = state
+                .prejoins
+                .values()
+                .filter(|p| p.lobby_id == lobby.id)
+                .collect();
+            prejoins.sort_by_key(|p| p.created_at);
+            prejoins
+                .into_iter()
+                .map(|p| PrejoinView {
+                    pid: pid(&p.email),
+                    team: p.team.clone(),
+                    random: p.random_team,
+                    created_at: p.created_at,
+                    dropped_at: p.dropped_at,
+                    drop_reason: p.drop_reason.clone(),
+                })
+                .collect()
+        },
+        // First time this game is seen on Steam: ask for players and teams.
+        needs_setup: lobby.source == LobbySource::Steam
+            && lobby.status.is_running()
+            && lobby
+                .game_id
+                .is_some_and(|g| !state.defaults.contains_key(&g)),
         typical: lobby
             .game_id
             .map(|g| typical_view(state.typical_for(Some(g)))),
@@ -214,12 +275,36 @@ pub fn lobby_view(state: &LiveState, lobby: &Lobby) -> LobbyView {
     }
 }
 
+/// One item of the admin's check-in queue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct AdminQueueItem {
+    pub pid: String,
+    /// `playing-not-checked-in`
+    pub kind: String,
+    pub game_name: Option<String>,
+}
+
+/// People Steam shows playing who haven't checked in (admins only).
+pub fn admin_queue(state: &LiveState) -> Vec<AdminQueueItem> {
+    let mut items: Vec<AdminQueueItem> = super::engine::playing_not_checked_in(state)
+        .into_iter()
+        .map(|(email, game_name)| AdminQueueItem {
+            pid: pid(&email),
+            kind: "playing-not-checked-in".to_string(),
+            game_name,
+        })
+        .collect();
+    items.sort_by(|a, b| a.pid.cmp(&b.pid));
+    items
+}
+
 /// Every person's view, by email.
-pub fn people_views(state: &LiveState) -> BTreeMap<Email, PersonView> {
+pub fn people_views(state: &LiveState, now: DateTime<Utc>) -> BTreeMap<Email, PersonView> {
     state
         .people
         .keys()
-        .filter_map(|email| person_view(state, email).map(|v| (email.clone(), v)))
+        .filter_map(|email| person_view(state, email, now).map(|v| (email.clone(), v)))
         .collect()
 }
 
@@ -277,7 +362,6 @@ pub fn suggestion_id(game_id: i64, start: DateTime<Utc>) -> String {
 }
 
 /// Parse a suggestion id back into `(game_id, start)`.
-#[allow(dead_code)] // Pre-joining a suggestion (phase 2) materialises it.
 pub fn parse_suggestion_id(id: &str) -> Option<(i64, DateTime<Utc>)> {
     let rest = id.strip_prefix('s')?;
     let (game, ms) = rest.split_once('@')?;

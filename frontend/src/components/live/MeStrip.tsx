@@ -17,6 +17,7 @@ import {
   myNow,
 } from "../../live/selectors";
 import { Cover, Mono } from "./liveUi";
+import { formatRemaining } from "../../live/clock";
 
 export interface MeStripProps {
   state: LiveState;
@@ -232,6 +233,25 @@ export function MeStrip({
         </Box>
       )}
 
+      {me?.presence?.switchLobbyId &&
+        me.presence.switchGraceUntil &&
+        Date.parse(me.presence.switchGraceUntil) > now && (
+          <Mono
+            size={11}
+            color={colors.pinkText}
+            sx={{
+              border: `1px solid ${colors.pink}`,
+              px: 1,
+              py: "4px",
+              whiteSpace: "normal",
+            }}
+          >
+            LAUNCH{" "}
+            {state.lobbies[me.presence.switchLobbyId]?.name.toUpperCase() ??
+              "THE GAME"}{" "}
+            TO SWITCH · {formatRemaining(me.presence.switchGraceUntil, now)}
+          </Mono>
+        )}
       <Box
         sx={{
           display: "flex",

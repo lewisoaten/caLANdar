@@ -229,6 +229,7 @@ fn build_rocket(
     log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]
     let hub = live::hub::LiveHub::new(pool.clone());
+    live::ticker::spawn(hub.clone(), pool.clone(), steam_api_key.clone());
     let rocket = rocket::build()
         .attach(CORS)
         .manage::<Arc<live::hub::LiveHub>>(hub)
@@ -251,6 +252,13 @@ fn build_rocket(
                 routes::live::checkin,
                 routes::live::settings,
                 routes::live::tick,
+                routes::live::presence,
+                routes::live::prejoin,
+                routes::live::unprejoin,
+                routes::live::end_lobby,
+                routes::live::lobby_defaults,
+                routes::live::dev_presence,
+                routes::live::internal_tick,
                 routes::activity_ticker::get_activity_ticker,
                 routes::auth::login,
                 routes::auth::verify_email,
@@ -416,6 +424,11 @@ async fn serve_live() -> Result<(), Box<dyn std::error::Error>> {
     let config = rocket_config()?;
     let pool = connect_pool(&database_url).await?;
     let hub = live::hub::LiveHub::new(pool.clone());
+    live::ticker::spawn(
+        hub.clone(),
+        pool.clone(),
+        std::env::var("STEAM_API_KEY").unwrap_or_default(),
+    );
     let _rocket = rocket::build()
         .attach(CORS)
         .manage::<Arc<live::hub::LiveHub>>(hub)

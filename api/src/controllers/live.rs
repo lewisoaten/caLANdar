@@ -75,7 +75,8 @@ pub async fn execute(
         .filter(|k| !k.is_empty() && k.len() <= MAX_KEY_LEN);
     let actor = match &input {
         Input::Command { actor, .. } => Some(actor.email.clone()),
-        Input::Tick => None,
+        Input::Presence { .. } => Some("steam".to_string()),
+        Input::Tick | Input::Materialise { .. } => None,
     };
 
     let mut tx = pool
@@ -211,6 +212,37 @@ pub async fn plan_views(pool: &PgPool, state: &LiveState) -> Vec<LobbyView> {
             Vec::new()
         }
     }
+}
+
+/// The planner suggestion for `game_id` at `start`, if it is still on the
+/// plan (people can only pre-join what the planner actually suggests).
+pub async fn find_suggestion(
+    pool: &PgPool,
+    event_id: i32,
+    game_id: i64,
+    start: chrono::DateTime<Utc>,
+) -> Result<Option<crate::live::engine::Suggestion>, Error> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(db("Unable to get a connection"))?;
+    let Some(state) = store::load(&mut conn, event_id)
+        .await
+        .map_err(db("Unable to load live state"))?
+    else {
+        return Err(Error::NotFound(format!("Event {event_id} not found")));
+    };
+    drop(conn);
+    Ok(plan_views(pool, &state)
+        .await
+        .into_iter()
+        .find(|l| l.game_id == Some(game_id) && l.start == start)
+        .map(|l| crate::live::engine::Suggestion {
+            game_id,
+            game_name: l.name,
+            start: l.start,
+            minutes: l.minutes,
+        }))
 }
 
 /// Recompute the planner's suggestions and, if they changed since last
@@ -363,7 +395,8 @@ pub struct Snapshot {
     /// Recent feed entries and admin posts, oldest first.
     pub feed: Vec<JsonValue>,
     pub floor: Floor,
-    pub admin_queue: Vec<JsonValue>,
+    /// Admins only: people Steam shows playing who haven't checked in.
+    pub admin_queue: Vec<crate::live::views::AdminQueueItem>,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
@@ -440,7 +473,7 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
         me: viewer.email().map(|e| MeView {
             pid: crate::live::model::pid(e),
         }),
-        people: crate::live::views::people_views(&state)
+        people: crate::live::views::people_views(&state, Utc::now())
             .into_values()
             .collect(),
         lobbies,
@@ -451,7 +484,11 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
             .map(crate::live::stream::row_json)
             .collect(),
         floor: floor(pool, &state).await,
-        admin_queue: Vec::new(),
+        admin_queue: if viewer.is_admin() {
+            crate::live::views::admin_queue(&state)
+        } else {
+            Vec::new()
+        },
     })
 }
 
@@ -560,6 +597,170 @@ pub async fn email_for_pid(pool: &PgPool, event_id: i32, pid_value: &str) -> Res
         .map(|e| crate::util::normalise_email(&e))
         .find(|e| crate::live::model::pid(e) == pid_value)
         .ok_or_else(|| Error::NotFound("No such person at this event".to_string()))
+}
+
+/// Claim a background job for an event if it hasn't run in `every`, so only
+/// one instance does it (DESIGN.md §3.6, §3.7).
+async fn claim(pool: &PgPool, event_id: i32, column: &str, every: std::time::Duration) -> bool {
+    let sql = format!(
+        r"
+        INSERT INTO live_runtime (event_id, {column}) VALUES ($1, NOW())
+        ON CONFLICT (event_id) DO UPDATE SET {column} = NOW()
+        WHERE live_runtime.{column} < NOW() - make_interval(secs => $2)
+        "
+    );
+    sqlx::query(&sql)
+        .bind(event_id)
+        .bind(every.as_secs_f64())
+        .execute(pool)
+        .await
+        .is_ok_and(|r| r.rows_affected() > 0)
+}
+
+/// Is this a real Steam key (not the local placeholder)?
+pub fn steam_enabled(steam_api_key: &str) -> bool {
+    !steam_api_key.is_empty() && steam_api_key != "test_steam_key"
+}
+
+/// Poll Steam for the presence of everyone attending with a Steam id
+/// (DESIGN.md §3.7): one call per 100 people.
+pub async fn poll_steam(pool: &PgPool, steam_api_key: &str, event_id: i32) -> Result<(), Error> {
+    let people = sqlx::query_as::<_, (String, i64)>(
+        r"
+        SELECT i.email, p.steam_id
+        FROM invitation i
+        JOIN profiles p ON LOWER(p.email) = LOWER(i.email)
+        WHERE i.event_id = $1 AND i.response IN ('yes', 'maybe') AND p.steam_id <> 0
+        ",
+    )
+    .bind(event_id)
+    .fetch_all(pool)
+    .await
+    .map_err(db("Unable to read Steam ids"))?;
+    if people.is_empty() {
+        return Ok(());
+    }
+    let ids: Vec<i64> = people.iter().map(|(_, id)| *id).collect();
+    let mut samples = Vec::new();
+    for chunk in ids.chunks(crate::repositories::steam_api::MAX_SUMMARY_IDS) {
+        let found = crate::repositories::steam_api::get_player_summaries(steam_api_key, chunk)
+            .await
+            .map_err(|e| Error::Upstream(format!("Steam presence failed: {e}")))?;
+        for p in found {
+            for (email, _) in people.iter().filter(|(_, id)| *id == p.steam_id) {
+                samples.push(crate::live::engine::PresenceSample {
+                    email: crate::util::normalise_email(email),
+                    game_id: p.game_id,
+                    game_name: p.game_name.clone(),
+                    persona_state: p.persona_state,
+                    visibility: p.visibility,
+                });
+            }
+        }
+    }
+    execute(
+        pool,
+        event_id,
+        Input::Presence {
+            samples,
+            immediate: false,
+        },
+        None,
+    )
+    .await
+    .map(|_| ())
+}
+
+/// Store the planner's suggestions that are starting now, then send the new
+/// plan if it changed.
+pub async fn check_plan(pool: &PgPool, event_id: i32) -> Result<(), Error> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(db("Unable to get a connection"))?;
+    let Some(state) = store::load(&mut conn, event_id)
+        .await
+        .map_err(db("Unable to load live state"))?
+    else {
+        return Ok(());
+    };
+    drop(conn);
+    let now = Utc::now();
+    if now >= state.event.time_begin {
+        let due: Vec<crate::live::engine::Suggestion> = plan_views(pool, &state)
+            .await
+            .into_iter()
+            .filter(|l| {
+                l.start <= now + chrono::Duration::minutes(2)
+                    && l.start + chrono::Duration::minutes(i64::from(l.minutes)) > now
+            })
+            .filter_map(|l| {
+                Some(crate::live::engine::Suggestion {
+                    game_id: l.game_id?,
+                    game_name: l.name,
+                    start: l.start,
+                    minutes: l.minutes,
+                })
+            })
+            .collect();
+        if !due.is_empty() {
+            execute(
+                pool,
+                event_id,
+                Input::Materialise { suggestions: due },
+                None,
+            )
+            .await?;
+        }
+    }
+    refresh_plan(pool, event_id).await;
+    Ok(())
+}
+
+/// One round of background work for an event: tick now, poll Steam every
+/// 30s and check the plan every minute (each claimed, so instances share).
+pub async fn background(pool: &PgPool, steam_api_key: &str, event_id: i32) {
+    if let Err(e) = tick(pool, event_id).await {
+        ::log::warn!("live: tick of event {event_id} failed: {e}");
+    }
+    if steam_enabled(steam_api_key)
+        && claim(
+            pool,
+            event_id,
+            "steam_polled_at",
+            std::time::Duration::from_secs(28),
+        )
+        .await
+    {
+        if let Err(e) = poll_steam(pool, steam_api_key, event_id).await {
+            ::log::warn!("live: Steam poll of event {event_id} failed: {e}");
+        }
+    }
+    if claim(
+        pool,
+        event_id,
+        "plan_checked_at",
+        std::time::Duration::from_secs(55),
+    )
+    .await
+    {
+        if let Err(e) = check_plan(pool, event_id).await {
+            ::log::warn!("live: plan check of event {event_id} failed: {e}");
+        }
+    }
+}
+
+/// Events in their live window now (for the Cloud Scheduler backstop).
+pub async fn live_events(pool: &PgPool) -> Result<Vec<i32>, Error> {
+    sqlx::query_scalar::<_, i32>(
+        r"
+        SELECT id FROM event
+        WHERE time_begin - INTERVAL '2 hours' <= NOW() AND time_end + INTERVAL '1 hour' >= NOW()
+        ",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(db("Unable to list live events"))
 }
 
 /// The actor for a signed-in user.

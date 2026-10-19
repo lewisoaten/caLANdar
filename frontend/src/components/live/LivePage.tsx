@@ -30,7 +30,12 @@ import { LiveFloor } from "./LiveFloor";
 import { LiveFeed } from "./LiveFeed";
 import { AdminLobbyActions } from "./AdminLobbyActions";
 import { LiveSettingsPanel } from "./LiveSettingsPanel";
+import { LobbyActions, LobbyLog, SetupCard } from "./LobbyActions";
+import { AuditTimeline } from "./AuditTimeline";
+import { AdminQueuePanel } from "./AdminQueuePanel";
+import { DevPresencePanel } from "./DevPresencePanel";
 import { Mono } from "./liveUi";
+import { currentMembers } from "../../live/selectors";
 
 export default function LivePage() {
   const { id } = useParams();
@@ -44,6 +49,7 @@ export default function LivePage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [jumpKey, setJumpKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [lens, setLens] = useState<"lobbies" | "players">("lobbies");
 
   const selectedId =
     selected && state.lobbies[selected]
@@ -64,7 +70,23 @@ export default function LivePage() {
         if (!connection) return null;
         setBusy(true);
         try {
-          return await sendLiveCommand(connection, token, path, body, options);
+          const result = await sendLiveCommand(
+            connection,
+            token,
+            path,
+            body,
+            options,
+          );
+          // Pre-joining a suggestion stores it under a new id: follow it.
+          const stored = result.lobbies?.find((l) => !l.virtual);
+          if (
+            selected &&
+            state.lobbies[selected]?.virtual &&
+            stored &&
+            path.includes(encodeURIComponent(selected))
+          )
+            setSelected(stored.id);
+          return result;
         } catch (e) {
           enqueueSnackbar(
             userFacingReason(e) ?? "That didn't work. Try again.",
@@ -77,7 +99,7 @@ export default function LivePage() {
           setBusy(false);
         }
       },
-    [connection, token, enqueueSnackbar],
+    [connection, token, enqueueSnackbar, selected, state.lobbies],
   );
 
   if (state.error === "notFound") {
@@ -128,6 +150,7 @@ export default function LivePage() {
         busy={busy}
         onCheckIn={() => void command("/checkin", {})}
         onSelect={setSelected}
+        onLeave={() => void command("/presence", { none: true })}
       />
 
       <Panel
@@ -143,6 +166,25 @@ export default function LivePage() {
               flexWrap: "wrap",
             }}
           >
+            {state.isAdmin && (
+              <Box
+                sx={{ display: "flex", border: `1px solid ${colors.amber}66` }}
+              >
+                {(["lobbies", "players"] as const).map((l) => (
+                  <Button
+                    key={l}
+                    size="small"
+                    color="warning"
+                    variant={lens === l ? "contained" : "text"}
+                    aria-pressed={lens === l}
+                    onClick={() => setLens(l)}
+                    sx={{ minHeight: 32, borderRadius: 0 }}
+                  >
+                    {l === "lobbies" ? "Lobbies" : "Audit"}
+                  </Button>
+                ))}
+              </Box>
+            )}
             <ConnectionIndicator
               status={state.status}
               lastUpdate={state.lastUpdate}
@@ -159,13 +201,17 @@ export default function LivePage() {
           </Box>
         }
       >
-        <LiveTimeline
-          state={state}
-          now={now}
-          selectedId={selectedId}
-          onSelect={setSelected}
-          jumpKey={jumpKey}
-        />
+        {lens === "players" && state.isAdmin ? (
+          <AuditTimeline state={state} now={now} />
+        ) : (
+          <LiveTimeline
+            state={state}
+            now={now}
+            selectedId={selectedId}
+            onSelect={setSelected}
+            jumpKey={jumpKey}
+          />
+        )}
       </Panel>
 
       <Box
@@ -189,6 +235,34 @@ export default function LivePage() {
             state={state}
             lobby={lobby}
             now={now}
+            setup={
+              lobby?.needsSetup &&
+              lobby.gameId &&
+              currentMembers(lobby).some((m) => m.pid === state.me) ? (
+                <SetupCard
+                  lobby={lobby}
+                  eventId={eventId}
+                  busy={busy}
+                  command={(body) =>
+                    command(`/api/games/${lobby.gameId}/lobby-defaults`, body, {
+                      method: "PUT",
+                    })
+                  }
+                />
+              ) : undefined
+            }
+            actions={
+              lobby && lobby.status !== "done" ? (
+                <LobbyActions
+                  state={state}
+                  lobby={lobby}
+                  now={now}
+                  busy={busy}
+                  command={command}
+                />
+              ) : undefined
+            }
+            log={lobby ? <LobbyLog state={state} lobby={lobby} /> : undefined}
             adminActions={
               lobby && eventId ? (
                 <AdminLobbyActions
@@ -210,8 +284,10 @@ export default function LivePage() {
             gap: sectionGap,
           }}
         >
+          <AdminQueuePanel state={state} command={command} busy={busy} />
           <UpNext state={state} now={now} onSelect={setSelected} />
           <LiveFloor state={state} />
+          <DevPresencePanel state={state} command={command} />
           {state.isAdmin && connection && (
             <LiveSettingsPanel eventId={eventId} state={state} token={token} />
           )}

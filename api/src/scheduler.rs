@@ -85,6 +85,9 @@ pub struct SchedulerInput {
     pub default_game_duration: i32,
     /// Zone whose wall clock defines the night (see [`NIGHT_START_HOUR`]).
     pub tz: Tz,
+    /// Plan only sessions starting at or after this (Live re-plans from
+    /// what's left of the event; nothing is suggested in the past).
+    pub plan_from: Option<DateTime<Utc>>,
 }
 
 /// A suggested game schedule
@@ -145,7 +148,10 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
         .collect();
     sorted_games.sort_by_key(|game| std::cmp::Reverse(game.votes));
 
-    let candidates = build_start_times(input.event_start, input.event_end, input.tz);
+    let mut candidates = build_start_times(input.event_start, input.event_end, input.tz);
+    if let Some(from) = input.plan_from {
+        candidates.retain(|&start| start >= from);
+    }
 
     for _round in 0..MAX_SESSIONS_PER_GAME {
         let mut placed_any = false;
@@ -475,6 +481,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -567,6 +574,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -697,6 +705,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -799,6 +808,7 @@ mod tests {
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 10am-11am
             default_game_duration: 120,      // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -898,6 +908,7 @@ mod tests {
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 1am-4am
             default_game_duration: 120,      // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -987,7 +998,34 @@ mod tests {
             pinned_slots,
             default_game_duration: 120,
             tz: chrono_tz::UTC,
+            plan_from: None,
         }
+    }
+
+    #[test]
+    fn test_plans_only_from_plan_from() {
+        // Live re-plans from what's left: no suggestion starts in the past,
+        // and the first one is on the next :00/:30 slot.
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 24, 22, 0, 0).unwrap();
+        let mut input = input_for(
+            vec![game(1, 5, &["a", "b"], 2), game(2, 3, &["a", "b"], 2)],
+            all_day_voters(&["a", "b"]),
+            start,
+            end,
+            vec![],
+        );
+        input.plan_from = Some(Utc.with_ymd_and_hms(2024, 11, 24, 14, 10, 0).unwrap());
+        let output = schedule_games(&input);
+        assert_eq!(output.suggested_schedules.len(), 2);
+        assert_eq!(
+            output.suggested_schedules[0].start_time,
+            Utc.with_ymd_and_hms(2024, 11, 24, 14, 30, 0).unwrap()
+        );
+        assert!(output
+            .suggested_schedules
+            .iter()
+            .all(|s| s.start_time >= input.plan_from.expect("set above")));
     }
 
     #[test]

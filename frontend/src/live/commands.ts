@@ -29,7 +29,7 @@ export interface CommandOptions {
 
 /**
  * Send a command for the connection's event. `path` is relative to
- * `/api/events/:id/live`. Throws an ApiError on rejection (409 carries the
+ * `/api/events/:id/live` (or a full `/api/...` path). Throws an ApiError on rejection (409 carries the
  * reason, e.g. "Lobby full").
  */
 export async function sendLiveCommand(
@@ -42,7 +42,12 @@ export async function sendLiveCommand(
   const eventId = connection.store.getState().eventId;
   const { method = "POST", admin = false, retries = 2 } = options;
   const key = idempotencyKey();
-  const url = `/api/events/${eventId}/live${path}${admin ? (path.includes("?") ? "&" : "?") + "as_admin=true" : ""}`;
+  // Paths are relative to the event's live API, unless they are full API
+  // paths (`/api/games/...`).
+  const base = path.startsWith("/api/")
+    ? path
+    : `/api/events/${eventId}/live${path}`;
+  const url = `${base}${admin ? (base.includes("?") ? "&" : "?") + "as_admin=true" : ""}`;
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {

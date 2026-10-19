@@ -219,14 +219,12 @@ pub async fn get_owned_games(
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
-#[allow(dead_code)]
 pub struct PlayerSummaries {
     pub response: PlayerSummariesResponse,
 }
 
 #[derive(Clone, Deserialize)]
 #[serde(crate = "rocket::serde")]
-#[allow(dead_code)]
 pub struct PlayerSummariesResponse {
     pub players: Vec<PlayerSummary>,
 }
@@ -279,51 +277,80 @@ pub struct PlayerSummariesResponse {
 //       ]
 //     }
 //   }
-#[derive(Clone, Deserialize)]
+/// One player from `GetPlayerSummaries`. Everything but `steamid` is
+/// optional: Steam leaves fields out for private or incomplete profiles,
+/// and one odd profile must not break the whole poll.
+#[derive(Clone, Debug, Deserialize)]
 #[serde(crate = "rocket::serde")]
-#[allow(dead_code)]
 pub struct PlayerSummary {
     pub steamid: String,
-    pub personaname: String,
-    pub profileurl: String,
-    pub avatar: String,
-    pub avatarmedium: String,
-    pub avatarfull: String,
-    pub personastate: i32,
-    pub communityvisibilitystate: i32,
-    pub profilestate: i32,
-    pub lastlogoff: i64,
-    pub commentpermission: i32,
-    pub realname: Option<String>,
-    pub primaryclanid: String,
-    pub timecreated: i64,
-    pub personastateflags: i32,
+    #[serde(default)]
+    pub personastate: Option<i32>,
+    #[serde(default)]
+    pub communityvisibilitystate: Option<i32>,
+    /// The game being played, as an app id string.
+    #[serde(default)]
     pub gameid: Option<String>,
+    /// The game's name.
+    #[serde(default)]
+    pub gameextrainfo: Option<String>,
 }
 
-#[allow(dead_code)]
-pub async fn get_current_game(
-    steam_api_key: &String,
-    steam_id: &String,
-) -> Result<Option<String>, reqwest::Error> {
+/// What Live needs to know about a player right now.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlayerPresence {
+    pub steam_id: i64,
+    pub game_id: Option<i64>,
+    pub game_name: Option<String>,
+    pub persona_state: i32,
+    pub visibility: i32,
+}
+
+impl From<PlayerSummary> for Option<PlayerPresence> {
+    fn from(p: PlayerSummary) -> Self {
+        Some(PlayerPresence {
+            steam_id: p.steamid.parse().ok()?,
+            game_id: p.gameid.and_then(|g| g.parse().ok()),
+            game_name: p.gameextrainfo,
+            persona_state: p.personastate.unwrap_or(0),
+            visibility: p.communityvisibilitystate.unwrap_or(3),
+        })
+    }
+}
+
+/// Steam takes at most this many ids per `GetPlayerSummaries` call.
+pub const MAX_SUMMARY_IDS: usize = 100;
+
+/// Presence of up to [`MAX_SUMMARY_IDS`] players in one call (DESIGN.md
+/// §3.7). The key never reaches logs (`without_url`).
+pub async fn get_player_summaries(
+    steam_api_key: &str,
+    steam_ids: &[i64],
+) -> Result<Vec<PlayerPresence>, reqwest::Error> {
+    if steam_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids = steam_ids
+        .iter()
+        .take(MAX_SUMMARY_IDS)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     let request_url = format!(
-        "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={steam_id}",
+        "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key={steam_api_key}&steamids={ids}",
     );
-
-    log::info!("Requesting current game from Steam API for {steam_id}");
-
     let response = reqwest::get(&request_url)
         .await
+        .map_err(reqwest::Error::without_url)?
+        .error_for_status()
         .map_err(reqwest::Error::without_url)?;
-
-    let player_summaries: PlayerSummaries =
-        response.json().await.map_err(reqwest::Error::without_url)?;
-
-    Ok(player_summaries
+    let summaries: PlayerSummaries = response.json().await.map_err(reqwest::Error::without_url)?;
+    Ok(summaries
         .response
         .players
-        .first()
-        .and_then(|p| p.gameid.clone()))
+        .into_iter()
+        .filter_map(Option::<PlayerPresence>::from)
+        .collect())
 }
 
 #[derive(Clone, Deserialize)]
@@ -513,5 +540,47 @@ mod tests {
         // Slicing bytes at 2 would split the 2-byte "é" and panic.
         assert_eq!(snippet("aéb", 2), "aé");
         assert_eq!(snippet("", 10), "");
+    }
+}
+
+#[cfg(test)]
+mod presence_tests {
+    use super::*;
+
+    #[test]
+    fn parses_partial_player_summaries() {
+        let body = r#"{"response":{"players":[
+            {"steamid":"76561197990048341","personastate":1,"communityvisibilitystate":3,
+             "gameid":"730","gameextrainfo":"Counter-Strike 2","personaname":"Caecus"},
+            {"steamid":"76561197971093005"},
+            {"steamid":"not-a-number","personastate":1}
+        ]}}"#;
+        let parsed: PlayerSummaries =
+            rocket::serde::json::serde_json::from_str(body).expect("parses");
+        let presence: Vec<PlayerPresence> = parsed
+            .response
+            .players
+            .into_iter()
+            .filter_map(Option::<PlayerPresence>::from)
+            .collect();
+        assert_eq!(
+            presence,
+            vec![
+                PlayerPresence {
+                    steam_id: 76_561_197_990_048_341,
+                    game_id: Some(730),
+                    game_name: Some("Counter-Strike 2".to_string()),
+                    persona_state: 1,
+                    visibility: 3,
+                },
+                PlayerPresence {
+                    steam_id: 76_561_197_971_093_005,
+                    game_id: None,
+                    game_name: None,
+                    persona_state: 0,
+                    visibility: 3,
+                },
+            ]
+        );
     }
 }
