@@ -16,8 +16,9 @@ use super::{
     engine::{FeedEntry, Outcome},
     log::{Audience, NewLogRow},
     model::{
-        pid, CheckIn, EventInfo, Food, GameDefaults, LiveState, Lobby, LobbyKind, LobbySource,
-        LobbyStatus, Member, Person, Prejoin, Presence, Rsvp, SeatRef, Team, Typical, Via,
+        pid, Ballot, CheckIn, EventInfo, Food, GameDefaults, LiveState, Lobby, LobbyKind,
+        LobbySource, LobbyStatus, Member, OptionKind, Person, Prejoin, Presence, Rsvp, SeatRef,
+        Team, Typical, Via, Vote, VoteOption, VoteStatus, VoteType,
     },
     views::{self, LobbyView, PersonView},
 };
@@ -305,6 +306,7 @@ pub async fn load(
         state.lobbies.insert(lobby.id, lobby);
     }
     load_presence(&mut *conn, &mut state).await?;
+    load_votes(&mut *conn, &mut state).await?;
 
     // Defaults and learned lengths for the games on this event's schedule
     // and suggestion list.
@@ -327,6 +329,133 @@ pub async fn load(
     .await?;
 
     Ok(Some(state))
+}
+
+#[derive(sqlx::FromRow)]
+struct VoteRow {
+    id: i64,
+    #[sqlx(rename = "type")]
+    kind: String,
+    target_lobby_id: Option<i32>,
+    slot_start: Option<DateTime<Utc>>,
+    status: String,
+    resolution: Option<String>,
+    opened_by: String,
+    opened_at: DateTime<Utc>,
+    deadline: DateTime<Utc>,
+    settle_at: Option<DateTime<Utc>>,
+    resolved_by: Option<String>,
+    resolved_at: Option<DateTime<Utc>>,
+    winner_option_id: Option<i64>,
+}
+
+#[derive(sqlx::FromRow)]
+struct OptionRow {
+    id: i64,
+    vote_id: i64,
+    kind: String,
+    label: String,
+    lobby_id: Option<i32>,
+    game_id: Option<i64>,
+    food: Option<JsonValue>,
+    start_delta_min: Option<i32>,
+    duration_min: Option<i32>,
+    new_start: Option<DateTime<Utc>>,
+    max_players: Option<i32>,
+    teams: Option<JsonValue>,
+    created_by: Option<String>,
+    created_at: DateTime<Utc>,
+}
+
+/// Votes of the last day (older ones no longer matter to the rules) with
+/// their options and ballots.
+async fn load_votes(conn: &mut PgConnection, state: &mut LiveState) -> Result<(), sqlx::Error> {
+    let event_id = state.event.id;
+    let votes = sqlx::query_as::<_, VoteRow>(
+        r"
+        SELECT id, type, target_lobby_id, slot_start, status, resolution, opened_by, opened_at,
+            deadline, settle_at, resolved_by, resolved_at, winner_option_id
+        FROM live_vote
+        WHERE event_id = $1 AND (status = 'open' OR opened_at > NOW() - INTERVAL '1 day')
+        ",
+    )
+    .bind(event_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    let ids: Vec<i64> = votes.iter().map(|v| v.id).collect();
+    for v in votes {
+        state.votes.insert(
+            v.id,
+            Vote {
+                id: v.id,
+                kind: VoteType::parse(&v.kind).unwrap_or(VoteType::Slot),
+                target_lobby_id: v.target_lobby_id,
+                slot_start: v.slot_start,
+                status: VoteStatus::parse(&v.status).unwrap_or(VoteStatus::Lapsed),
+                resolution: v.resolution,
+                opened_by: v.opened_by,
+                opened_at: v.opened_at,
+                deadline: v.deadline,
+                settle_at: v.settle_at,
+                resolved_by: v.resolved_by,
+                resolved_at: v.resolved_at,
+                winner_option_id: v.winner_option_id,
+            },
+        );
+    }
+    if ids.is_empty() {
+        return Ok(());
+    }
+    let options = sqlx::query_as::<_, OptionRow>(
+        r"
+        SELECT id, vote_id, kind, label, lobby_id, game_id, food, start_delta_min, duration_min,
+            new_start, max_players, teams, created_by, created_at
+        FROM live_vote_option WHERE vote_id = ANY($1)
+        ",
+    )
+    .bind(&ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    for o in options {
+        state.options.insert(
+            o.id,
+            VoteOption {
+                id: o.id,
+                vote_id: o.vote_id,
+                kind: OptionKind::parse(&o.kind).unwrap_or(OptionKind::Game),
+                lobby_id: o.lobby_id,
+                game_id: o.game_id,
+                name: o.label,
+                food: o.food.and_then(|v| serde_json::from_value(v).ok()),
+                start_delta_min: o.start_delta_min,
+                duration_min: o.duration_min,
+                new_start: o.new_start,
+                max_players: o.max_players,
+                teams: parse_teams(o.teams),
+                created_by: o.created_by,
+                created_at: o.created_at,
+            },
+        );
+    }
+    let ballots = sqlx::query_as::<_, (i64, String, Option<i64>, bool, DateTime<Utc>)>(
+        "SELECT vote_id, email, option_id, split_ok, updated_at FROM live_vote_ballot WHERE vote_id = ANY($1)",
+    )
+    .bind(&ids)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (vote_id, email, option_id, split_ok, updated_at) in ballots {
+        state.ballots.insert(
+            (vote_id, email.clone()),
+            Ballot {
+                vote_id,
+                email,
+                option_id,
+                split_ok,
+                updated_at,
+            },
+        );
+    }
+    Ok(())
 }
 
 /// Members, pre-joins and presence of an event's lobbies.
@@ -568,7 +697,8 @@ async fn insert_lobby(
     .bind(l.max_players)
     .bind(teams_json(l.teams.as_ref()))
     .bind(&l.proposed_by)
-    .bind(l.created_by_vote)
+    // A vote created in the same step gets its id after the lobby does.
+    .bind(l.created_by_vote.filter(|v| *v > 0))
     .bind(l.grace_until)
     .bind(l.grace_locked)
     .bind(l.hold_remaining_s)
@@ -643,20 +773,29 @@ pub async fn persist(
                 .await?;
         }
     }
-    for (id, lobby) in &after.lobbies {
+    // Temporary ids count down: insert in reverse key order to keep the
+    // order things were created in.
+    for (id, lobby) in after.lobbies.iter().rev() {
         if *id < 0 {
             let real = insert_lobby(&mut *conn, event_id, lobby).await?;
             remap.lobbies.insert(*id, real);
         }
     }
     apply_remap(after, outcome, &remap);
+    let new_votes = persist_votes(conn, before, after, outcome).await?;
     for (id, lobby) in &after.lobbies {
-        if before.lobbies.get(id).is_some_and(|b| b != lobby) {
+        let changed = before.lobbies.get(id).is_some_and(|b| b != lobby);
+        let new_with_vote = !before.lobbies.contains_key(id)
+            && lobby
+                .created_by_vote
+                .is_some_and(|v| new_votes.contains(&v));
+        if changed || new_with_vote {
             update_lobby(&mut *conn, lobby).await?;
         }
     }
 
     persist_members(conn, before, after).await?;
+    persist_people(conn, before, after).await?;
     persist_prejoins(conn, before, after).await?;
     persist_presence(conn, before, after).await?;
     persist_defaults(conn, before, after).await?;
@@ -682,6 +821,225 @@ pub async fn persist(
     Ok(remap)
 }
 
+/// Votes, options and ballots. New votes and options get real ids, swapped
+/// in everywhere they are referenced. Returns the ids of new votes.
+async fn persist_votes(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &mut LiveState,
+    outcome: &mut Outcome,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let event_id = after.event.id;
+    for id in before.votes.keys() {
+        if !after.votes.contains_key(id) {
+            sqlx::query("DELETE FROM live_vote WHERE id = $1")
+                .bind(id)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    let mut votes: HashMap<i64, i64> = HashMap::new();
+    for (id, v) in after.votes.iter().rev() {
+        if *id < 0 {
+            let real: i64 = sqlx::query_scalar(
+                r"
+                INSERT INTO live_vote (event_id, type, target_lobby_id, slot_start, status,
+                    opened_by, opened_at, deadline)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id
+                ",
+            )
+            .bind(event_id)
+            .bind(v.kind.as_str())
+            .bind(v.target_lobby_id)
+            .bind(v.slot_start)
+            .bind(v.status.as_str())
+            .bind(&v.opened_by)
+            .bind(v.opened_at)
+            .bind(v.deadline)
+            .fetch_one(&mut *conn)
+            .await?;
+            votes.insert(*id, real);
+        }
+    }
+    let vote_id = |id: i64| votes.get(&id).copied().unwrap_or(id);
+    if !votes.is_empty() {
+        after.votes = std::mem::take(&mut after.votes)
+            .into_iter()
+            .map(|(id, mut v)| {
+                v.id = vote_id(id);
+                (v.id, v)
+            })
+            .collect();
+        for o in after.options.values_mut() {
+            o.vote_id = vote_id(o.vote_id);
+        }
+        after.ballots = std::mem::take(&mut after.ballots)
+            .into_iter()
+            .map(|((v, email), mut b)| {
+                b.vote_id = vote_id(v);
+                ((b.vote_id, email), b)
+            })
+            .collect();
+        for l in after.lobbies.values_mut() {
+            l.created_by_vote = l.created_by_vote.map(vote_id);
+        }
+        for f in &mut outcome.feed {
+            f.vote_id = f.vote_id.map(vote_id);
+        }
+    }
+
+    let mut options: HashMap<i64, i64> = HashMap::new();
+    for (id, o) in after.options.iter().rev() {
+        if *id < 0 {
+            let real: i64 = sqlx::query_scalar(
+                r"
+                INSERT INTO live_vote_option (vote_id, kind, label, lobby_id, game_id, food,
+                    start_delta_min, duration_min, new_start, max_players, teams, created_by,
+                    created_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                RETURNING id
+                ",
+            )
+            .bind(o.vote_id)
+            .bind(o.kind.as_str())
+            .bind(&o.name)
+            .bind(o.lobby_id)
+            .bind(o.game_id)
+            .bind(
+                o.food
+                    .as_ref()
+                    .map(|f| serde_json::to_value(f).unwrap_or(JsonValue::Null)),
+            )
+            .bind(o.start_delta_min)
+            .bind(o.duration_min)
+            .bind(o.new_start)
+            .bind(o.max_players)
+            .bind(teams_json(o.teams.as_ref()))
+            .bind(&o.created_by)
+            .bind(o.created_at)
+            .fetch_one(&mut *conn)
+            .await?;
+            options.insert(*id, real);
+        } else if before.options.get(id).is_some_and(|b| b != o) {
+            sqlx::query(
+                "UPDATE live_vote_option SET label = $2, lobby_id = $3, duration_min = $4 WHERE id = $1",
+            )
+            .bind(id)
+            .bind(&o.name)
+            .bind(o.lobby_id)
+            .bind(o.duration_min)
+            .execute(&mut *conn)
+            .await?;
+        }
+    }
+    let option_id = |id: i64| options.get(&id).copied().unwrap_or(id);
+    if !options.is_empty() {
+        after.options = std::mem::take(&mut after.options)
+            .into_iter()
+            .map(|(id, mut o)| {
+                o.id = option_id(id);
+                (o.id, o)
+            })
+            .collect();
+        for b in after.ballots.values_mut() {
+            b.option_id = b.option_id.map(option_id);
+        }
+        for v in after.votes.values_mut() {
+            v.winner_option_id = v.winner_option_id.map(option_id);
+        }
+    }
+
+    for (id, v) in &after.votes {
+        if before.votes.get(id) == Some(v) {
+            continue;
+        }
+        sqlx::query(
+            r"
+            UPDATE live_vote SET status = $2, resolution = $3, deadline = $4, settle_at = $5,
+                resolved_by = $6, resolved_at = $7, winner_option_id = $8, target_lobby_id = $9
+            WHERE id = $1
+            ",
+        )
+        .bind(id)
+        .bind(v.status.as_str())
+        .bind(&v.resolution)
+        .bind(v.deadline)
+        .bind(v.settle_at)
+        .bind(&v.resolved_by)
+        .bind(v.resolved_at)
+        .bind(v.winner_option_id)
+        .bind(v.target_lobby_id.filter(|l| after.lobbies.contains_key(l)))
+        .execute(&mut *conn)
+        .await?;
+    }
+
+    for key in before.ballots.keys() {
+        if !after.ballots.contains_key(key) {
+            sqlx::query("DELETE FROM live_vote_ballot WHERE vote_id = $1 AND email = $2")
+                .bind(key.0)
+                .bind(&key.1)
+                .execute(&mut *conn)
+                .await?;
+        }
+    }
+    for (key, b) in &after.ballots {
+        if before.ballots.get(key) == Some(b) {
+            continue;
+        }
+        sqlx::query(
+            r"
+            INSERT INTO live_vote_ballot (vote_id, email, option_id, split_ok, updated_at)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (vote_id, email) DO UPDATE SET option_id = $3, split_ok = $4,
+                updated_at = $5
+            ",
+        )
+        .bind(b.vote_id)
+        .bind(&b.email)
+        .bind(b.option_id)
+        .bind(b.split_ok)
+        .bind(b.updated_at)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(votes.values().copied().collect())
+}
+
+/// RSVP and attendance changes made by admins from Live.
+async fn persist_people(
+    conn: &mut PgConnection,
+    before: &LiveState,
+    after: &LiveState,
+) -> Result<(), sqlx::Error> {
+    for (email, p) in &after.people {
+        let Some(old) = before.people.get(email) else {
+            continue;
+        };
+        if old.rsvp == p.rsvp && old.attendance == p.attendance {
+            continue;
+        }
+        sqlx::query(
+            r"
+            UPDATE invitation
+            SET response = $3::invitation_response, attendance = $4, last_modified = NOW()
+            WHERE event_id = $1 AND LOWER(email) = LOWER($2)
+            ",
+        )
+        .bind(after.event.id)
+        .bind(email)
+        .bind(p.rsvp.map(Rsvp::as_str))
+        .bind(if p.attendance.is_empty() {
+            None
+        } else {
+            Some(p.attendance.clone())
+        })
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 async fn persist_members(
     conn: &mut PgConnection,
     before: &LiveState,
@@ -698,7 +1056,7 @@ async fn persist_members(
         }
     }
     let mut inserted = Vec::new();
-    for (id, m) in &after.members {
+    for (id, m) in after.members.iter().rev() {
         if *id < 0 {
             let real: i64 = sqlx::query_scalar(
                 r"
@@ -917,6 +1275,7 @@ pub struct Deltas {
     pub lobbies: Vec<LobbyView>,
     pub deleted_lobbies: Vec<String>,
     pub people: Vec<PersonView>,
+    pub votes: Vec<views::VoteView>,
 }
 
 /// The JSON payload of a feed entry: ids as client ids, people as pids.
@@ -980,6 +1339,23 @@ pub fn delta_rows(
         }
     }
 
+    let before_votes = views::vote_views(before, now);
+    let after_votes = views::vote_views(after, now);
+    for (id, view) in &after_votes {
+        if before_votes.get(id) != Some(view) {
+            deltas.rows.push(with_actor(NewLogRow::new("vote", view)));
+            deltas.votes.push(view.clone());
+        }
+    }
+    for id in before_votes.keys() {
+        if !after_votes.contains_key(id) {
+            deltas.rows.push(with_actor(NewLogRow::new(
+                "vote.delete",
+                json!({ "id": id.to_string() }),
+            )));
+        }
+    }
+
     let before_people = views::people_views(before, now);
     let after_people = views::people_views(after, now);
     for (email, view) in &after_people {
@@ -998,8 +1374,8 @@ pub fn delta_rows(
             NewLogRow::new("feed", feed_payload(after, entry, &key)).tier(entry.tier),
         ));
     }
-    let before_queue = views::admin_queue(before);
-    let after_queue = views::admin_queue(after);
+    let before_queue = views::admin_queue(before, now);
+    let after_queue = views::admin_queue(after, now);
     if before_queue != after_queue {
         deltas.rows.push(with_actor(
             NewLogRow::new("admin.queue", json!({ "items": after_queue }))

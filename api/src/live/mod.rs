@@ -17,7 +17,11 @@
     // Engine rules share one `Result` shape and pass the step's context.
     clippy::unnecessary_wraps,
     clippy::too_many_arguments,
-    clippy::redundant_pub_crate
+    clippy::redundant_pub_crate,
+    // Commands are built once per request; boxing them buys nothing.
+    clippy::large_enum_variant,
+    // Rule functions take the proposal they act on.
+    clippy::needless_pass_by_value
 )]
 
 pub mod engine;

@@ -13,6 +13,9 @@ use super::{
 use crate::live::model::{LiveState, LobbyKind, LobbyStatus, Prejoin};
 
 pub fn run(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
+    super::proposals::expire(state, now, out);
+    super::votes::tick(state, now, out);
+    start_machine(state, now, out);
     switch_graces(state, now);
     manual_expiry(state, now, out);
     food_ends(state, now, out);
@@ -124,5 +127,129 @@ fn afk(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
                 .actor(&email)
                 .data(json!({})),
         );
+    }
+}
+
+/// The start-time machine (DESIGN.md §4.4, §5.4): at its start, a lobby
+/// nobody has joined waits five minutes for someone (everyone involved gets
+/// the pink alert); a joined lobby's grace runs to its end, when stragglers
+/// drop out and the party splits; nobody by the end of a wait and the lobby
+/// is booted back to the planner.
+pub fn start_machine(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
+    if now < state.event.time_begin {
+        return;
+    }
+    let due: Vec<i32> = state
+        .lobbies
+        .values()
+        .filter(|l| {
+            matches!(l.status, LobbyStatus::Planned | LobbyStatus::Confirmed)
+                && l.start <= now
+                // Long past (e.g. added after the fact): leave it be.
+                && now < l.start + membership::GRACE * 2
+        })
+        .map(|l| l.id)
+        .collect();
+    for id in due {
+        if let Some(l) = state.lobbies.get_mut(&id) {
+            l.status = LobbyStatus::Waiting;
+            l.grace_locked = false;
+            l.grace_until = Some(l.start + membership::GRACE);
+            l.version += 1;
+        }
+    }
+
+    let expired: Vec<(i32, LobbyStatus)> = state
+        .lobbies
+        .values()
+        .filter(|l| {
+            matches!(l.status, LobbyStatus::Waiting | LobbyStatus::Grace)
+                && l.grace_until.is_some_and(|g| g <= now)
+        })
+        .map(|l| (l.id, l.status))
+        .collect();
+    for (id, status) in expired {
+        let anyone_in = state.members_of(id).next().is_some();
+        let played = state.members.values().any(|m| m.lobby_id == id);
+        if status == LobbyStatus::Grace && anyone_in {
+            end_grace(state, id, now, out);
+        } else if played {
+            // Played briefly, then everyone left during the grace.
+            membership::finish_lobby(state, id, now, "ended", out);
+        } else {
+            // Nobody joined: back to the planning pool (§5.4.2).
+            super::votes::boot(state, id);
+        }
+    }
+}
+
+/// The grace is over: the lobby is live, anyone still elsewhere drops out
+/// (the auto-split), and random-team players get a team.
+fn end_grace(state: &mut LiveState, lobby_id: i32, now: DateTime<Utc>, out: &mut Outcome) {
+    let inside: Vec<String> = state
+        .members_of(lobby_id)
+        .map(|m| m.email.clone())
+        .collect();
+    let mut dropped = Vec::new();
+    for p in state.prejoins.values_mut() {
+        if p.lobby_id == lobby_id && p.is_active() && !inside.contains(&p.email) {
+            p.dropped_at = Some(now);
+            p.drop_reason = Some("elsewhere".to_string());
+            dropped.push(p.email.clone());
+        }
+    }
+    assign_random_teams(state, lobby_id);
+    if let Some(l) = state.lobbies.get_mut(&lobby_id) {
+        l.status = LobbyStatus::Live;
+        l.grace_until = None;
+        l.grace_locked = false;
+        l.version += 1;
+    }
+    if !dropped.is_empty() {
+        out.feed.push(
+            FeedEntry::new(2, "lobby.split", "party split")
+                .lobby(lobby_id)
+                .people(dropped)
+                .data(json!({ "kicker": "Party split", "inside": inside.len() })),
+        );
+    }
+}
+
+/// Random-team players go to the team with the most open slots (§5.4.4).
+fn assign_random_teams(state: &mut LiveState, lobby_id: i32) {
+    let Some(teams) = state.lobbies.get(&lobby_id).and_then(|l| l.teams.clone()) else {
+        return;
+    };
+    let random: Vec<String> = state
+        .prejoins
+        .values()
+        .filter(|p| p.lobby_id == lobby_id && p.is_active() && p.random_team && p.team.is_none())
+        .map(|p| p.email.clone())
+        .collect();
+    for email in random {
+        let open = |name: &str, size: i32, state: &LiveState| {
+            let filled = state
+                .members_of(lobby_id)
+                .filter(|m| m.team.as_deref() == Some(name))
+                .count();
+            i64::from(size) - i64::try_from(filled).unwrap_or(0)
+        };
+        let Some(team) = teams
+            .iter()
+            .max_by_key(|t| open(&t.name, t.size, state))
+            .map(|t| t.name.clone())
+        else {
+            continue;
+        };
+        if let Some(p) = state.prejoins.get_mut(&(lobby_id, email.clone())) {
+            p.team = Some(team.clone());
+        }
+        if let Some(m) = state
+            .members
+            .values_mut()
+            .find(|m| m.lobby_id == lobby_id && m.email == email && m.is_open())
+        {
+            m.team = Some(team);
+        }
     }
 }

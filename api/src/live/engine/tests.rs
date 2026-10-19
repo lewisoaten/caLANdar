@@ -2,6 +2,7 @@
 //! frames (F1-F13) of the design handoff.
 #![allow(clippy::unwrap_used)]
 
+use super::votes::{involved, title};
 use super::*;
 use crate::live::model::{EventInfo, Person, Rsvp};
 use crate::live::model::{LobbyKind, LobbySource, LobbyStatus, Via};
@@ -425,7 +426,12 @@ fn steam_prefers_the_lobby_you_pre_joined() {
         t(19, 50),
     );
     assert_eq!(lobby_of(&s, "ana@x.io"), Some(planned_id));
-    assert_eq!(s.lobbies[&planned_id].status, LobbyStatus::Live);
+    assert_eq!(
+        s.lobbies[&planned_id].status,
+        LobbyStatus::Grace,
+        "the grace runs to the planned start + 5"
+    );
+    assert_eq!(s.lobbies[&planned_id].grace_until, Some(t(20, 5)));
     assert_eq!(
         s.lobbies[&planned_id].actual_start,
         Some(t(19, 50) + Duration::seconds(30))
@@ -798,4 +804,659 @@ fn admin_end_lobby_closes_it_now() {
     apply(&mut s, cmd(admin(), Command::EndLobby { id }), t(20, 0)).expect("ended");
     assert_eq!(s.lobbies[&id].status, LobbyStatus::Done);
     assert_eq!(lobby_of(&s, "ana@x.io"), None);
+}
+
+// ---- phase 3: start-time machine, proposals and votes ---------------------
+
+const L4D: i64 = 550;
+const PHAS: i64 = 739_630;
+
+fn prejoin_cmd(s: &mut LiveState, who: &str, lobby: i32, at: DateTime<Utc>) {
+    apply(
+        s,
+        cmd(
+            gamer(who),
+            Command::Prejoin {
+                lobby: LobbyRef::Stored(lobby),
+                team: None,
+                random: false,
+            },
+        ),
+        at,
+    )
+    .expect("pre-joined");
+}
+
+fn join_cmd(s: &mut LiveState, who: &str, lobby: i32, at: DateTime<Utc>) {
+    apply(s, cmd(gamer(who), Command::Join { lobby }), at).expect("joined");
+}
+
+fn tick_at(s: &mut LiveState, at: DateTime<Utc>) -> Outcome {
+    apply(s, Input::Tick, at).expect("tick")
+}
+
+fn game(id: i64, name: &str) -> OptionSpec {
+    OptionSpec::Game {
+        game_id: id,
+        name: name.to_string(),
+    }
+}
+
+fn no_players() -> PlayersAndTeams {
+    PlayersAndTeams {
+        max_players: None,
+        teams: None,
+    }
+}
+
+fn the_vote(s: &LiveState) -> crate::live::model::Vote {
+    s.votes.values().next().expect("a vote").clone()
+}
+
+fn option_named(s: &LiveState, vote: i64, name: &str) -> i64 {
+    s.options
+        .values()
+        .find(|o| o.vote_id == vote && o.name.contains(name))
+        .unwrap_or_else(|| panic!("no option {name}"))
+        .id
+}
+
+fn vote_for(s: &mut LiveState, who: &str, vote: i64, option: i64, at: DateTime<Utc>) {
+    apply(
+        s,
+        cmd(
+            gamer(who),
+            Command::Ballot {
+                vote,
+                option: Some(option),
+                split_ok: None,
+            },
+        ),
+        at,
+    )
+    .expect("voted");
+}
+
+#[test]
+fn nobody_joins_and_the_lobby_is_booted_after_five_minutes() {
+    let mut s = checked_in(&["ana@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(20, 0), 120);
+    tick_at(&mut s, t(19, 59));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Planned);
+    tick_at(&mut s, t(20, 0));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+    assert_eq!(s.lobbies[&drg].grace_until, Some(t(20, 5)));
+    tick_at(&mut s, t(20, 5));
+    assert_eq!(
+        s.lobbies[&drg].status,
+        LobbyStatus::Removed,
+        "a planned row stays as removed"
+    );
+}
+
+#[test]
+fn a_booted_suggestion_goes_back_to_the_planner() {
+    let mut s = checked_in(&["ana@x.io"]);
+    apply(
+        &mut s,
+        Input::Materialise {
+            suggestions: vec![Suggestion {
+                game_id: DRG,
+                game_name: "DRG".into(),
+                start: t(20, 0),
+                minutes: 120,
+            }],
+        },
+        t(19, 59),
+    )
+    .expect("stored");
+    let id = *s.lobbies.keys().next().expect("stored");
+    assert_eq!(s.lobbies[&id].source, LobbySource::Suggestion);
+    tick_at(&mut s, t(20, 0));
+    tick_at(&mut s, t(20, 5));
+    assert!(
+        s.lobbies.is_empty(),
+        "deleted: the planner can suggest it again"
+    );
+}
+
+#[test]
+fn the_first_join_locks_the_grace_and_stragglers_drop_out() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(20, 0), 120);
+    prejoin_cmd(&mut s, "ana@x.io", drg, t(19, 0));
+    prejoin_cmd(&mut s, "bo@x.io", drg, t(19, 0));
+    // Bo is still playing CS2.
+    play(&mut s, "bo@x.io", Some((CS2, "CS2")), t(19, 30));
+    tick_at(&mut s, t(20, 0));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+    join_cmd(&mut s, "ana@x.io", drg, t(20, 1));
+    let l = &s.lobbies[&drg];
+    assert_eq!(l.status, LobbyStatus::Grace);
+    assert!(l.grace_locked);
+    assert_eq!(l.grace_until, Some(t(20, 6)));
+    let out = tick_at(&mut s, t(20, 6));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Live);
+    let bo = &s.prejoins[&(drg, "bo@x.io".to_string())];
+    assert_eq!(bo.drop_reason.as_deref(), Some("elsewhere"));
+    assert!(out.feed.iter().any(|f| f.kind == "lobby.split"));
+    assert!(
+        lobby_of(&s, "bo@x.io").is_some_and(|l| l != drg),
+        "still in CS2"
+    );
+}
+
+#[test]
+fn joining_early_starts_the_grace_at_the_planned_start() {
+    let mut s = checked_in(&["ana@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(20, 0), 120);
+    join_cmd(&mut s, "ana@x.io", drg, t(19, 50));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Grace);
+    assert_eq!(s.lobbies[&drg].grace_until, Some(t(20, 5)));
+    assert_eq!(s.lobbies[&drg].actual_start, Some(t(19, 50)));
+}
+
+fn waiting_drg(s: &mut LiveState) -> i32 {
+    let drg = planned(s, DRG, "DRG", t(20, 0), 120);
+    prejoin_cmd(s, "ana@x.io", drg, t(19, 0));
+    prejoin_cmd(s, "bo@x.io", drg, t(19, 0));
+    tick_at(s, t(20, 0));
+    drg
+}
+
+fn delay(
+    s: &mut LiveState,
+    who: &str,
+    lobby: i32,
+    minutes: i32,
+    at: DateTime<Utc>,
+) -> Result<Outcome, Reject> {
+    apply(
+        s,
+        cmd(
+            gamer(who),
+            Command::OpenVote(VoteRequest::Delay { lobby, minutes }),
+        ),
+        at,
+    )
+}
+
+#[test]
+fn a_delay_vote_holds_the_grace_and_moves_the_start() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = waiting_drg(&mut s);
+    delay(&mut s, "ana@x.io", drg, 30, t(20, 2)).expect("opened");
+    let l = &s.lobbies[&drg];
+    assert_eq!(l.status, LobbyStatus::Delayed);
+    assert_eq!(l.hold_remaining_s, Some(180));
+    assert_eq!(l.grace_until, None);
+    let vote = the_vote(&s);
+    assert_eq!(vote.deadline, t(20, 5));
+    assert_eq!(
+        involved(&s, &vote),
+        vec!["ana@x.io".to_string(), "bo@x.io".to_string()]
+    );
+    let yes = option_named(&s, vote.id, "Delay");
+    vote_for(&mut s, "bo@x.io", vote.id, yes, t(20, 3));
+    assert_eq!(
+        s.votes[&vote.id].settle_at,
+        Some(t(20, 3) + Duration::seconds(20))
+    );
+    tick_at(&mut s, t(20, 3) + Duration::seconds(20));
+    assert_eq!(s.votes[&vote.id].resolution.as_deref(), Some("unanimous"));
+    let l = &s.lobbies[&drg];
+    assert_eq!(l.start, t(20, 30));
+    assert_eq!(l.planned_start, Some(t(20, 0)));
+    assert_eq!(l.status, LobbyStatus::Confirmed);
+    // The same alert comes back at the new start.
+    tick_at(&mut s, t(20, 30));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+}
+
+#[test]
+fn a_tied_delay_vote_resumes_the_grace() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = waiting_drg(&mut s);
+    delay(&mut s, "ana@x.io", drg, 30, t(20, 2)).expect("opened");
+    let vote = the_vote(&s);
+    let no = option_named(&s, vote.id, "Keep it");
+    vote_for(&mut s, "bo@x.io", vote.id, no, t(20, 3));
+    tick_at(&mut s, t(20, 5));
+    assert_eq!(s.votes[&vote.id].resolution.as_deref(), Some("deadline"));
+    let l = &s.lobbies[&drg];
+    assert_eq!(l.status, LobbyStatus::Waiting, "a tie goes to the plan");
+    assert_eq!(
+        l.grace_until,
+        Some(t(20, 8)),
+        "with the 3 minutes it had left"
+    );
+}
+
+#[test]
+fn joining_cancels_a_delay_vote() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = waiting_drg(&mut s);
+    delay(&mut s, "ana@x.io", drg, 30, t(20, 2)).expect("opened");
+    join_cmd(&mut s, "bo@x.io", drg, t(20, 3));
+    let vote = the_vote(&s);
+    assert_eq!(
+        s.votes[&vote.id].status,
+        crate::live::model::VoteStatus::Lapsed
+    );
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Grace);
+}
+
+fn propose(
+    s: &mut LiveState,
+    who: &str,
+    what: OptionSpec,
+    start: DateTime<Utc>,
+    mode: ProposalMode,
+    at: DateTime<Utc>,
+) -> Result<Outcome, Reject> {
+    apply(
+        s,
+        cmd(
+            gamer(who),
+            Command::Propose(Proposal {
+                what,
+                start,
+                minutes: 90,
+                players: no_players(),
+                mode,
+            }),
+        ),
+        at,
+    )
+}
+
+#[test]
+fn a_proposal_needs_one_backer_in_five_minutes() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let out = propose(
+        &mut s,
+        "ana@x.io",
+        game(PHAS, "Phasmophobia"),
+        t(22, 0),
+        ProposalMode::Alongside,
+        t(19, 40),
+    )
+    .expect("proposed");
+    let id = *s.lobbies.keys().next().expect("lobby");
+    assert_eq!(s.lobbies[&id].status, LobbyStatus::Proposed);
+    assert!(out
+        .feed
+        .iter()
+        .any(|f| f.kind == "lobby.proposed" && f.key_kind == Some("proposal")));
+    let out = apply(
+        &mut s,
+        cmd(
+            gamer("bo@x.io"),
+            Command::Prejoin {
+                lobby: LobbyRef::Stored(id),
+                team: None,
+                random: false,
+            },
+        ),
+        t(19, 42),
+    )
+    .expect("backed");
+    assert_eq!(s.lobbies[&id].status, LobbyStatus::Confirmed);
+    assert!(out
+        .feed
+        .iter()
+        .any(|f| f.kind == "lobby.backed" && f.tier == 1));
+    tick_at(&mut s, t(19, 50));
+    assert!(s.lobbies.contains_key(&id), "backed proposals stay");
+}
+
+#[test]
+fn an_unbacked_proposal_disappears_silently() {
+    let mut s = checked_in(&["ana@x.io"]);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(PHAS, "Phasmophobia"),
+        t(22, 0),
+        ProposalMode::Alongside,
+        t(19, 40),
+    )
+    .expect("proposed");
+    let id = *s.lobbies.keys().next().expect("lobby");
+    let out = tick_at(&mut s, t(19, 45));
+    assert!(s.lobbies.is_empty());
+    assert_eq!(
+        out.feed_deletes,
+        vec![("proposal", id)],
+        "and its feed line goes too"
+    );
+}
+
+#[test]
+fn a_challenge_opens_whats_on_and_unanimity_replaces_the_plan() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io", "cy@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    assert_eq!(vote.kind, crate::live::model::VoteType::Slot);
+    assert_eq!(vote.deadline, t(21, 45), "15 minutes before the slot");
+    assert_eq!(
+        title(&s, &vote),
+        "What's on at 22:00?".replace(
+            "22:00",
+            &t(22, 0)
+                .with_timezone(&chrono_tz::Europe::London)
+                .format("%H:%M")
+                .to_string()
+        )
+    );
+    let l4d = option_named(&s, vote.id, "L4D2");
+    vote_for(&mut s, "bo@x.io", vote.id, l4d, t(20, 5));
+    assert_eq!(s.votes[&vote.id].settle_at, None, "Cy hasn't voted");
+    vote_for(&mut s, "cy@x.io", vote.id, l4d, t(20, 6));
+    let settle = s.votes[&vote.id].settle_at.expect("settling");
+    // A change of mind inside the window cancels it.
+    let plan = option_named(&s, vote.id, "DRG");
+    vote_for(
+        &mut s,
+        "cy@x.io",
+        vote.id,
+        plan,
+        t(20, 6) + Duration::seconds(10),
+    );
+    assert_eq!(s.votes[&vote.id].settle_at, None);
+    vote_for(&mut s, "cy@x.io", vote.id, l4d, t(20, 7));
+    tick_at(&mut s, settle + Duration::minutes(2));
+    assert_eq!(s.votes[&vote.id].resolution.as_deref(), Some("unanimous"));
+    assert_eq!(
+        s.lobbies[&drg].status,
+        LobbyStatus::Removed,
+        "the plan lost"
+    );
+    let new = s
+        .lobbies
+        .values()
+        .find(|l| l.game_id == Some(L4D))
+        .expect("L4D2 lobby");
+    assert_eq!(new.start, t(22, 0));
+    assert_eq!(new.source, LobbySource::Vote);
+    assert_eq!(s.lobby_headcount(new.id), 3, "the voters are pre-joined");
+}
+
+#[test]
+fn checking_in_mid_vote_makes_you_involved() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    apply(
+        &mut s,
+        cmd(
+            gamer("cy@x.io"),
+            Command::CheckIn {
+                email: "cy@x.io".into(),
+            },
+        ),
+        t(20, 1),
+    )
+    .expect("in");
+    let l4d = option_named(&s, vote.id, "L4D2");
+    vote_for(&mut s, "bo@x.io", vote.id, l4d, t(20, 2));
+    assert_eq!(s.votes[&vote.id].settle_at, None, "Cy is involved now");
+    assert_eq!(involved(&s, &s.votes[&vote.id]).len(), 3);
+}
+
+#[test]
+fn everyone_happy_to_split_splits_the_party() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    let plan = option_named(&s, vote.id, "DRG");
+    for (who, option) in [("ana@x.io", None), ("bo@x.io", Some(plan))] {
+        apply(
+            &mut s,
+            cmd(
+                gamer(who),
+                Command::Ballot {
+                    vote: vote.id,
+                    option,
+                    split_ok: Some(true),
+                },
+            ),
+            t(20, 1),
+        )
+        .expect("ballot");
+    }
+    tick_at(&mut s, t(20, 2));
+    assert_eq!(
+        s.votes[&vote.id].resolution.as_deref(),
+        Some("everyone_split")
+    );
+    assert_ne!(
+        s.lobbies[&drg].status,
+        LobbyStatus::Removed,
+        "DRG had a voter"
+    );
+    assert!(s.prejoins[&(drg, "bo@x.io".to_string())].is_active());
+    let l4d = s
+        .lobbies
+        .values()
+        .find(|l| l.game_id == Some(L4D))
+        .expect("L4D2");
+    assert_eq!(l4d.source, LobbySource::Split);
+    assert!(s.prejoins[&(l4d.id, "ana@x.io".to_string())].is_active());
+}
+
+#[test]
+fn at_the_deadline_the_plurality_wins_and_ties_go_to_the_plan() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io", "cy@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    let plan = option_named(&s, vote.id, "DRG");
+    vote_for(&mut s, "bo@x.io", vote.id, plan, t(20, 1));
+    tick_at(&mut s, t(21, 45));
+    assert_eq!(s.votes[&vote.id].resolution.as_deref(), Some("deadline"));
+    assert_eq!(
+        s.votes[&vote.id].winner_option_id,
+        Some(plan),
+        "1-1: the plan"
+    );
+    assert_ne!(s.lobbies[&drg].status, LobbyStatus::Removed);
+}
+
+#[test]
+fn admins_can_force_or_veto() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    let l4d = option_named(&s, vote.id, "L4D2");
+    let refused = apply(
+        &mut s,
+        cmd(
+            gamer("bo@x.io"),
+            Command::ResolveVote {
+                vote: vote.id,
+                how: Resolve::Force(l4d),
+            },
+        ),
+        t(20, 1),
+    );
+    assert!(matches!(refused, Err(Reject::Forbidden(_))));
+    let out = apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::ResolveVote {
+                vote: vote.id,
+                how: Resolve::Force(l4d),
+            },
+        ),
+        t(20, 1),
+    )
+    .expect("forced");
+    assert_eq!(s.votes[&vote.id].resolution.as_deref(), Some("admin_pick"));
+    assert!(out.feed.iter().any(|f| f.tier == 1));
+    let again = apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::ResolveVote {
+                vote: vote.id,
+                how: Resolve::Veto,
+            },
+        ),
+        t(20, 2),
+    );
+    assert!(matches!(again, Err(Reject::Conflict(_))), "already final");
+}
+
+#[test]
+fn keep_playing_joins_an_open_slot_vote_instead_of_a_second_card() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 0));
+    let cs2 = lobby_of(&s, "ana@x.io").expect("cs2");
+    let drg = planned(&mut s, DRG, "DRG", t(21, 0), 120);
+    propose(
+        &mut s,
+        "bo@x.io",
+        game(L4D, "L4D2"),
+        t(21, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(19, 30),
+    )
+    .expect("challenged");
+    let slot = the_vote(&s).id;
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::OpenVote(VoteRequest::Extend {
+                lobby: cs2,
+                minutes: 60,
+            }),
+        ),
+        t(20, 0),
+    )
+    .expect("extend");
+    assert_eq!(s.votes.len(), 1, "no second vote");
+    let keep = s
+        .options
+        .values()
+        .find(|o| o.vote_id == slot && o.lobby_id == Some(cs2))
+        .expect("keep playing option");
+    assert!(keep.name.starts_with("Keep playing"));
+}
+
+#[test]
+fn rsvp_no_drops_pre_joins_and_delay_arrival_clears_the_block() {
+    let mut s = checked_in(&["ana@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    prejoin_cmd(&mut s, "bo@x.io", drg, t(19, 0));
+    apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::RsvpNo {
+                email: "bo@x.io".into(),
+            },
+        ),
+        t(19, 5),
+    )
+    .expect("rsvp no");
+    assert_eq!(s.people["bo@x.io"].rsvp, Some(Rsvp::No));
+    assert!(!s.prejoins[&(drg, "bo@x.io".to_string())].is_active());
+    apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::DelayArrival {
+                email: "cy@x.io".into(),
+            },
+        ),
+        t(19, 5),
+    )
+    .expect("delayed");
+    assert_eq!(s.people["cy@x.io"].attendance[0], 0, "Fri 18:00 block");
+    assert_eq!(s.people["cy@x.io"].attendance[1], 1);
+    let out = apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::Nudge {
+                email: "cy@x.io".into(),
+            },
+        ),
+        t(19, 5),
+    )
+    .expect("nudge");
+    assert_eq!(out.personal.len(), 1);
+}
+
+#[test]
+fn kick_off_early_moves_the_first_lobby() {
+    let mut s = state();
+    let drg = planned(&mut s, DRG, "DRG", t(19, 0), 120);
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::OpenVote(VoteRequest::Kickoff {
+                lobby: drg,
+                new_start: t(18, 0),
+            }),
+        ),
+        t(12, 0),
+    )
+    .expect("kickoff");
+    let vote = the_vote(&s);
+    assert_eq!(involved(&s, &vote).len(), 3, "everyone attending the start");
+    let yes = option_named(&s, vote.id, "Kick off");
+    for who in ["bo@x.io", "cy@x.io"] {
+        vote_for(&mut s, who, vote.id, yes, t(12, 1));
+    }
+    tick_at(&mut s, t(12, 2));
+    assert_eq!(s.lobbies[&drg].start, t(18, 0));
 }

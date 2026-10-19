@@ -285,8 +285,10 @@ pub struct AdminQueueItem {
     pub game_name: Option<String>,
 }
 
-/// People Steam shows playing who haven't checked in (admins only).
-pub fn admin_queue(state: &LiveState) -> Vec<AdminQueueItem> {
+/// The admin's check-in queue: people Steam shows playing who haven't
+/// checked in, and (from 30 minutes after doors) people expected now who
+/// haven't arrived.
+pub fn admin_queue(state: &LiveState, now: DateTime<Utc>) -> Vec<AdminQueueItem> {
     let mut items: Vec<AdminQueueItem> = super::engine::playing_not_checked_in(state)
         .into_iter()
         .map(|(email, game_name)| AdminQueueItem {
@@ -295,7 +297,23 @@ pub fn admin_queue(state: &LiveState) -> Vec<AdminQueueItem> {
             game_name,
         })
         .collect();
-    items.sort_by(|a, b| a.pid.cmp(&b.pid));
+    if now >= state.event.time_begin + chrono::Duration::minutes(30) && now <= state.event.time_end
+    {
+        for person in state.people.values() {
+            let id = pid(&person.email);
+            if !state.is_checked_in(&person.email)
+                && person.attending_at(&state.event, now)
+                && !items.iter().any(|i| i.pid == id)
+            {
+                items.push(AdminQueueItem {
+                    pid: id,
+                    kind: "expected-not-checked-in".to_string(),
+                    game_name: None,
+                });
+            }
+        }
+    }
+    items.sort_by(|a, b| (&a.kind, &a.pid).cmp(&(&b.kind, &b.pid)));
     items
 }
 
@@ -388,4 +406,143 @@ mod tests {
         assert_eq!(parse_suggestion_id("12"), None);
         assert_eq!(parse_suggestion_id("sx@1"), None);
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct VoteOptionView {
+    pub id: String,
+    pub kind: String,
+    pub lobby_id: Option<String>,
+    pub game_id: Option<i64>,
+    pub name: String,
+    pub food: Option<FoodView>,
+    pub start_delta_min: Option<i32>,
+    pub duration_min: Option<i32>,
+    pub new_start: Option<DateTime<Utc>>,
+    pub created_by: Option<String>,
+    /// pids of the involved people who picked this.
+    pub voters: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct VoteView {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub title: String,
+    pub target_lobby_id: Option<String>,
+    pub slot_start: Option<DateTime<Utc>>,
+    pub status: String,
+    pub resolution: Option<String>,
+    pub opened_by: String,
+    pub opened_at: DateTime<Utc>,
+    pub deadline: DateTime<Utc>,
+    pub settle_at: Option<DateTime<Utc>>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub winner_option_id: Option<String>,
+    pub options: Vec<VoteOptionView>,
+    pub split_ok: Vec<String>,
+    pub involved: Vec<String>,
+    pub waiting_on: Vec<String>,
+    /// e.g. `EVERYONE CHECKED IN · 7/9`.
+    pub involved_label: String,
+}
+
+pub fn vote_view(state: &LiveState, vote: &super::model::Vote) -> VoteView {
+    use super::model::{OptionKind, VoteStatus, VoteType};
+    let open = vote.status == VoteStatus::Open;
+    // Final votes keep the voters they had; open ones count the involved.
+    let involved = if open {
+        super::engine::involved(state, vote)
+    } else {
+        state
+            .ballots
+            .values()
+            .filter(|b| b.vote_id == vote.id)
+            .map(|b| b.email.clone())
+            .collect()
+    };
+    let ballots: Vec<_> = state
+        .ballots
+        .values()
+        .filter(|b| b.vote_id == vote.id && b.option_id.is_some() && involved.contains(&b.email))
+        .collect();
+    let mut options: Vec<_> = state
+        .options
+        .values()
+        .filter(|o| o.vote_id == vote.id)
+        .collect();
+    options.sort_by_key(|o| (o.created_at, o.id.unsigned_abs()));
+    let voted: Vec<&str> = ballots.iter().map(|b| b.email.as_str()).collect();
+    let label = match vote.kind {
+        VoteType::Slot => "EVERYONE CHECKED IN",
+        VoteType::Extend => "PEOPLE IN THE LOBBY",
+        VoteType::Delay => "EVERYONE WHO'S IN FOR IT",
+        VoteType::Change => "PEOPLE PRE-JOINED",
+        VoteType::Kickoff => "EVERYONE AT THE START",
+    };
+    VoteView {
+        id: vote.id.to_string(),
+        kind: vote.kind.as_str().to_string(),
+        title: super::engine::vote_title(state, vote),
+        target_lobby_id: vote.target_lobby_id.map(|id| id.to_string()),
+        slot_start: vote.slot_start,
+        status: vote.status.as_str().to_string(),
+        resolution: vote.resolution.clone(),
+        opened_by: pid(&vote.opened_by),
+        opened_at: vote.opened_at,
+        deadline: vote.deadline,
+        settle_at: vote.settle_at,
+        resolved_at: vote.resolved_at,
+        winner_option_id: vote.winner_option_id.map(|id| id.to_string()),
+        options: options
+            .into_iter()
+            .map(|o| VoteOptionView {
+                id: o.id.to_string(),
+                kind: o.kind.as_str().to_string(),
+                lobby_id: o.lobby_id.map(|id| id.to_string()),
+                game_id: o.game_id,
+                name: match o.kind {
+                    OptionKind::Lobby => o
+                        .lobby_id
+                        .and_then(|id| state.lobbies.get(&id))
+                        .map_or_else(|| o.name.clone(), |l| l.name.clone()),
+                    _ => o.name.clone(),
+                },
+                food: o.food.as_ref().map(FoodView::from),
+                start_delta_min: o.start_delta_min,
+                duration_min: o.duration_min,
+                new_start: o.new_start,
+                created_by: o.created_by.as_deref().map(pid),
+                voters: ballots
+                    .iter()
+                    .filter(|b| b.option_id == Some(o.id))
+                    .map(|b| pid(&b.email))
+                    .collect(),
+            })
+            .collect(),
+        split_ok: ballots
+            .iter()
+            .filter(|b| b.split_ok)
+            .map(|b| pid(&b.email))
+            .collect(),
+        waiting_on: involved
+            .iter()
+            .filter(|e| !voted.contains(&e.as_str()))
+            .map(|e| pid(e))
+            .collect(),
+        involved_label: format!("{label} · {}/{}", voted.len(), involved.len()),
+        involved: involved.iter().map(|e| pid(e)).collect(),
+    }
+}
+
+/// Every vote's view, by id.
+pub fn vote_views(state: &LiveState, _now: DateTime<Utc>) -> BTreeMap<i64, VoteView> {
+    state
+        .votes
+        .values()
+        .map(|v| (v.id, vote_view(state, v)))
+        .collect()
 }

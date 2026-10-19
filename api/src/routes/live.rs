@@ -17,7 +17,10 @@ use crate::{
         Error,
     },
     live::{
-        engine::{Command, Input, LobbyRef, PlayersAndTeams, PresenceSample},
+        engine::{
+            Command, Input, LobbyRef, OptionSpec, PlayersAndTeams, PresenceSample, Proposal,
+            ProposalMode, Resolve, VoteRequest,
+        },
         log, token, LiveConfig,
     },
 };
@@ -589,4 +592,453 @@ pub async fn internal_tick(
         live::background(pool, steam_api_key, *event_id).await;
     }
     Ok(Json(InternalTickResponse { events }))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct FoodRequest {
+    pub name: String,
+    #[serde(default)]
+    pub place_id: Option<String>,
+    #[serde(default)]
+    pub photo_url: Option<String>,
+    #[serde(default)]
+    pub rating: Option<f64>,
+    #[serde(default)]
+    pub address: Option<String>,
+    #[serde(default)]
+    pub free_text: Option<String>,
+}
+
+impl From<FoodRequest> for crate::live::model::Food {
+    fn from(f: FoodRequest) -> Self {
+        Self {
+            name: f.name.trim().to_string(),
+            place_id: f.place_id,
+            photo_url: f.photo_url,
+            rating: f.rating,
+            address: f.address,
+            free_text: f.free_text,
+        }
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct WhatRequest {
+    /// `game` or `food`.
+    pub kind: String,
+    #[serde(default)]
+    pub game_id: Option<i64>,
+    #[serde(default)]
+    pub food: Option<FoodRequest>,
+    #[serde(default)]
+    pub max_players: Option<i32>,
+    #[serde(default)]
+    pub teams: Option<Vec<TeamRequest>>,
+}
+
+fn players_of(max_players: Option<i32>, teams: Option<Vec<TeamRequest>>) -> PlayersAndTeams {
+    PlayersAndTeams {
+        max_players,
+        teams: teams.map(|teams| {
+            teams
+                .into_iter()
+                .map(|t| crate::live::model::Team {
+                    name: t.name.trim().to_string(),
+                    size: t.size,
+                })
+                .collect()
+        }),
+    }
+}
+
+async fn option_spec(
+    pool: &PgPool,
+    kind: &str,
+    game_id: Option<i64>,
+    food: Option<FoodRequest>,
+) -> Result<OptionSpec, LiveError> {
+    match kind {
+        "game" => {
+            let game_id =
+                game_id.ok_or_else(|| LiveError::BadRequest("Pick a game".to_string()))?;
+            let name = live::game_name(pool, game_id).await?;
+            Ok(OptionSpec::Game { game_id, name })
+        }
+        "food" => Ok(OptionSpec::Food(
+            food.ok_or_else(|| LiveError::BadRequest("Say what food".to_string()))?
+                .into(),
+        )),
+        other => Err(LiveError::BadRequest(format!("Unknown kind {other}"))),
+    }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct ProposeRequest {
+    #[serde(flatten)]
+    pub what: WhatRequest,
+    pub start: DateTime<Utc>,
+    pub duration_min: i32,
+    /// `alongside` (needs one backer) or `option` (challenges `lobbyId`, or
+    /// adds to `voteId`).
+    #[serde(default = "alongside")]
+    pub mode: String,
+    #[serde(default)]
+    pub lobby_id: Option<String>,
+    #[serde(default)]
+    pub vote_id: Option<String>,
+}
+
+fn alongside() -> String {
+    "alongside".to_string()
+}
+
+fn vote_id(id: &str) -> Result<i64, LiveError> {
+    id.parse()
+        .map_err(|_| LiveError::BadRequest(format!("Bad vote id {id}")))
+}
+
+/// Propose a game or food: alongside what's on (needs a backer within five
+/// minutes), or as an option against a planned lobby.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/lobbies", format = "json", data = "<request>")]
+pub async fn propose(
+    event_id: i32,
+    request: Json<ProposeRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let request = request.into_inner();
+    let what = option_spec(
+        pool,
+        &request.what.kind,
+        request.what.game_id,
+        request.what.food,
+    )
+    .await?;
+    let mode = match request.mode.as_str() {
+        "alongside" => ProposalMode::Alongside,
+        "option" => match (&request.vote_id, &request.lobby_id) {
+            (Some(vote), _) => ProposalMode::AddTo(vote_id(vote)?),
+            (None, Some(lobby)) => ProposalMode::Challenge(lobby_ref(pool, event_id, lobby).await?),
+            (None, None) => {
+                return Err(LiveError::BadRequest("Say which lobby or vote".to_string()))
+            }
+        },
+        other => return Err(LiveError::BadRequest(format!("Unknown mode {other}"))),
+    };
+    let challenging_suggestion = matches!(mode, ProposalMode::Challenge(LobbyRef::Suggested(_)));
+    let response = run(
+        pool,
+        event_id,
+        &user.email,
+        Command::Propose(Proposal {
+            what,
+            start: request.start,
+            minutes: request.duration_min,
+            players: players_of(request.what.max_players, request.what.teams),
+            mode,
+        }),
+        &key,
+    )
+    .await?;
+    if challenging_suggestion {
+        live::refresh_plan(pool, event_id).await;
+    }
+    Ok(response)
+}
+
+/// Remove your own proposal.
+#[openapi(tag = "Live")]
+#[delete("/events/<event_id>/live/lobbies/<lobby_id>")]
+pub async fn remove_proposal(
+    event_id: i32,
+    lobby_id: &str,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let lobby = stored_id(lobby_id)?;
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::RemoveProposal { lobby },
+        &key,
+    )
+    .await
+}
+
+/// "Close now": end an empty lobby at the time the last person left.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/lobbies/<lobby_id>/close")]
+pub async fn close_lobby(
+    event_id: i32,
+    lobby_id: &str,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let lobby = stored_id(lobby_id)?;
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::CloseNow { lobby },
+        &key,
+    )
+    .await
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct VoteOpenRequest {
+    /// `extend`, `delay`, `change` or `kickoff`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub lobby_id: String,
+    /// extend / delay: by how much.
+    #[serde(default)]
+    pub minutes: Option<i32>,
+    /// change: move the start by this much.
+    #[serde(default)]
+    pub start_delta: Option<i32>,
+    /// change: change the length by this much.
+    #[serde(default)]
+    pub minutes_delta: Option<i32>,
+    /// kickoff: the new start.
+    #[serde(default)]
+    pub new_start: Option<DateTime<Utc>>,
+}
+
+/// Call a vote about a lobby: keep playing, delay, change, kick off early.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/votes", format = "json", data = "<request>")]
+pub async fn open_vote(
+    event_id: i32,
+    request: Json<VoteOpenRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let lobby = match lobby_ref(pool, event_id, &request.lobby_id).await? {
+        LobbyRef::Stored(id) => id,
+        LobbyRef::Suggested(_) => {
+            return Err(LiveError::Conflict(
+                "Pre-join it first: suggestions can't be voted on yet".to_string(),
+            ))
+        }
+    };
+    let need =
+        |v: Option<i32>, what: &str| v.ok_or_else(|| LiveError::BadRequest(format!("Say {what}")));
+    let vote = match request.kind.as_str() {
+        "extend" => VoteRequest::Extend {
+            lobby,
+            minutes: need(request.minutes, "how long")?,
+        },
+        "delay" => VoteRequest::Delay {
+            lobby,
+            minutes: need(request.minutes, "how long")?,
+        },
+        "change" => VoteRequest::Change {
+            lobby,
+            start_delta: request.start_delta.unwrap_or(0),
+            minutes_delta: request.minutes_delta.unwrap_or(0),
+        },
+        "kickoff" => VoteRequest::Kickoff {
+            lobby,
+            new_start: request
+                .new_start
+                .ok_or_else(|| LiveError::BadRequest("Say when".to_string()))?,
+        },
+        other => return Err(LiveError::BadRequest(format!("Unknown vote type {other}"))),
+    };
+    run(pool, event_id, &user.email, Command::OpenVote(vote), &key).await
+}
+
+#[derive(Deserialize, JsonSchema, Default)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct BallotRequest {
+    #[serde(default)]
+    pub option_id: Option<String>,
+    #[serde(default)]
+    pub split_ok: Option<bool>,
+}
+
+/// Vote, change your vote, or tick "happy to split the party".
+#[openapi(tag = "Live")]
+#[put(
+    "/events/<event_id>/live/votes/<vote>/ballot",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn ballot(
+    event_id: i32,
+    vote: &str,
+    request: Json<BallotRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let option = request.option_id.as_deref().map(vote_id).transpose()?;
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::Ballot {
+            vote: vote_id(vote)?,
+            option,
+            split_ok: request.split_ok,
+        },
+        &key,
+    )
+    .await
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct AddOptionRequest {
+    #[serde(flatten)]
+    pub what: WhatRequest,
+    pub duration_min: i32,
+}
+
+/// Add an option to a slot vote (its start comes from the vote).
+#[openapi(tag = "Live")]
+#[post(
+    "/events/<event_id>/live/votes/<vote>/options",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn add_option(
+    event_id: i32,
+    vote: &str,
+    request: Json<AddOptionRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let request = request.into_inner();
+    let what = option_spec(
+        pool,
+        &request.what.kind,
+        request.what.game_id,
+        request.what.food,
+    )
+    .await?;
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::AddOption {
+            vote: vote_id(vote)?,
+            what,
+            minutes: request.duration_min,
+            players: players_of(request.what.max_players, request.what.teams),
+        },
+        &key,
+    )
+    .await
+}
+
+#[derive(Deserialize, JsonSchema, Default)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct ResolveRequest {
+    #[serde(default)]
+    pub force: Option<String>,
+    #[serde(default)]
+    pub split: bool,
+    #[serde(default)]
+    pub veto: bool,
+}
+
+/// Admin: force an option, split the party, or veto.
+#[openapi(tag = "Live")]
+#[post(
+    "/events/<event_id>/live/votes/<vote>/resolve",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn resolve_vote(
+    event_id: i32,
+    vote: &str,
+    request: Json<ResolveRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    admin: AdminUser,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let how = match (&request.force, request.split, request.veto) {
+        (Some(option), false, false) => Resolve::Force(vote_id(option)?),
+        (None, true, false) => Resolve::Split,
+        (None, false, true) => Resolve::Veto,
+        _ => {
+            return Err(LiveError::BadRequest(
+                "Say force, split or veto".to_string(),
+            ))
+        }
+    };
+    run(
+        pool,
+        event_id,
+        &admin.email,
+        Command::ResolveVote {
+            vote: vote_id(vote)?,
+            how,
+        },
+        &key,
+    )
+    .await
+}
+
+/// Admin, from the check-in queue: `rsvp-no` (they called to cancel),
+/// `delay-arrival` (running late) or `nudge`.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/people/<pid>/<action>")]
+pub async fn person_action(
+    event_id: i32,
+    pid: &str,
+    action: &str,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    admin: AdminUser,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let email = live::email_for_pid(pool, event_id, pid).await?;
+    let command = match action {
+        "rsvp-no" => Command::RsvpNo { email },
+        "delay-arrival" => Command::DelayArrival { email },
+        "nudge" => Command::Nudge { email },
+        other => return Err(LiveError::NotFound(format!("No action {other}"))),
+    };
+    run(pool, event_id, &admin.email, command, &key).await
+}
+
+/// A game's saved players and teams and its typical length (§5.6), for
+/// pre-filling the propose sheet.
+#[openapi(tag = "Live")]
+#[get("/games/<game_id>/lobby-defaults")]
+pub async fn get_lobby_defaults(
+    game_id: i64,
+    pool: &State<PgPool>,
+    _user: User,
+) -> Result<Json<live::GameKnowledge>, LiveError> {
+    Ok(Json(live::game_knowledge(pool, game_id).await?))
+}
+
+/// Search games for the propose sheet: the event's suggested games first,
+/// then all of Steam.
+#[openapi(tag = "Live")]
+#[get("/events/<event_id>/live/games?<q>")]
+pub async fn search_games(
+    event_id: i32,
+    q: Option<&str>,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<Vec<live::GameHit>>, LiveError> {
+    live::viewer_for(pool, event_id, &user.email).await?;
+    Ok(Json(
+        live::search_games(pool, event_id, q.unwrap_or_default()).await?,
+    ))
 }

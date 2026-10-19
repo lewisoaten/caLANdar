@@ -30,6 +30,7 @@ pub struct CommandResponse {
     pub lobbies: Vec<LobbyView>,
     pub deleted_lobbies: Vec<String>,
     pub people: Vec<PersonView>,
+    pub votes: Vec<crate::live::views::VoteView>,
 }
 
 /// The result of [`execute`]: the response plus the state after the step.
@@ -140,6 +141,7 @@ pub async fn execute(
         lobbies: deltas.lobbies,
         deleted_lobbies: deltas.deleted_lobbies,
         people: deltas.people,
+        votes: deltas.votes,
     };
     if let Some(key) = key {
         sqlx::query(
@@ -391,7 +393,7 @@ pub struct Snapshot {
     pub people: Vec<PersonView>,
     /// Stored lobbies plus the planner's suggestions (`virtual: true`).
     pub lobbies: Vec<LobbyView>,
-    pub votes: Vec<JsonValue>,
+    pub votes: Vec<crate::live::views::VoteView>,
     /// Recent feed entries and admin posts, oldest first.
     pub feed: Vec<JsonValue>,
     pub floor: Floor,
@@ -477,7 +479,9 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
             .into_values()
             .collect(),
         lobbies,
-        votes: Vec::new(),
+        votes: crate::live::views::vote_views(&state, Utc::now())
+            .into_values()
+            .collect(),
         feed: feed
             .iter()
             .filter(|row| viewer.can_see(row.audience.as_deref()))
@@ -485,7 +489,7 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
             .collect(),
         floor: floor(pool, &state).await,
         admin_queue: if viewer.is_admin() {
-            crate::live::views::admin_queue(&state)
+            crate::live::views::admin_queue(&state, Utc::now())
         } else {
             Vec::new()
         },
@@ -761,6 +765,130 @@ pub async fn live_events(pool: &PgPool) -> Result<Vec<i32>, Error> {
     .fetch_all(pool)
     .await
     .map_err(db("Unable to list live events"))
+}
+
+/// A game's name from the Steam cache.
+pub async fn game_name(pool: &PgPool, game_id: i64) -> Result<String, Error> {
+    sqlx::query_scalar::<_, String>("SELECT name FROM steam_game WHERE appid = $1")
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(db("Unable to look up the game"))?
+        .ok_or_else(|| Error::BadInput(format!("Unknown game {game_id}")))
+}
+
+/// What Live knows about a game: saved players and teams, typical length.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct GameKnowledge {
+    pub game_id: i64,
+    pub max_players: Option<i32>,
+    pub teams: Option<Vec<crate::live::views::TeamView>>,
+    pub typical: crate::live::views::TypicalView,
+    /// Nobody has set players and teams yet.
+    pub new_game: bool,
+}
+
+pub async fn game_knowledge(pool: &PgPool, game_id: i64) -> Result<GameKnowledge, Error> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(db("Unable to get a connection"))?;
+    let mut defaults = std::collections::BTreeMap::new();
+    let mut typical = std::collections::BTreeMap::new();
+    store::load_game_knowledge(&mut conn, &[game_id], &mut defaults, &mut typical)
+        .await
+        .map_err(db("Unable to read game defaults"))?;
+    let d = defaults.get(&game_id).cloned();
+    let t = typical.get(&game_id).copied().unwrap_or_else(|| {
+        d.as_ref().and_then(|d| d.duration_minutes).map_or(
+            crate::live::model::Typical {
+                minutes: crate::live::model::DEFAULT_GAME_MINUTES,
+                sessions: 0,
+            },
+            |minutes| crate::live::model::Typical {
+                minutes,
+                sessions: 0,
+            },
+        )
+    });
+    Ok(GameKnowledge {
+        game_id,
+        max_players: d.as_ref().and_then(|d| d.max_players),
+        teams: d.as_ref().and_then(|d| d.teams.as_ref()).map(|teams| {
+            teams
+                .iter()
+                .map(|t| crate::live::views::TeamView {
+                    name: t.name.clone(),
+                    size: t.size,
+                })
+                .collect()
+        }),
+        typical: crate::live::views::TypicalView {
+            minutes: t.minutes,
+            sessions: t.sessions,
+        },
+        new_game: d.is_none(),
+    })
+}
+
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct GameHit {
+    pub game_id: i64,
+    pub name: String,
+    /// Suggested for this event (shown first).
+    pub suggested: bool,
+}
+
+/// The event's suggested games matching `q` first, then the rest of Steam.
+pub async fn search_games(pool: &PgPool, event_id: i32, q: &str) -> Result<Vec<GameHit>, Error> {
+    let q = q.trim();
+    let mut hits: Vec<GameHit> = sqlx::query_as::<_, (i64, String)>(
+        r"
+        SELECT sg.appid, sg.name
+        FROM event_game eg JOIN steam_game sg ON sg.appid = eg.game_id
+        WHERE eg.event_id = $1 AND ($2 = '' OR sg.name ILIKE $3)
+        ORDER BY sg.name
+        LIMIT 20
+        ",
+    )
+    .bind(event_id)
+    .bind(q)
+    .bind(crate::util::like_pattern(q))
+    .fetch_all(pool)
+    .await
+    .map_err(db("Unable to search suggested games"))?
+    .into_iter()
+    .map(|(game_id, name)| GameHit {
+        game_id,
+        name,
+        suggested: true,
+    })
+    .collect();
+    if q.len() >= 2 {
+        let more = crate::repositories::game::filter(
+            pool,
+            crate::repositories::game::Filter {
+                query: q.to_string(),
+                count: 20,
+                page: 0,
+            },
+        )
+        .await
+        .map_err(db("Unable to search Steam games"))?;
+        for g in more {
+            if !hits.iter().any(|h| h.game_id == g.appid) {
+                hits.push(GameHit {
+                    game_id: g.appid,
+                    name: g.name,
+                    suggested: false,
+                });
+            }
+        }
+    }
+    hits.truncate(30);
+    Ok(hits)
 }
 
 /// The actor for a signed-in user.

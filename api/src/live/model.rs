@@ -72,6 +72,19 @@ impl Person {
     pub const fn attending(&self) -> bool {
         matches!(self.rsvp, Some(Rsvp::Yes | Rsvp::Maybe))
     }
+
+    /// Attending (yes/maybe) and around at `t` by their declared attendance.
+    /// No attendance declared counts as around the whole time.
+    pub fn attending_at(&self, event: &EventInfo, t: DateTime<Utc>) -> bool {
+        if !self.attending() {
+            return false;
+        }
+        if self.attendance.is_empty() {
+            return true;
+        }
+        bucket_index(event.time_begin, event.time_end, t)
+            .is_none_or(|i| self.attendance.get(i).copied().unwrap_or(0) == 1)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -252,6 +265,102 @@ impl Prejoin {
     }
 }
 
+string_enum!(VoteType {
+    Slot = "slot",
+    Extend = "extend",
+    Delay = "delay",
+    Change = "change",
+    Kickoff = "kickoff",
+});
+
+string_enum!(VoteStatus {
+    Open = "open",
+    Final = "final",
+    Vetoed = "vetoed",
+    Lapsed = "lapsed",
+});
+
+string_enum!(OptionKind {
+    Lobby = "lobby",
+    Game = "game",
+    Food = "food",
+    KeepPlaying = "keep_playing",
+    Yes = "yes",
+    No = "no",
+});
+
+/// A competitive decision (`live_vote`, DESIGN.md §5.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Vote {
+    /// Negative until stored.
+    pub id: i64,
+    pub kind: VoteType,
+    pub target_lobby_id: Option<i32>,
+    pub slot_start: Option<DateTime<Utc>>,
+    pub status: VoteStatus,
+    pub resolution: Option<String>,
+    pub opened_by: Email,
+    pub opened_at: DateTime<Utc>,
+    pub deadline: DateTime<Utc>,
+    pub settle_at: Option<DateTime<Utc>>,
+    pub resolved_by: Option<Email>,
+    pub resolved_at: Option<DateTime<Utc>>,
+    pub winner_option_id: Option<i64>,
+}
+
+/// One option of a vote (`live_vote_option`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VoteOption {
+    /// Negative until stored.
+    pub id: i64,
+    pub vote_id: i64,
+    pub kind: OptionKind,
+    pub lobby_id: Option<i32>,
+    pub game_id: Option<i64>,
+    /// Game name (not stored: looked up), or the food's name.
+    pub name: String,
+    pub food: Option<Food>,
+    pub start_delta_min: Option<i32>,
+    pub duration_min: Option<i32>,
+    pub new_start: Option<DateTime<Utc>>,
+    pub max_players: Option<i32>,
+    pub teams: Option<Vec<Team>>,
+    pub created_by: Option<Email>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Someone's vote (`live_vote_ballot`): their option and whether they're
+/// happy to split the party.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ballot {
+    pub vote_id: i64,
+    pub email: Email,
+    pub option_id: Option<i64>,
+    pub split_ok: bool,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Index of the 6-hour attendance bucket containing `t`, in the order of
+/// `get_day_quarter_buckets(begin, end)`.
+pub fn bucket_index(begin: DateTime<Utc>, end: DateTime<Utc>, t: DateTime<Utc>) -> Option<usize> {
+    let mut index = 0;
+    let mut day = begin.date_naive();
+    while day.and_hms_opt(6, 0, 0)?.and_utc() < end {
+        for hour in [6, 12, 18, 24] {
+            let start = day.and_hms_opt(0, 0, 0)?.and_utc() + Duration::hours(hour);
+            let stop = start + Duration::hours(6);
+            if start <= end && stop > begin {
+                if start <= t && t < stop {
+                    return Some(index);
+                }
+                index += 1;
+            }
+        }
+        day = day.succ_opt()?;
+    }
+    None
+}
+
 /// Steam persona states that mean "away" (Away, Snooze).
 pub const AFK_STATES: [i32; 2] = [3, 4];
 /// How long someone must be away before the floor fades their seat.
@@ -311,6 +420,9 @@ pub struct LiveState {
     pub members: BTreeMap<i64, Member>,
     pub prejoins: BTreeMap<(i32, Email), Prejoin>,
     pub presence: BTreeMap<Email, Presence>,
+    pub votes: BTreeMap<i64, Vote>,
+    pub options: BTreeMap<i64, VoteOption>,
+    pub ballots: BTreeMap<(i64, Email), Ballot>,
     pub defaults: BTreeMap<i64, GameDefaults>,
     pub typical: BTreeMap<i64, Typical>,
     /// Next temporary id (counting down from -1) for new rows.
@@ -327,6 +439,9 @@ impl LiveState {
             members: BTreeMap::new(),
             prejoins: BTreeMap::new(),
             presence: BTreeMap::new(),
+            votes: BTreeMap::new(),
+            options: BTreeMap::new(),
+            ballots: BTreeMap::new(),
             defaults: BTreeMap::new(),
             typical: BTreeMap::new(),
             next_temp_id: -1,
@@ -428,6 +543,28 @@ mod tests {
         assert_eq!(pid("A@Example.com"), pid("a@example.com"));
         assert_eq!(pid("a@example.com").len(), 12);
         assert_ne!(pid("a@example.com"), pid("b@example.com"));
+    }
+
+    #[test]
+    fn bucket_index_matches_the_attendance_buckets() {
+        use chrono::TimeZone;
+        let at = |d, h, m| {
+            Utc.with_ymd_and_hms(2026, 10, d, h, m, 0)
+                .single()
+                .expect("valid")
+        };
+        // Fri 18:00 -> Sun 16:00: buckets Fri 18, Sat 00, 06, 12, 18, Sun 00, 06, 12.
+        let (begin, end) = (at(23, 18, 0), at(25, 16, 0));
+        assert_eq!(
+            crate::controllers::event_invitation::get_day_quarter_buckets(begin, end).len(),
+            8
+        );
+        assert_eq!(bucket_index(begin, end, at(23, 18, 0)), Some(0));
+        assert_eq!(bucket_index(begin, end, at(23, 23, 59)), Some(0));
+        assert_eq!(bucket_index(begin, end, at(24, 0, 0)), Some(1));
+        assert_eq!(bucket_index(begin, end, at(24, 12, 30)), Some(3));
+        assert_eq!(bucket_index(begin, end, at(25, 15, 0)), Some(7));
+        assert_eq!(bucket_index(begin, end, at(23, 17, 0)), None);
     }
 
     #[test]

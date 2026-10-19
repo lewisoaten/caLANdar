@@ -23,6 +23,8 @@ pub const MANUAL_OVERRUN: Duration = Duration::minutes(30);
 pub const STILL_PLAYING: Duration = Duration::minutes(60);
 /// An empty lobby closes this long after the last person left.
 pub const EMPTY_CLOSE: Duration = Duration::minutes(5);
+/// The start-time grace: five minutes to join (§5.4).
+pub const GRACE: Duration = Duration::minutes(5);
 
 /// Most people a lobby takes, if limited.
 pub fn capacity(lobby: &Lobby) -> Option<i32> {
@@ -142,16 +144,31 @@ pub fn join(
     let Some(lobby) = state.lobbies.get_mut(&lobby_id) else {
         return;
     };
-    let starting = !matches!(lobby.status, LobbyStatus::Live | LobbyStatus::Empty);
-    if lobby.status == LobbyStatus::Empty {
-        lobby.empty_since = None;
+    let starting = !matches!(
+        lobby.status,
+        LobbyStatus::Live | LobbyStatus::Empty | LobbyStatus::Grace
+    );
+    match lobby.status {
+        LobbyStatus::Empty => {
+            lobby.status = LobbyStatus::Live;
+            lobby.empty_since = None;
+        }
+        LobbyStatus::Live | LobbyStatus::Grace => {}
+        _ => {
+            // Someone's in: the grace locks (§5.4.2). Anyone pre-joined who
+            // is still elsewhere when it ends drops out.
+            lobby.status = LobbyStatus::Grace;
+            lobby.grace_locked = true;
+            lobby.grace_until = Some(lobby.start.max(now) + GRACE);
+            lobby.hold_remaining_s = None;
+        }
     }
-    lobby.status = LobbyStatus::Live;
     if lobby.actual_start.is_none() {
         lobby.actual_start = Some(now);
     }
     lobby.version += 1;
     if starting {
+        super::votes::cancel_delays(state, lobby_id, now);
         out.feed.push(
             FeedEntry::new(2, "lobby.started", "started")
                 .lobby(lobby_id)
@@ -438,13 +455,27 @@ pub fn prejoin(
             drop_reason: None,
         },
     );
+    let mut newly_backed = None;
     if let Some(lobby) = state.lobbies.get_mut(&lobby_id) {
         let backed = lobby.proposed_by.as_deref() != Some(email.as_str());
-        if lobby.status == LobbyStatus::Planned || (lobby.status == LobbyStatus::Proposed && backed)
-        {
+        if lobby.status == LobbyStatus::Proposed && backed {
+            lobby.status = LobbyStatus::Confirmed;
+            lobby.grace_until = None;
+            newly_backed.clone_from(&lobby.proposed_by);
+        } else if lobby.status == LobbyStatus::Planned {
             lobby.status = LobbyStatus::Confirmed;
         }
         lobby.version += 1;
+    }
+    if let Some(proposer) = newly_backed {
+        // Additive proposals are final with one backer (§5.2).
+        out.feed.push(
+            FeedEntry::new(1, "lobby.backed", "backed")
+                .actor(&proposer)
+                .lobby(lobby_id)
+                .people(vec![proposer.clone(), email.clone()])
+                .data(json!({ "badge": "FINAL · BACKED", "voteType": "proposal" })),
+        );
     }
     if existing.is_none() {
         out.feed.push(

@@ -18,9 +18,15 @@ use super::model::{Email, LiveState, Lobby, Team};
 
 mod checkin;
 mod membership;
+mod people;
 mod presence;
+mod proposals;
 mod schedule;
 mod tick;
+mod votes;
+
+pub use proposals::{Proposal, ProposalMode};
+pub use votes::{involved, title as vote_title, OptionSpec, Resolve, VoteRequest};
 
 pub use presence::playing_not_checked_in;
 
@@ -99,6 +105,35 @@ pub enum Command {
         lobby: Option<i32>,
         players: PlayersAndTeams,
     },
+    /// Propose a game or food: alongside, or against a planned lobby.
+    Propose(Proposal),
+    /// Remove your own proposal.
+    RemoveProposal { lobby: i32 },
+    /// "Close now" on an empty lobby.
+    CloseNow { lobby: i32 },
+    /// Open a yes/no vote about a lobby.
+    OpenVote(VoteRequest),
+    /// Vote, change your vote, or tick "happy to split".
+    Ballot {
+        vote: i64,
+        option: Option<i64>,
+        split_ok: Option<bool>,
+    },
+    /// Add an option to a slot vote (start from the vote; you pick length).
+    AddOption {
+        vote: i64,
+        what: OptionSpec,
+        minutes: i32,
+        players: PlayersAndTeams,
+    },
+    /// Admin: force, split or veto a vote.
+    ResolveVote { vote: i64, how: Resolve },
+    /// Admin: they called to cancel.
+    RsvpNo { email: Email },
+    /// Admin: they're running late.
+    DelayArrival { email: Email },
+    /// Admin: nudge them.
+    Nudge { email: Email },
 }
 
 /// What Steam (or a simulator) says about one person.
@@ -231,7 +266,12 @@ pub fn apply(state: &mut LiveState, input: Input, now: DateTime<Utc>) -> Result<
                 membership::materialise(state, s, now);
             }
         }
-        Input::Command { actor, command } => command_step(state, &actor, command, now, &mut out)?,
+        Input::Command { actor, command } => {
+            command_step(state, &actor, command, now, &mut out)?;
+            // A command may complete a rule (the last ballot of a unanimous
+            // vote starts its settle window): settle right away.
+            tick::run(state, now, &mut out);
+        }
     }
     Ok(out)
 }
@@ -275,6 +315,35 @@ fn command_step(
             lobby,
             players,
         } => schedule::set_players(state, actor, game_id, lobby, players, now),
+        Command::Propose(p) => proposals::propose(state, actor, p, now, out).map(|_| ()),
+        Command::RemoveProposal { lobby } => proposals::remove_own(state, actor, lobby, out),
+        Command::CloseNow { lobby } => proposals::close_now(state, actor, lobby, now, out),
+        Command::OpenVote(request) => votes::open(state, actor, request, now, out).map(|_| ()),
+        Command::Ballot {
+            vote,
+            option,
+            split_ok,
+        } => votes::ballot(state, actor, vote, option, split_ok, now, out),
+        Command::AddOption {
+            vote,
+            what,
+            minutes,
+            players,
+        } => votes::add_option(
+            state,
+            actor,
+            vote,
+            what,
+            minutes,
+            (players.max_players, players.teams),
+            now,
+            out,
+        )
+        .map(|_| ()),
+        Command::ResolveVote { vote, how } => votes::resolve(state, actor, vote, how, now, out),
+        Command::RsvpNo { email } => people::rsvp_no(state, actor, &email, now, out),
+        Command::DelayArrival { email } => people::delay_arrival(state, actor, &email, now),
+        Command::Nudge { email } => people::nudge(state, actor, &email, out),
     }
 }
 

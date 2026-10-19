@@ -309,6 +309,33 @@ pub async fn schedule_suggested_games(
         .await
         .map_err(|e| Error::Controller(format!("Unable to get game owners due to: {e}")))?;
 
+    // Learned typical lengths per game (DESIGN.md §5.6).
+    let lengths = {
+        let mut defaults = std::collections::BTreeMap::new();
+        let mut typical = std::collections::BTreeMap::new();
+        let mut conn = pool
+            .acquire()
+            .await
+            .map_err(|e| Error::Controller(format!("Unable to get a connection: {e}")))?;
+        crate::live::store::load_game_knowledge(
+            &mut conn,
+            &candidate_ids,
+            &mut defaults,
+            &mut typical,
+        )
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to read game lengths: {e}")))?;
+        for (game, d) in &defaults {
+            if let Some(minutes) = d.duration_minutes {
+                typical.entry(*game).or_insert(crate::live::model::Typical {
+                    minutes,
+                    sessions: 0,
+                });
+            }
+        }
+        typical
+    };
+
     // Get voters and their availability for each game
     let mut voters_map: HashMap<String, Voter> = HashMap::new();
     let mut games: Vec<Game> = Vec::new();
@@ -346,6 +373,7 @@ pub async fn schedule_suggested_games(
             votes: game_record.vote_count.unwrap_or(0),
             voter_ids,
             owner_count,
+            duration_minutes: lengths.get(&game_record.game_id).map(|t| t.minutes),
         });
     }
 

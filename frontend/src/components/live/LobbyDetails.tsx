@@ -220,7 +220,7 @@ export function LobbyDetails({
             title={
               past
                 ? "PLAYED BY"
-                : members.length
+                : currentMembers(lobby).length
                   ? "IN THE LOBBY"
                   : "WHO'S COMING"
             }
@@ -268,7 +268,7 @@ export function LobbyDetails({
           </Section>
         )}
 
-        {(past || lobby.plannedStart) && (
+        {(past || lobby.actualStart) && (
           <Section title="PLAN VS ACTUAL">
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               <TimeCell

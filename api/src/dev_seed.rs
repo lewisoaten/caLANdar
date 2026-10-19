@@ -251,9 +251,13 @@ pub async fn run(pool: &PgPool) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Two pinned sessions: one starting now, one later tonight.
-    for (game_id, start, minutes) in [(548_430_i64, now, 120), (550, now + Duration::hours(3), 90)]
-    {
+    // Two pinned sessions: one starting in a few minutes (to see the start
+    // grace), one later tonight.
+    let soon = Utc::now().duration_trunc(Duration::minutes(1))? + Duration::minutes(4);
+    for (game_id, start, minutes) in [
+        (548_430_i64, soon, 120),
+        (550, now + Duration::hours(3), 90),
+    ] {
         sqlx::query(
             r"
             INSERT INTO event_game_schedule (event_id, game_id, start_time, duration_minutes, is_pinned)
