@@ -1,12 +1,12 @@
 # caLANdar Live: design
 
-Status: draft v2, with decisions folded in · 2026-10-19
+Status: implemented (phases 0–4) · draft v2 with decisions folded in · 2026-10-19. See §11 for how the build differs, and TESTING.md to try it.
 Source: `Live Event Dashboard Design.zip` (README, `Live Event.dc.html` prototype, `Live Dashboard.dc.html` storyboards F1–F13)
 
 **The schedule and Live are two views of one thing.** Both read and write the same set of sessions:
 
-- `/schedule` is the *ahead-of-time* planning view.
-- `/live` is the *during-the-event* view.
+- `/schedule` is the _ahead-of-time_ planning view.
+- `/live` is the _during-the-event_ view.
 
 A lobby **is** a schedule entry. Whatever is played, moved, split or extended on Live is the schedule from then on. Section 4.5 covers how this works.
 
@@ -32,22 +32,22 @@ The page's job is to keep the LAN running smoothly **during** the event. That pu
 
 These facts drive the design:
 
-| Fact | Where | Consequence |
-|---|---|---|
-| Netlify proxies `/api/*` to Cloud Run and **cuts requests at about 26s** | `frontend/vite.config.ts:31-63`, `api/src/controllers/game.rs:91` | The SSE stream **can't go through the Netlify proxy**. It has to connect directly to the Cloud Run origin. |
-| Cloud Run `--timeout 60s`, `min 0` / `max 10` instances, default concurrency 80, CPU throttled outside requests | `Justfile:308-322` | Raise the timeout for streams. We need **cross-instance fan-out**. Background work can only rely on CPU while a request (a stream counts) is open. |
-| The last three commits moved the Steam refresh into a Cloud Run Job specifically to **avoid `--no-cpu-throttling` billing** | `264731c` | No always-on pollers in the service. Timers must be deadline-driven and must catch up after the fact. |
-| Auth is a **Bearer header only**; admin needs `?as_admin=true` | `api/src/auth.rs:37-184` | Native `EventSource` can't authenticate. We need a scoped stream token. |
-| Rocket 0.5 ships `EventStream`; sqlx 0.8 has `PgListener` | `Cargo.toml` | Both building blocks exist, with no new dependencies. |
-| DB is Supabase, pool default of 10 per instance | `main.rs:373` | `LISTEN` needs a **session-mode or direct** connection. The transaction pooler drops it. Streams must never hold a pooled connection each. |
-| `get_current_game` stub: one ID per call, plain `http`, fragile struct (`commentpermission`/`primaryclanid` non-Option), no `gameextrainfo` | `api/src/repositories/steam_api.rs:282-327` | Rewrite it as a batched `get_player_summaries(ids[..100])` with lenient deserialisation. |
-| The schedule persists **pinned rows only**. Suggestions are **recomputed on every GET**. | `controllers/game_schedule.rs:141-320`, `scheduler.rs` | Planned lobbies can't have stable IDs just by reading the schedule. See §4.5. |
-| The planning view is **single-track**. The frontend's `findClash` blocks overlapping sessions, and the backend `has_overlap` is never called. | `EventGameSchedule.tsx:637`, `repositories/game_schedule.rs:205` | Reality has parallel lobbies, so the schedule view must learn **lanes** (§4.5). |
-| The planner's default session length is a hard-coded 120 min | `controllers/game_schedule.rs:276` | Replace it with the learned typical length (§5.6). |
-| Attendance is **6-hour buckets** (06/12/18/00 UTC) | `controllers/event_invitation.rs:25` | Answering "everyone attending at 22:00" means using the 18:00 bucket. That's coarse but workable. |
-| The only backend tests are inline unit tests. The pure `scheduler.rs` is the pattern to copy. | n/a | The live rules engine should be a **pure, unit-tested module**, separate from I/O. |
-| The frontend uses raw `fetch` with no query library. The ActivityTicker polls every 30s. | `ActivityTicker.tsx:338` | Build one small `LiveStore`. The ticker can switch to the same stream later. |
-| The frontend is on **MUI v9**, not v7 as the handoff says | `frontend/package.json` | Use the hl primitives as they are. There's no hl `Button`; the themed MUI `Button` is already chamfered. |
+| Fact                                                                                                                                          | Where                                                             | Consequence                                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Netlify proxies `/api/*` to Cloud Run and **cuts requests at about 26s**                                                                      | `frontend/vite.config.ts:31-63`, `api/src/controllers/game.rs:91` | The SSE stream **can't go through the Netlify proxy**. It has to connect directly to the Cloud Run origin.                                         |
+| Cloud Run `--timeout 60s`, `min 0` / `max 10` instances, default concurrency 80, CPU throttled outside requests                               | `Justfile:308-322`                                                | Raise the timeout for streams. We need **cross-instance fan-out**. Background work can only rely on CPU while a request (a stream counts) is open. |
+| The last three commits moved the Steam refresh into a Cloud Run Job specifically to **avoid `--no-cpu-throttling` billing**                   | `264731c`                                                         | No always-on pollers in the service. Timers must be deadline-driven and must catch up after the fact.                                              |
+| Auth is a **Bearer header only**; admin needs `?as_admin=true`                                                                                | `api/src/auth.rs:37-184`                                          | Native `EventSource` can't authenticate. We need a scoped stream token.                                                                            |
+| Rocket 0.5 ships `EventStream`; sqlx 0.8 has `PgListener`                                                                                     | `Cargo.toml`                                                      | Both building blocks exist, with no new dependencies.                                                                                              |
+| DB is Supabase, pool default of 10 per instance                                                                                               | `main.rs:373`                                                     | `LISTEN` needs a **session-mode or direct** connection. The transaction pooler drops it. Streams must never hold a pooled connection each.         |
+| `get_current_game` stub: one ID per call, plain `http`, fragile struct (`commentpermission`/`primaryclanid` non-Option), no `gameextrainfo`   | `api/src/repositories/steam_api.rs:282-327`                       | Rewrite it as a batched `get_player_summaries(ids[..100])` with lenient deserialisation.                                                           |
+| The schedule persists **pinned rows only**. Suggestions are **recomputed on every GET**.                                                      | `controllers/game_schedule.rs:141-320`, `scheduler.rs`            | Planned lobbies can't have stable IDs just by reading the schedule. See §4.5.                                                                      |
+| The planning view is **single-track**. The frontend's `findClash` blocks overlapping sessions, and the backend `has_overlap` is never called. | `EventGameSchedule.tsx:637`, `repositories/game_schedule.rs:205`  | Reality has parallel lobbies, so the schedule view must learn **lanes** (§4.5).                                                                    |
+| The planner's default session length is a hard-coded 120 min                                                                                  | `controllers/game_schedule.rs:276`                                | Replace it with the learned typical length (§5.6).                                                                                                 |
+| Attendance is **6-hour buckets** (06/12/18/00 UTC)                                                                                            | `controllers/event_invitation.rs:25`                              | Answering "everyone attending at 22:00" means using the 18:00 bucket. That's coarse but workable.                                                  |
+| The only backend tests are inline unit tests. The pure `scheduler.rs` is the pattern to copy.                                                 | n/a                                                               | The live rules engine should be a **pure, unit-tested module**, separate from I/O.                                                                 |
+| The frontend uses raw `fetch` with no query library. The ActivityTicker polls every 30s.                                                      | `ActivityTicker.tsx:338`                                          | Build one small `LiveStore`. The ticker can switch to the same stream later.                                                                       |
+| The frontend is on **MUI v9**, not v7 as the handoff says                                                                                     | `frontend/package.json`                                           | Use the hl primitives as they are. There's no hl `Button`; the themed MUI `Button` is already chamfered.                                           |
 
 ---
 
@@ -136,6 +136,7 @@ Every write produces log rows, and those rows serve three purposes:
 Native `EventSource` gives us automatic reconnect and `Last-Event-ID` for free. It works on the TV's browser, needs no dependency, and uses the same code path for gamers and the wall-board. This is why it beats a fetch-based reader with a header.
 
 **Deploy changes.** Streams are served by a **dedicated `calandar-live` Cloud Run service**. §3.8 explains why.
+
 - **Same image, new subcommand.** It runs `calandar-api serve-live`, in the same way the Steam Job runs `calandar-api refresh-steam-games` from the same binary today.
 - **Live service flags:** `--timeout 3600 --concurrency 1000 --cpu 1 --min-instances 0 --max-instances 2`. Rocket is async, so a stream costs about one task plus one broadcast receiver.
 - **The API service is unchanged.** It keeps `--timeout 60s` and scales to zero.
@@ -177,9 +178,9 @@ Steam is polled from the same leader ticker, **every 30 seconds while the event 
    - Every field except `steamid` is `Option`.
    - Keep `.without_url()` so the key never reaches logs.
 2. **Debounce.** A new `gameid` has to show up in **two consecutive polls** (about 30–60s) before it counts. This stops a 20-second "launch to patch" from creating a lobby and a feed entry. Going AFK (`personastate` 3 or 4) is debounced the same way.
-3. **The engine decides.** Debounced samples become `Input::Presence`, and the engine applies the presence rules in §5.1. Only *changes* produce log rows.
+3. **The engine decides.** Debounced samples become `Input::Presence`, and the engine applies the presence rules in §5.1. Only _changes_ produce log rows.
 4. **Only checked-in people count.** Steam presence from someone who hasn't checked in **never** puts them in a lobby, because they might be playing at home. It only produces the admin "playing but not checked in" card.
-5. **Privacy fallback.** If a profile is private, `gameid` never comes back. After a check-in where 2 polls in a row show the person online but return no game data, they get a one-time hint: "Steam isn't sharing your game. Join lobbies manually, or make *Game details* public." They're then treated as manual.
+5. **Privacy fallback.** If a profile is private, `gameid` never comes back. After a check-in where 2 polls in a row show the person online but return no game data, they get a one-time hint: "Steam isn't sharing your game. Join lobbies manually, or make _Game details_ public." They're then treated as manual.
 
 Later, an optional `presence_source` per gamer could support other launchers: a Discord Rich Presence bot, or a tiny desktop agent. The engine only sees `PresenceSample { email, game_id?, via }`, so new sources slot in without engine changes.
 
@@ -187,23 +188,25 @@ Later, an optional `presence_source` per gamer could support other launchers: a 
 
 ### 3.8 Cost: hold connections only while someone is looking
 
-**How Cloud Run bills this.** Billing is request-based, so an instance costs money for every second it has **at least one request open**. An open SSE stream is an open request. The cost is therefore roughly *the hours during which at least one stream is open × one instance*, whatever the number of viewers. At the current request-based rates (about $0.000018 per vCPU-second and $0.000002 per GiB-second):
+**How Cloud Run bills this.** Billing is request-based, so an instance costs money for every second it has **at least one request open**. An open SSE stream is an open request. The cost is therefore roughly _the hours during which at least one stream is open × one instance_, whatever the number of viewers. At the current request-based rates (about $0.000018 per vCPU-second and $0.000002 per GiB-second):
 
-| Scenario | Instance-hours | Approx. cost |
-|---|---|---|
-| A 48h LAN weekend with the TV on throughout (the worst realistic case), 1 vCPU / 512 MiB | 48 | **≈ $3.30** |
-| The same, but only while somebody actually has the page open | 30–48 | ≈ $2–3.30 |
-| Between events | 0 | $0 |
+| Scenario                                                                                 | Instance-hours | Approx. cost |
+| ---------------------------------------------------------------------------------------- | -------------- | ------------ |
+| A 48h LAN weekend with the TV on throughout (the worst realistic case), 1 vCPU / 512 MiB | 48             | **≈ $3.30**  |
+| The same, but only while somebody actually has the page open                             | 30–48          | ≈ $2–3.30    |
+| Between events                                                                           | 0              | $0           |
 
 The monthly free allowance is 180,000 vCPU-seconds, about 50 vCPU-hours. A whole LAN weekend **probably fits inside the free tier**, provided the API's own usage that month is small. Keeping connections open isn't expensive at this scale. The real risks are **accidental always-on**: a forgotten tab, or streams opened weeks before the event, both of which the measures below prevent.
 
 **Why there's no "cheaper SSE node" on Cloud Run.** Going below 1 vCPU forces `concurrency = 1`, which means **one instance per viewer**. That's strictly more expensive. A 1 vCPU instance serving 1,000 streams is already the cheapest shape. A dedicated service is still worth having:
+
 - The API keeps its 60s timeout, which protects it from hung requests.
 - With max 2 instances, there's effectively **one** stream instance. That makes it the natural ticker and Steam-poll leader.
 - Commands on the API service bill only for their few milliseconds each.
 - Separate services show the cost of streaming on its own line in billing.
 
 **Measures that keep streams open only while someone is watching.** These are built into `connection.ts` and the stream endpoint:
+
 1. **Hidden tabs disconnect.** On `visibilitychange`, if the page has been hidden for **2 minutes**, the client closes the stream. When the page becomes visible again, the client reconnects with `Last-Event-ID`, and the server replays what was missed, so it feels seamless.
 2. **No streams outside the live window.** The client only opens a stream from **doors − 2h to the event end + 1h**. Outside that window, during the lead-up, the page polls the snapshot every 60 seconds while visible, which is plenty when nothing happens in real time.
 3. **A server-side idle cap.** The server closes a stream after 50 minutes (§3.4). It also closes streams after **4 hours with no user interaction**, using a ping from the client on input. This catches the forgotten laptop. It doesn't apply to the wall-board.
@@ -212,6 +215,7 @@ The monthly free allowance is 180,000 vCPU-seconds, about 50 vCPU-hours. A whole
 6. **Client-triggered ticks.** When a countdown that a client is showing reaches zero, the client sends a debounced `POST /live/tick`. Transitions then land within about a second, even if the stream instance's 2-second loop isn't running.
 
 **Plan B, if streaming ever turns out costly or awkward: Supabase Realtime.** We already use Supabase. Its Broadcast feature would replace the Cloud Run stream entirely:
+
 - The API publishes to channel `event:<id>`, and clients subscribe using a JWT that Cloud Run mints with RLS on `realtime.messages`.
 - The free plan includes 200 concurrent connections and 2M messages a month.
 - The cost is a WebSocket client library, Supabase-JWT minting and vendor coupling. Ticks then rely only on points 5 and 6.
@@ -221,6 +225,7 @@ The client's `connection.ts` sits behind a small `LiveTransport` interface (`sub
 ## 4. Data model
 
 ### 4.1 Event additions
+
 ```sql
 ALTER TABLE event ADD COLUMN discord_invite_url TEXT,
                   ADD COLUMN wallboard_token TEXT UNIQUE,          -- random, rotatable by admin
@@ -229,6 +234,7 @@ ALTER TABLE event ADD COLUMN discord_invite_url TEXT,
 ```
 
 ### 4.2 Live tables
+
 ```sql
 live_checkin   (event_id, email, checked_in_at, by_email, PRIMARY KEY (event_id, email))
 
@@ -338,12 +344,12 @@ stateDiagram-v2
 
 `event_game_schedule` is the single store for sessions. Every row is a lobby. The two pages are lenses on it:
 
-| | `/schedule` (planning ahead) | `/live` (during the event) |
-|---|---|---|
-| Shows | Every row, plus computed suggestions, on day cards and a timeline | Every row, plus suggestions, as lanes with a NOW line, presence, votes and the feed |
-| Admin edits | Drag, resize, pin and delete, **without a vote** (the admin override) | Inline admin strip: Edit, End, Remove, Force |
-| Gamer edits | Votes on games (unchanged) | Propose, pre-join, vote, join |
-| Freshness | Subscribes to the same live stream while the event is live, and stays as it is otherwise | The live stream |
+|             | `/schedule` (planning ahead)                                                             | `/live` (during the event)                                                          |
+| ----------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Shows       | Every row, plus computed suggestions, on day cards and a timeline                        | Every row, plus suggestions, as lanes with a NOW line, presence, votes and the feed |
+| Admin edits | Drag, resize, pin and delete, **without a vote** (the admin override)                    | Inline admin strip: Edit, End, Remove, Force                                        |
+| Gamer edits | Votes on games (unchanged)                                                               | Propose, pre-join, vote, join                                                       |
+| Freshness   | Subscribes to the same live stream while the event is live, and stays as it is otherwise | The live stream                                                                     |
 
 Each schedule-page edit goes through the **same command path and engine** as Live: one lock, one log row and one broadcast. An admin dragging DRG on `/schedule` therefore moves it on every Live screen and on the TV, and the feed gets an "Admin moved DRG to 22:30" line.
 
@@ -365,8 +371,9 @@ Each schedule-page edit goes through the **same command path and engine** as Liv
 **Re-planning from what's left.** The planner only plans the **future**: suggestions start at `max(now, event start)`. Every stored row that isn't `removed` counts as an occupied game and time, whether it's planned, confirmed, live or done. That's F10's "the schedule re-plans from what's left", achieved with no planner algorithm change. The changes are in what `schedule_suggested_games` passes in (`controllers/game_schedule.rs`); `scheduler.rs` itself is unchanged.
 
 **Consequences for the existing schedule page.**
+
 - **Lanes.** Reality overlaps, for example two lobbies running side by side after a split. `ScheduleTimeline` needs to pack lanes greedily, using the same `pack()` as Live (shared in `scheduleModel.ts`).
-- **Clashes.** `findClash` stops being a hard block. It still warns about clashes in admin *planning* edits, but rows that came from Live are allowed to overlap.
+- **Clashes.** `findClash` stops being a hard block. It still warns about clashes in admin _planning_ edits, but rows that came from Live are allowed to overlap.
 - **Past rows.** Played rows render as "played", with their actual times. Admins can still correct them, but with a confirm step, because they're history.
 - **API.** `GameScheduleEntry` gains `status`, `kind`, `food`, `plannedStart`, `plannedMinutes`, `actualStart`, `actualEnd`, `teams` and `maxPlayers`. Today's consumers read only the existing fields, so the change is additive.
 
@@ -386,7 +393,8 @@ The handoff's flows are mostly coherent. Below are the places where the rules, a
    - the lobby details actions for a live lobby you're in, as `Leave lobby`;
    - the Call vote ▾ menu, as `I'm not playing`, which clears your manual "now".
 
-   Leave works for Steam users too: it ends your membership until Steam shows a *different* game, so a game left running in the background doesn't pull you back in. A manual "now" also expires when the lobby's planned end plus 30 minutes passes, unless you answer a lime "Still playing X?" toast.
+   Leave works for Steam users too: it ends your membership until Steam shows a _different_ game, so a game left running in the background doesn't pull you back in. A manual "now" also expires when the lobby's planned end plus 30 minutes passes, unless you answer a lime "Still playing X?" toast.
+
 2. **What happens after the Steam-switch grace isn't specified.** The handoff says that if you manually join B while Steam shows A, you get 5 minutes to launch B.
    → If you don't launch B in time, the manual join of B is **converted to a pre-join** of B (not dropped), and you stay in A. You lose nothing, and there's no surprise.
 3. **Two live lobbies of the same game,** for example after a split, or two CS2 groups. Steam only tells us the `gameid`.
@@ -397,26 +405,28 @@ The handoff's flows are mostly coherent. Below are the places where the rules, a
    4. The most recent lobby.
 
    You can always correct it manually, and a manual pick wins while the `gameid` matches.
+
 4. **Food versus Steam.** You won't be launching anything while eating, and Steam may still show CS2 in the background.
    → While you're a member of a live **food** lobby, Steam presence is ignored for lobby membership. Food membership is manual, or comes from the vote or the split. You leave by pressing Leave, or automatically at the food lobby's end.
-5. **Auto-create noise.** This is handled by the debounce in §3.7. The **setup toast** only shows the *first* time a game is ever seen, meaning when no `game_lobby_defaults` row exists. After that, the defaults apply silently.
+5. **Auto-create noise.** This is handled by the debounce in §3.7. The **setup toast** only shows the _first_ time a game is ever seen, meaning when no `game_lobby_defaults` row exists. After that, the defaults apply silently.
 6. **AFK** (`personastate` Away/Snooze held for more than 10 minutes, debounced) shows on the floor at 40% opacity and in the audit lens. It does **not** remove you from the lobby. Otherwise the lobby would empty when people step away.
 
 ### 5.2 Proposals versus votes: "everything is a vote", made precise
 
 The handoff uses "vote" for two different things, and the unanimity rule only works for one of them.
 
-| | **Additive: "Propose a lobby"** | **Competitive: "Decide something"** |
-|---|---|---|
-| Examples | Propose a game or food that runs *alongside* others (Phasmophobia at 22:00, L4D2 at 21:00) | What's on at 22:00 · change · delay · keep playing · kick off early |
-| Who it affects | Only the people who join | Everyone eligible |
-| Final when | **1 backer** (a pre-join, or a "yes") within 5 min → `confirmed`. Otherwise it's removed silently. | **Unanimous** among the people involved (§5.3.3), or an admin forces/splits/vetoes, or the deadline arrives (§5.3.2) |
-| Feed T1 | "FINAL · BACKED" | "FINAL · UNANIMOUS / ADMIN PICK / EVERYONE SPLIT" |
+|                | **Additive: "Propose a lobby"**                                                                    | **Competitive: "Decide something"**                                                                                  |
+| -------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Examples       | Propose a game or food that runs _alongside_ others (Phasmophobia at 22:00, L4D2 at 21:00)         | What's on at 22:00 · change · delay · keep playing · kick off early                                                  |
+| Who it affects | Only the people who join                                                                           | Everyone eligible                                                                                                    |
+| Final when     | **1 backer** (a pre-join, or a "yes") within 5 min → `confirmed`. Otherwise it's removed silently. | **Unanimous** among the people involved (§5.3.3), or an admin forces/splits/vetoes, or the deadline arrives (§5.3.2) |
+| Feed T1        | "FINAL · BACKED"                                                                                   | "FINAL · UNANIMOUS / ADMIN PICK / EVERYONE SPLIT"                                                                    |
 
 The L4D2 history card in the prototype ("NEW LOBBY · FINAL · UNANIMOUS", 4 yes votes) is really the additive case. The badge should read **BACKED**, or the count should be the backers.
 
 **When proposing, the sheet decides which kind applies:**
-- If the chosen time **overlaps a planned or confirmed lobby that the proposer has pre-joined or is eligible for**, the sheet asks: **"Add as an option to *What's on at 22:00?*"** or **"Run alongside"**.
+
+- If the chosen time **overlaps a planned or confirmed lobby that the proposer has pre-joined or is eligible for**, the sheet asks: **"Add as an option to _What's on at 22:00?_"** or **"Run alongside"**.
 - Otherwise it's simply additive.
 
 This is the one new UI element the design needs (a two-option chip row in the sheet footer).
@@ -433,16 +443,18 @@ This is the one new UI element the design needs (a two-option chip row in the sh
    - A tie goes to the planned option, then to the earliest-created option.
 
    The admin can still decide earlier.
+
 3. **Who votes: everyone involved, and "involved" depends on the kind of vote.** Unanimity means every involved person agrees. The "Waiting on" row lists exactly the involved people who haven't voted yet.
 
-   | Vote | Involved |
-   |---|---|
-   | New game or what's on at a slot (`slot`) | Everyone **checked in** at that time, so anyone who checks in while the vote is open joins it |
-   | Keep playing (`extend`) | Everyone **in** the live lobby right now |
+   | Vote                                        | Involved                                                                                                                    |
+   | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+   | New game or what's on at a slot (`slot`)    | Everyone **checked in** at that time, so anyone who checks in while the vote is open joins it                               |
+   | Keep playing (`extend`)                     | Everyone **in** the live lobby right now                                                                                    |
    | Change or delay a lobby (`change`, `delay`) | Everyone **pre-joined to or in** the lobby, plus the people who backed or voted for it (F9.1b: "everyone who voted for it") |
-   | Kick off early (`kickoff`) | Everyone **attending** the start bucket. Nobody can be checked in yet, because check-in opens at doors. |
+   | Kick off early (`kickoff`)                  | Everyone **attending** the start bucket. Nobody can be checked in yet, because check-in opens at doors.                     |
 
    The set is **recomputed from live state**, not frozen when the vote opens. People who check in, join or pre-join get added (F6.2: "Joining L4D2 lets you vote"). Anyone who leaves the lobby, RSVPs no or has their arrival delayed drops out of the involved set, and their ballot stops counting. Someone involved who never votes can't stall the decision forever, because the deadline (§5.3.2) settles it.
+
 4. **Accidental finalisation.** If the last person's tap makes the vote unanimous, it finalises at once, before anyone can change their mind.
    → Unanimity starts a **20-second settle window** (status `OPEN · FINALISING 0:20`). Any change cancels it. The window is short enough to feel instant, and long enough to undo a mis-tap.
 5. **Keep playing exists twice.** It's a standalone "extend" vote and also an auto-added slot-vote option.
@@ -462,6 +474,7 @@ This is the one new UI element the design needs (a two-option chip row in the sh
    - **Someone has joined.** The 5-minute grace is locked, and anyone still elsewhere when it ends drops out. That's the auto-split.
 
    This means every move is either a vote or the grace expiring. Nothing moves silently.
+
 3. **Pre-join drop.** If you're still in another game when a lobby you've pre-joined starts, its grace runs, and at the end you're dropped (`drop_reason='elsewhere'`). This is the auto-split, and both result toasts in F8 come from it. It's one rule, and it covers the "keep playing past the end" case as well.
 4. **Random team** slots are assigned **when the grace ends**: you go to the team with the most open slots, with ties broken randomly. Until then you show as a dashed `?`.
 
@@ -509,26 +522,26 @@ The same data can later suggest **max players**, using the peak concurrent membe
 
 All of these live under `/api/events/:id/live`, through the Netlify proxy. Admin variants take `?as_admin=true`, following the existing guard convention.
 
-| Method | Path | Notes |
-|---|---|---|
-| GET | `` | Snapshot (§4.3) |
-| POST | `/stream-token` | Returns `{token, streamUrl}` |
-| GET | `/stream?st=` | **Direct to Cloud Run** |
-| POST | `/checkin` | Admin: `{email}` with `as_admin` |
-| POST | `/presence` | Manual: `{lobbyId}` or `{none:true}`; Leave |
-| POST | `/lobbies` | Propose: `{kind, gameId/food, start, durationMin, teams?, mode: alongside|option, voteId?}` |
-| POST | `/lobbies/:lid/prejoin` · DELETE | `{team?|random}` |
-| PATCH | `/lobbies/:lid` | Admin edit · DELETE admin remove/end · `POST /close` proposer close-now |
-| POST | `/votes` | `{type, targetLobbyId?, options[]}` |
-| PUT | `/votes/:vid/ballot` | `{optionId, splitOk}` (change your vote) |
-| POST | `/votes/:vid/options` | Add an option |
-| POST | `/votes/:vid/resolve?as_admin=true` | `{force: optionId}`, `{split:true}`, or `{veto:true}` |
-| POST | `/posts?as_admin=true` | `{text, ttl, tv}` |
-| POST | `/people/:pid/{rsvp-no,delay-arrival,nudge}?as_admin=true` | Admin check-in queue |
-| PUT | `/api/games/:gid/lobby-defaults` | Players and teams defaults |
-| GET | `/api/games/search?q=` | Searches the existing `steam_game` table: suggested first, then all of Steam |
-| GET | `/api/live/:wallboardToken` | Wall-board snapshot (no auth); `.../stream-token` |
-| POST | `/api/internal/live/tick` | Cloud Scheduler OIDC |
+| Method | Path                                                       | Notes                                                                        |
+| ------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| GET    | ``                                                         | Snapshot (§4.3)                                                              |
+| POST   | `/stream-token`                                            | Returns `{token, streamUrl}`                                                 |
+| GET    | `/stream?st=`                                              | **Direct to Cloud Run**                                                      |
+| POST   | `/checkin`                                                 | Admin: `{email}` with `as_admin`                                             |
+| POST   | `/presence`                                                | Manual: `{lobbyId}` or `{none:true}`; Leave                                  |
+| POST   | `/lobbies`                                                 | Propose: `{kind, gameId/food, start, durationMin, teams?, mode: alongside    | option, voteId?}` |
+| POST   | `/lobbies/:lid/prejoin` · DELETE                           | `{team?                                                                      | random}`          |
+| PATCH  | `/lobbies/:lid`                                            | Admin edit · DELETE admin remove/end · `POST /close` proposer close-now      |
+| POST   | `/votes`                                                   | `{type, targetLobbyId?, options[]}`                                          |
+| PUT    | `/votes/:vid/ballot`                                       | `{optionId, splitOk}` (change your vote)                                     |
+| POST   | `/votes/:vid/options`                                      | Add an option                                                                |
+| POST   | `/votes/:vid/resolve?as_admin=true`                        | `{force: optionId}`, `{split:true}`, or `{veto:true}`                        |
+| POST   | `/posts?as_admin=true`                                     | `{text, ttl, tv}`                                                            |
+| POST   | `/people/:pid/{rsvp-no,delay-arrival,nudge}?as_admin=true` | Admin check-in queue                                                         |
+| PUT    | `/api/games/:gid/lobby-defaults`                           | Players and teams defaults                                                   |
+| GET    | `/api/games/search?q=`                                     | Searches the existing `steam_game` table: suggested first, then all of Steam |
+| GET    | `/api/live/:wallboardToken`                                | Wall-board snapshot (no auth); `.../stream-token`                            |
+| POST   | `/api/internal/live/tick`                                  | Cloud Scheduler OIDC                                                         |
 
 **Stream events:** `lobby`, `lobby.delete`, `vote`, `vote.delete`, `presence`, `checkin`, `feed`, `feed.delete`, `toast.admin`, `toast.personal`, `reset`, `reconnect`.
 
@@ -556,21 +569,22 @@ live/
 
 ### 7.2 Components
 
-| Component | Builds on |
-|---|---|
-| `components/live/LivePage.tsx` (the route) | `Dashboard` shell, `Panel`, `sectionGap` |
-| `MeStrip` (check-in, NOW/NEXT chips, Call vote menu) | `UserAvatar`, `Tag`, MUI `Menu` |
-| `LiveTimeline` (new; read-only, 100px/h, sticky lanes, NOW line, auto-scroll to 45%) | Pure helpers from `schedule/scheduleModel.ts` (`buildTicks`, `fmtClock`, `LAN_DAY_CUTOFF_HOUR`). **Not** `ScheduleTimeline`, which is a drag editor with no NOW line. |
-| `LobbyDetails`, `TeamCards`, `PlanVsActual`, `LobbyLog` | `Panel`, `Tag`, `UserAvatar` |
-| `UpNext` | `scheduleModel` time formatters |
-| `LiveFloor` | `SeatFloorPlan` + `SeatTile.occupants`, extended with a **group overlay** that merges neighbouring seats in the same lobby (new prop `groups: {seatIds, color, label}[]`) |
-| `LiveFeed` (`VoteCard`, `HistoryRail` T1–T4) | `tickerKind` colours from `ActivityTicker` |
-| `ProposeSheet` (6 modes), `PlayersTeamsBlock` (shared with the setup toast) | MUI `Drawer` |
-| `ToastStack` (its own component, top-right) | Not notistack. It renders `selectors.toasts()`. Minimised and hidden IDs go to localStorage (wrapped in try/catch). |
-| `AdminFab` + `AdminPopover` | Amber tone, `chamfer()` |
-| `WallBoard` (`/live/:token`, outside `ProtectedRoutes`) | The same store with a `wallboard` connection mode |
+| Component                                                                            | Builds on                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `components/live/LivePage.tsx` (the route)                                           | `Dashboard` shell, `Panel`, `sectionGap`                                                                                                                                  |
+| `MeStrip` (check-in, NOW/NEXT chips, Call vote menu)                                 | `UserAvatar`, `Tag`, MUI `Menu`                                                                                                                                           |
+| `LiveTimeline` (new; read-only, 100px/h, sticky lanes, NOW line, auto-scroll to 45%) | Pure helpers from `schedule/scheduleModel.ts` (`buildTicks`, `fmtClock`, `LAN_DAY_CUTOFF_HOUR`). **Not** `ScheduleTimeline`, which is a drag editor with no NOW line.     |
+| `LobbyDetails`, `TeamCards`, `PlanVsActual`, `LobbyLog`                              | `Panel`, `Tag`, `UserAvatar`                                                                                                                                              |
+| `UpNext`                                                                             | `scheduleModel` time formatters                                                                                                                                           |
+| `LiveFloor`                                                                          | `SeatFloorPlan` + `SeatTile.occupants`, extended with a **group overlay** that merges neighbouring seats in the same lobby (new prop `groups: {seatIds, color, label}[]`) |
+| `LiveFeed` (`VoteCard`, `HistoryRail` T1–T4)                                         | `tickerKind` colours from `ActivityTicker`                                                                                                                                |
+| `ProposeSheet` (6 modes), `PlayersTeamsBlock` (shared with the setup toast)          | MUI `Drawer`                                                                                                                                                              |
+| `ToastStack` (its own component, top-right)                                          | Not notistack. It renders `selectors.toasts()`. Minimised and hidden IDs go to localStorage (wrapped in try/catch).                                                       |
+| `AdminFab` + `AdminPopover`                                                          | Amber tone, `chamfer()`                                                                                                                                                   |
+| `WallBoard` (`/live/:token`, outside `ProtectedRoutes`)                              | The same store with a `wallboard` connection mode                                                                                                                         |
 
 **Shell changes:**
+
 - `navModel.ts`: add a `live` section to `ShellSection` and `EVENT_SECTIONS`; extend the `parseRoute` regex with `live`; add a `LABELS` entry; insert into `eventNavItems` after Overview.
 - `navIcons.tsx`: add an icon. `NAV_ICONS` is a `Record`, so the build fails until this exists.
 - `MenuItems.tsx` `NavRow`: add a `badge` prop for `LIVE · 2D 3H` and `● LIVE`.
@@ -581,16 +595,16 @@ live/
 
 `toasts(state, me, now)` is a pure selector:
 
-| Toast | Derived from |
-|---|---|
+| Toast                                  | Derived from                                                                                   |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | Pink grace ("Join now or stay in CS2") | A lobby in `grace` or `waiting` where I'm pre-joined, a backer, or eligible, and I'm not in it |
-| Pink Steam switch | `me.presence.switch_grace_until > now` |
-| Violet "Needs one backer" | My lobby in `proposed` |
-| Violet "Everyone left" | My lobby in `empty` |
-| Cyan setup | `presence` created a lobby for me with no defaults |
-| Cyan "Starts in 10 min" | A lobby I've pre-joined with `start − now ≤ 10m` |
-| Results | `feed` rows tier 1 or 2 that involve me, newer than page load, shown for 10s |
-| Amber admin post | `toast.admin` rows within their TTL |
+| Pink Steam switch                      | `me.presence.switch_grace_until > now`                                                         |
+| Violet "Needs one backer"              | My lobby in `proposed`                                                                         |
+| Violet "Everyone left"                 | My lobby in `empty`                                                                            |
+| Cyan setup                             | `presence` created a lobby for me with no defaults                                             |
+| Cyan "Starts in 10 min"                | A lobby I've pre-joined with `start − now ≤ 10m`                                               |
+| Results                                | `feed` rows tier 1 or 2 that involve me, newer than page load, shown for 10s                   |
+| Amber admin post                       | `toast.admin` rows within their TTL                                                            |
 
 The derived ID is `kind:entityId[:startAt]`. That makes "the **same alert** shows again after a delay" (F9.3) automatic: the start time changed, so the ID is new and a previous hide doesn't apply.
 
@@ -598,14 +612,14 @@ The derived ID is `kind:entityId[:startAt]`. That makes "the **same alert** show
 
 ## 8. Other realtime technology worth using
 
-| Tech | Use | When |
-|---|---|---|
+| Tech                                       | Use                                                                                                                                                                                                                                                  | When                                               |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | **Web Push** (VAPID plus a service worker) | Pink graces, "starts in 10 min" and nudges reach people whose phone is locked or whose tab is in the background. That's most people mid-match. Server sends via `web-push` when it writes a personal toast-worthy log row. Opt-in from the me strip. | Phase 4. This is the single biggest win after SSE. |
-| **Notification API** (no push) | The same alerts as OS notifications while the tab is open but unfocused, for example while someone is playing on the same PC | Phase 3 (cheap) |
-| **Screen Wake Lock** | The wall-board never sleeps | Phase 4 |
-| **Page Visibility / online events** | Resync immediately on wake, and pause animations when hidden | Phase 1 |
-| **Discord webhook** (per-event URL) | "Share to Discord" on proposals, admin posts with "also on Discord", and vote results | Phase 4 |
-| **Vibration API** | A short buzz for pink alerts on mobile | Phase 3 |
+| **Notification API** (no push)             | The same alerts as OS notifications while the tab is open but unfocused, for example while someone is playing on the same PC                                                                                                                         | Phase 3 (cheap)                                    |
+| **Screen Wake Lock**                       | The wall-board never sleeps                                                                                                                                                                                                                          | Phase 4                                            |
+| **Page Visibility / online events**        | Resync immediately on wake, and pause animations when hidden                                                                                                                                                                                         | Phase 1                                            |
+| **Discord webhook** (per-event URL)        | "Share to Discord" on proposals, admin posts with "also on Discord", and vote results                                                                                                                                                                | Phase 4                                            |
+| **Vibration API**                          | A short buzz for pink alerts on mobile                                                                                                                                                                                                               | Phase 3                                            |
 
 **WebSockets aren't needed.** Every client → server message is a discrete command that already has a REST shape. SSE plus REST is simpler on Cloud Run, reconnects natively, and works through the TV browser.
 
@@ -615,29 +629,31 @@ The derived ID is `kind:entityId[:startAt]`. That makes "the **same alert** show
 
 **Handoff gaps (§5).** All nine fixes are agreed. The Leave action (§5.1.1) is a confirmed addition to the design.
 
-| # | Question | Decision |
-|---|---|---|
-| Q1 | Should Live write back into the schedule? | **Yes, they're one thing.** Lobbies *are* `event_game_schedule` rows, and the two pages are views of them (§4.5). |
-| Q2 | What happens at a competitive vote's deadline? | Plurality wins. Options whose voters ticked split, and that reach `min_players`, get their own lobby. A tie goes to the plan (§5.3.2). |
-| Q3 | Who has to agree for unanimity? | **Everyone involved**, and "involved" depends on the vote. A new game or slot means everyone checked in at that time; keep playing means the people in the game; change or delay means the lobby's people and backers; kick-off means the people attending the start (§5.3.3). |
-| Q4 | When do slot votes open? | Only when someone challenges a planned lobby (§5.3.1). |
-| Q5 | Should running over slide the next lobby automatically? | **No separate rule.** The start-time grace covers it: nobody joins within 5 minutes and the lobby is booted, or a delay vote moves it (§5.4.2). |
-| Q6 | Is food planned? | No, food is proposal-only. Google Places comes in phase 4. |
-| Q7 | Where are game defaults saved? | **Globally**, pre-filled on re-proposal. Typical play length is **learned from actual sessions** and feeds the propose sheet, Steam auto-create and the planner (§5.6). |
-| Q8 | Does the production Supabase URL use the transaction pooler? | **No: it uses session mode** (checked 2026-10-19). The secret points at the Supavisor pooler host on port 5432 (session mode), not 6543 (transaction mode), so `LISTEN` works as-is. Each live instance holds one connection for its listener. That connection comes out of the session pooler's client limit, so it's created separately rather than taken from the request pool. No URL change is needed. If the pooler ever moves to 6543, give the listener its own `DATABASE_LISTEN_URL`. |
-| n/a | Cost of open connections | A dedicated `calandar-live` service at 1 vCPU, streams opened only while someone is watching, and Supabase Realtime as plan B (§3.8). |
+| #   | Question                                                     | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1  | Should Live write back into the schedule?                    | **Yes, they're one thing.** Lobbies _are_ `event_game_schedule` rows, and the two pages are views of them (§4.5).                                                                                                                                                                                                                                                                                                                                                                              |
+| Q2  | What happens at a competitive vote's deadline?               | Plurality wins. Options whose voters ticked split, and that reach `min_players`, get their own lobby. A tie goes to the plan (§5.3.2).                                                                                                                                                                                                                                                                                                                                                         |
+| Q3  | Who has to agree for unanimity?                              | **Everyone involved**, and "involved" depends on the vote. A new game or slot means everyone checked in at that time; keep playing means the people in the game; change or delay means the lobby's people and backers; kick-off means the people attending the start (§5.3.3).                                                                                                                                                                                                                 |
+| Q4  | When do slot votes open?                                     | Only when someone challenges a planned lobby (§5.3.1).                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Q5  | Should running over slide the next lobby automatically?      | **No separate rule.** The start-time grace covers it: nobody joins within 5 minutes and the lobby is booted, or a delay vote moves it (§5.4.2).                                                                                                                                                                                                                                                                                                                                                |
+| Q6  | Is food planned?                                             | No, food is proposal-only. Google Places comes in phase 4.                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Q7  | Where are game defaults saved?                               | **Globally**, pre-filled on re-proposal. Typical play length is **learned from actual sessions** and feeds the propose sheet, Steam auto-create and the planner (§5.6).                                                                                                                                                                                                                                                                                                                        |
+| Q8  | Does the production Supabase URL use the transaction pooler? | **No: it uses session mode** (checked 2026-10-19). The secret points at the Supavisor pooler host on port 5432 (session mode), not 6543 (transaction mode), so `LISTEN` works as-is. Each live instance holds one connection for its listener. That connection comes out of the session pooler's client limit, so it's created separately rather than taken from the request pool. No URL change is needed. If the pooler ever moves to 6543, give the listener its own `DATABASE_LISTEN_URL`. |
+| n/a | Cost of open connections                                     | A dedicated `calandar-live` service at 1 vCPU, streams opened only while someone is watching, and Supabase Realtime as plan B (§3.8).                                                                                                                                                                                                                                                                                                                                                          |
 
 ## 10. Delivery plan
 
 Each phase is shippable on its own and useful at a real LAN.
 
 **Phase 0: plumbing (no visible feature)**
+
 - `live_log`, `LiveHub` (PgListener plus broadcast plus 5s poll), stream token, and the `EventStream` endpoint.
 - The `serve-live` subcommand plus the `calandar-live` service (`Justfile` and the deploy workflow), `DATABASE_URL_LISTEN`, and `PgPoolOptions`.
 - `src/live/store.ts` and `connection.ts` behind `LiveTransport`, with the visibility, live-window and idle rules from §3.8 and a debug panel.
 - **Prove it works by:** verifying that a stream survives more than 26s on staging, an instance recycle and a laptop sleep, and that a hidden tab actually drops its connection. Check the billing line for `calandar-live` after a test weekend.
 
 **Phase 1: the timeline and check-in (read-mostly)**
+
 - The nav item and badge; `LivePage` with the me strip; check-in; `LiveTimeline` from planned lobbies; Up next; the floor from seat reservations; the Discord link.
 - `event.discord_invite_url` and `timezone`.
 - The `event_game_schedule` columns from §4.2. The `/schedule` page gets lanes, a soft clash warning, played styling, and a live stream subscription while the event is live.
@@ -645,22 +661,67 @@ Each phase is shippable on its own and useful at a real LAN.
 - The ActivityTicker moves to live_log rows.
 
 **Phase 2: presence**
+
 - Rewrite the Steam API stub; the leader ticker plus Cloud Scheduler backstop; manual join and leave; auto-create plus the setup toast plus `game_lobby_defaults`; pre-join and teams; the floor grouped by lobby; the feed's T2–T4 tiers; the admin audit lens.
 - Materialising planned lobbies, recording `actual_start` and `actual_end`, and the planner planning only the future around stored rows.
 - Record **typical length** from day one, so the data is there when §5.6 needs it.
 
 **Phase 3: votes and the start-time machine**
+
 - Proposals and backers, competitive votes, ballots, split, admin force/split/veto, and the propose sheet's six modes.
 - The grace, delay, auto-split and empty rules. Running over is covered by the grace, so there's no slide-back rule.
 - §5.6 learned lengths in the propose sheet, Steam auto-create and the planner, replacing the hard-coded 120 minutes.
 - `ToastStack`, the admin popover and posts, and OS notifications.
 
 **Phase 4: room-scale polish**
+
 - The wall-board plus token plus Wake Lock; Web Push; Discord webhooks; Google Places food; mobile pass.
 
 **Testing:**
+
 - **The engine:** pure unit tests, one per storyboard frame (F1–F13). These are the acceptance criteria.
 - **Selectors:** Vitest.
 - **Connection:** MSW v3 `sse()` handlers. It's available in the installed `msw`, `lib/core/index.d.ts`.
 - **Storybook:** each `?sc=` scenario as a story fed from a fixture store, with no network. These stories double as the design-sync previews.
 - **Backend I/O:** one `#[sqlx::test]` integration test, for the transaction plus NOTIFY plus replay. It would be the repo's first, and it's worth adding here.
+
+## 11. Implementation notes (2026-10-20)
+
+All five phases are built, on stacked branches `live/p0-plumbing` → `live/p4-roomscale`. TESTING.md explains how to run it locally. Where the build differs from the design above, it is listed here.
+
+**Transport**
+
+- **Unnamed stream events.** Rows go out as plain `message` events, with the kind inside the data. Only `ping`, `reset` and `reconnect` are named. The client then needs one listener however many kinds there are.
+- **No `DATABASE_URL_LISTEN`.** Production uses the session pooler (Q8), so the listener connects with `DATABASE_URL`. It is created lazily, by the first stream subscriber on an instance.
+- **Idle cap in the client.** The 4-hour cap is enforced by `connection.ts` (input listeners), not by the server. The 50-minute recycle is the server's.
+- **Shared-secret backstop.** Cloud Scheduler authenticates with an `X-Live-Tick-Secret` header (the `LIVE_TICK_SECRET` secret, created by the deploy), not an OIDC token. That avoids a JWT and Google-certificate dependency.
+
+**Data**
+
+- **`live_vote*` tables.** The vote tables are `live_vote`, `live_vote_option` and `live_vote_ballot`, because `vote` is already the game-vote enum type. Options store their `label`.
+- **Phase 2 bookkeeping.** `lobby_member.manual_expires_at` and the `live_presence` debounce and grace columns are new.
+
+**Engine**
+
+- **Diff, don't log changes.** The engine changes a copy of the state, and the store diffs it against the loaded state. New rows carry negative temporary ids until inserted. Stream deltas are the client views that differ before and after, so the engine only produces feed entries, personal toasts and notices.
+- **Early joins.** A lobby can be joined 15 minutes before its start. Joining starts the grace, which runs to `max(start, join) + 5m`. A planned lobby whose start was missed by more than 10 minutes, for example one created after the fact, is left alone rather than booted.
+- **Openers count for change and delay.** Whoever opens a change or delay vote is involved in it, even without a pre-join. Otherwise a change to a lobby nobody had pre-joined could never pass.
+- **Proposals have no vote row.** An alongside proposal is a `proposed` lobby with its backer deadline in `grace_until`. Backing it is a pre-join by someone other than the proposer.
+- **Admin queue.** Besides "playing on Steam, not checked in", it lists people expected now who haven't checked in, from 30 minutes after doors.
+
+**Frontend**
+
+- **Toast placement.** Toasts start below the top bar. Informational ones fold into a pill after 15 seconds so they don't cover the me strip. They sit under drawers and modals (found in the end-to-end run).
+- **Lane packing.** The schedule page packs lanes per LAN-day row with its own `packRowLanes`; Live has its own `packLanes`. They are not one shared `pack()`.
+
+**Room scale**
+
+- **Web Push.** RFC 8291 and RFC 8292 are implemented in pure Rust (`p256`, `aes-gcm`, `hkdf`). Pushes go out for: nobody's in, starting with the grace, your proposal backed, and nudges. "Starts in 10 minutes" stays an in-page toast only.
+- **Discord.** Vote results, backed and new proposals, and admin posts marked for Discord are posted to the webhook.
+- **Food.** Search uses Places Text Search (New), biased to the venue. Distance is shown; delivery time isn't, because Places doesn't provide it.
+
+**Not built**
+
+- **ActivityTicker.** It still polls its own endpoint. Moving it onto `live_log` rows is left for later.
+- **Storybook and MSW.** There are no Storybook stories for the Live components and no MSW `sse()` tests. The connection is tested with a fake transport instead.
+- **Two tabs, two streams.** There is no shared `BroadcastChannel` leader, as planned for v1.
