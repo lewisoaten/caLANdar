@@ -91,7 +91,7 @@ export function AdminFab({
           position: "fixed",
           right: 24,
           bottom: `calc(var(${TOAST_BOTTOM_VAR}, 0px) + 24px)`,
-          zIndex: 1300,
+          zIndex: 1100,
           display: "flex",
           alignItems: "center",
           gap: 1,

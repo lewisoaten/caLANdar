@@ -341,6 +341,9 @@ function ToastCard({
   );
 }
 
+/** Informational toasts fold into a pill after this long on screen. */
+export const AUTO_MINIMISE_MS = 15_000;
+
 export function ToastStack({
   state,
   toasts,
@@ -354,17 +357,28 @@ export function ToastStack({
   onAction: (toast: Toast, action: ToastAction) => void;
   prefs: ReturnType<typeof useToastPrefs>;
 }) {
+  // Toasts the viewer re-opened after they folded away.
+  const [reopened, setReopened] = useState<Set<string>>(new Set());
   const visible = toasts.filter((t) => !prefs.prefs.hidden.includes(t.id));
   if (!visible.length) return null;
+  const sticky = (t: Toast) =>
+    t.cls === "alert" || t.cls === "own" || t.cls === "setup";
+  const isMinimised = (t: Toast) => {
+    if (prefs.prefs.minimised.includes(t.id)) return true;
+    if (sticky(t) || reopened.has(t.id)) return false;
+    return t.shownAt != null && now - t.shownAt > AUTO_MINIMISE_MS;
+  };
   return (
     <Box
       aria-label="Notifications"
       component="section"
       sx={{
         position: "fixed",
-        top: 12,
+        // Below the shell's 64px top bar.
+        top: 72,
         right: 16,
-        zIndex: 1400,
+        // Under drawers (the propose sheet) and modals, above the page.
+        zIndex: 1150,
         width: "min(470px, calc(100% - 32px))",
         maxHeight: "calc(100vh - 24px)",
         overflowY: "auto",
@@ -379,8 +393,12 @@ export function ToastStack({
           toast={t}
           state={state}
           now={now}
-          minimised={prefs.prefs.minimised.includes(t.id)}
-          onMinimise={() => prefs.toggleMinimised(t.id)}
+          minimised={isMinimised(t)}
+          onMinimise={() => {
+            if (isMinimised(t) && !prefs.prefs.minimised.includes(t.id))
+              setReopened((r) => new Set(r).add(t.id));
+            else prefs.toggleMinimised(t.id);
+          }}
           onHide={() => prefs.hide(t.id)}
           onAction={(a) => onAction(t, a)}
         />

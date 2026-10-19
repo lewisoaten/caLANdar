@@ -56,6 +56,9 @@ export interface Toast {
   actions: ToastAction[];
   gameId?: number | null;
   kind?: "game" | "food";
+  /** When an informational toast first appeared (server ms): it folds
+   * into a pill a while later so it doesn't cover the page. */
+  shownAt?: number;
   /** People rows: IN / WAITING ON. */
   people?: { label: string; pids: string[] }[];
 }
@@ -236,6 +239,7 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
           title: `${l.name} · ${clock(l.start)}`,
           countdownTo: start,
           progress: [start - STARTS_SOON_MS, start],
+          shownAt: start - STARTS_SOON_MS,
           life: `UNTIL ${clock(start)}`,
           canHide: true,
           gameId: l.gameId,
@@ -340,6 +344,7 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
     if (!forever && now - at > ADMIN_POST_MS) continue;
     out.push({
       id: `admin:${row.seq}`,
+      shownAt: at,
       ...base("admin"),
       kicker: "FROM THE ADMINS",
       title: p.text ?? "",
@@ -357,6 +362,7 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
     const p = row.payload ?? {};
     out.push({
       id: `personal:${row.seq}`,
+      shownAt: at,
       ...base(p.kind === "nudge" ? "admin" : "setup"),
       kicker: p.kind === "nudge" ? "NUDGE" : "STEAM",
       title:
