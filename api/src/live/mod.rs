@@ -5,10 +5,25 @@
 //! - [`hub`]: fans new rows out to the stream subscribers of this instance;
 //! - [`stream`]: the SSE endpoint, authorised by a [`token`].
 
+// Views and rows are wide data structures (flags, optional fields) and the
+// engine's rule functions are long by nature; these pedantic lints add noise
+// rather than catch bugs here.
+#![allow(
+    clippy::struct_excessive_bools,
+    clippy::single_option_map,
+    clippy::too_many_lines,
+    clippy::missing_const_for_fn,
+    clippy::derive_partial_eq_without_eq
+)]
+
+pub mod engine;
 pub mod hub;
 pub mod log;
+pub mod model;
+pub mod store;
 pub mod stream;
 pub mod token;
+pub mod views;
 
 /// Deployment settings for Live.
 #[derive(Clone, Debug, Default)]

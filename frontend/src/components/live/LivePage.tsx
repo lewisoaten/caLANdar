@@ -1,19 +1,37 @@
+/**
+ * The Live page, `/events/:id/live` (docs/live-event/DESIGN.md §7): the me
+ * strip, the timeline, lobby details, up next, the floor and the feed, all
+ * fed by one live store kept in step over SSE.
+ */
 import * as React from "react";
-import { useContext, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useContext, useMemo, useState } from "react";
+import { Link as RouterLink, useParams } from "react-router-dom";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import TextField from "@mui/material/TextField";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
+import EventBusySharp from "@mui/icons-material/EventBusySharp";
 import { useSnackbar } from "notistack";
 import { UserContext } from "../../UserProvider";
-import { PageHeader, Panel } from "../hl";
-import { colors, fonts } from "../hl/tokens";
+import { EmptyState, Panel } from "../hl";
+import { colors, sectionGap, srOnly } from "../hl/tokens";
 import { useLive } from "../../live/useLive";
+import { useServerNow } from "../../live/clock";
 import { sendLiveCommand } from "../../live/commands";
+import { dayClock, defaultSelection } from "../../live/selectors";
+import type { LobbyView } from "../../live/types";
 import { userFacingReason } from "../../utils/apiError";
 import { ConnectionIndicator } from "./ConnectionIndicator";
+import { MeStrip } from "./MeStrip";
+import { LiveTimeline } from "./LiveTimeline";
+import { LobbyDetails } from "./LobbyDetails";
+import { UpNext } from "./UpNext";
+import { LiveFloor } from "./LiveFloor";
+import { LiveFeed } from "./LiveFeed";
+import { AdminLobbyActions } from "./AdminLobbyActions";
+import { LiveSettingsPanel } from "./LiveSettingsPanel";
+import { Mono } from "./liveUi";
 
-/** The Live page (phase 0: connection and raw log only). */
 export default function LivePage() {
   const { id } = useParams();
   const eventId = Number(id);
@@ -21,75 +39,193 @@ export default function LivePage() {
   const { connection, state } = useLive(
     Number.isFinite(eventId) ? eventId : null,
   );
+  const now = useServerNow(state, 1000);
   const { enqueueSnackbar } = useSnackbar();
-  const [text, setText] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [jumpKey, setJumpKey] = useState(0);
+  const [busy, setBusy] = useState(false);
 
-  const post = async () => {
-    if (!connection) return;
-    try {
-      await sendLiveCommand(
-        connection,
-        token,
-        "/posts",
-        { text, ttl: "10m", tv: false },
-        { admin: true },
-      );
-      setText("");
-    } catch (e) {
-      enqueueSnackbar(userFacingReason(e) ?? "Couldn't post", {
-        variant: "error",
-      });
-    }
-  };
+  const selectedId =
+    selected && state.lobbies[selected]
+      ? selected
+      : defaultSelection(state, now);
+  const lobby: LobbyView | null = selectedId
+    ? (state.lobbies[selectedId] ?? null)
+    : null;
+
+  /** Run a live command, reporting a refusal as a toast. */
+  const command = useMemo(
+    () =>
+      async (
+        path: string,
+        body?: unknown,
+        options?: Parameters<typeof sendLiveCommand>[4],
+      ) => {
+        if (!connection) return null;
+        setBusy(true);
+        try {
+          return await sendLiveCommand(connection, token, path, body, options);
+        } catch (e) {
+          enqueueSnackbar(
+            userFacingReason(e) ?? "That didn't work. Try again.",
+            {
+              variant: "error",
+            },
+          );
+          return null;
+        } finally {
+          setBusy(false);
+        }
+      },
+    [connection, token, enqueueSnackbar],
+  );
+
+  if (state.error === "notFound") {
+    return (
+      <EmptyState
+        variant="panel"
+        icon={<EventBusySharp />}
+        kicker="404"
+        title="Live isn't available"
+        description="The event may have been removed, or you haven't been invited to it."
+        action={
+          <Button variant="outlined" component={RouterLink} to="/events">
+            Back to events
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (!state.loaded) {
+    return (
+      <Box
+        role="status"
+        aria-label="Loading Live"
+        sx={{ display: "flex", flexDirection: "column", gap: sectionGap }}
+      >
+        <Skeleton variant="rectangular" height={66} />
+        <Skeleton variant="rectangular" height={300} />
+        <Skeleton variant="rectangular" height={240} />
+      </Box>
+    );
+  }
+
+  const event = state.event;
+  const kicker = event
+    ? `${dayClock(event.timeBegin)} → ${dayClock(event.timeEnd)}`
+    : "Schedule";
 
   return (
     <>
-      <PageHeader
-        title="Live"
-        kicker={state.event?.title ?? "Live"}
-        actions={
-          <ConnectionIndicator
-            status={state.status}
-            lastUpdate={state.lastUpdate}
-          />
-        }
+      <Typography variant="h1" sx={srOnly}>
+        {event?.title ?? "Live"}: live
+      </Typography>
+
+      <MeStrip
+        state={state}
+        now={now}
+        busy={busy}
+        onCheckIn={() => void command("/checkin", {})}
+        onSelect={setSelected}
       />
-      {state.isAdmin && (
-        <Panel title="Post to everyone" tone="amber">
-          <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
-            <TextField
-              label="Message"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              sx={{ flex: "1 1 260px" }}
+
+      <Panel
+        kicker={kicker}
+        title={event?.title ?? "Schedule"}
+        padding="none"
+        actions={
+          <Box
+            sx={{
+              display: "flex",
+              gap: 1,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <ConnectionIndicator
+              status={state.status}
+              lastUpdate={state.lastUpdate}
             />
             <Button
-              variant="contained"
-              color="warning"
-              disabled={!text.trim()}
-              onClick={post}
+              size="small"
+              variant="outlined"
+              color="success"
+              onClick={() => setJumpKey((k) => k + 1)}
+              sx={{ minHeight: 32 }}
             >
-              Post
+              Now
             </Button>
           </Box>
-        </Panel>
-      )}
-      <Panel title="Feed" kicker={`SEQ ${state.seq}`}>
-        <Box
-          component="ol"
-          sx={{ m: 0, p: 0, listStyle: "none", fontFamily: fonts.mono }}
-        >
-          {[...state.feed].reverse().map((row) => (
-            <Box
-              component="li"
-              key={row.seq}
-              sx={{ fontSize: 12, color: colors.textMuted, py: 0.5 }}
-            >
-              {row.seq} · {row.kind} · {JSON.stringify(row.payload)}
-            </Box>
-          ))}
-        </Box>
+        }
+      >
+        <LiveTimeline
+          state={state}
+          now={now}
+          selectedId={selectedId}
+          onSelect={setSelected}
+          jumpKey={jumpKey}
+        />
       </Panel>
+
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "clamp(16px, 2vw, 24px)",
+          alignItems: "flex-start",
+        }}
+      >
+        <Box
+          sx={{
+            flex: "1.5 1 460px",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: sectionGap,
+          }}
+        >
+          <LobbyDetails
+            state={state}
+            lobby={lobby}
+            now={now}
+            adminActions={
+              lobby && eventId ? (
+                <AdminLobbyActions
+                  eventId={eventId}
+                  lobby={lobby}
+                  token={token}
+                />
+              ) : undefined
+            }
+          />
+          <LiveFeed state={state} />
+        </Box>
+        <Box
+          sx={{
+            flex: "1 1 300px",
+            minWidth: 0,
+            display: "flex",
+            flexDirection: "column",
+            gap: sectionGap,
+          }}
+        >
+          <UpNext state={state} now={now} onSelect={setSelected} />
+          <LiveFloor state={state} />
+          {state.isAdmin && connection && (
+            <LiveSettingsPanel eventId={eventId} state={state} token={token} />
+          )}
+        </Box>
+      </Box>
+
+      <Mono
+        size={9}
+        color={colors.textDim}
+        weight={400}
+        sx={{ display: "block", textAlign: "right" }}
+      >
+        SEQ {state.seq}
+      </Mono>
     </>
   );
 }

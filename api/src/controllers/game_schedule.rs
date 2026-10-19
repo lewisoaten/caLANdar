@@ -4,7 +4,11 @@ use sqlx::PgPool;
 use std::collections::HashMap;
 
 use crate::{
-    controllers::{ensure_user_invited, Error},
+    controllers::{ensure_user_invited, live, Error},
+    live::{
+        engine::{Command, Input, LobbyEdit},
+        model::Lobby,
+    },
     repositories::{event, game_schedule, game_suggestion, invitation, user_games},
     routes::game_schedule::{GameScheduleEntry, GameScheduleRequest},
     scheduler::{self, Game, OccupiedSlot, SchedulerInput, Voter},
@@ -35,8 +39,58 @@ impl From<game_schedule::GameSchedule> for GameScheduleEntry {
             is_suggested: false,
             created_at: schedule.created_at,
             last_modified: schedule.last_modified,
+            kind: schedule.kind,
+            status: schedule.status,
+            source: schedule.source,
+            planned_start: schedule.planned_start,
+            planned_minutes: schedule.planned_minutes,
+            actual_start: schedule.actual_start,
+            actual_end: schedule.actual_end,
+            max_players: schedule.max_players,
         }
     }
+}
+
+/// The schedule entry for a lobby the engine just wrote.
+fn entry_from_lobby(event_id: i32, lobby: &Lobby) -> GameScheduleEntry {
+    GameScheduleEntry {
+        id: lobby.id,
+        event_id,
+        game_id: lobby.game_id.unwrap_or(0),
+        game_name: lobby.name.clone(),
+        start_time: lobby.start,
+        duration_minutes: lobby.minutes,
+        is_pinned: lobby.is_pinned,
+        is_suggested: false,
+        created_at: lobby.created_at,
+        last_modified: Utc::now(),
+        kind: lobby.kind.as_str().to_string(),
+        status: lobby.status.as_str().to_string(),
+        source: lobby.source.as_str().to_string(),
+        planned_start: lobby.planned_start,
+        planned_minutes: lobby.planned_minutes,
+        actual_start: lobby.actual_start,
+        actual_end: lobby.actual_end,
+        max_players: lobby.max_players,
+    }
+}
+
+async fn game_name(pool: &PgPool, game_id: i64) -> Result<String, Error> {
+    sqlx::query_scalar::<_, String>("SELECT name FROM steam_game WHERE appid = $1")
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| Error::Controller(format!("Unable to look up the game: {e}")))?
+        .ok_or_else(|| Error::BadInput(format!("Unknown game {game_id}")))
+}
+
+async fn edit_for(pool: &PgPool, request: GameScheduleRequest) -> Result<LobbyEdit, Error> {
+    Ok(LobbyEdit {
+        game_name: game_name(pool, request.game_id).await?,
+        game_id: request.game_id,
+        start: request.start_time,
+        minutes: request.duration_minutes,
+    })
 }
 
 /// Get all scheduled games for an event (pinned + suggested). `tz` is the zone
@@ -75,52 +129,91 @@ pub async fn get_all(
     Ok(all_games)
 }
 
-/// Create a new scheduled game (admin only)
+/// Create a new scheduled game (admin only). Goes through the live engine,
+/// so a change made here shows on Live (and its feed) at once.
 pub async fn create(
     pool: &PgPool,
     event_id: i32,
     request: GameScheduleRequest,
-    _email: &str,
+    email: &str,
 ) -> Result<GameScheduleEntry, Error> {
-    let schedule = game_schedule::create(
+    let edit = edit_for(pool, request).await?;
+    let executed = live::execute(
         pool,
         event_id,
-        request.game_id,
-        request.start_time,
-        request.duration_minutes,
-        true, // Always pinned when manually created
+        Input::Command {
+            actor: live::actor(email),
+            command: Command::CreateLobby(edit),
+        },
+        None,
     )
-    .await
-    .map_err(|e| Error::Controller(format!("Unable to create game schedule due to: {e}")))?;
-
-    Ok(GameScheduleEntry::from(schedule))
+    .await?;
+    live::refresh_plan(pool, event_id).await;
+    executed
+        .created_lobbies
+        .first()
+        .and_then(|id| executed.state.lobbies.get(id))
+        .map(|lobby| entry_from_lobby(event_id, lobby))
+        .ok_or_else(|| Error::Controller("The new schedule entry is missing".to_string()))
 }
 
 /// Update an existing scheduled game (admin only)
 pub async fn update(
     pool: &PgPool,
+    event_id: i32,
     schedule_id: i32,
     request: GameScheduleRequest,
-    _email: &str,
+    email: &str,
 ) -> Result<GameScheduleEntry, Error> {
-    let schedule = game_schedule::update(
+    let edit = edit_for(pool, request).await?;
+    let executed = live::execute(
         pool,
-        schedule_id,
-        request.start_time,
-        request.duration_minutes,
+        event_id,
+        Input::Command {
+            actor: live::actor(email),
+            command: Command::UpdateLobby {
+                id: schedule_id,
+                edit,
+            },
+        },
+        None,
     )
     .await
-    .map_err(|e| Error::Controller(format!("Unable to update game schedule due to: {e}")))?;
-
-    Ok(GameScheduleEntry::from(schedule))
+    .map_err(|e| match e {
+        Error::NotFound(e) => Error::Controller(format!("Schedule entry not found: {e}")),
+        e => e,
+    })?;
+    live::refresh_plan(pool, event_id).await;
+    executed
+        .state
+        .lobbies
+        .get(&schedule_id)
+        .map(|lobby| entry_from_lobby(event_id, lobby))
+        .ok_or_else(|| Error::Controller("Schedule entry not found".to_string()))
 }
 
 /// Delete a scheduled game (admin only)
-pub async fn delete(pool: &PgPool, schedule_id: i32, _email: &str) -> Result<(), Error> {
-    game_schedule::delete(pool, schedule_id)
-        .await
-        .map_err(|e| Error::Controller(format!("Unable to delete game schedule due to: {e}")))?;
-
+pub async fn delete(
+    pool: &PgPool,
+    event_id: i32,
+    schedule_id: i32,
+    email: &str,
+) -> Result<(), Error> {
+    live::execute(
+        pool,
+        event_id,
+        Input::Command {
+            actor: live::actor(email),
+            command: Command::RemoveLobby { id: schedule_id },
+        },
+        None,
+    )
+    .await
+    .map_err(|e| match e {
+        Error::NotFound(e) => Error::Controller(format!("Schedule entry not found: {e}")),
+        e => e,
+    })?;
+    live::refresh_plan(pool, event_id).await;
     Ok(())
 }
 
@@ -294,6 +387,14 @@ pub async fn schedule_suggested_games(
             is_suggested: true,
             created_at: Utc::now(),
             last_modified: Utc::now(),
+            kind: "game".to_string(),
+            status: "planned".to_string(),
+            source: "suggestion".to_string(),
+            planned_start: None,
+            planned_minutes: None,
+            actual_start: None,
+            actual_end: None,
+            max_players: None,
         })
         .collect();
 

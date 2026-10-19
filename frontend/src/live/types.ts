@@ -191,12 +191,17 @@ export interface VoteView {
 export interface FloorRoom {
   id: number;
   name: string;
+  sortOrder: number;
+  gridRows: number | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  features: any[];
 }
 
 export interface FloorSeat {
   id: number;
   roomId: number;
   label: string;
+  name: string | null;
   x: number;
   y: number;
   gridCol: number | null;

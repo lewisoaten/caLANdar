@@ -127,3 +127,23 @@ describe("active event", () => {
     expect(pickActiveEvent([e(1, 10, 20)], now)).toBeNull();
   });
 });
+
+describe("live nav badge", () => {
+  test("counts down before the event and says LIVE during it", async () => {
+    const { liveBadgeFor } = await import("../components/MenuItems");
+    const begin = Date.parse("2026-10-23T18:00:00Z");
+    const end = Date.parse("2026-10-25T16:00:00Z");
+    expect(liveBadgeFor(begin, end, begin - (2 * 24 + 3) * 3600e3)).toEqual({
+      label: "LIVE · 2D 3H",
+      live: false,
+    });
+    expect(liveBadgeFor(begin, end, begin - 90 * 60e3)?.label).toBe(
+      "LIVE · 1H 30M",
+    );
+    expect(liveBadgeFor(begin, end, begin + 1)).toEqual({
+      label: "LIVE",
+      live: true,
+    });
+    expect(liveBadgeFor(begin, end, end)).toBeUndefined();
+  });
+});

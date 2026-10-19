@@ -19,6 +19,8 @@ import { GameScheduleEntry } from "../types/game_schedule";
 import GameScheduleDetails, { TimingControls } from "./GameScheduleDetails";
 import { EmptyState, PageHeader, colors, tint, useIsMobile } from "./hl";
 import { useScheduleData } from "./schedule/useScheduleData";
+import { useLive } from "../live/useLive";
+import { inLiveWindow } from "../live/connection";
 import ScheduleTimeline from "./schedule/ScheduleTimeline";
 import ScheduleDayCards from "./schedule/ScheduleDayCards";
 import AddToScheduleDialog, {
@@ -93,6 +95,31 @@ export default function EventGameSchedule() {
     invitations,
     headers,
   } = data;
+
+  // One schedule, two views: while the event is live, follow the Live
+  // stream and refetch when anything on the schedule changes there.
+  const liveEventId =
+    event &&
+    inLiveWindow(
+      moment(event.timeBegin).toISOString(),
+      moment(event.timeEnd).toISOString(),
+      Date.now(),
+    )
+      ? event.id
+      : null;
+  const { state: live } = useLive(liveEventId);
+  const liveSeq = React.useRef(0);
+  React.useEffect(() => {
+    if (!live.loaded) return undefined;
+    const previous = liveSeq.current;
+    liveSeq.current = live.seq;
+    if (!previous || live.seq <= previous) return undefined;
+    const timer = window.setTimeout(
+      () => void refreshSchedule({ background: true }),
+      400,
+    );
+    return () => window.clearTimeout(timer);
+  }, [live.seq, live.loaded, refreshSchedule]);
 
   const [showSuggestions, setShowSuggestions] = React.useState(true);
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
@@ -280,13 +307,13 @@ export default function EventGameSchedule() {
       }
       const clash = findClash(allSessions, days, day, st, dur, s.key);
       if (clash) {
+        // Not a block: overlapping sessions run alongside, in lanes.
         say(
-          `Clashes with ${clash.entry.gameName} (${fmtClock(clash.st)}–${fmtClock(
+          `Overlaps ${clash.entry.gameName} (${fmtClock(clash.st)}–${fmtClock(
             clash.st + clash.dur,
-          )}). Not moved.`,
-          "error",
+          )}). Both will run.`,
+          "warning",
         );
-        return null;
       }
       const { start, startTime, durationMinutes } = timesOf(day, st, dur);
       const wasPinned = s.pinned && s.entry.id > 0;
@@ -496,12 +523,11 @@ export default function EventGameSchedule() {
     const clash = findClash(allSessions, days, s.day, s.st, s.dur, s.key);
     if (clash) {
       say(
-        `Clashes with ${clash.entry.gameName} (${fmtClock(clash.st)}–${fmtClock(
+        `Overlaps ${clash.entry.gameName} (${fmtClock(clash.st)}–${fmtClock(
           clash.st + clash.dur,
-        )}). Not pinned.`,
-        "error",
+        )}). Both will run.`,
+        "warning",
       );
-      return;
     }
     await withBusy(async () => {
       const response = await send(

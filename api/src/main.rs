@@ -30,6 +30,7 @@ mod error;
 
 mod auth;
 mod controllers;
+mod dev_seed;
 mod live;
 mod repositories;
 mod routes;
@@ -247,6 +248,9 @@ fn build_rocket(
                 routes::live::stream_token,
                 routes::live::snapshot,
                 routes::live::post,
+                routes::live::checkin,
+                routes::live::settings,
+                routes::live::tick,
                 routes::activity_ticker::get_activity_ticker,
                 routes::auth::login,
                 routes::auth::verify_email,
@@ -466,6 +470,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("refresh-steam-games") => return run_steam_refresh_job().await,
         // The dedicated stream service runs this same binary too.
         Some("serve-live") => return serve_live().await,
+        Some("dev-seed-live") => {
+            let database_url = std::env::var("DATABASE_URL")
+                .map_err(|_| "DATABASE_URL environment variable must be set")?;
+            let pool = connect_pool(&database_url).await?;
+            sqlx::migrate!().run(&pool).await?;
+            return dev_seed::run(&pool).await;
+        }
         Some("dev-token") => {
             let email = std::env::args()
                 .nth(2)

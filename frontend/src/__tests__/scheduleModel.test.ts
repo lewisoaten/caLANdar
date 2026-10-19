@@ -7,6 +7,7 @@ import {
   dayIndexOf,
   dragPlacement,
   findClash,
+  packRowLanes,
   firstFreeStart,
   fmtClock,
   fmtDur,
@@ -151,6 +152,34 @@ describe("sessions and range", () => {
     expect(findClash(sessions, days, 0, 21, 1)).toBeUndefined();
     // Overlapping the suggested Saturday slot is allowed.
     expect(findClash(sessions, days, 1, 21, 1)).toBeUndefined();
+  });
+
+  it("never clashes with Live rows or sessions already played", () => {
+    const fromLive = sessions.map((x, i) =>
+      i === 0 ? { ...x, entry: { ...x.entry, source: "steam" } } : x,
+    );
+    expect(findClash(fromLive, days, 0, 20, 1)).toBeUndefined();
+    const played = sessions.map((x, i) =>
+      i === 0 ? { ...x, entry: { ...x.entry, status: "done" } } : x,
+    );
+    expect(findClash(played, days, 0, 20, 1)).toBeUndefined();
+  });
+
+  it("packs overlapping sessions into lanes", () => {
+    const { lanes, count } = packRowLanes([
+      { key: "a", st: 19, dur: 2 },
+      { key: "b", st: 20, dur: 2 },
+      { key: "c", st: 21, dur: 1 },
+      { key: "d", st: 20.5, dur: 1 },
+    ]);
+    expect(count).toBe(3);
+    expect([...lanes.entries()].sort()).toEqual([
+      ["a", 0],
+      ["b", 1],
+      ["c", 0],
+      ["d", 2],
+    ]);
+    expect(packRowLanes([]).count).toBe(1);
   });
 
   it("rejects placements outside the event", () => {

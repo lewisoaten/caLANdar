@@ -1,10 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use rocket::{
-    get, post,
-    serde::{
-        json::{serde_json::Value as JsonValue, Json},
-        Deserialize, Serialize,
-    },
+    get, post, put,
+    serde::{json::Json, Deserialize, Serialize},
     State,
 };
 use rocket_okapi::okapi::schemars;
@@ -15,8 +12,14 @@ use sqlx::PgPool;
 
 use crate::{
     auth::{AdminUser, User},
-    controllers::{live, Error},
-    live::{log, stream::row_json, token, LiveConfig},
+    controllers::{
+        live::{self, CommandResponse},
+        Error,
+    },
+    live::{
+        engine::{Command, Input},
+        log, token, LiveConfig,
+    },
 };
 
 custom_errors!(
@@ -75,67 +78,17 @@ pub async fn stream_token(
     }))
 }
 
-/// The event, as Live needs it.
-#[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde", rename_all = "camelCase")]
-pub struct LiveEventInfo {
-    pub id: i32,
-    pub title: String,
-    pub time_begin: DateTime<Utc>,
-    pub time_end: DateTime<Utc>,
-    pub discord_invite_url: Option<String>,
-    pub timezone: String,
-}
-
-/// Everything the Live page needs to render, plus the stream cursor.
-#[derive(Serialize, JsonSchema)]
-#[serde(crate = "rocket::serde", rename_all = "camelCase")]
-pub struct LiveSnapshot {
-    /// Resume the stream after this seq.
-    pub seq: i64,
-    pub server_time: DateTime<Utc>,
-    pub is_admin: bool,
-    pub event: LiveEventInfo,
-    /// Recent feed entries and admin posts, oldest first.
-    pub feed: Vec<JsonValue>,
-}
-
-/// Get the live snapshot of an event.
+/// Get the live snapshot of an event: everything the Live page renders,
+/// plus the stream cursor.
 #[openapi(tag = "Live")]
 #[get("/events/<event_id>/live", format = "json")]
 pub async fn snapshot(
     event_id: i32,
     pool: &State<PgPool>,
     user: User,
-) -> Result<Json<LiveSnapshot>, LiveError> {
+) -> Result<Json<live::Snapshot>, LiveError> {
     let viewer = live::viewer_for(pool, event_id, &user.email).await?;
-    let event = crate::controllers::event::get(pool, event_id)
-        .await
-        .map_err(|_| LiveError::NotFound(format!("Event {event_id} not found")))?;
-    let seq = log::latest_seq(pool.inner(), event_id)
-        .await
-        .map_err(|e| LiveError::InternalServerError(format!("Unable to read the log: {e}")))?;
-    let feed = log::feed(pool.inner(), event_id, 200)
-        .await
-        .map_err(|e| LiveError::InternalServerError(format!("Unable to read the feed: {e}")))?
-        .iter()
-        .filter(|row| viewer.can_see(row.audience.as_deref()))
-        .map(row_json)
-        .collect();
-    Ok(Json(LiveSnapshot {
-        seq,
-        server_time: Utc::now(),
-        is_admin: viewer.is_admin(),
-        event: LiveEventInfo {
-            id: event.id,
-            title: event.title,
-            time_begin: event.time_begin,
-            time_end: event.time_end,
-            discord_invite_url: None,
-            timezone: crate::scheduler::DEFAULT_TIMEZONE.name().to_string(),
-        },
-        feed,
-    }))
+    Ok(Json(live::snapshot(pool, event_id, &viewer).await?))
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -167,5 +120,146 @@ pub async fn post(
     let ttl = live::PostTtl::parse(&request.ttl)?;
     let seq = live::post_to_everyone(pool, event_id, &admin.email, &request.text, ttl, request.tv)
         .await?;
+    Ok(Json(SeqResponse { seq }))
+}
+
+/// The `Idempotency-Key` header of a live command (DESIGN.md §3.5).
+pub struct IdempotencyKey(pub Option<String>);
+
+#[rocket::async_trait]
+impl<'r> rocket::request::FromRequest<'r> for IdempotencyKey {
+    type Error = ();
+
+    async fn from_request(
+        request: &'r rocket::Request<'_>,
+    ) -> rocket::request::Outcome<Self, Self::Error> {
+        rocket::request::Outcome::Success(Self(
+            request
+                .headers()
+                .get_one("Idempotency-Key")
+                .map(ToString::to_string),
+        ))
+    }
+}
+
+impl rocket_okapi::request::OpenApiFromRequest<'_> for IdempotencyKey {
+    fn from_request_input(
+        _gen: &mut rocket_okapi::gen::OpenApiGenerator,
+        _name: String,
+        _required: bool,
+    ) -> rocket_okapi::Result<rocket_okapi::request::RequestHeaderInput> {
+        Ok(rocket_okapi::request::RequestHeaderInput::None)
+    }
+}
+
+/// Run a gamer's command and answer with what changed.
+async fn run(
+    pool: &PgPool,
+    event_id: i32,
+    email: &str,
+    command: Command,
+    key: &IdempotencyKey,
+) -> Result<Json<CommandResponse>, LiveError> {
+    live::viewer_for(pool, event_id, email).await?;
+    let executed = live::execute(
+        pool,
+        event_id,
+        Input::Command {
+            actor: live::actor(email),
+            command,
+        },
+        key.0.as_deref(),
+    )
+    .await?;
+    Ok(Json(executed.response))
+}
+
+#[derive(Deserialize, JsonSchema, Default)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct CheckInRequest {
+    /// Admins only: who to check in (their pid). Omit to check yourself in.
+    #[serde(default)]
+    pub pid: Option<String>,
+}
+
+/// Check in at the venue (yourself; admins may check in someone else).
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/checkin", format = "json", data = "<request>")]
+pub async fn checkin(
+    event_id: i32,
+    request: Json<CheckInRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let email = match &request.pid {
+        None => user.email.clone(),
+        Some(pid) => live::email_for_pid(pool, event_id, pid).await?,
+    };
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::CheckIn { email },
+        &key,
+    )
+    .await
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct SettingsRequest {
+    /// Empty string clears it; omit to leave it.
+    #[serde(default)]
+    pub discord_invite_url: Option<String>,
+    #[serde(default)]
+    pub timezone: Option<String>,
+    #[serde(default)]
+    pub rotate_wallboard: bool,
+}
+
+/// Update an event's Live settings (admin only).
+#[openapi(tag = "Live")]
+#[put(
+    "/events/<event_id>/live/settings",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn settings(
+    event_id: i32,
+    request: Json<SettingsRequest>,
+    pool: &State<PgPool>,
+    admin: AdminUser,
+) -> Result<Json<live::EventView>, LiveError> {
+    let request = request.into_inner();
+    Ok(Json(
+        live::update_settings(
+            pool,
+            event_id,
+            &admin.email,
+            live::Settings {
+                discord_invite_url: request.discord_invite_url,
+                timezone: request.timezone,
+                rotate_wallboard: request.rotate_wallboard,
+            },
+        )
+        .await?,
+    ))
+}
+
+/// Run the time-driven rules now: clients call this when a countdown they
+/// show reaches zero, so transitions land within a second (§3.8).
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/tick")]
+pub async fn tick(
+    event_id: i32,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<SeqResponse>, LiveError> {
+    live::viewer_for(pool, event_id, &user.email).await?;
+    live::tick(pool, event_id).await?;
+    let seq = log::latest_seq(pool.inner(), event_id)
+        .await
+        .map_err(|e| LiveError::InternalServerError(format!("Unable to read the log: {e}")))?;
     Ok(Json(SeqResponse { seq }))
 }

@@ -29,6 +29,11 @@ struct Claims {
     a: Option<String>,
 }
 
+/// A random token (the wall-board link), as for room backgrounds.
+pub fn random_token() -> String {
+    format!("{:032x}", rand::random::<u128>())
+}
+
 /// Mint a stream token for `viewer` on `event_id`.
 pub fn mint(
     key: &PasetoSymmetricKey<V4, Local>,
