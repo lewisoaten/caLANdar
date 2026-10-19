@@ -23,6 +23,11 @@ pub struct EventInfo {
     pub discord_invite_url: Option<String>,
     pub timezone: String,
     pub wallboard_token: Option<String>,
+    pub discord_webhook_url: Option<String>,
+    /// e.g. `03:00-09:00`: the wall-board sleeps then (local time).
+    pub wallboard_sleep: Option<String>,
+    /// `{name, lat, lng}` for food near the venue.
+    pub venue: Option<rocket::serde::json::serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

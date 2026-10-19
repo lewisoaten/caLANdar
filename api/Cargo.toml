@@ -24,3 +24,7 @@ rocket_okapi = { git = "https://github.com/GREsau/okapi", features = ["swagger"]
 rusty_paseto = { version = "0.10.1", features = ["batteries_included"] }
 sqlx = { version = "0.8.6", features = [ "runtime-tokio-native-tls", "postgres", "chrono" ] }
 tokio = { version = "1.52.3", features = ["full"] }
+p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
+aes-gcm = "0.10"
+hkdf = "0.12"
+sha2 = "0.10"

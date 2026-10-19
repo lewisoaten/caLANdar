@@ -84,6 +84,15 @@ export function useLiveState(connection: LiveConnection | null): LiveState {
   return useSyncExternalStore(store.subscribe, store.getState, store.getState);
 }
 
+/** The wall-board's live connection and state (no login). */
+export function useWallboard(wallboardToken: string | null) {
+  const connection = useLiveConnection(
+    wallboardToken ? { kind: "wallboard", wallboardToken } : null,
+  );
+  const state = useLiveState(connection);
+  return { connection, state };
+}
+
 /** The signed-in gamer's live connection and state for an event. */
 export function useLive(eventId: number | null) {
   const { token } = useContext(UserContext);

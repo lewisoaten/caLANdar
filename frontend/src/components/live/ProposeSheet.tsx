@@ -186,6 +186,129 @@ function startChoices(now: number, eventEnd: number): number[] {
   return out;
 }
 
+interface PlaceHit {
+  placeId: string;
+  name: string;
+  rating: number | null;
+  address: string | null;
+  photoUrl: string | null;
+  distanceM: number | null;
+}
+
+/** Google Places results near the venue (README §2 food mode). */
+function PlacesPicker({
+  eventId,
+  venue,
+  picked,
+  onPick,
+}: {
+  eventId: number;
+  venue: string;
+  picked: string | null;
+  onPick: (p: PlaceHit) => void;
+}) {
+  const { token } = useContext(UserContext);
+  const [q, setQ] = useState("pizza");
+  const [hits, setHits] = useState<PlaceHit[] | null>(null);
+  useEffect(() => {
+    if (q.trim().length < 2) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      fetch(`/api/events/${eventId}/live/places?q=${encodeURIComponent(q)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      })
+        .then((r) => (r.ok ? r.json() : { places: [] }))
+        .then((data) => {
+          if (!cancelled) setHits(data.places ?? []);
+        })
+        .catch(() => undefined);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [eventId, q, token]);
+  return (
+    <Field label={`NEAR ${venue.toUpperCase()}`}>
+      <TextField
+        size="small"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        slotProps={{
+          htmlInput: { "aria-label": "Search food near the venue" },
+        }}
+      />
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          maxHeight: 260,
+          overflowY: "auto",
+          border: `1px solid ${tint("violet", 0.3)}`,
+        }}
+      >
+        {hits?.length === 0 && (
+          <Box sx={{ p: 1.5, color: colors.textMuted, fontSize: 13 }}>
+            Nothing found nearby.
+          </Box>
+        )}
+        {(hits ?? []).map((p) => (
+          <ButtonBase
+            key={p.placeId}
+            onClick={() => onPick(p)}
+            aria-pressed={picked === p.placeId}
+            sx={{
+              display: "flex",
+              gap: 1.25,
+              alignItems: "center",
+              justifyContent: "flex-start",
+              p: "6px 8px",
+              borderTop: `1px solid ${tint("violet", 0.12)}`,
+              backgroundColor:
+                picked === p.placeId ? tint("violet", 0.18) : "transparent",
+            }}
+          >
+            <Box
+              aria-hidden="true"
+              sx={{
+                width: 64,
+                height: 44,
+                flex: "none",
+                backgroundColor: tint("violet", 0.15),
+                backgroundImage: p.photoUrl ? `url("${p.photoUrl}")` : "none",
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            />
+            <Box sx={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+              <Box sx={{ fontSize: 14, color: colors.text, fontWeight: 700 }}>
+                {p.name}
+              </Box>
+              <Mono
+                size={10}
+                color={colors.textMuted}
+                weight={500}
+                sx={{ whiteSpace: "normal" }}
+              >
+                {p.rating != null ? `★ ${p.rating.toFixed(1)} · ` : ""}
+                {p.distanceM != null
+                  ? p.distanceM < 1000
+                    ? `${Math.round(p.distanceM)} M`
+                    : `${(p.distanceM / 1000).toFixed(1)} KM`
+                  : ""}
+                {p.address ? ` · ${p.address}` : ""}
+              </Mono>
+            </Box>
+          </ButtonBase>
+        ))}
+      </Box>
+    </Field>
+  );
+}
+
 function LobbyHeader({ lobby, tone }: { lobby: LobbyView; tone: string }) {
   return (
     <Box
@@ -276,6 +399,7 @@ function SheetBody({
     fromLobby ? true : null,
   );
   const [addKind, setAddKind] = useState<"game" | "food">("game");
+  const [place, setPlace] = useState<PlaceHit | null>(null);
 
   const eventId = state.eventId;
   const pickingGame = mode === "game" || (mode === "add" && addKind === "game");
@@ -333,7 +457,18 @@ function SheetBody({
     const what = pickingFood
       ? {
           kind: "food",
-          food: { name: foodName.trim(), freeText: foodNote.trim() || null },
+          food: {
+            name: foodName.trim(),
+            freeText: foodNote.trim() || null,
+            ...(place && place.name === foodName.trim()
+              ? {
+                  placeId: place.placeId,
+                  photoUrl: place.photoUrl,
+                  rating: place.rating,
+                  address: place.address,
+                }
+              : {}),
+          },
         }
       : { kind: "game", gameId: game?.gameId, ...teamsForSave(players) };
     switch (mode) {
@@ -479,6 +614,17 @@ function SheetBody({
 
   const food = pickingFood && (
     <>
+      {state.event?.placesEnabled && (
+        <PlacesPicker
+          eventId={eventId}
+          venue={state.event.venueName ?? "the venue"}
+          picked={place?.placeId ?? null}
+          onPick={(p) => {
+            setPlace(p);
+            setFoodName(p.name);
+          }}
+        />
+      )}
       <Field label="WHAT">
         <TextField
           size="small"

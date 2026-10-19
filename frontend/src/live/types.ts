@@ -35,6 +35,16 @@ export interface LiveEventInfo {
   timeEnd: string;
   discordInviteUrl: string | null;
   timezone: string;
+  /** Admins only. */
+  wallboardToken?: string | null;
+  /** Admins only. */
+  discordWebhookUrl?: string | null;
+  /** e.g. `03:00-09:00`. */
+  wallboardSleep?: string | null;
+  venueName?: string | null;
+  /** Admins only: `lat,lng`. */
+  venueLocation?: string | null;
+  placesEnabled?: boolean;
 }
 
 export interface PresenceView {

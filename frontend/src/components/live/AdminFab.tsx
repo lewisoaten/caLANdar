@@ -65,6 +65,7 @@ export function AdminFab({
   const [text, setText] = useState("");
   const [ttl, setTtl] = useState<"10m" | "dismiss">("10m");
   const [tv, setTv] = useState(false);
+  const [discord, setDiscord] = useState(false);
   if (!state.isAdmin) return null;
   const openVotes = Object.values(state.votes).filter(
     (v) => v.status === "open",
@@ -72,7 +73,11 @@ export function AdminFab({
   const count = openVotes.length + state.adminQueue.length;
 
   const post = async () => {
-    const ok = await command("/posts", { text, ttl, tv }, { admin: true });
+    const ok = await command(
+      "/posts",
+      { text, ttl, tv, discord },
+      { admin: true },
+    );
     if (ok) setText("");
   };
 
@@ -183,6 +188,11 @@ export function AdminFab({
             <Chip selected={tv} onClick={() => setTv(!tv)}>
               ALSO ON TV
             </Chip>
+            {state.event?.discordWebhookUrl && (
+              <Chip selected={discord} onClick={() => setDiscord(!discord)}>
+                ALSO ON DISCORD
+              </Chip>
+            )}
             <Box sx={{ flex: 1 }} />
             <Button
               variant="contained"

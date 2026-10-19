@@ -241,7 +241,10 @@ fn build_rocket(
         .manage::<Tera>(tera)
         .mount("/", routes![all_options])
         // The SSE stream has no OpenAPI responder, so it is mounted apart.
-        .mount("/api", routes![live::stream::stream])
+        .mount(
+            "/api",
+            routes![live::stream::stream, routes::live::place_photo],
+        )
         .mount(
             "/api",
             openapi_get_routes![
@@ -269,6 +272,11 @@ fn build_rocket(
                 routes::live::person_action,
                 routes::live::get_lobby_defaults,
                 routes::live::search_games,
+                routes::live::wallboard_snapshot,
+                routes::live::wallboard_stream_token,
+                routes::live::push_key,
+                routes::live::push_subscribe,
+                routes::live::places,
                 routes::activity_ticker::get_activity_ticker,
                 routes::auth::login,
                 routes::auth::verify_email,
@@ -499,6 +507,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let pool = connect_pool(&database_url).await?;
             sqlx::migrate!().run(&pool).await?;
             return dev_seed::run(&pool).await;
+        }
+        Some("dev-vapid") => {
+            // Prints a VAPID key pair for Web Push (VAPID_PRIVATE_KEY).
+            let vapid = live::push::Vapid::generate();
+            println!("VAPID_PRIVATE_KEY={}", vapid.private_base64());
+            eprintln!("public key: {}", vapid.public_base64());
+            return Ok(());
         }
         Some("dev-token") => {
             let email = std::env::args()

@@ -167,7 +167,15 @@ export function applyRow(
       next.people = { ...next.people, [p.pid]: p as PersonView };
       break;
     case "event":
-      next.event = p as LiveEventInfo;
+      // The streamed row is the public view: keep admin-only fields.
+      next.event = { ...(next.event ?? {}), ...(p as LiveEventInfo) };
+      for (const k of [
+        "wallboardToken",
+        "discordWebhookUrl",
+        "venueLocation",
+      ] as const)
+        if (p[k] == null && next.event && state.event?.[k] != null)
+          next.event = { ...next.event, [k]: state.event[k] };
       break;
     case "admin.queue":
       next.adminQueue = (p.items ?? []) as AdminQueueItem[];

@@ -54,6 +54,9 @@ struct EventRow {
     discord_invite_url: Option<String>,
     timezone: String,
     wallboard_token: Option<String>,
+    discord_webhook_url: Option<String>,
+    wallboard_sleep: Option<String>,
+    venue: Option<JsonValue>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -194,14 +197,15 @@ fn lobby_from_row(row: LobbyRow) -> Lobby {
     }
 }
 
-/// Load the event's live state. `None` if the event doesn't exist.
-pub async fn load(
+/// The event's Live settings.
+pub async fn load_event(
     conn: &mut PgConnection,
     event_id: i32,
-) -> Result<Option<LiveState>, sqlx::Error> {
+) -> Result<Option<EventInfo>, sqlx::Error> {
     let Some(event) = sqlx::query_as::<_, EventRow>(
         r"
-        SELECT id, title, time_begin, time_end, discord_invite_url, timezone, wallboard_token
+        SELECT id, title, time_begin, time_end, discord_invite_url, timezone, wallboard_token,
+            discord_webhook_url, wallboard_sleep, venue
         FROM event WHERE id = $1
         ",
     )
@@ -212,7 +216,7 @@ pub async fn load(
         return Ok(None);
     };
 
-    let mut state = LiveState::new(EventInfo {
+    Ok(Some(EventInfo {
         id: event.id,
         title: event.title,
         time_begin: event.time_begin,
@@ -220,7 +224,21 @@ pub async fn load(
         discord_invite_url: event.discord_invite_url,
         timezone: event.timezone,
         wallboard_token: event.wallboard_token,
-    });
+        discord_webhook_url: event.discord_webhook_url,
+        wallboard_sleep: event.wallboard_sleep,
+        venue: event.venue,
+    }))
+}
+
+/// Load the event's live state. `None` if the event doesn't exist.
+pub async fn load(
+    conn: &mut PgConnection,
+    event_id: i32,
+) -> Result<Option<LiveState>, sqlx::Error> {
+    let Some(event) = load_event(&mut *conn, event_id).await? else {
+        return Ok(None);
+    };
+    let mut state = LiveState::new(event);
 
     let people = sqlx::query_as::<_, PersonRow>(
         r"

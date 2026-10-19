@@ -31,6 +31,7 @@ import {
   useClientTick,
 } from "../../live/alerts";
 import type { LobbyView, VoteView } from "../../live/types";
+import { enablePush } from "../../live/push";
 import { userFacingReason } from "../../utils/apiError";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { MeStrip } from "./MeStrip";
@@ -364,7 +365,21 @@ export default function LivePage() {
                 variant="text"
                 onClick={() => {
                   setNotifyAsked(true);
-                  void Notification.requestPermission();
+                  void enablePush(eventId, token).then((r) =>
+                    enqueueSnackbar(
+                      r === "enabled"
+                        ? "Alerts will reach this device, even when it's locked"
+                        : r === "notifications-only"
+                          ? "Alerts will show while this tab is open"
+                          : "Notifications are blocked in this browser",
+                      {
+                        variant:
+                          r === "denied" || r === "unsupported"
+                            ? "warning"
+                            : "success",
+                      },
+                    ),
+                  );
                 }}
                 sx={{ minHeight: 32 }}
               >

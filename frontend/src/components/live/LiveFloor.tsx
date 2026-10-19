@@ -24,9 +24,12 @@ const CELL = 34;
 export function LiveFloor({
   state,
   compact = false,
+  tv = false,
 }: {
   state: LiveState;
   compact?: boolean;
+  /** Wall-board size: big seats, readable across the room. */
+  tv?: boolean;
 }) {
   const groups = useMemo(() => floorGroups(state), [state]);
   const groupOf = useMemo(() => {
@@ -37,7 +40,7 @@ export function LiveFloor({
   const rooms = [...state.floor.rooms].sort(
     (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
   );
-  const cell = compact ? 26 : CELL;
+  const cell = tv ? 34 : compact ? 26 : CELL;
 
   const content =
     rooms.length === 0 ? (

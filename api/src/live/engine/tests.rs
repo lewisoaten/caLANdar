@@ -35,6 +35,9 @@ pub fn state() -> LiveState {
         discord_invite_url: None,
         timezone: "Europe/London".to_string(),
         wallboard_token: None,
+        discord_webhook_url: None,
+        wallboard_sleep: None,
+        venue: None,
     });
     for e in ["ana@x.io", "bo@x.io", "cy@x.io"] {
         s.people.insert(e.to_string(), person(e, Some(Rsvp::Yes)));

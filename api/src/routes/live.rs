@@ -103,6 +103,9 @@ pub struct PostRequest {
     /// Also show it on the wall-board.
     #[serde(default)]
     pub tv: bool,
+    /// Also post it to the event's Discord channel.
+    #[serde(default)]
+    pub discord: bool,
 }
 
 #[derive(Serialize, JsonSchema)]
@@ -121,8 +124,16 @@ pub async fn post(
     admin: AdminUser,
 ) -> Result<Json<SeqResponse>, LiveError> {
     let ttl = live::PostTtl::parse(&request.ttl)?;
-    let seq = live::post_to_everyone(pool, event_id, &admin.email, &request.text, ttl, request.tv)
-        .await?;
+    let seq = live::post_to_everyone(
+        pool,
+        event_id,
+        &admin.email,
+        &request.text,
+        ttl,
+        request.tv,
+        request.discord,
+    )
+    .await?;
     Ok(Json(SeqResponse { seq }))
 }
 
@@ -215,8 +226,19 @@ pub struct SettingsRequest {
     /// Empty string clears it; omit to leave it.
     #[serde(default)]
     pub discord_invite_url: Option<String>,
+    /// A Discord webhook (`https://discord.com/api/webhooks/...`).
+    #[serde(default)]
+    pub discord_webhook_url: Option<String>,
     #[serde(default)]
     pub timezone: Option<String>,
+    /// e.g. `03:00-09:00`; empty to never sleep.
+    #[serde(default)]
+    pub wallboard_sleep: Option<String>,
+    #[serde(default)]
+    pub venue_name: Option<String>,
+    /// `lat,lng`.
+    #[serde(default)]
+    pub venue_location: Option<String>,
     #[serde(default)]
     pub rotate_wallboard: bool,
 }
@@ -242,7 +264,15 @@ pub async fn settings(
             &admin.email,
             live::Settings {
                 discord_invite_url: request.discord_invite_url,
+                discord_webhook_url: request.discord_webhook_url,
                 timezone: request.timezone,
+                wallboard_sleep: request.wallboard_sleep,
+                venue: match (request.venue_name, request.venue_location) {
+                    (None, None) => None,
+                    (name, location) => {
+                        Some((name.unwrap_or_default(), location.unwrap_or_default()))
+                    }
+                },
                 rotate_wallboard: request.rotate_wallboard,
             },
         )
@@ -1041,4 +1071,155 @@ pub async fn search_games(
     Ok(Json(
         live::search_games(pool, event_id, q.unwrap_or_default()).await?,
     ))
+}
+
+/// The event behind a wall-board link.
+async fn wallboard_event(pool: &PgPool, token: &str) -> Result<i32, LiveError> {
+    sqlx::query_scalar::<_, i32>("SELECT id FROM event WHERE wallboard_token = $1")
+        .bind(token)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| LiveError::InternalServerError(format!("Unable to read the event: {e}")))?
+        .ok_or_else(|| LiveError::NotFound("This wall-board link is no longer valid".to_string()))
+}
+
+/// The wall-board's snapshot (no login; public rows only, no emails).
+#[openapi(tag = "Live")]
+#[get("/live/<token>", format = "json", rank = 2)]
+pub async fn wallboard_snapshot(
+    token: &str,
+    pool: &State<PgPool>,
+) -> Result<Json<live::Snapshot>, LiveError> {
+    let event_id = wallboard_event(pool, token).await?;
+    Ok(Json(
+        live::snapshot(pool, event_id, &crate::live::log::Viewer::Wallboard).await?,
+    ))
+}
+
+/// A stream token for the wall-board.
+#[openapi(tag = "Live")]
+#[post("/live/<token>/stream-token", rank = 2)]
+pub async fn wallboard_stream_token(
+    token: &str,
+    pool: &State<PgPool>,
+    key: &State<PasetoSymmetricKey<V4, Local>>,
+    config: &State<LiveConfig>,
+) -> Result<Json<StreamTokenResponse>, LiveError> {
+    let event_id = wallboard_event(pool, token).await?;
+    let token = token::mint(key, event_id, &crate::live::log::Viewer::Wallboard)
+        .map_err(LiveError::InternalServerError)?;
+    Ok(Json(StreamTokenResponse {
+        token,
+        stream_url: config.stream_url(event_id),
+        expires_at: Utc::now() + Duration::hours(token::TTL_HOURS),
+    }))
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct PushKeyResponse {
+    /// The VAPID public key: the browser's `applicationServerKey`.
+    pub public_key: String,
+}
+
+/// The Web Push key, if push is set up on this server.
+#[openapi(tag = "Live")]
+#[get("/live/push/key", rank = 1)]
+pub fn push_key(_user: User) -> Result<Json<PushKeyResponse>, LiveError> {
+    crate::live::notify::vapid()
+        .map(|v| {
+            Json(PushKeyResponse {
+                public_key: v.public_base64(),
+            })
+        })
+        .ok_or_else(|| LiveError::NotFound("Push isn't set up".to_string()))
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct PushKeys {
+    pub p256dh: String,
+    pub auth: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct PushSubscriptionRequest {
+    pub endpoint: String,
+    pub keys: PushKeys,
+}
+
+/// Get Live's alerts as push notifications on this browser.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/push", format = "json", data = "<request>")]
+pub async fn push_subscribe(
+    event_id: i32,
+    request: Json<PushSubscriptionRequest>,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<SeqResponse>, LiveError> {
+    live::viewer_for(pool, event_id, &user.email).await?;
+    if !request.endpoint.starts_with("https://") || request.endpoint.len() > 1000 {
+        return Err(LiveError::BadRequest("Bad push endpoint".to_string()));
+    }
+    sqlx::query(
+        r"
+        INSERT INTO live_push_subscription (event_id, email, endpoint, p256dh, auth)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (event_id, endpoint) DO UPDATE SET email = $2, p256dh = $4, auth = $5
+        ",
+    )
+    .bind(event_id)
+    .bind(&user.email)
+    .bind(&request.endpoint)
+    .bind(&request.keys.p256dh)
+    .bind(&request.keys.auth)
+    .execute(pool.inner())
+    .await
+    .map_err(|e| LiveError::InternalServerError(format!("Unable to save the subscription: {e}")))?;
+    Ok(Json(SeqResponse { seq: 0 }))
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct PlacesResponse {
+    pub places: Vec<crate::live::places::PlaceHit>,
+}
+
+/// Food near the venue (needs `GOOGLE_PLACES_API_KEY` and a venue).
+#[openapi(tag = "Live")]
+#[get("/events/<event_id>/live/places?<q>")]
+pub async fn places(
+    event_id: i32,
+    q: &str,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<PlacesResponse>, LiveError> {
+    live::viewer_for(pool, event_id, &user.email).await?;
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(|e| LiveError::InternalServerError(format!("Unable to get a connection: {e}")))?;
+    let event = crate::live::store::load_event(&mut conn, event_id)
+        .await
+        .map_err(|e| LiveError::InternalServerError(format!("Unable to read the event: {e}")))?
+        .ok_or_else(|| LiveError::NotFound("No such event".to_string()))?;
+    drop(conn);
+    let venue = event
+        .venue
+        .and_then(|v| Some((v["lat"].as_f64()?, v["lng"].as_f64()?)))
+        .ok_or_else(|| LiveError::NotFound("No venue set for this event".to_string()))?;
+    let places = crate::live::places::search(q, venue.0, venue.1)
+        .await
+        .map_err(LiveError::InternalServerError)?;
+    Ok(Json(PlacesResponse { places }))
+}
+
+/// A place photo: redirects to a short-lived Google URL.
+#[get("/live/places/photo?<name>", rank = 1)]
+pub async fn place_photo(name: &str, _user: User) -> Result<rocket::response::Redirect, LiveError> {
+    let uri = crate::live::places::photo_uri(name)
+        .await
+        .map_err(LiveError::NotFound)?;
+    Ok(rocket::response::Redirect::to(uri))
 }

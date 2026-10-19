@@ -304,6 +304,28 @@ cloudrun-deploy image_url:
 		--role roles/run.developer \
 		|| echo "WARNING: could not grant ${SERVICE_ACCOUNT} permission to run ${REFRESH_JOB_NAME}"
 
+	# caLANdar Live secrets, created on first deploy (best effort: the deployer
+	# may lack Secret Manager permissions):
+	# - LIVE_TICK_SECRET authorises Cloud Scheduler's backstop tick (§3.6);
+	# - VAPID_PRIVATE_KEY signs Web Push (§8), on both services, since the
+	#   stream instance's ticks send pushes too;
+	# - GOOGLE_PLACES_API_KEY (optional, add it by hand) turns on food search.
+	ensure_secret() {
+		if ! gcloud secrets describe "$1" --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+			head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' | gcloud secrets create "$1" \
+				--project "${GCP_PROJECT_ID}" --data-file=- >/dev/null \
+				|| echo "WARNING: could not create $1"
+		fi
+	}
+	has_secret() { gcloud secrets describe "$1" --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; }
+	ensure_secret LIVE_TICK_SECRET
+	ensure_secret VAPID_PRIVATE_KEY
+	LIVE_SECRETS=""
+	PUSH_SECRET=""
+	if has_secret LIVE_TICK_SECRET; then LIVE_SECRETS="${LIVE_SECRETS},LIVE_TICK_SECRET=LIVE_TICK_SECRET:latest"; fi
+	if has_secret VAPID_PRIVATE_KEY; then PUSH_SECRET=",VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest"; fi
+	if has_secret GOOGLE_PLACES_API_KEY; then LIVE_SECRETS="${LIVE_SECRETS},GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest"; fi
+
 	# caLANdar Live streams are served by a dedicated service from the same
 	# image (docs/live-event/DESIGN.md §3.8): long request timeout for SSE,
 	# high concurrency (an open stream costs a task, not a thread), scale to
@@ -322,7 +344,7 @@ cloudrun-deploy image_url:
 		--command /app/calandar-api \
 		--args serve-live \
 		--set-env-vars "RUST_LOG=info" \
-		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${PUSH_SECRET}" \
 		--min-instances 0 \
 		--max-instances 2 \
 		--concurrency 1000 \
@@ -335,20 +357,6 @@ cloudrun-deploy image_url:
 		--format 'value(status.url)')
 	echo "Live stream origin: ${LIVE_STREAM_ORIGIN}"
 
-	# Live's backstop (docs/live-event/DESIGN.md §3.6): with nobody watching,
-	# Cloud Scheduler ticks live events once a minute (graces, deadlines,
-	# Steam presence), authorised by a shared secret. Best effort: the
-	# deployer may lack Secret Manager or Scheduler permissions.
-	if ! gcloud secrets describe LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
-		head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | gcloud secrets create LIVE_TICK_SECRET \
-			--project "${GCP_PROJECT_ID}" --data-file=- \
-			|| echo "WARNING: could not create LIVE_TICK_SECRET"
-	fi
-	LIVE_SECRETS=""
-	if gcloud secrets describe LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
-		LIVE_SECRETS=",LIVE_TICK_SECRET=LIVE_TICK_SECRET:latest"
-	fi
-
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
@@ -358,7 +366,7 @@ cloudrun-deploy image_url:
 		--allow-unauthenticated \
 		--port 8080 \
 		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME},LIVE_STREAM_ORIGIN=${LIVE_STREAM_ORIGIN}" \
-		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${LIVE_SECRETS}" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${LIVE_SECRETS}${PUSH_SECRET}" \
 		--min-instances 0 \
 		--max-instances 10 \
 		--memory 512Mi \
@@ -378,7 +386,7 @@ cloudrun-deploy image_url:
 		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
 
-	if [ -n "${LIVE_SECRETS}" ]; then
+	if has_secret LIVE_TICK_SECRET; then
 		# The recipe traces commands (set -x): keep the secret out of the logs.
 		set +x
 		TICK_SECRET=$(gcloud secrets versions access latest --secret LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}")

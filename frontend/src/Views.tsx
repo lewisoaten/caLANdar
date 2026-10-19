@@ -16,6 +16,7 @@ import EventGameSchedule from "./components/EventGameSchedule";
 import AuditLog from "./components/AuditLog";
 import RoomEditor from "./components/RoomEditor";
 import LivePage from "./components/live/LivePage";
+import WallBoard from "./components/live/WallBoard";
 
 export const SentryRoutes = Sentry.withSentryReactRouterV6Routing(Routes);
 
@@ -23,6 +24,7 @@ const Views = () => {
   return (
     <SentryRoutes>
       <Route path="/" element={<SignIn />} />
+      <Route path="/live/:token" element={<WallBoard />} />
       <Route path="/verify_email">
         <Route path=":token" element={<VerifyEmail />} />
         <Route path="" element={<VerifyEmail />} />

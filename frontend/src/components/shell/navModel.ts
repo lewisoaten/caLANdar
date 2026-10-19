@@ -18,6 +18,7 @@ export type ShellSection =
   | "adminEvent"
   | "gamers"
   | "audit"
+  | "wallboard"
   | "unknown";
 
 export interface ShellRoute {
@@ -48,6 +49,7 @@ export function parseRoute(pathname: string): ShellRoute {
   if (path === "/verify_email" || path.startsWith("/verify_email/"))
     return { section: "verify" };
   if (path === "/events") return { section: "events" };
+  if (/^\/live\/[^/]+$/.test(path)) return { section: "wallboard" };
   const ev = /^\/events\/([^/]+)(?:\/(games|seat-map|schedule|live))?$/.exec(
     path,
   );
@@ -79,9 +81,9 @@ export function parseRoute(pathname: string): ShellRoute {
   return { section: "unknown" };
 }
 
-/** Sections rendered without the app chrome (full-screen auth pages). */
+/** Sections rendered without the app chrome (auth pages, the wall-board). */
 export const isBareSection = (s: ShellSection) =>
-  s === "signin" || s === "verify";
+  s === "signin" || s === "verify" || s === "wallboard";
 
 const LABELS: Record<ShellSection, string> = {
   signin: "Sign in",
@@ -97,6 +99,7 @@ const LABELS: Record<ShellSection, string> = {
   adminEvent: "Manage events",
   gamers: "Gamers",
   audit: "Audit log",
+  wallboard: "Wall-board",
   unknown: "",
 };
 

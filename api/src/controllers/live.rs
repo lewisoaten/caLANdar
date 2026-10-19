@@ -125,6 +125,7 @@ pub async fn execute(
         .await
         .map_err(db("Unable to save live state"))?;
     let deltas = store::delta_rows(&before, &after, &outcome, actor.as_deref(), now);
+    let outbox = crate::live::notify::notices(&before, &after, &outcome);
     let changed = !deltas.rows.is_empty();
     let appended = log::append(&mut tx, event_id, deltas.rows)
         .await
@@ -158,6 +159,12 @@ pub async fn execute(
         .map_err(db("Unable to store the idempotency key"))?;
     }
     tx.commit().await.map_err(db("Unable to commit"))?;
+    crate::live::notify::dispatch(
+        pool,
+        event_id,
+        after.event.discord_webhook_url.clone(),
+        outbox,
+    );
 
     Ok(Executed {
         response,
@@ -418,6 +425,38 @@ pub struct EventView {
     pub timezone: String,
     /// Admins only: the wall-board link token.
     pub wallboard_token: Option<String>,
+    /// Admins only: where results, proposals and posts are sent.
+    pub discord_webhook_url: Option<String>,
+    /// e.g. `03:00-09:00`: the wall-board sleeps then.
+    pub wallboard_sleep: Option<String>,
+    /// The venue's name, for food near it.
+    pub venue_name: Option<String>,
+    /// Admins only: the venue as `lat,lng`.
+    pub venue_location: Option<String>,
+    /// Food search near the venue is available.
+    pub places_enabled: bool,
+}
+
+impl EventView {
+    pub fn of(event: &crate::live::model::EventInfo, admin: bool) -> Self {
+        let venue = event.venue.as_ref();
+        let location =
+            venue.and_then(|v| Some(format!("{},{}", v["lat"].as_f64()?, v["lng"].as_f64()?)));
+        Self {
+            id: event.id,
+            title: event.title.clone(),
+            time_begin: event.time_begin,
+            time_end: event.time_end,
+            discord_invite_url: event.discord_invite_url.clone(),
+            timezone: event.timezone.clone(),
+            wallboard_token: admin.then(|| event.wallboard_token.clone()).flatten(),
+            discord_webhook_url: admin.then(|| event.discord_webhook_url.clone()).flatten(),
+            wallboard_sleep: event.wallboard_sleep.clone(),
+            venue_name: venue.and_then(|v| v["name"].as_str().map(ToString::to_string)),
+            places_enabled: crate::live::places::enabled() && location.is_some(),
+            venue_location: admin.then_some(location).flatten(),
+        }
+    }
 }
 
 /// Whether local-only developer tools are on (`LIVE_DEV_TOOLS=1`).
@@ -459,19 +498,7 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
         server_time: Utc::now(),
         is_admin: viewer.is_admin(),
         dev_tools: dev_tools(),
-        event: EventView {
-            id: state.event.id,
-            title: state.event.title.clone(),
-            time_begin: state.event.time_begin,
-            time_end: state.event.time_end,
-            discord_invite_url: state.event.discord_invite_url.clone(),
-            timezone: state.event.timezone.clone(),
-            wallboard_token: if viewer.is_admin() {
-                state.event.wallboard_token.clone()
-            } else {
-                None
-            },
-        },
+        event: EventView::of(&state.event, viewer.is_admin()),
         me: viewer.email().map(|e| MeView {
             pid: crate::live::model::pid(e),
         }),
@@ -496,12 +523,35 @@ pub async fn snapshot(pool: &PgPool, event_id: i32, viewer: &Viewer) -> Result<S
     })
 }
 
-/// Admin settings for Live on an event.
+/// Admin settings for Live on an event. `None` leaves a field as it is;
+/// an empty string clears it.
 pub struct Settings {
     pub discord_invite_url: Option<String>,
+    pub discord_webhook_url: Option<String>,
     pub timezone: Option<String>,
+    pub wallboard_sleep: Option<String>,
+    /// `name` and `lat,lng`.
+    pub venue: Option<(String, String)>,
     /// Make a new wall-board link (the old one stops working).
     pub rotate_wallboard: bool,
+}
+
+fn https_or_empty(value: Option<&str>, what: &str, prefix: &str) -> Result<(), Error> {
+    match value.map(str::trim) {
+        None | Some("") => Ok(()),
+        Some(url) if url.starts_with(prefix) => Ok(()),
+        Some(_) => Err(Error::BadInput(format!(
+            "The {what} must start with {prefix}"
+        ))),
+    }
+}
+
+/// `HH:MM-HH:MM`.
+fn valid_sleep(value: &str) -> bool {
+    let parse = |t: &str| chrono::NaiveTime::parse_from_str(t.trim(), "%H:%M").is_ok();
+    value
+        .split_once('-')
+        .is_some_and(|(a, b)| parse(a) && parse(b))
 }
 
 /// Update an event's Live settings and tell every screen.
@@ -511,81 +561,98 @@ pub async fn update_settings(
     admin_email: &str,
     settings: Settings,
 ) -> Result<EventView, Error> {
-    if let Some(tz) = &settings.timezone {
+    if let Some(tz) = settings.timezone.as_deref() {
         tz.parse::<chrono_tz::Tz>()
             .map_err(|_| Error::BadInput(format!("Unknown time zone \"{tz}\"")))?;
     }
-    let discord = settings
-        .discord_invite_url
-        .as_deref()
-        .map(str::trim)
-        .map(ToString::to_string);
-    if let Some(url) = discord.as_deref().filter(|u| !u.is_empty()) {
-        if !url.starts_with("https://") {
+    https_or_empty(
+        settings.discord_invite_url.as_deref(),
+        "Discord invite",
+        "https://",
+    )?;
+    https_or_empty(
+        settings.discord_webhook_url.as_deref(),
+        "Discord webhook",
+        "https://discord.com/api/webhooks/",
+    )?;
+    if let Some(sleep) = settings.wallboard_sleep.as_deref().map(str::trim) {
+        if !sleep.is_empty() && !valid_sleep(sleep) {
             return Err(Error::BadInput(
-                "The Discord invite must be an https:// link".to_string(),
+                "Sleep times look like 03:00-09:00".to_string(),
             ));
         }
     }
+    let venue = match &settings.venue {
+        None => None,
+        Some((name, location)) if name.trim().is_empty() && location.trim().is_empty() => {
+            Some(JsonValue::Null)
+        }
+        Some((name, location)) => {
+            let (lat, lng) = location
+                .split_once(',')
+                .and_then(|(a, b)| {
+                    Some((a.trim().parse::<f64>().ok()?, b.trim().parse::<f64>().ok()?))
+                })
+                .filter(|(a, b)| (-90.0..=90.0).contains(a) && (-180.0..=180.0).contains(b))
+                .ok_or_else(|| {
+                    Error::BadInput("The venue location looks like 51.5072,-0.1276".to_string())
+                })?;
+            Some(rocket::serde::json::json!({ "name": name.trim(), "lat": lat, "lng": lng }))
+        }
+    };
     let token = settings
         .rotate_wallboard
         .then(crate::live::token::random_token);
+    let text = |v: &Option<String>| v.as_ref().map(|s| s.trim().to_string());
 
     let mut tx = pool
         .begin()
         .await
         .map_err(db("Unable to start transaction"))?;
-    let row = sqlx::query_as::<
-        _,
-        (
-            i32,
-            String,
-            chrono::DateTime<Utc>,
-            chrono::DateTime<Utc>,
-            Option<String>,
-            String,
-            Option<String>,
-        ),
-    >(
+    let updated = sqlx::query(
         r"
         UPDATE event SET
             discord_invite_url = CASE WHEN $2 THEN NULLIF($3, '') ELSE discord_invite_url END,
-            timezone = COALESCE($4, timezone),
-            wallboard_token = COALESCE($5, wallboard_token),
+            discord_webhook_url = CASE WHEN $4 THEN NULLIF($5, '') ELSE discord_webhook_url END,
+            timezone = COALESCE($6, timezone),
+            wallboard_sleep = CASE WHEN $7 THEN NULLIF($8, '') ELSE wallboard_sleep END,
+            venue = CASE WHEN $9 THEN NULLIF($10, 'null'::jsonb) ELSE venue END,
+            wallboard_token = COALESCE($11, wallboard_token),
             last_modified = NOW()
         WHERE id = $1
-        RETURNING id, title, time_begin, time_end, discord_invite_url, timezone, wallboard_token
         ",
     )
     .bind(event_id)
-    .bind(discord.is_some())
-    .bind(discord.clone().unwrap_or_default())
+    .bind(settings.discord_invite_url.is_some())
+    .bind(text(&settings.discord_invite_url).unwrap_or_default())
+    .bind(settings.discord_webhook_url.is_some())
+    .bind(text(&settings.discord_webhook_url).unwrap_or_default())
     .bind(&settings.timezone)
+    .bind(settings.wallboard_sleep.is_some())
+    .bind(text(&settings.wallboard_sleep).unwrap_or_default())
+    .bind(venue.is_some())
+    .bind(venue.unwrap_or(JsonValue::Null))
     .bind(&token)
-    .fetch_optional(&mut *tx)
+    .execute(&mut *tx)
     .await
-    .map_err(db("Unable to save the settings"))?
-    .ok_or_else(|| Error::NotFound(format!("Event {event_id} not found")))?;
-    let view = EventView {
-        id: row.0,
-        title: row.1,
-        time_begin: row.2,
-        time_end: row.3,
-        discord_invite_url: row.4,
-        timezone: row.5,
-        wallboard_token: row.6,
-    };
-    let mut public = view.clone();
-    public.wallboard_token = None;
+    .map_err(db("Unable to save the settings"))?;
+    if updated.rows_affected() == 0 {
+        return Err(Error::NotFound(format!("Event {event_id} not found")));
+    }
+    let event = store::load_event(&mut tx, event_id)
+        .await
+        .map_err(db("Unable to read the event"))?
+        .ok_or_else(|| Error::NotFound(format!("Event {event_id} not found")))?;
     log::append(
         &mut tx,
         event_id,
-        vec![NewLogRow::new("event", &public).actor(format!("admin:{admin_email}"))],
+        vec![NewLogRow::new("event", EventView::of(&event, false))
+            .actor(format!("admin:{admin_email}"))],
     )
     .await
     .map_err(db("Unable to write the live log"))?;
     tx.commit().await.map_err(db("Unable to commit"))?;
-    Ok(view)
+    Ok(EventView::of(&event, true))
 }
 
 /// The email of the invitee with this pid.
@@ -948,6 +1015,7 @@ pub async fn post_to_everyone(
     text: &str,
     ttl: PostTtl,
     tv: bool,
+    discord: bool,
 ) -> Result<i64, Error> {
     let text = text.trim();
     if text.is_empty() {
@@ -982,6 +1050,25 @@ pub async fn post_to_everyone(
     tx.commit()
         .await
         .map_err(|e| Error::Controller(format!("Unable to commit the post: {e}")))?;
+    if discord {
+        let mut conn = pool
+            .acquire()
+            .await
+            .map_err(db("Unable to get a connection"))?;
+        let webhook = store::load_event(&mut conn, event_id)
+            .await
+            .map_err(db("Unable to read the event"))?
+            .and_then(|e| e.discord_webhook_url);
+        crate::live::notify::dispatch(
+            pool,
+            event_id,
+            webhook,
+            crate::live::notify::Outbox {
+                pushes: Vec::new(),
+                discord: vec![format!("📣 {text}")],
+            },
+        );
+    }
 
     crate::util::log_audit(
         pool,
