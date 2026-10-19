@@ -785,6 +785,11 @@ pub async fn check_plan(pool: &PgPool, event_id: i32) -> Result<(), Error> {
         }
     }
     refresh_plan(pool, event_id).await;
+    // Idempotency keys only need to outlive a client's retries (§3.5).
+    let _ =
+        sqlx::query("DELETE FROM live_command WHERE created_at < NOW() - INTERVAL '10 minutes'")
+            .execute(pool)
+            .await;
     Ok(())
 }
 
@@ -1081,4 +1086,175 @@ pub async fn post_to_everyone(
     .await;
 
     Ok(rows.last().map_or(0, |r| r.seq))
+}
+
+/// Database-backed: the write path end to end (persist, id remap, reload,
+/// log rows). Needs a migrated database:
+/// `DATABASE_URL=... cargo test -- --ignored live_db`.
+#[cfg(test)]
+#[allow(clippy::too_many_lines)]
+mod live_db_tests {
+    use super::*;
+    use crate::live::engine::{
+        Command, LobbyRef, OptionSpec, PlayersAndTeams, Proposal, ProposalMode,
+    };
+    use chrono::Duration;
+
+    async fn pool() -> PgPool {
+        let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let pool = PgPool::connect(&url).await.expect("connects");
+        sqlx::migrate!().run(&pool).await.expect("migrates");
+        pool
+    }
+
+    fn gamer(email: &str) -> Actor {
+        Actor {
+            email: email.to_string(),
+            admin: false,
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a database"]
+    async fn live_db_a_challenge_round_trips_through_the_database() {
+        let pool = pool().await;
+        let now = Utc::now();
+        let event_id: i32 = sqlx::query_scalar(
+            "INSERT INTO event (title, description, time_begin, time_end) VALUES ('t', 'd', $1, $2) RETURNING id",
+        )
+        .bind(now - Duration::hours(1))
+        .bind(now + Duration::hours(24))
+        .fetch_one(&pool)
+        .await
+        .expect("event");
+        for game in [(9_990_001_i64, "Alpha"), (9_990_002, "Beta")] {
+            sqlx::query("INSERT INTO steam_game_update DEFAULT VALUES")
+                .execute(&pool)
+                .await
+                .expect("update");
+            sqlx::query(
+                "INSERT INTO steam_game (appid, update_id, name) VALUES ($1, (SELECT MAX(id) FROM steam_game_update), $2) ON CONFLICT DO NOTHING",
+            )
+            .bind(game.0)
+            .bind(game.1)
+            .execute(&pool)
+            .await
+            .expect("game");
+        }
+        for email in ["a@db.test", "b@db.test"] {
+            sqlx::query(
+                "INSERT INTO invitation (event_id, email, response) VALUES ($1, $2, 'yes')",
+            )
+            .bind(event_id)
+            .bind(email)
+            .execute(&pool)
+            .await
+            .expect("invite");
+            execute(
+                &pool,
+                event_id,
+                Input::Command {
+                    actor: gamer(email),
+                    command: Command::CheckIn {
+                        email: email.to_string(),
+                    },
+                },
+                None,
+            )
+            .await
+            .expect("checked in");
+        }
+        // A planned lobby, challenged by a proposal: lobby, vote and options
+        // are all new rows in one step.
+        let planned = execute(
+            &pool,
+            event_id,
+            Input::Command {
+                actor: Actor {
+                    email: "admin@db.test".into(),
+                    admin: true,
+                },
+                command: Command::CreateLobby(crate::live::engine::LobbyEdit {
+                    game_id: 9_990_001,
+                    game_name: "Alpha".into(),
+                    start: now + Duration::hours(2),
+                    minutes: 60,
+                }),
+            },
+            None,
+        )
+        .await
+        .expect("planned");
+        let lobby = planned.created_lobbies[0];
+        let key = format!("k-{event_id}");
+        let challenged = execute(
+            &pool,
+            event_id,
+            Input::Command {
+                actor: gamer("a@db.test"),
+                command: Command::Propose(Proposal {
+                    what: OptionSpec::Game {
+                        game_id: 9_990_002,
+                        name: "Beta".into(),
+                    },
+                    start: now + Duration::hours(2),
+                    minutes: 60,
+                    players: PlayersAndTeams {
+                        max_players: None,
+                        teams: None,
+                    },
+                    mode: ProposalMode::Challenge(LobbyRef::Stored(lobby)),
+                }),
+            },
+            Some(&key),
+        )
+        .await
+        .expect("challenged");
+        let vote = challenged
+            .response
+            .votes
+            .first()
+            .expect("vote view")
+            .clone();
+        assert!(
+            vote.id.parse::<i64>().expect("id") > 0,
+            "real ids in the response"
+        );
+        assert_eq!(vote.options.len(), 2);
+        assert_eq!(vote.options[0].kind, "lobby", "the plan stays option one");
+
+        // Idempotent replay.
+        let again = execute(
+            &pool,
+            event_id,
+            Input::Command {
+                actor: gamer("a@db.test"),
+                command: Command::Leave,
+            },
+            Some(&key),
+        )
+        .await
+        .expect("replayed");
+        assert_eq!(again.response.seq, challenged.response.seq);
+
+        // Reloaded state matches what the step returned.
+        let mut conn = pool.acquire().await.expect("conn");
+        let state = store::load(&mut conn, event_id)
+            .await
+            .expect("load")
+            .expect("event");
+        let stored = state.votes.values().next().expect("vote");
+        assert_eq!(stored.id.to_string(), vote.id);
+        assert_eq!(state.options.len(), 2);
+        assert_eq!(state.ballots.len(), 1, "the proposer's vote");
+        let rows = log::since(&pool, event_id, 0, 500).await.expect("rows");
+        assert!(rows.iter().any(|r| r.kind == "vote"));
+        assert!(rows.iter().any(|r| r.kind == "feed" && r.tier == Some(3)));
+
+        sqlx::query("DELETE FROM event WHERE id = $1")
+            .bind(event_id)
+            .execute(&pool)
+            .await
+            .expect("cleanup");
+    }
 }

@@ -30,12 +30,22 @@ dev-api:
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
+    # caLANdar Live: local-only simulators and the seed (never set in prod).
+    export LIVE_DEV_TOOLS="${LIVE_DEV_TOOLS:-1}"
 
     echo "Running migrations..."
     cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
 
     echo "Starting API with cargo watch..."
     cargo watch --quiet --clear --exec 'run'
+
+# caLANdar Live: seed a local event that is running now (see docs/live-event/TESTING.md)
+live-seed:
+	cd api && DATABASE_URL="{{LOCAL_DB_URL}}" LIVE_DEV_TOOLS=1 cargo run -q -- dev-seed-live
+
+# caLANdar Live: print an API token (and a localStorage snippet) for an email
+live-token email:
+	cd api && PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}" cargo run -q -- dev-token {{email}}
 
 dev-frontend:
     cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start
