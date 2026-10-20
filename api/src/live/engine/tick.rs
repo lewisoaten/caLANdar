@@ -6,10 +6,7 @@
 use chrono::{DateTime, Utc};
 use rocket::serde::json::json;
 
-use super::{
-    membership::{self, EMPTY_CLOSE},
-    FeedEntry, Outcome,
-};
+use super::{membership, proposals, FeedEntry, Outcome};
 use crate::live::model::{LiveState, LobbyKind, LobbyStatus, Prejoin};
 
 pub fn run(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
@@ -94,14 +91,15 @@ fn food_ends(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     }
 }
 
-/// An empty lobby closes five minutes after the last person left; it ends
-/// at the time they left (§4.4).
+/// An empty lobby closes five minutes after the last person left (or later,
+/// with more time); it ends at the time they left (§4.4).
 fn close_empty(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     let closing: Vec<i32> = state
         .lobbies
         .values()
         .filter(|l| {
-            l.status == LobbyStatus::Empty && l.empty_since.is_some_and(|t| t + EMPTY_CLOSE <= now)
+            l.status == LobbyStatus::Empty
+                && proposals::empty_closes_at(l).is_some_and(|t| t <= now)
         })
         .map(|l| l.id)
         .collect();

@@ -24,6 +24,8 @@ export type ToastActionKind =
   | "join"
   | "delay"
   | "close"
+  | "moreTime"
+  | "prejoin"
   | "rejoin"
   | "stillPlaying"
   | "leave"
@@ -99,6 +101,8 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
   const me = state.me;
   const out: Toast[] = [];
   const mine = myNow(state);
+  const myRsvp = me ? state.people[me]?.rsvp : null;
+  const attending = myRsvp === "yes" || myRsvp === "maybe";
 
   if (me) {
     for (const l of visibleLobbies(state)) {
@@ -180,7 +184,42 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
           canHide: false,
           gameId: l.gameId,
           kind: l.kind,
-          actions: [{ label: "Show", kind: "select", lobbyId: l.id }],
+          actions: [
+            { label: "+5 min", kind: "moreTime", lobbyId: l.id },
+            { label: "Show", kind: "select", lobbyId: l.id },
+          ],
+        });
+      }
+      // Cyan: someone else's proposal needs a backer, and you could be it.
+      if (
+        l.status === "proposed" &&
+        l.proposedBy !== me &&
+        attending &&
+        !activePrejoins(l).some((p) => p.pid === me)
+      ) {
+        const who = l.proposedBy ? state.people[l.proposedBy]?.handle : null;
+        out.push({
+          id: `proposal:${l.id}`,
+          ...base("soon"),
+          kicker: "NEEDS ONE BACKER",
+          title: `${who ?? "Someone"} proposed ${l.name} · ${
+            Date.parse(l.start) <= now ? "now" : clock(l.start)
+          }`,
+          sub: "Pre-join to back it, or it disappears.",
+          countdownTo: ms(l.graceUntil),
+          // Folds into a pill a while after it was proposed.
+          shownAt:
+            ms(
+              activePrejoins(l).find((p) => p.pid === l.proposedBy)?.createdAt,
+            ) || now,
+          life: "UNTIL BACKED",
+          canHide: true,
+          gameId: l.gameId,
+          kind: l.kind,
+          actions: [
+            { label: "I'm in", kind: "prejoin", lobbyId: l.id, primary: true },
+            { label: "Show", kind: "select", lobbyId: l.id },
+          ],
         });
       }
       // Violet: everyone left a lobby you were in (or proposed).
@@ -189,7 +228,11 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
         (l.members.some((m) => m.pid === me) || l.proposedBy === me) &&
         !mine
       ) {
-        const closes = ms(l.emptySince) + 5 * 60_000;
+        // More time is kept in graceUntil (see the API's `more_time`).
+        const closes = Math.max(
+          ms(l.emptySince) + 5 * 60_000,
+          ms(l.graceUntil) || 0,
+        );
         out.push({
           id: `empty:${l.id}:${l.emptySince}`,
           ...base("own"),
@@ -203,6 +246,7 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
           kind: l.kind,
           actions: [
             { label: "Close now", kind: "close", lobbyId: l.id, primary: true },
+            { label: "+5 min", kind: "moreTime", lobbyId: l.id },
             { label: "Rejoin", kind: "rejoin", lobbyId: l.id },
           ],
         });

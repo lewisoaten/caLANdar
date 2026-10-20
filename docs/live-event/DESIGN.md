@@ -706,7 +706,8 @@ All five phases are built, on stacked branches `live/p0-plumbing` → `live/p4-r
 - **Diff, don't log changes.** The engine changes a copy of the state, and the store diffs it against the loaded state. New rows carry negative temporary ids until inserted. Stream deltas are the client views that differ before and after, so the engine only produces feed entries, personal toasts and notices.
 - **Early joins.** A lobby can be joined 15 minutes before its start. Joining starts the grace, which runs to `max(start, join) + 5m`. A planned lobby whose start was missed by more than 10 minutes, for example one created after the fact, is left alone rather than booted.
 - **Openers count for change and delay.** Whoever opens a change or delay vote is involved in it, even without a pre-join. Otherwise a change to a lobby nobody had pre-joined could never pass.
-- **Proposals have no vote row.** An alongside proposal is a `proposed` lobby with its backer deadline in `grace_until`. Backing it is a pre-join by someone other than the proposer.
+- **Proposals have no vote row.** An alongside proposal is a `proposed` lobby with its backer deadline in `grace_until`. Backing it is a pre-join by someone other than the proposer. Open proposals are pinned in the feed beside open votes, and attendees get a hideable "Needs one backer" toast with **I'm in** (a pre-join).
+- **More time** (added after the first manual test). `POST /lobbies/:lid/more-time` gives a proposal 5 more minutes to find a backer (proposer or admin), or keeps an empty lobby open 5 more minutes (anyone who played it). Deadlines never go more than 30 minutes out. An empty lobby's extra time is kept in `grace_until`, and it still ends at the time the last person left.
 - **Admin queue.** Besides "playing on Steam, not checked in", it lists people expected now who haven't checked in, from 30 minutes after doors.
 
 **Frontend**

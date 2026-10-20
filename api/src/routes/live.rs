@@ -823,6 +823,28 @@ pub async fn close_lobby(
     .await
 }
 
+/// "+5 min": more time for your proposal to find a backer, or for an empty
+/// lobby you played before it closes.
+#[openapi(tag = "Live")]
+#[post("/events/<event_id>/live/lobbies/<lobby_id>/more-time")]
+pub async fn more_time(
+    event_id: i32,
+    lobby_id: &str,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let lobby = stored_id(lobby_id)?;
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::MoreTime { lobby },
+        &key,
+    )
+    .await
+}
+
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct VoteOpenRequest {

@@ -247,3 +247,60 @@ pub fn close_now(
     membership::finish_lobby(state, lobby_id, now, "ended", out);
     Ok(())
 }
+
+/// How much "more time" adds.
+pub const MORE_TIME: Duration = Duration::minutes(5);
+/// "More time" never puts a deadline further out than this.
+pub const MORE_TIME_MAX: Duration = Duration::minutes(30);
+
+/// "+5 min": more time for a proposal to find a backer, or for an empty
+/// lobby before it closes. For the proposer and the people who played it
+/// (and admins), so nobody has to re-propose the same thing.
+pub fn more_time(
+    state: &mut LiveState,
+    actor: &Actor,
+    lobby_id: i32,
+    now: DateTime<Utc>,
+) -> Result<(), Reject> {
+    let lobby = lobby_mut(state, lobby_id)?.clone();
+    let mine = lobby.proposed_by.as_deref() == Some(actor.email.as_str());
+    let current = match lobby.status {
+        LobbyStatus::Proposed => {
+            if !mine && !actor.admin {
+                return Err(Reject::Forbidden(
+                    "Only the proposer can give it more time".to_string(),
+                ));
+            }
+            lobby.grace_until.unwrap_or(now)
+        }
+        LobbyStatus::Empty => {
+            let was_in = state
+                .members
+                .values()
+                .any(|m| m.lobby_id == lobby_id && m.email == actor.email);
+            if !mine && !was_in && !actor.admin {
+                return Err(Reject::Forbidden(
+                    "Only people who played it can keep it open".to_string(),
+                ));
+            }
+            empty_closes_at(&lobby).unwrap_or(now)
+        }
+        _ => {
+            return Err(Reject::Conflict(
+                "Only a proposal or an empty lobby can have more time".to_string(),
+            ))
+        }
+    };
+    let until = (current.max(now) + MORE_TIME).min(now + MORE_TIME_MAX);
+    let lobby = lobby_mut(state, lobby_id)?;
+    lobby.grace_until = Some(until);
+    lobby.version += 1;
+    Ok(())
+}
+
+/// When an empty lobby closes: five minutes after the last person left, or
+/// later if someone asked for more time (kept in `grace_until`).
+pub fn empty_closes_at(lobby: &crate::live::model::Lobby) -> Option<DateTime<Utc>> {
+    let base = lobby.empty_since? + membership::EMPTY_CLOSE;
+    Some(lobby.grace_until.map_or(base, |g| g.max(base)))
+}

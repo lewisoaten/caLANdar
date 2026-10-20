@@ -1136,6 +1136,68 @@ fn an_unbacked_proposal_disappears_silently() {
 }
 
 #[test]
+fn the_proposer_can_give_a_proposal_more_time() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(PHAS, "Phasmophobia"),
+        t(22, 0),
+        ProposalMode::Alongside,
+        t(19, 40),
+    )
+    .expect("proposed");
+    let id = *s.lobbies.keys().next().expect("lobby");
+    let more = |s: &mut LiveState, who: &str, at| {
+        apply(s, cmd(gamer(who), Command::MoreTime { lobby: id }), at)
+    };
+    assert!(matches!(
+        more(&mut s, "bo@x.io", t(19, 43)),
+        Err(Reject::Forbidden(_))
+    ));
+    more(&mut s, "ana@x.io", t(19, 43)).expect("more time");
+    assert_eq!(s.lobbies[&id].grace_until, Some(t(19, 50)));
+    tick_at(&mut s, t(19, 47));
+    assert_eq!(s.lobbies[&id].status, LobbyStatus::Proposed, "still there");
+    // Never more than 30 minutes out.
+    for _ in 0..10 {
+        more(&mut s, "ana@x.io", t(19, 48)).expect("more time");
+    }
+    assert_eq!(s.lobbies[&id].grace_until, Some(t(20, 18)));
+    tick_at(&mut s, t(20, 18));
+    assert!(s.lobbies.is_empty(), "then it lapses as before");
+}
+
+#[test]
+fn an_empty_lobby_can_stay_open_longer() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 0));
+    let id = lobby_of(&s, "ana@x.io").expect("lobby");
+    play(&mut s, "ana@x.io", None, t(20, 30));
+    let left_at = s.lobbies[&id].empty_since.expect("empty since");
+    assert!(matches!(
+        apply(
+            &mut s,
+            cmd(gamer("bo@x.io"), Command::MoreTime { lobby: id }),
+            left_at + Duration::minutes(1),
+        ),
+        Err(Reject::Forbidden(_))
+    ));
+    apply(
+        &mut s,
+        cmd(gamer("ana@x.io"), Command::MoreTime { lobby: id }),
+        left_at + Duration::minutes(4),
+    )
+    .expect("more time");
+    tick_at(&mut s, left_at + Duration::minutes(6));
+    assert_eq!(s.lobbies[&id].status, LobbyStatus::Empty, "kept open");
+    tick_at(&mut s, left_at + Duration::minutes(10));
+    let lobby = &s.lobbies[&id];
+    assert_eq!(lobby.status, LobbyStatus::Done);
+    assert_eq!(lobby.actual_end, Some(left_at), "still ends when they left");
+}
+
+#[test]
 fn a_challenge_opens_whats_on_and_unanimity_replaces_the_plan() {
     let mut s = checked_in(&["ana@x.io", "bo@x.io", "cy@x.io"]);
     let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);

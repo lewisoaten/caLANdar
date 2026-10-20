@@ -265,6 +265,7 @@ fn build_rocket(
                 routes::live::propose,
                 routes::live::remove_proposal,
                 routes::live::close_lobby,
+                routes::live::more_time,
                 routes::live::open_vote,
                 routes::live::ballot,
                 routes::live::add_option,

@@ -119,7 +119,66 @@ describe("deriveToasts", () => {
       "NEEDS ONE BACKER",
       "EVERYONE LEFT",
     ]);
-    expect(toasts[1].actions.map((a) => a.kind)).toEqual(["close", "rejoin"]);
+    expect(toasts[0].actions.map((a) => a.kind)).toEqual([
+      "moreTime",
+      "select",
+    ]);
+    expect(toasts[1].actions.map((a) => a.kind)).toEqual([
+      "close",
+      "moreTime",
+      "rejoin",
+    ]);
+    expect(toasts[1].countdownTo).toBe(T("19:35"));
+    // More time on the empty lobby moves its close.
+    const kept = deriveToasts(
+      {
+        ...s,
+        lobbies: {
+          ...s.lobbies,
+          "2": { ...s.lobbies["2"], graceUntil: iso("19:45") },
+        },
+      },
+      T("19:41"),
+    );
+    expect(kept[1].countdownTo).toBe(T("19:45"));
+  });
+
+  test("someone else's proposal asks attendees to back it", () => {
+    const person = (rsvp: "yes" | "no") => ({
+      me: { pid: "me", handle: "Me", rsvp } as never,
+      ana: { pid: "ana", handle: "Ana", rsvp: "yes" } as never,
+    });
+    const s = stateWith(
+      [
+        lobby("1", {
+          status: "proposed",
+          kind: "food",
+          name: "Fry Up",
+          start: iso("19:40"),
+          proposedBy: "ana",
+          graceUntil: iso("19:45"),
+          prejoins: [prejoin("ana")],
+        }),
+      ],
+      { people: person("yes") },
+    );
+    const [t] = deriveToasts(s, T("19:41"));
+    expect(t.kicker).toBe("NEEDS ONE BACKER");
+    expect(t.title).toBe("Ana proposed Fry Up · now");
+    expect(t.countdownTo).toBe(T("19:45"));
+    expect(t.canHide).toBe(true);
+    expect(t.actions[0]).toMatchObject({ kind: "prejoin", lobbyId: "1" });
+    // Not once you've backed it, nor if you aren't coming.
+    const backed = {
+      ...s,
+      lobbies: {
+        "1": { ...s.lobbies["1"], prejoins: [prejoin("ana"), prejoin("me")] },
+      },
+    };
+    expect(deriveToasts(backed, T("19:41"))).toEqual([]);
+    expect(deriveToasts({ ...s, people: person("no") }, T("19:41"))).toEqual(
+      [],
+    );
   });
 
   test("starting soon, results and admin posts can be hidden", () => {

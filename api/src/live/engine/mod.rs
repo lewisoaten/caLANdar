@@ -111,6 +111,8 @@ pub enum Command {
     RemoveProposal { lobby: i32 },
     /// "Close now" on an empty lobby.
     CloseNow { lobby: i32 },
+    /// "+5 min" on your proposal, or on an empty lobby you played.
+    MoreTime { lobby: i32 },
     /// Open a yes/no vote about a lobby.
     OpenVote(VoteRequest),
     /// Vote, change your vote, or tick "happy to split".
@@ -318,6 +320,7 @@ fn command_step(
         Command::Propose(p) => proposals::propose(state, actor, p, now, out).map(|_| ()),
         Command::RemoveProposal { lobby } => proposals::remove_own(state, actor, lobby, out),
         Command::CloseNow { lobby } => proposals::close_now(state, actor, lobby, now, out),
+        Command::MoreTime { lobby } => proposals::more_time(state, actor, lobby, now),
         Command::OpenVote(request) => votes::open(state, actor, request, now, out).map(|_| ()),
         Command::Ballot {
             vote,

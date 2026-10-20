@@ -84,6 +84,8 @@ pub fn leave(
         if lobby.status == LobbyStatus::Live {
             lobby.status = LobbyStatus::Empty;
             lobby.empty_since = Some(now);
+            // "More time" on an empty lobby is kept here (see `more_time`).
+            lobby.grace_until = None;
             lobby.version += 1;
             out.feed.push(
                 FeedEntry::new(2, "lobby.empty", "everyone left")
@@ -152,6 +154,7 @@ pub fn join(
         LobbyStatus::Empty => {
             lobby.status = LobbyStatus::Live;
             lobby.empty_since = None;
+            lobby.grace_until = None;
         }
         LobbyStatus::Live | LobbyStatus::Grace => {}
         _ => {

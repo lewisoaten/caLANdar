@@ -23,6 +23,7 @@ import {
   currentMembers,
   dayClock,
   defaultSelection,
+  visibleLobbies,
 } from "../../live/selectors";
 import { deriveToasts, type Toast, type ToastAction } from "../../live/toasts";
 import {
@@ -53,6 +54,7 @@ import { DevPresencePanel } from "./DevPresencePanel";
 import { CallVoteMenu } from "./CallVoteMenu";
 import { ProposeSheet, type SheetRequest } from "./ProposeSheet";
 import { VoteCard } from "./VoteCard";
+import { ProposalCard } from "./ProposalCard";
 import { ToastStack, useToastPrefs } from "./ToastStack";
 import { AdminFab } from "./AdminFab";
 import { Mono } from "./liveUi";
@@ -129,6 +131,16 @@ function MoreLobbyActions({
           onClick={() => void command(`/lobbies/${lobby.id}/close`)}
         >
           Close now
+        </Button>
+      )}
+      {lobby.status === "empty" && (wasIn || lobby.proposedBy === me) && (
+        <Button
+          variant="outlined"
+          color="secondary"
+          disabled={busy}
+          onClick={() => void command(`/lobbies/${lobby.id}/more-time`)}
+        >
+          Keep open +5 min
         </Button>
       )}
       {lobby.status === "done" && lobby.gameId && (
@@ -246,6 +258,20 @@ export default function LivePage() {
       case "close":
         void command(`/lobbies/${a.lobbyId}/close`);
         break;
+      case "moreTime":
+        void command(
+          `/lobbies/${encodeURIComponent(a.lobbyId ?? "")}/more-time`,
+        );
+        break;
+      case "prejoin":
+        void command(
+          `/lobbies/${encodeURIComponent(a.lobbyId ?? "")}/prejoin`,
+          {
+            team: null,
+            random: (target?.teams?.length ?? 0) > 0,
+          },
+        );
+        break;
       case "stillPlaying":
         void command("/presence", { stillPlaying: a.lobbyId });
         break;
@@ -298,6 +324,11 @@ export default function LivePage() {
   const openVotes = Object.values(state.votes)
     .filter((v) => v.status === "open")
     .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline));
+  const openProposals = visibleLobbies(state)
+    .filter((l) => l.status === "proposed")
+    .sort(
+      (a, b) => Date.parse(a.graceUntil ?? "") - Date.parse(b.graceUntil ?? ""),
+    );
   const canNotify =
     notificationsSupported() &&
     Notification.permission === "default" &&
@@ -515,13 +546,26 @@ export default function LivePage() {
           <LiveFeed
             state={state}
             openVotes={
-              openVotes.length > 0 ? (
+              openVotes.length + openProposals.length > 0 ? (
                 <Box
                   sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
                 >
                   <Mono size={10} color={colors.cyan} spacing="0.16em">
-                    OPEN VOTES · {openVotes.length}
+                    {openProposals.length > 0
+                      ? `OPEN VOTES & PROPOSALS · ${openVotes.length + openProposals.length}`
+                      : `OPEN VOTES · ${openVotes.length}`}
                   </Mono>
+                  {openProposals.map((l) => (
+                    <ProposalCard
+                      key={l.id}
+                      state={state}
+                      lobby={l}
+                      now={now}
+                      busy={busy}
+                      command={command}
+                      onShow={setSelected}
+                    />
+                  ))}
                   {openVotes.map((v: VoteView) => (
                     <VoteCard
                       key={v.id}
