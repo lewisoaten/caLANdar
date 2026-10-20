@@ -603,6 +603,7 @@ live/
 | Violet "Everyone left"                 | My lobby in `empty`                                                                            |
 | Cyan setup                             | `presence` created a lobby for me with no defaults                                             |
 | Cyan "Starts in 10 min"                | A lobby I've pre-joined with `start − now ≤ 10m`                                               |
+| Cyan vote open                         | An open vote I'm involved in and haven't voted on (one button per option, up to 3)             |
 | Results                                | `feed` rows tier 1 or 2 that involve me, newer than page load, shown for 10s                   |
 | Amber admin post                       | `toast.admin` rows within their TTL                                                            |
 
@@ -709,6 +710,7 @@ All five phases are built, on stacked branches `live/p0-plumbing` → `live/p4-r
 - **Proposals have no vote row.** An alongside proposal is a `proposed` lobby with its backer deadline in `grace_until`. Backing it is a pre-join by someone other than the proposer. Open proposals are pinned in the feed beside open votes, and attendees get a hideable "Needs one backer" toast with **I'm in** (a pre-join).
 - **Live settings live in event management** (after the first manual test). Discord invite and webhook, time zone, venue and the wall-board link and sleep hours are set up before the event, so they're a "Live" tab on `/admin/events/:id` (`GET`/`PUT /events/:id/live/settings`), not a panel on the Live page. The admin button on the Live page links there and opens the wall-board.
 - **Steam catches up.** Steam acts when someone's game changes, so the tick also checks for checked-in people in no lobby whose Steam still shows a game (a meal ended, a manual join lapsed) and puts them in that game's lobby. It skips anyone who left that game's lobby themselves, and an admin ending a lobby counts as that for the people still in it, so it isn't recreated.
+- **Vote notifications** (after the first manual test). Nothing told people a vote had opened: it was only pinned in the feed. Everyone involved who hasn't voted now gets a "vote open" toast, and a Web Push goes to everyone involved except whoever called it. Admin posts also show on the TV by default.
 - **More time** (added after the first manual test). `POST /lobbies/:lid/more-time` gives a proposal 5 more minutes to find a backer (proposer or admin), or keeps an empty lobby open 5 more minutes (anyone who played it). Deadlines never go more than 30 minutes out. An empty lobby's extra time is kept in `grace_until`, and it still ends at the time the last person left.
 - **Admin queue.** Besides "playing on Steam, not checked in", it lists people expected now who haven't checked in, from 30 minutes after doors.
 
