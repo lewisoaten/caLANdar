@@ -13,9 +13,10 @@ just dev            # Postgres (docker-compose), the API on :8080, vite on :3000
 `just dev-api` sets `LIVE_DEV_TOOLS=1`, which turns on the local-only
 seed and simulators. Never set it in production.
 
-> Port 5432 must be free for the docker-compose database. If another
-> project's Postgres holds it, stop that container first (or point
-> `LOCAL_DB_URL` in the Justfile at another port).
+> The database is published on 5432 and the API listens on 8080. If
+> either is taken, pick others: `PORT=55555 DB_PORT=55432 just dev`.
+> Put them in `.env` (or pass them to every recipe, e.g.
+> `DB_PORT=55432 just live-seed`) so the other recipes agree.
 
 Optional extras:
 

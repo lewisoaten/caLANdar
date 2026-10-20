@@ -36,7 +36,7 @@ services:
     # Expose PostgreSQL port for local development and debugging only.
     # Do NOT expose this port in production environments.
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     environment:
       - POSTGRES_PASSWORD=password
       - POSTGRES_USER=postgres

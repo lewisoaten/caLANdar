@@ -1,8 +1,13 @@
 # Load environment variables from .env file if it exists (for local development)
 set dotenv-load := true
 
+# Local ports: override with e.g. `PORT=55555 DB_PORT=55432 just dev`.
+# DB_PORT is exported so docker-compose publishes the database on it.
+API_PORT := env_var_or_default("PORT", "8080")
+export DB_PORT := env_var_or_default("DB_PORT", "5432")
+
 # Local development database URL
-LOCAL_DB_URL := "postgres://postgres:password@localhost:5432/calandar"
+LOCAL_DB_URL := "postgres://postgres:password@localhost:" + DB_PORT + "/calandar"
 
 default:
   just --list
@@ -27,6 +32,7 @@ dev-api:
     done
 
     export DATABASE_URL="{{LOCAL_DB_URL}}"
+    export PORT="{{API_PORT}}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
@@ -48,7 +54,7 @@ live-token email:
 	cd api && PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}" cargo run -q -- dev-token {{email}}
 
 dev-frontend:
-    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start
+    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:{{API_PORT}} npm start
 
 dev-storybook:
 	cd frontend && npm install && npm run storybook

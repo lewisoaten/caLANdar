@@ -1,4 +1,5 @@
-// Shared helpers for local browser checks against vite (:3000) + API (:8080).
+// Shared helpers for local browser checks against vite (:3000) + API (:8080,
+// or $PORT).
 const { chromium } = require("playwright-core");
 const { execFileSync } = require("child_process");
 const API =
@@ -52,7 +53,7 @@ async function pageAs(b, email, viewport = { width: 1440, height: 1000 }) {
 }
 
 async function api(method, path, email, body) {
-  const res = await fetch(`http://localhost:8080/api${path}`, {
+  const res = await fetch(`http://localhost:${process.env.PORT ?? 8080}/api${path}`, {
     method,
     headers: {
       Authorization: `Bearer ${token(email)}`,
