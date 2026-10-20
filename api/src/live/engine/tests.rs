@@ -628,8 +628,9 @@ fn a_manual_now_lapses_unless_still_playing() {
 }
 
 #[test]
-fn food_ignores_steam() {
+fn food_ignores_a_game_left_running_but_launching_one_ends_the_meal() {
     let mut s = checked_in(&["ana@x.io"]);
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(18, 30));
     let id = s.temp_lobby_id();
     let mut food = schedule_lobby(id, t(19, 0), 45);
     food.kind = LobbyKind::Food;
@@ -645,10 +646,34 @@ fn food_ignores_steam() {
         t(19, 0),
     )
     .expect("eat");
-    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 10));
+    // CS2 still running in the background, then closed: still eating.
+    poll(
+        &mut s,
+        vec![steam("ana@x.io", Some((CS2, "CS2")))],
+        t(19, 5),
+    );
     assert_eq!(lobby_of(&s, "ana@x.io"), Some(id), "still eating");
-    apply(&mut s, Input::Tick, t(19, 46)).expect("tick");
-    assert_eq!(s.lobbies[&id].status, LobbyStatus::Done);
+    play(&mut s, "ana@x.io", None, t(19, 10));
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(id), "still eating");
+
+    // Launching the next game (pre-joined, starting soon) moves them to it.
+    let l4d = planned(&mut s, L4D, "L4D2", t(19, 30), 90);
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::Prejoin {
+                lobby: LobbyRef::Stored(l4d),
+                team: None,
+                random: false,
+            },
+        ),
+        t(19, 12),
+    )
+    .expect("pre-joined");
+    play(&mut s, "ana@x.io", Some((L4D, "L4D2")), t(19, 16));
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(l4d), "done eating");
+    assert_eq!(s.lobbies[&l4d].status, LobbyStatus::Grace, "starts early");
 }
 
 fn schedule_lobby(id: i32, start: DateTime<Utc>, minutes: i32) -> crate::live::model::Lobby {

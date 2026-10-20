@@ -143,10 +143,14 @@ pub fn steam_membership(
     let current = state.current_membership(email);
     let current_lobby = current.and_then(|(_, id)| state.lobbies.get(&id)).cloned();
 
-    // Eating: Steam may still show a game in the background (§5.1.4).
-    if current_lobby
-        .as_ref()
-        .is_some_and(|l| l.kind == LobbyKind::Food)
+    // Eating: Steam may still show a game in the background, and closing it
+    // doesn't end the meal (§5.1.4). This only runs when Steam's game
+    // changes, though, so launching a game means you've finished eating:
+    // that takes you out of the food lobby like any other switch.
+    if game.is_none()
+        && current_lobby
+            .as_ref()
+            .is_some_and(|l| l.kind == LobbyKind::Food)
     {
         return;
     }

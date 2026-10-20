@@ -407,7 +407,7 @@ The handoff's flows are mostly coherent. Below are the places where the rules, a
    You can always correct it manually, and a manual pick wins while the `gameid` matches.
 
 4. **Food versus Steam.** You won't be launching anything while eating, and Steam may still show CS2 in the background.
-   → While you're a member of a live **food** lobby, Steam presence is ignored for lobby membership. Food membership is manual, or comes from the vote or the split. You leave by pressing Leave, or automatically at the food lobby's end.
+   → While you're a member of a live **food** lobby, a game Steam already showed (or stops showing) doesn't change your lobby. *Launching* a game does: Steam's game changing to a new one means you've finished eating, and you move to that game's lobby like any other switch (changed after the first manual test, when launching the next game from a food lobby didn't move you). Food membership is manual, or comes from the vote or the split. You leave by pressing Leave, or automatically at the food lobby's end.
 5. **Auto-create noise.** This is handled by the debounce in §3.7. The **setup toast** only shows the _first_ time a game is ever seen, meaning when no `game_lobby_defaults` row exists. After that, the defaults apply silently.
 6. **AFK** (`personastate` Away/Snooze held for more than 10 minutes, debounced) shows on the floor at 40% opacity and in the audit lens. It does **not** remove you from the lobby. Otherwise the lobby would empty when people step away.
 
