@@ -34,6 +34,8 @@ dev-api:
     export DATABASE_URL="{{LOCAL_DB_URL}}"
     export PORT="{{API_PORT}}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
+    # Without a real Resend key, log emails (and sign-in links) instead of sending.
+    if [[ -z "${RESEND_API_KEY:-}" ]]; then export EMAIL_TO_LOG="${EMAIL_TO_LOG:-1}"; fi
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
     # caLANdar Live: local-only simulators and the seed (never set in prod).

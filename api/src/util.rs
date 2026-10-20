@@ -6,12 +6,25 @@ use sqlx::PgPool;
 
 use crate::{controllers::event, routes::events::Event};
 
+/// Local development without a Resend key (`just dev` sets `EMAIL_TO_LOG`):
+/// emails are logged instead of sent.
+fn email_to_log() -> bool {
+    std::env::var("EMAIL_TO_LOG").is_ok_and(|v| !v.is_empty() && v != "0")
+}
+
 pub async fn send_email(
     sender: &Resend,
     tos: Vec<&str>,
     subject: &str,
     body: &str,
 ) -> Result<(), String> {
+    if email_to_log() {
+        eprintln!(
+            "EMAIL_TO_LOG: not sending \"{subject}\" to {}",
+            tos.join(", ")
+        );
+        return Ok(());
+    }
     let from = "CaLANdar <lewis+calandar@updates.oaten.name>";
     let reply_to = "lewis+calandar@oaten.name";
 
@@ -37,6 +50,14 @@ pub async fn send_email_bcc(
 ) -> Result<(), String> {
     let from = "CaLANdar <lewis+calandar@updates.oaten.name>";
     let reply_to = "lewis+calandar@oaten.name";
+
+    if email_to_log() {
+        eprintln!(
+            "EMAIL_TO_LOG: not sending \"{subject}\" to {}",
+            bccs.join(", ")
+        );
+        return Ok(());
+    }
 
     // Send to the from address so there's a valid "to" recipient
     // All actual recipients are in BCC to hide email addresses from each other
@@ -170,6 +191,13 @@ pub async fn send_preauth_email(
     };
 
     template_context.insert("token", &token);
+
+    if email_to_log() {
+        eprintln!(
+            "EMAIL_TO_LOG: sign-in link for {}: http://localhost:3000/verify_email?token={token}",
+            email.address
+        );
+    }
 
     let body = match tera.render(email.template.as_str(), template_context) {
         Ok(body) => body,

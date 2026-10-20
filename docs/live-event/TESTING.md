@@ -10,6 +10,10 @@ simulator in place of real Steam presence.
 just dev            # Postgres (docker-compose), the API on :8080, vite on :3000
 ```
 
+Without `RESEND_API_KEY` set, `just dev-api` sets `EMAIL_TO_LOG=1`: no
+email is sent, and signing in prints a `http://localhost:3000/verify_email?token=…`
+link in the API's output to open instead.
+
 `just dev-api` sets `LIVE_DEV_TOOLS=1`, which turns on the local-only
 seed and simulators. Never set it in production.
 
