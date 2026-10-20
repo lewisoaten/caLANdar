@@ -96,7 +96,7 @@ from the Admin button, and handle the check-in queue.
 
 **Room scale.** In **Manage event → Live** (`/admin/events/<id>?tab=live`) make a
 wall-board link and open it on a TV-sized window: no login, updates live,
-shows posts marked **ALSO ON TV**, and sleeps in the hours you set. **Notify
+shows admin posts (**ALSO ON TV** is on by default), and sleeps in the hours you set. **Notify
 me** subscribes the browser to Web Push (with `VAPID_PRIVATE_KEY` set). Add a
 Discord webhook to get results and proposals posted there.
 

@@ -259,7 +259,7 @@ const CS2: i64 = 730;
 const DRG: i64 = 548_430;
 const FAC: i64 = 427_520;
 
-fn checked_in(emails: &[&str]) -> LiveState {
+pub fn checked_in(emails: &[&str]) -> LiveState {
     let mut s = state();
     for e in emails {
         apply(
@@ -295,12 +295,17 @@ fn poll(s: &mut LiveState, samples: Vec<PresenceSample>, at: DateTime<Utc>) -> O
 }
 
 /// Two polls 30s apart: the debounced way a game is seen.
-fn play(s: &mut LiveState, email: &str, game: Option<(i64, &str)>, at: DateTime<Utc>) -> Outcome {
+pub fn play(
+    s: &mut LiveState,
+    email: &str,
+    game: Option<(i64, &str)>,
+    at: DateTime<Utc>,
+) -> Outcome {
     poll(s, vec![steam(email, game)], at);
     poll(s, vec![steam(email, game)], at + Duration::seconds(30))
 }
 
-fn lobby_of(s: &LiveState, email: &str) -> Option<i32> {
+pub fn lobby_of(s: &LiveState, email: &str) -> Option<i32> {
     s.current_membership(email).map(|(_, id)| id)
 }
 

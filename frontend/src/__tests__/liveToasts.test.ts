@@ -181,6 +181,48 @@ describe("deriveToasts", () => {
     );
   });
 
+  test("an open vote asks the people involved who haven't voted", () => {
+    const option = (id: string, name: string, voters: string[]) =>
+      ({ id, name, kind: "yes", voters }) as never;
+    const vote = {
+      id: "9",
+      type: "extend",
+      title: "Keep playing CS2 +30m?",
+      status: "open",
+      openedBy: "ana",
+      openedAt: iso("19:40"),
+      deadline: iso("19:45"),
+      settleAt: null,
+      involved: ["me", "ana"],
+      options: [option("1", "Keep playing", ["ana"]), option("2", "No", [])],
+    } as never;
+    const s = stateWith([], {
+      votes: { "9": vote },
+      people: { ana: { pid: "ana", handle: "Ana" } as never },
+    });
+    const [t] = deriveToasts(s, T("19:41"));
+    expect(t.kicker).toBe("KEEP PLAYING? · VOTE");
+    expect(t.sub).toBe("Ana called it");
+    expect(t.countdownTo).toBe(T("19:45"));
+    expect(t.actions.map((a) => [a.kind, a.optionId])).toEqual([
+      ["ballot", "1"],
+      ["ballot", "2"],
+      ["showVote", undefined],
+    ]);
+    // Gone once you've voted, and never for people not involved.
+    const voted = {
+      ...s,
+      votes: {
+        "9": {
+          ...(vote as object),
+          options: [option("1", "Keep playing", ["ana", "me"])],
+        } as never,
+      },
+    };
+    expect(deriveToasts(voted, T("19:41"))).toEqual([]);
+    expect(deriveToasts({ ...s, me: "cy" }, T("19:41"))).toEqual([]);
+  });
+
   test("starting soon, results and admin posts can be hidden", () => {
     const s = stateWith(
       [

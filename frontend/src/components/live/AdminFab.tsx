@@ -64,7 +64,7 @@ export function AdminFab({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [text, setText] = useState("");
   const [ttl, setTtl] = useState<"10m" | "dismiss">("10m");
-  const [tv, setTv] = useState(false);
+  const [tv, setTv] = useState(true);
   const [discord, setDiscord] = useState(false);
   if (!state.isAdmin) return null;
   const openVotes = Object.values(state.votes).filter(

@@ -107,6 +107,26 @@ pub fn notices(before: &LiveState, after: &LiveState, outcome: &Outcome) -> Outb
             _ => {}
         }
     }
+    // A vote opened: everyone involved but the person who called it.
+    for vote in after.votes.values() {
+        let new = vote.status == crate::live::model::VoteStatus::Open
+            && before
+                .votes
+                .get(&vote.id)
+                .is_none_or(|v| v.status != vote.status);
+        if !new {
+            continue;
+        }
+        out.pushes.push(Notice {
+            to: super::engine::involved(after, vote)
+                .into_iter()
+                .filter(|e| *e != vote.opened_by)
+                .collect(),
+            title: super::engine::vote_title(after, vote),
+            body: "A vote is open: tap to vote.".to_string(),
+            tag: format!("vote:{}", vote.id),
+        });
+    }
     for toast in &outcome.personal {
         if toast.kind == "nudge" {
             out.pushes.push(Notice {
@@ -245,6 +265,31 @@ async fn deliver(pool: &PgPool, vapid: &Vapid, event_id: i32, notice: &Notice) {
 mod tests {
     use super::*;
     use crate::live::engine::{apply, tests as t, Command, Input, LobbyRef};
+
+    #[test]
+    fn a_new_vote_pushes_to_the_others_involved() {
+        let mut s = t::checked_in(&["ana@x.io", "bo@x.io"]);
+        t::play(&mut s, "ana@x.io", Some((730, "CS2")), t::t(19, 0));
+        t::play(&mut s, "bo@x.io", Some((730, "CS2")), t::t(19, 0));
+        let lobby = t::lobby_of(&s, "ana@x.io").expect("lobby");
+        let before = s.clone();
+        let outcome = apply(
+            &mut s,
+            t::cmd(
+                t::gamer("ana@x.io"),
+                Command::OpenVote(crate::live::engine::VoteRequest::Extend { lobby, minutes: 30 }),
+            ),
+            t::t(20, 50),
+        )
+        .expect("opened");
+        let outbox = notices(&before, &s, &outcome);
+        let push = outbox
+            .pushes
+            .iter()
+            .find(|n| n.tag.starts_with("vote:"))
+            .expect("vote push");
+        assert_eq!(push.to, vec!["bo@x.io".to_string()], "not the caller");
+    }
 
     #[test]
     fn nobody_in_pushes_to_the_people_pre_joined_and_results_go_to_discord() {

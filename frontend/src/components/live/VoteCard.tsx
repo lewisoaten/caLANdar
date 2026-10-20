@@ -76,6 +76,7 @@ export function VoteCard({
   return (
     <Box
       component="article"
+      id={`vote-${vote.id}`}
       aria-label={`Vote: ${vote.title}`}
       sx={{
         border: `2px solid ${c}`,

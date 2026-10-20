@@ -257,6 +257,19 @@ export default function LivePage() {
       case "close":
         void command(`/lobbies/${a.lobbyId}/close`);
         break;
+      case "ballot":
+        void command(
+          `/votes/${a.voteId}/ballot`,
+          { optionId: a.optionId },
+          { method: "PUT" },
+        );
+        break;
+      case "showVote":
+        document
+          .getElementById(`vote-${a.voteId}`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (t.cls !== "alert") toastPrefs.toggleMinimised(t.id);
+        break;
       case "moreTime":
         void command(
           `/lobbies/${encodeURIComponent(a.lobbyId ?? "")}/more-time`,

@@ -30,12 +30,16 @@ export type ToastActionKind =
   | "stillPlaying"
   | "leave"
   | "select"
-  | "setup";
+  | "setup"
+  | "ballot"
+  | "showVote";
 
 export interface ToastAction {
   label: string;
   kind: ToastActionKind;
   lobbyId?: string;
+  voteId?: string;
+  optionId?: string;
   primary?: boolean;
 }
 
@@ -68,6 +72,16 @@ export interface Toast {
 export const RESULT_MS = 10_000;
 export const ADMIN_POST_MS = 10 * 60_000;
 export const STARTS_SOON_MS = 10 * 60_000;
+/** A vote toast offers each option as a button up to this many. */
+export const VOTE_BUTTONS = 3;
+
+const VOTE_KICKER: Record<string, string> = {
+  slot: "WHAT'S ON · VOTE",
+  extend: "KEEP PLAYING? · VOTE",
+  delay: "DELAY? · VOTE",
+  change: "CHANGE? · VOTE",
+  kickoff: "KICK OFF EARLY? · VOTE",
+};
 
 const STYLE: Record<ToastClass, { color: string; bg: string }> = {
   alert: { color: colors.pink, bg: "#2a0a17" },
@@ -342,6 +356,44 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
           ],
         });
       }
+    }
+  }
+
+  // Cyan: an open vote you're involved in and haven't voted on yet.
+  if (me) {
+    for (const v of Object.values(state.votes)) {
+      if (v.status !== "open" || !v.involved.includes(me)) continue;
+      if (v.options.some((o) => o.voters.includes(me))) continue;
+      const opener = state.people[v.openedBy]?.handle;
+      const few = v.options.length <= VOTE_BUTTONS;
+      out.push({
+        id: `vote:${v.id}`,
+        ...base("soon"),
+        kicker: VOTE_KICKER[v.type] ?? "VOTE",
+        title: v.title,
+        sub: opener && v.openedBy !== me ? `${opener} called it` : undefined,
+        countdownTo: ms(v.settleAt ?? v.deadline),
+        shownAt: ms(v.openedAt) || now,
+        life: "UNTIL YOU VOTE",
+        canHide: true,
+        actions: [
+          ...(few
+            ? v.options.map((o, i) => ({
+                label: o.name,
+                kind: "ballot" as const,
+                voteId: v.id,
+                optionId: o.id,
+                primary: i === 0,
+              }))
+            : []),
+          {
+            label: few ? "Show" : "Vote…",
+            kind: "showVote" as const,
+            voteId: v.id,
+            primary: !few,
+          },
+        ],
+      });
     }
   }
 
