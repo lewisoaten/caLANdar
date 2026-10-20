@@ -12,12 +12,14 @@ use crate::live::model::{LiveState, LobbyKind, LobbyStatus, Prejoin};
 pub fn run(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     super::proposals::expire(state, now, out);
     super::votes::tick(state, now, out);
-    start_machine(state, now, out);
     switch_graces(state, now);
     manual_expiry(state, now, out);
     food_ends(state, now, out);
-    close_empty(state, now, out);
+    // Before the start machine, so someone whose meal ended as a grace runs
+    // out lands in that lobby rather than a new one.
     steam_catch_up(state, now, out);
+    start_machine(state, now, out);
+    close_empty(state, now, out);
     afk(state, now, out);
 }
 
