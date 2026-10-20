@@ -28,7 +28,7 @@ Optional extras:
 | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `STEAM_API_KEY` (real key) | Real Steam presence polling every 30s for attendees with a Steam id                                          |
 | `VAPID_PRIVATE_KEY`        | Web Push. Make one with `cd api && cargo run -q -- dev-vapid`                                                |
-| `GOOGLE_PLACES_API_KEY`    | Food near the venue in the propose sheet (also set a venue location under Manage event → Live)                        |
+| `GOOGLE_PLACES_API_KEY`    | Food near the venue in the propose sheet (also set a venue location under Manage event → Live)               |
 | `LIVE_STREAM_ORIGIN`       | Streams from a separate origin (production: the `calandar-live` service). Unset locally: the API serves them |
 
 ## 2. Seed an event that is running now
