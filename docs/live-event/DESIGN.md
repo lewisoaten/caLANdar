@@ -426,7 +426,7 @@ The L4D2 history card in the prototype ("NEW LOBBY · FINAL · UNANIMOUS", 4 yes
 
 **When proposing, the sheet decides which kind applies:**
 
-- If the chosen time **overlaps a planned or confirmed lobby that the proposer has pre-joined or is eligible for**, the sheet asks: **"Add as an option to _What's on at 22:00?_"** or **"Run alongside"**.
+- If the chosen time **overlaps a planned or confirmed lobby that the proposer has pre-joined or is eligible for**, the sheet asks: **"Add as an option to _What's on at 22:00?_"** or **"Run alongside"**. Adding as an option is the default; "Run alongside" has to be picked.
 - Otherwise it's simply additive.
 
 This is the one new UI element the design needs (a two-option chip row in the sheet footer).

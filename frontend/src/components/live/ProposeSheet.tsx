@@ -438,7 +438,9 @@ function SheetBody({
       ) ?? null
     );
   }, [mode, start, length, state]);
-  const challenging = clash != null && asOption === true;
+  // Overlapping a plan adds an option to its vote unless "Run alongside"
+  // is picked explicitly.
+  const challenging = clash != null && asOption !== false;
 
   const whoVotes =
     lobby && (mode === "extend" || mode === "delay" || mode === "change")
@@ -927,13 +929,13 @@ function SheetBody({
             </Mono>
             <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
               <Chip
-                selected={asOption === true}
+                selected={asOption !== false}
                 onClick={() => setAsOption(true)}
               >
                 Add as an option to What&apos;s on at {clock(clash.start)}?
               </Chip>
               <Chip
-                selected={asOption !== true}
+                selected={asOption === false}
                 onClick={() => setAsOption(false)}
                 accent={colors.violetLight}
               >
