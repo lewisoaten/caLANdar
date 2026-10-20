@@ -191,7 +191,12 @@ pub fn start_machine(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcom
         .collect();
     for (id, status) in expired {
         let anyone_in = state.members_of(id).next().is_some();
-        let played = state.members.values().any(|m| m.lobby_id == id);
+        // Joins before an early start was undone don't count.
+        let since = state.lobbies.get(&id).and_then(|l| l.actual_start);
+        let played = state
+            .members
+            .values()
+            .any(|m| m.lobby_id == id && since.is_some_and(|s| m.joined_at >= s));
         if status == LobbyStatus::Grace && anyone_in {
             end_grace(state, id, now, out);
         } else if played {

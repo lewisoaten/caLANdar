@@ -85,6 +85,31 @@ describe("deriveToasts", () => {
     expect(deriveToasts({ ...s, me: "other" }, T("20:01"))).toEqual([]);
   });
 
+  test("a lobby started early is calm until its scheduled start", () => {
+    const at = (hhmm: string) =>
+      deriveToasts(
+        stateWith([
+          lobby("1", {
+            status: "grace",
+            start: iso("21:30"),
+            actualStart: iso("20:57"),
+            graceUntil: iso("21:35"),
+            prejoins: [prejoin("me")],
+          }),
+        ]),
+        T(hhmm),
+      )[0];
+    const early = at("21:00");
+    expect(early.kicker).toBe("STARTED EARLY");
+    expect(early.cls).toBe("soon");
+    expect(early.canHide).toBe(true);
+    expect(early.actions[0].kind).toBe("join");
+    // From the scheduled start it's the usual pink alert.
+    const due = at("21:31");
+    expect(due.cls).toBe("alert");
+    expect(due.kicker).toBe("STARTING · JOIN NOW");
+  });
+
   test("the alert id changes with the start, so it comes back after a delay", () => {
     const at = (start: string) =>
       deriveToasts(

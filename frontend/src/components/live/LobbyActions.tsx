@@ -25,7 +25,7 @@ import {
   type PlayersTeams,
 } from "./PlayersTeamsBlock";
 
-const EARLY_JOIN_MS = 15 * 60_000;
+const EARLY_JOIN_MS = 60 * 60_000;
 
 export type LiveCommand = (
   path: string,

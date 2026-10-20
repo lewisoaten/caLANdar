@@ -776,7 +776,12 @@ fn a_meal_ending_as_the_grace_runs_out_still_lands_in_that_lobby() {
     // ...but once the meal ends, Steam's game counts again.
     tick_at(&mut s, t(19, 46));
     assert_eq!(lobby_of(&s, "ana@x.io"), Some(l4d), "back into L4D2");
-    assert_eq!(s.lobbies[&l4d].status, LobbyStatus::Live, "not a new lobby");
+    // She left before the scheduled start, so it restarted when she came back.
+    assert_eq!(
+        s.lobbies[&l4d].status,
+        LobbyStatus::Grace,
+        "not a new lobby"
+    );
 }
 
 #[test]
@@ -790,6 +795,53 @@ fn an_ended_lobby_is_not_recreated_while_steam_still_shows_its_game() {
     // A different game later still works.
     play(&mut s, "ana@x.io", Some((L4D, "L4D2")), t(20, 10));
     assert!(lobby_of(&s, "ana@x.io").is_some());
+}
+
+#[test]
+fn playing_a_scheduled_game_early_starts_it_early() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    let drg = planned(&mut s, DRG, "Deep Rock Galactic", t(21, 30), 120);
+    apply(
+        &mut s,
+        cmd(
+            gamer("bo@x.io"),
+            Command::Prejoin {
+                lobby: LobbyRef::Stored(drg),
+                team: None,
+                random: false,
+            },
+        ),
+        t(20, 0),
+    )
+    .expect("pre-joined");
+    // 33 minutes early: no new lobby, the scheduled one starts.
+    let out = play(&mut s, "ana@x.io", Some((DRG, "DRG")), t(20, 57));
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(drg));
+    assert!(!out.feed.iter().any(|f| f.kind == "lobby.new"));
+    let lobby = &s.lobbies[&drg];
+    assert_eq!(lobby.status, LobbyStatus::Grace);
+    assert_eq!(lobby.start, t(21, 30), "the schedule stays");
+    assert_eq!(
+        lobby.grace_until,
+        Some(t(21, 35)),
+        "pre-joiners keep their time"
+    );
+    // Bo isn't dropped for not coming early.
+    tick_at(&mut s, t(21, 20));
+    assert!(s.prejoins[&(drg, "bo@x.io".to_string())].is_active());
+
+    // If everyone leaves before the scheduled start, it starts on schedule.
+    play(&mut s, "ana@x.io", None, t(21, 25));
+    let lobby = &s.lobbies[&drg];
+    assert_eq!(lobby.status, LobbyStatus::Confirmed);
+    assert_eq!(lobby.actual_start, None);
+    tick_at(&mut s, t(21, 30));
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+    tick_at(&mut s, t(21, 36));
+    assert!(
+        !s.lobbies.contains_key(&drg) || s.lobbies[&drg].status != LobbyStatus::Done,
+        "nobody came: back to the planning pool, not ended"
+    );
 }
 
 fn schedule_lobby(id: i32, start: DateTime<Utc>, minutes: i32) -> crate::live::model::Lobby {

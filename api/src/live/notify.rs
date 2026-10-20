@@ -88,6 +88,18 @@ pub fn notices(before: &LiveState, after: &LiveState, outcome: &Outcome) -> Outb
                 body: "Join now, or vote to delay the start. You have 5 minutes.".to_string(),
                 tag: format!("grace:{}", lobby.id),
             }),
+            // Started before its scheduled time: no rush yet.
+            LobbyStatus::Grace if lobby.actual_start.is_some_and(|a| a < lobby.start) => {
+                out.pushes.push(Notice {
+                    to: interested_elsewhere(after, lobby),
+                    title: format!("{} started early", lobby.name),
+                    body: format!(
+                        "Join whenever you're ready, by {}.",
+                        local(after, lobby.grace_until.unwrap_or(lobby.start))
+                    ),
+                    tag: format!("grace:{}", lobby.id),
+                });
+            }
             LobbyStatus::Grace => out.pushes.push(Notice {
                 to: interested_elsewhere(after, lobby),
                 title: format!("{} is starting: join now", lobby.name),

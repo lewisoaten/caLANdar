@@ -121,8 +121,31 @@ export function deriveToasts(state: LiveState, now: number): Toast[] {
   if (me) {
     for (const l of visibleLobbies(state)) {
       const inIt = currentMembers(l).some((m) => m.pid === me);
+      // Cyan: a lobby you're in for started before its scheduled time.
+      // Your grace runs to five minutes after the scheduled start.
+      const early = l.status === "grace" && now < ms(l.start);
+      if (early && !inIt && interested(state, l, me)) {
+        out.push({
+          id: `early:${l.id}:${l.start}`,
+          ...base("soon"),
+          kicker: "STARTED EARLY",
+          title: `${l.name} started early`,
+          sub: `Join whenever you're ready, by ${clock(ms(l.graceUntil))}`,
+          countdownTo: ms(l.graceUntil),
+          shownAt: ms(l.actualStart) || now,
+          life: `UNTIL ${clock(ms(l.graceUntil))}`,
+          canHide: true,
+          gameId: l.gameId,
+          kind: l.kind,
+          actions: [
+            { label: "Join now", kind: "join", lobbyId: l.id, primary: true },
+            { label: "Show", kind: "select", lobbyId: l.id },
+          ],
+        });
+      }
       // Pink: a lobby starting that you're in for, and you're not in it.
       if (
+        !early &&
         (l.status === "waiting" || l.status === "grace") &&
         !inIt &&
         interested(state, l, me)

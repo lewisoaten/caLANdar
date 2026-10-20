@@ -12,8 +12,10 @@ use crate::live::model::{
     Email, LiveState, Lobby, LobbyKind, LobbySource, LobbyStatus, Member, Prejoin, Presence, Via,
 };
 
-/// How early before its start a lobby can be joined (it starts early).
-pub const EARLY_JOIN: Duration = Duration::minutes(15);
+/// How early before its start a lobby can be joined, by hand or by Steam:
+/// it starts early. People pre-joined keep their grace until five minutes
+/// after the scheduled start.
+pub const EARLY_JOIN: Duration = Duration::minutes(60);
 /// How long you have to launch the game after joining by hand while Steam
 /// shows another one.
 pub const SWITCH_GRACE: Duration = Duration::minutes(5);
@@ -81,6 +83,24 @@ pub fn leave(
         return;
     }
     if let Some(lobby) = state.lobbies.get_mut(&lobby_id) {
+        // Started early and everyone left before the scheduled start: it
+        // hasn't really started, so it starts on schedule as planned.
+        if lobby.status == LobbyStatus::Grace && now < lobby.start {
+            let backed = state
+                .prejoins
+                .values()
+                .any(|p| p.lobby_id == lobby_id && p.is_active());
+            lobby.status = if lobby.source == LobbySource::Proposal || backed {
+                LobbyStatus::Confirmed
+            } else {
+                LobbyStatus::Planned
+            };
+            lobby.grace_until = None;
+            lobby.grace_locked = false;
+            lobby.actual_start = None;
+            lobby.version += 1;
+            return;
+        }
         if lobby.status == LobbyStatus::Live {
             lobby.status = LobbyStatus::Empty;
             lobby.empty_since = Some(now);

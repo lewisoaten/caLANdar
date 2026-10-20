@@ -177,6 +177,15 @@ export function blockLook(
         dashed: true,
       };
     case "grace":
+      // Started before its scheduled time: no rush until then.
+      if (now < Date.parse(l.start))
+        return {
+          label: "STARTED EARLY",
+          color: colors.lime,
+          border: colors.lime,
+          glow: `0 0 18px -6px ${colors.lime}`,
+          dashed: false,
+        };
       return { label: "GRACE", ...pink, glow: glowPink, dashed: true };
     case "waiting":
       return { label: "NOBODY IN", ...pink, glow: glowPink, dashed: true };
