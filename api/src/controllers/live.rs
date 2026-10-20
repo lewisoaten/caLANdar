@@ -655,6 +655,19 @@ pub async fn update_settings(
     Ok(EventView::of(&event, true))
 }
 
+/// An event's Live settings, for the admin's event management page.
+pub async fn get_settings(pool: &PgPool, event_id: i32) -> Result<EventView, Error> {
+    let mut conn = pool
+        .acquire()
+        .await
+        .map_err(db("Unable to reach the database"))?;
+    let event = store::load_event(&mut conn, event_id)
+        .await
+        .map_err(db("Unable to read the event"))?
+        .ok_or_else(|| Error::NotFound(format!("Event {event_id} not found")))?;
+    Ok(EventView::of(&event, true))
+}
+
 /// The email of the invitee with this pid.
 pub async fn email_for_pid(pool: &PgPool, event_id: i32, pid_value: &str) -> Result<String, Error> {
     let emails =

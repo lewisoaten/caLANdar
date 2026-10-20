@@ -42,7 +42,6 @@ import { UpNext } from "./UpNext";
 import { LiveFloor } from "./LiveFloor";
 import { LiveFeed } from "./LiveFeed";
 import { AdminLobbyActions } from "./AdminLobbyActions";
-import { LiveSettingsPanel } from "./LiveSettingsPanel";
 import {
   LobbyActions,
   LobbyLog,
@@ -594,9 +593,6 @@ export default function LivePage() {
           <UpNext state={state} now={now} onSelect={setSelected} />
           <LiveFloor state={state} />
           <DevPresencePanel state={state} command={command} />
-          {state.isAdmin && connection && (
-            <LiveSettingsPanel eventId={eventId} state={state} token={token} />
-          )}
         </Box>
       </Box>
 
@@ -624,7 +620,36 @@ export default function LivePage() {
         command={command}
         onClose={() => setSheet(null)}
       />
-      <AdminFab state={state} command={command} busy={busy} />
+      <AdminFab
+        state={state}
+        command={command}
+        busy={busy}
+        extra={
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+            {state.event?.wallboardToken && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                href={`/live/${state.event.wallboardToken}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open wall-board
+              </Button>
+            )}
+            <Button
+              size="small"
+              variant="text"
+              color="warning"
+              component={RouterLink}
+              to={`/admin/events/${eventId}?tab=live`}
+            >
+              Live settings
+            </Button>
+          </Box>
+        }
+      />
     </>
   );
 }

@@ -254,6 +254,7 @@ fn build_rocket(
                 routes::live::post,
                 routes::live::checkin,
                 routes::live::settings,
+                routes::live::get_settings,
                 routes::live::tick,
                 routes::live::presence,
                 routes::live::prejoin,

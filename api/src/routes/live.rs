@@ -243,6 +243,17 @@ pub struct SettingsRequest {
     pub rotate_wallboard: bool,
 }
 
+/// An event's Live settings (admin only).
+#[openapi(tag = "Live")]
+#[get("/events/<event_id>/live/settings")]
+pub async fn get_settings(
+    event_id: i32,
+    pool: &State<PgPool>,
+    _admin: AdminUser,
+) -> Result<Json<live::EventView>, LiveError> {
+    Ok(Json(live::get_settings(pool, event_id).await?))
+}
+
 /// Update an event's Live settings (admin only).
 #[openapi(tag = "Live")]
 #[put(

@@ -28,7 +28,7 @@ Optional extras:
 | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `STEAM_API_KEY` (real key) | Real Steam presence polling every 30s for attendees with a Steam id                                          |
 | `VAPID_PRIVATE_KEY`        | Web Push. Make one with `cd api && cargo run -q -- dev-vapid`                                                |
-| `GOOGLE_PLACES_API_KEY`    | Food near the venue in the propose sheet (also set a venue location in Live settings)                        |
+| `GOOGLE_PLACES_API_KEY`    | Food near the venue in the propose sheet (also set a venue location under Manage event → Live)                        |
 | `LIVE_STREAM_ORIGIN`       | Streams from a separate origin (production: the `calandar-live` service). Unset locally: the API serves them |
 
 ## 2. Seed an event that is running now
@@ -94,7 +94,7 @@ unanimity finalises after 20 seconds, "happy to split" splits the party,
 the deadline goes to the plurality. Admins force, split or veto inline or
 from the Admin button, and handle the check-in queue.
 
-**Room scale.** In **Live settings** (admins, right column) make a
+**Room scale.** In **Manage event → Live** (`/admin/events/<id>?tab=live`) make a
 wall-board link and open it on a TV-sized window: no login, updates live,
 shows posts marked **ALSO ON TV**, and sleeps in the hours you set. **Notify
 me** subscribes the browser to Web Push (with `VAPID_PRIVATE_KEY` set). Add a

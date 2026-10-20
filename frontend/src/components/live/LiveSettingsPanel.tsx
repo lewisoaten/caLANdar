@@ -1,38 +1,82 @@
 /**
- * Admin: the event's Live settings: Discord invite and webhook, time zone,
- * the venue (for food near it), and the wall-board link and sleep hours.
+ * Admin: the event's Live settings, on the event management page (they're
+ * set up before the event, not changed during it): Discord invite and
+ * webhook, time zone, the venue (for food near it), and the wall-board
+ * link and sleep hours.
  */
 import * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Skeleton from "@mui/material/Skeleton";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import { useSnackbar } from "notistack";
 import { Panel } from "../hl/Panel";
 import { colors } from "../hl/tokens";
-import type { LiveState } from "../../live/store";
+import type { LiveEventInfo } from "../../live/types";
 import { userFacingReason } from "../../utils/apiError";
 import { adminFetch } from "./adminApi";
 import { Mono } from "./liveUi";
 
 export function LiveSettingsPanel({
   eventId,
-  state,
   token,
 }: {
   eventId: number;
-  state: LiveState;
   token: string;
 }) {
   const { enqueueSnackbar } = useSnackbar();
-  const e = state.event;
-  const [discord, setDiscord] = useState(e?.discordInviteUrl ?? "");
-  const [webhook, setWebhook] = useState(e?.discordWebhookUrl ?? "");
-  const [timezone, setTimezone] = useState(e?.timezone ?? "Europe/London");
-  const [venueName, setVenueName] = useState(e?.venueName ?? "");
-  const [venueLocation, setVenueLocation] = useState(e?.venueLocation ?? "");
-  const [sleep, setSleep] = useState(e?.wallboardSleep ?? "");
-  const [wallToken, setWallToken] = useState(e?.wallboardToken ?? null);
+  const [loaded, setLoaded] = useState<LiveEventInfo | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    adminFetch(token, `/events/${eventId}/live/settings`, "GET")
+      .then((v) => live && setLoaded(v as LiveEventInfo))
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [eventId, token]);
+
+  if (!loaded) {
+    return failed ? (
+      <Panel kicker="Live" title="Live settings" tone="amber" padding="compact">
+        <Box sx={{ color: colors.textMuted, fontSize: 14 }}>
+          Couldn&apos;t load the Live settings.
+        </Box>
+      </Panel>
+    ) : (
+      <Skeleton variant="rectangular" height={420} />
+    );
+  }
+  return (
+    <SettingsForm
+      eventId={eventId}
+      token={token}
+      event={loaded}
+      enqueueSnackbar={enqueueSnackbar}
+    />
+  );
+}
+
+function SettingsForm({
+  eventId,
+  token,
+  event: e,
+  enqueueSnackbar,
+}: {
+  eventId: number;
+  token: string;
+  event: LiveEventInfo;
+  enqueueSnackbar: ReturnType<typeof useSnackbar>["enqueueSnackbar"];
+}) {
+  const [discord, setDiscord] = useState(e.discordInviteUrl ?? "");
+  const [webhook, setWebhook] = useState(e.discordWebhookUrl ?? "");
+  const [timezone, setTimezone] = useState(e.timezone ?? "Europe/London");
+  const [venueName, setVenueName] = useState(e.venueName ?? "");
+  const [venueLocation, setVenueLocation] = useState(e.venueLocation ?? "");
+  const [sleep, setSleep] = useState(e.wallboardSleep ?? "");
+  const [wallToken, setWallToken] = useState(e.wallboardToken ?? null);
   const [busy, setBusy] = useState(false);
 
   const save = async (
@@ -71,7 +115,7 @@ export function LiveSettingsPanel({
     : null;
 
   return (
-    <Panel kicker="Admin" title="Live settings" tone="amber" padding="compact">
+    <Panel kicker="Live" title="Live settings" tone="amber" padding="compact">
       <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
         <TextField
           label="Discord invite link"

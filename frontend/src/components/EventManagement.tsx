@@ -15,6 +15,7 @@ import EditNoteSharp from "@mui/icons-material/EditNoteSharp";
 import GroupSharp from "@mui/icons-material/GroupSharp";
 import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
 import CampaignSharp from "@mui/icons-material/CampaignSharp";
+import SensorsSharp from "@mui/icons-material/SensorsSharp";
 import AddSharp from "@mui/icons-material/AddSharp";
 import EditSharp from "@mui/icons-material/EditSharp";
 import MeetingRoomSharp from "@mui/icons-material/MeetingRoomSharp";
@@ -35,12 +36,14 @@ import EventsAdminDialog from "./EventsAdminDialog";
 import SendEmailDialog from "./SendEmailDialog";
 import EventSeatingConfig from "./EventSeatingConfig";
 import SeatOccupancyAdmin from "./SeatOccupancyAdmin";
+import LiveSettingsPanel from "./live/LiveSettingsPanel";
 import { EmptyState, Tag, colors, fonts, hairline } from "./hl";
 
 export const MANAGE_TABS = [
   { id: "details", label: "Details", icon: <EditNoteSharp /> },
   { id: "roster", label: "Roster", icon: <GroupSharp /> },
   { id: "seating", label: "Seating", icon: <EventSeatSharp /> },
+  { id: "live", label: "Live", icon: <SensorsSharp /> },
   { id: "broadcast", label: "Broadcast", icon: <CampaignSharp /> },
 ] as const;
 
@@ -561,6 +564,14 @@ const EventManagement = () => {
               eventId={event.id}
               refreshTrigger={occupancyKey}
             />
+          </Box>
+        )}
+      </Box>
+
+      <Box {...panelProps("live")}>
+        {ready && tab === "live" && token && (
+          <Box sx={{ maxWidth: 720 }}>
+            <LiveSettingsPanel eventId={event.id} token={token} />
           </Box>
         )}
       </Box>
