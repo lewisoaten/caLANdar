@@ -1,8 +1,10 @@
 /**
  * Team cards (README §1c "Teams"): one card per team with slot rows.
  * Filled slots show an avatar, random pre-joins a dashed violet `?`, open
- * slots a dashed `+`. Each card has "Pre-join <team>"; a dashed violet
- * "Pre-join a random team" runs underneath.
+ * slots a dashed `+`. Each card has "Pre-join <team>", and clicking an open
+ * slot does the same (you're picking a team, not a seat: you appear after
+ * whoever's already in). A dashed violet "Pre-join a random team" runs
+ * underneath.
  */
 import * as React from "react";
 import Box from "@mui/material/Box";
@@ -154,22 +156,37 @@ export function TeamCards({
                     </Box>
                   );
                 })}
-                {Array.from({ length: Math.min(open, 6) }).map((_, n) => (
-                  <Box
-                    key={`open-${n}`}
-                    sx={{
-                      height: 32,
-                      display: "grid",
-                      placeItems: "center",
-                      border: `1px dashed ${tint("neutral", 0.35)}`,
-                      color: colors.textDim,
-                      fontSize: 14,
-                    }}
-                    aria-hidden="true"
-                  >
-                    +
-                  </Box>
-                ))}
+                {Array.from({ length: Math.min(open, 6) }).map((_, n) => {
+                  const take = canPrejoin && !mineHere;
+                  return (
+                    <ButtonBase
+                      key={`open-${n}`}
+                      disabled={!take || busy}
+                      onClick={() => onPrejoin(team.name, false)}
+                      aria-label={`Take an open slot in ${team.name}`}
+                      aria-hidden={take ? undefined : true}
+                      tabIndex={take && n === 0 ? 0 : -1}
+                      sx={{
+                        height: 32,
+                        display: "grid",
+                        placeItems: "center",
+                        border: `1px dashed ${tint("neutral", 0.35)}`,
+                        color: colors.textDim,
+                        fontSize: 14,
+                        "&.Mui-disabled": { color: colors.textDim },
+                        ...(take && {
+                          "&:hover": {
+                            borderColor: c,
+                            color: c,
+                            backgroundColor: `${c}14`,
+                          },
+                        }),
+                      }}
+                    >
+                      +
+                    </ButtonBase>
+                  );
+                })}
                 {open > 6 && (
                   <Mono size={9} color={colors.textDim}>
                     +{open - 6} MORE OPEN
