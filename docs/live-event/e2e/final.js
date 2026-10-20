@@ -1,5 +1,5 @@
 // Full end-to-end test of caLANdar Live on the final branch.
-const { browser, pageAs, api } = require("./lib");
+const { WEB, browser, pageAs, api } = require("./lib");
 const { execSync } = require("child_process");
 const E = Number(process.argv[2]);
 const S = process.env.E2E_OUT || __dirname;
@@ -24,7 +24,7 @@ async function closeAdmin(p) {
   const bo = await pageAs(b, "bo@example.com");
   const cy = await pageAs(b, "cy@example.com");
   const admin = await pageAs(b, ADMIN);
-  const url = `http://localhost:3000/events/${E}/live`;
+  const url = `${WEB}/events/${E}/live`;
 
   console.log("Phase 0: plumbing");
   for (const p of [ana, bo, cy, admin]) await p.goto(url);
@@ -71,7 +71,7 @@ async function closeAdmin(p) {
   await bo.getByText("moved to").first().waitFor({ timeout: 8000 });
   ok("an edit on the schedule page moves the lobby on Live, with a feed line");
   const sched = await pageAs(b, ADMIN);
-  await sched.goto(`http://localhost:3000/events/${E}/schedule`);
+  await sched.goto(`${WEB}/events/${E}/schedule`);
   await sched
     .getByRole("button", { name: /Left 4 Dead 2/ })
     .first()
@@ -119,7 +119,7 @@ async function closeAdmin(p) {
     .click()
     .catch(() => {});
   await sheet.getByRole("button", { name: /^Propose · start at/ }).click();
-  await cy.getByText("NEEDS ONE BACKER").waitFor({ timeout: 8000 });
+  await cy.getByText("NEEDS ONE BACKER").first().waitFor({ timeout: 8000 });
   await ana.getByRole("button", { name: /Phasmophobia, PROPOSED/ }).click();
   await ana.getByRole("button", { name: "Pre-join", exact: true }).click();
   await cy.getByText("FINAL · BACKED").first().waitFor({ timeout: 8000 });
@@ -241,7 +241,7 @@ async function closeAdmin(p) {
   );
   const ctx = await b.newContext({ viewport: { width: 1920, height: 1080 } });
   const tv = await ctx.newPage();
-  await tv.goto(`http://localhost:3000/live/${view.wallboardToken}`);
+  await tv.goto(`${WEB}/live/${view.wallboardToken}`);
   await tv.getByText(/IN GAME/).waitFor({ timeout: 10000 });
   await api("POST", `/events/${E}/live/posts?as_admin=true`, ADMIN, {
     text: "Pizza is here",

@@ -121,3 +121,5 @@ CHROME_PATH=$(which google-chrome) node final.js <event id>
 
 Set `RESTART_API` to a command that restarts the API to also check that
 streams recover from a restart.
+Set `WEB` (default `http://localhost:3000`) and `PORT` to point it at another
+vite and API, for example a separate stack on a throwaway database.

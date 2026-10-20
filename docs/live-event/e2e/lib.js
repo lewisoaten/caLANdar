@@ -1,7 +1,8 @@
-// Shared helpers for local browser checks against vite (:3000) + API (:8080,
-// or $PORT).
+// Shared helpers for local browser checks against vite (:3000, or $WEB) +
+// API (:8080, or $PORT).
 const { chromium } = require("playwright-core");
 const { execFileSync } = require("child_process");
+const WEB = process.env.WEB ?? "http://localhost:3000";
 const API =
   process.env.CALANDAR_API ||
   `${__dirname}/../../../api/target/debug/calandar-api`;
@@ -76,4 +77,4 @@ async function api(method, path, email, body) {
   return json;
 }
 
-module.exports = { browser, pageAs, token, api };
+module.exports = { WEB, browser, pageAs, token, api };
