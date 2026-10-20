@@ -1,7 +1,8 @@
 /**
  * "Call vote ▾" (README §1a): one row per vote type with a colour bar.
  * Keep playing shows while you're in a live lobby; Kick off early only in
- * the lead-up. "I'm not playing" clears a manual now (DESIGN.md §5.1.1).
+ * the lead-up. Leaving isn't a vote: it's on the NOW chip and the lobby
+ * details (DESIGN.md §5.1.1).
  */
 import * as React from "react";
 import { useState } from "react";
@@ -20,13 +21,11 @@ export function CallVoteMenu({
   now,
   selected,
   onOpen,
-  onLeave,
 }: {
   state: LiveState;
   now: number;
   selected: LobbyView | null;
   onOpen: (r: SheetRequest) => void;
-  onLeave: () => void;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const mine = myNow(state);
@@ -90,13 +89,6 @@ export function CallVoteMenu({
       color: colors.cyan,
       onClick: () => onOpen({ mode: "kickoff", lobby: first }),
       show: leadUp && Boolean(first),
-    },
-    {
-      label: "I'm not playing",
-      hint: mine ? `LEAVE ${mine.name.toUpperCase()}` : "",
-      color: colors.pink,
-      onClick: onLeave,
-      show: Boolean(mine),
     },
   ];
 

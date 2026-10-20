@@ -388,10 +388,9 @@ The handoff's flows are mostly coherent. Below are the places where the rules, a
 ### 5.1 Presence
 
 1. **Manual users can't leave.** There's no "leave" or "not playing" action, so a manual "now" would last forever, and lobbies of manual-only players would never empty.
-   → **Add a Leave action. This is a design addition the handoff lacks.** It goes in three places:
+   → **Add a Leave action. This is a design addition the handoff lacks.** It goes in two places (not the Call vote ▾ menu: leaving isn't a vote):
    - the NOW chip in the me strip, as a `Leave` text button next to the game name;
    - the lobby details actions for a live lobby you're in, as `Leave lobby`;
-   - the Call vote ▾ menu, as `I'm not playing`, which clears your manual "now".
 
    Leave works for Steam users too: it ends your membership until Steam shows a _different_ game, so a game left running in the background doesn't pull you back in. A manual "now" also expires when the lobby's planned end plus 30 minutes passes, unless you answer a lime "Still playing X?" toast.
 

@@ -365,7 +365,6 @@ export default function LivePage() {
             now={now}
             selected={lobby}
             onOpen={setSheet}
-            onLeave={() => void command("/presence", { none: true })}
           />
         }
       />
