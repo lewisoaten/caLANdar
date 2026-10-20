@@ -53,14 +53,17 @@ async function pageAs(b, email, viewport = { width: 1440, height: 1000 }) {
 }
 
 async function api(method, path, email, body) {
-  const res = await fetch(`http://localhost:${process.env.PORT ?? 8080}/api${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token(email)}`,
-      "Content-Type": "application/json",
+  const res = await fetch(
+    `http://localhost:${process.env.PORT ?? 8080}/api${path}`,
+    {
+      method,
+      headers: {
+        Authorization: `Bearer ${token(email)}`,
+        "Content-Type": "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  );
   const text = await res.text();
   let json = null;
   try {
