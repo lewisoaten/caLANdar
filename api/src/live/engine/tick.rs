@@ -17,7 +17,28 @@ pub fn run(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     manual_expiry(state, now, out);
     food_ends(state, now, out);
     close_empty(state, now, out);
+    steam_catch_up(state, now, out);
     afk(state, now, out);
+}
+
+/// Steam acts when someone's game changes. If they end up in no lobby while
+/// it still shows a game (their meal ended, a manual join lapsed), put them
+/// in that game's lobby now, unless they left that game's lobby themselves.
+fn steam_catch_up(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
+    let due: Vec<(String, i64, Option<String>)> = state
+        .presence
+        .values()
+        .filter_map(|p| {
+            let game = p.game_id?;
+            (p.ignore_game_id != Some(game)
+                && state.is_checked_in(&p.email)
+                && state.current_membership(&p.email).is_none())
+            .then(|| (p.email.clone(), game, p.game_name.clone()))
+        })
+        .collect();
+    for (email, game, name) in due {
+        super::presence::steam_membership(state, &email, Some(game), name.as_deref(), now, out);
+    }
 }
 
 /// A manual join of B while Steam showed A: if B wasn't launched within the

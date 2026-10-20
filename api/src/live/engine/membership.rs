@@ -190,10 +190,19 @@ pub fn finish_lobby(
     out: &mut Outcome,
 ) {
     let open: Vec<i64> = state.members_of(lobby_id).map(|m| m.id).collect();
+    let game = state.lobbies.get(&lobby_id).and_then(|l| l.game_id);
     for id in open {
-        if let Some(m) = state.members.get_mut(&id) {
-            m.left_at = Some(now);
-            m.left_reason = Some(reason.to_string());
+        let Some(m) = state.members.get_mut(&id) else {
+            continue;
+        };
+        m.left_at = Some(now);
+        m.left_reason = Some(reason.to_string());
+        // Still playing it: don't let Steam recreate the lobby just ended.
+        let email = m.email.clone();
+        if let Some(p) = state.presence.get_mut(&email) {
+            if game.is_some() && p.game_id == game {
+                p.ignore_game_id = game;
+            }
         }
     }
     let played: Vec<Email> = {

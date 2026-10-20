@@ -676,6 +676,68 @@ fn food_ignores_a_game_left_running_but_launching_one_ends_the_meal() {
     assert_eq!(s.lobbies[&l4d].status, LobbyStatus::Grace, "starts early");
 }
 
+#[test]
+fn when_the_meal_ends_steam_puts_you_in_the_game_it_shows() {
+    let mut s = checked_in(&["ana@x.io"]);
+    let l4d = planned(&mut s, L4D, "L4D2", t(19, 45), 90);
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::Prejoin {
+                lobby: LobbyRef::Stored(l4d),
+                team: None,
+                random: false,
+            },
+        ),
+        t(19, 0),
+    )
+    .expect("pre-joined");
+    let id = s.temp_lobby_id();
+    let mut food = schedule_lobby(id, t(19, 0), 45);
+    food.kind = LobbyKind::Food;
+    food.game_id = None;
+    food.food = Some(crate::live::model::Food {
+        name: "Pizza".to_string(),
+        ..Default::default()
+    });
+    s.lobbies.insert(id, food);
+    play(&mut s, "ana@x.io", Some((L4D, "L4D2")), t(19, 31));
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(l4d), "joined early");
+    // Back to dinner by hand while Steam still shows L4D2.
+    apply(
+        &mut s,
+        cmd(gamer("ana@x.io"), Command::Join { lobby: id }),
+        t(19, 35),
+    )
+    .expect("eat");
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(id));
+    // The same game reported again changes nothing while eating...
+    poll(
+        &mut s,
+        vec![steam("ana@x.io", Some((L4D, "L4D2")))],
+        t(19, 40),
+    );
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(id), "still eating");
+    // ...but once the meal ends, Steam's game counts again.
+    tick_at(&mut s, t(19, 46));
+    assert_eq!(lobby_of(&s, "ana@x.io"), Some(l4d), "back into L4D2");
+    assert_eq!(s.lobbies[&l4d].status, LobbyStatus::Grace);
+}
+
+#[test]
+fn an_ended_lobby_is_not_recreated_while_steam_still_shows_its_game() {
+    let mut s = checked_in(&["ana@x.io"]);
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 0));
+    let id = lobby_of(&s, "ana@x.io").expect("lobby");
+    apply(&mut s, cmd(admin(), Command::EndLobby { id }), t(20, 0)).expect("ended");
+    tick_at(&mut s, t(20, 1));
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
+    // A different game later still works.
+    play(&mut s, "ana@x.io", Some((L4D, "L4D2")), t(20, 10));
+    assert!(lobby_of(&s, "ana@x.io").is_some());
+}
+
 fn schedule_lobby(id: i32, start: DateTime<Utc>, minutes: i32) -> crate::live::model::Lobby {
     crate::live::model::Lobby {
         id,
