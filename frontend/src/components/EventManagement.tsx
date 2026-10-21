@@ -571,7 +571,12 @@ const EventManagement = () => {
       <Box {...panelProps("live")}>
         {ready && tab === "live" && token && (
           <Box sx={{ maxWidth: 720 }}>
-            <LiveSettingsPanel eventId={event.id} token={token} />
+            {/* Keyed so another event starts from a fresh fetch and form. */}
+            <LiveSettingsPanel
+              key={event.id}
+              eventId={event.id}
+              token={token}
+            />
           </Box>
         )}
       </Box>

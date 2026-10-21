@@ -1694,6 +1694,64 @@ fn rsvp_no_drops_pre_joins_and_delay_arrival_clears_the_block() {
 }
 
 #[test]
+fn delaying_someone_with_no_attendance_set_only_clears_this_block() {
+    let mut s = checked_in(&["ana@x.io"]);
+    s.people.get_mut("cy@x.io").expect("cy").attendance.clear();
+    apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::DelayArrival {
+                email: "cy@x.io".into(),
+            },
+        ),
+        t(19, 5),
+    )
+    .expect("delayed");
+    let cy = &s.people["cy@x.io"];
+    assert!(!cy.attending_at(&s.event, t(19, 30)));
+    assert!(
+        cy.attending_at(&s.event, t(18, 0) + Duration::hours(7)),
+        "the next block"
+    );
+    assert!(cy.attending_at(&s.event, s.event.time_end - Duration::minutes(1)));
+}
+
+#[test]
+fn moving_a_waiting_lobby_starts_it_at_the_new_time() {
+    let mut s = checked_in(&["ana@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(19, 0), 120);
+    apply(&mut s, Input::Tick, t(19, 2)).expect("tick");
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+    apply(
+        &mut s,
+        cmd(
+            admin(),
+            Command::UpdateLobby {
+                id: drg,
+                edit: LobbyEdit {
+                    game_id: DRG,
+                    game_name: "DRG".into(),
+                    start: t(20, 0),
+                    minutes: 120,
+                },
+            },
+        ),
+        t(19, 2),
+    )
+    .expect("moved");
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Planned);
+    apply(&mut s, Input::Tick, t(19, 6)).expect("tick");
+    assert_eq!(
+        s.lobbies[&drg].status,
+        LobbyStatus::Planned,
+        "not booted at the old deadline"
+    );
+    apply(&mut s, Input::Tick, t(20, 0)).expect("tick");
+    assert_eq!(s.lobbies[&drg].status, LobbyStatus::Waiting);
+}
+
+#[test]
 fn kick_off_early_moves_the_first_lobby() {
     let mut s = state();
     let drg = planned(&mut s, DRG, "DRG", t(19, 0), 120);

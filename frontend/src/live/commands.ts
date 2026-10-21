@@ -6,10 +6,23 @@
  */
 import { ApiError, apiErrorFrom } from "../utils/apiError";
 import type { LiveConnection } from "./connection";
-import { applyEntities, type EntityBatch } from "./store";
+import { applyEntities, type EntityBatch, type LiveState } from "./store";
 
 export interface CommandResult extends EntityBatch {
   seq: number;
+}
+
+/**
+ * Apply a command's entities, unless the stream has already passed them: a
+ * slow response must not overwrite newer state (another player's join that
+ * arrived over SSE meanwhile). The cursor stays put, because the feed rows
+ * up to `result.seq` still have to come from the stream.
+ */
+export function applyCommandResult(
+  state: LiveState,
+  result: CommandResult,
+): LiveState {
+  return result.seq > state.seq ? applyEntities(state, result) : state;
 }
 
 /** A random idempotency key. */
@@ -63,7 +76,7 @@ export async function sendLiveCommand(
       });
       if (!res.ok) throw await apiErrorFrom("Live action failed", res);
       const result = (await res.json()) as CommandResult;
-      connection.store.update((s) => applyEntities(s, result));
+      connection.store.update((s) => applyCommandResult(s, result));
       return result;
     } catch (e) {
       // Only network failures are retried; the server's answer is final.

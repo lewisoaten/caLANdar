@@ -33,6 +33,22 @@ export function inLiveWindow(
   );
 }
 
+/**
+ * Milliseconds until `inLiveWindow` next changes (the window opens or
+ * closes), or null once it has closed for good.
+ */
+export function msUntilLiveWindowChange(
+  timeBegin: string,
+  timeEnd: string,
+  now: number,
+): number | null {
+  const opens = Date.parse(timeBegin) - LIVE_WINDOW_BEFORE_MS;
+  const closes = Date.parse(timeEnd) + LIVE_WINDOW_AFTER_MS;
+  if (now < opens) return opens - now;
+  if (now <= closes) return closes - now + 1;
+  return null;
+}
+
 export interface TransportHandlers {
   onOpen(): void;
   onRow(row: LiveLogEntry): void;

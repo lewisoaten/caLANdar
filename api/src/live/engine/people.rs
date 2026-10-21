@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use rocket::serde::json::json;
 
 use super::{membership, require_admin, Actor, Outcome, PersonalToast, Reject};
-use crate::live::model::{bucket_index, LiveState, Rsvp};
+use crate::live::model::{bucket_count, bucket_index, LiveState, Rsvp};
 
 fn person_email(state: &LiveState, email: &str) -> Result<String, Reject> {
     state
@@ -53,7 +53,9 @@ pub fn delay_arrival(
     };
     if let Some(p) = state.people.get_mut(&email) {
         if p.attendance.is_empty() {
-            p.attendance = vec![1; index + 1];
+            // Unset means every block: keep the later ones.
+            let count = bucket_count(state.event.time_begin, state.event.time_end);
+            p.attendance = vec![1; count.max(index + 1)];
         }
         if let Some(slot) = p.attendance.get_mut(index) {
             *slot = 0;

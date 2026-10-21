@@ -2,9 +2,20 @@
  * React bindings for the Live store: one shared connection per event (or
  * wall-board) for however many components read it.
  */
-import { useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import {
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { UserContext, UserDispatchContext } from "../UserProvider";
-import { LiveConnection, type LiveEndpoint } from "./connection";
+import {
+  inLiveWindow,
+  LiveConnection,
+  msUntilLiveWindowChange,
+  type LiveEndpoint,
+} from "./connection";
 import { LiveStore, type LiveState } from "./store";
 
 interface Entry {
@@ -103,4 +114,45 @@ export function useLive(eventId: number | null) {
   );
   const state = useLiveState(connection);
   return { connection, state };
+}
+
+/** Longest single timer: browsers overflow past 2^31-1 ms (~24.8 days). */
+const MAX_TIMER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether an event is in its live window, re-evaluated when the window
+ * opens or closes, so a page left open before the event starts following
+ * Live when it begins.
+ */
+export function useInLiveWindow(
+  timeBegin: string | null | undefined,
+  timeEnd: string | null | undefined,
+): boolean {
+  const check = () =>
+    timeBegin && timeEnd ? inLiveWindow(timeBegin, timeEnd, Date.now()) : false;
+  const [inside, setInside] = useState(check);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!timeBegin || !timeEnd) return undefined;
+    const sync = () => setInside(inLiveWindow(timeBegin, timeEnd, Date.now()));
+    // Now (the times just arrived or changed), then when the window next
+    // opens or closes.
+    const soon = setTimeout(sync, 0);
+    const wait = msUntilLiveWindowChange(timeBegin, timeEnd, Date.now());
+    const later =
+      wait == null
+        ? null
+        : setTimeout(
+            () => {
+              sync();
+              setTick((n) => n + 1);
+            },
+            Math.min(wait, MAX_TIMER_MS),
+          );
+    return () => {
+      clearTimeout(soon);
+      if (later) clearTimeout(later);
+    };
+  }, [timeBegin, timeEnd, tick]);
+  return timeBegin && timeEnd ? inside : false;
 }

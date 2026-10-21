@@ -345,25 +345,43 @@ pub struct Ballot {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Index of the 6-hour attendance bucket containing `t`, in the order of
-/// `get_day_quarter_buckets(begin, end)`.
-pub fn bucket_index(begin: DateTime<Utc>, end: DateTime<Utc>, t: DateTime<Utc>) -> Option<usize> {
-    let mut index = 0;
+/// The 6-hour attendance buckets of an event, `[start, stop)`, in the order
+/// of `get_day_quarter_buckets(begin, end)`.
+fn buckets(begin: DateTime<Utc>, end: DateTime<Utc>) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+    let mut out = Vec::new();
     let mut day = begin.date_naive();
-    while day.and_hms_opt(6, 0, 0)?.and_utc() < end {
+    while let Some(six) = day.and_hms_opt(6, 0, 0) {
+        if six.and_utc() >= end {
+            break;
+        }
+        let Some(midnight) = day.and_hms_opt(0, 0, 0) else {
+            break;
+        };
         for hour in [6, 12, 18, 24] {
-            let start = day.and_hms_opt(0, 0, 0)?.and_utc() + Duration::hours(hour);
+            let start = midnight.and_utc() + Duration::hours(hour);
             let stop = start + Duration::hours(6);
             if start <= end && stop > begin {
-                if start <= t && t < stop {
-                    return Some(index);
-                }
-                index += 1;
+                out.push((start, stop));
             }
         }
-        day = day.succ_opt()?;
+        let Some(next) = day.succ_opt() else {
+            break;
+        };
+        day = next;
     }
-    None
+    out
+}
+
+/// Index of the 6-hour attendance bucket containing `t`.
+pub fn bucket_index(begin: DateTime<Utc>, end: DateTime<Utc>, t: DateTime<Utc>) -> Option<usize> {
+    buckets(begin, end)
+        .iter()
+        .position(|&(start, stop)| start <= t && t < stop)
+}
+
+/// How many attendance buckets the event has.
+pub fn bucket_count(begin: DateTime<Utc>, end: DateTime<Utc>) -> usize {
+    buckets(begin, end).len()
 }
 
 /// Steam persona states that mean "away" (Away, Snooze).

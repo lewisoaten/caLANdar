@@ -102,11 +102,28 @@ pub fn update_lobby(
 ) -> Result<(), Reject> {
     validate_edit(&edit)?;
     let event_started = state.event.time_begin <= now;
+    let backed = state
+        .prejoins
+        .values()
+        .any(|p| p.lobby_id == id && p.is_active());
     let lobby = lobby_mut(state, id)?;
     let moved = lobby.start != edit.start;
     let resized = lobby.minutes != edit.minutes;
     if event_started && (moved || resized) {
         lobby.freeze_plan();
+    }
+    if moved && matches!(lobby.status, LobbyStatus::Waiting | LobbyStatus::Delayed) {
+        // Its start deadline belongs to the old time: it starts again at the
+        // new one (as a delay vote does). A new time already past starts the
+        // wait over on the next tick.
+        lobby.status = if lobby.source == LobbySource::Proposal || backed {
+            LobbyStatus::Confirmed
+        } else {
+            LobbyStatus::Planned
+        };
+        lobby.grace_until = None;
+        lobby.grace_locked = false;
+        lobby.hold_remaining_s = None;
     }
     lobby.start = edit.start;
     lobby.minutes = edit.minutes;

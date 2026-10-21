@@ -5,6 +5,7 @@ import {
   applySnapshot,
   initialLiveState,
 } from "../live/store";
+import { applyCommandResult } from "../live/commands";
 import type { LiveLogEntry, LiveSnapshot, LobbyView } from "../live/types";
 
 const lobby = (id: string, extra: Partial<LobbyView> = {}): LobbyView => ({
@@ -116,5 +117,20 @@ describe("applyEntities", () => {
     });
     expect(s.lobbies["1"].status).toBe("confirmed");
     expect(s.seq).toBe(base.seq);
+  });
+
+  test("a command response the stream has already passed is ignored", () => {
+    const base = applySnapshot(initialLiveState(1), snapshot, 0);
+    const result = (seq: number) => ({
+      seq,
+      lobbies: [lobby("1", { status: "confirmed" })],
+      deletedLobbies: [],
+      people: [],
+      votes: [],
+    });
+    expect(applyCommandResult(base, result(base.seq))).toBe(base);
+    const ahead = applyCommandResult(base, result(base.seq + 1));
+    expect(ahead.lobbies["1"].status).toBe("confirmed");
+    expect(ahead.seq).toBe(base.seq);
   });
 });

@@ -3,6 +3,7 @@ import {
   HIDDEN_CLOSE_MS,
   LiveConnection,
   inLiveWindow,
+  msUntilLiveWindowChange,
   type LiveTransport,
   type TransportHandlers,
 } from "../live/connection";
@@ -19,6 +20,19 @@ describe("inLiveWindow", () => {
     ["2026-10-21T17:01:00Z", false],
   ])("%s -> %s", (now, expected) => {
     expect(inLiveWindow(begin, end, Date.parse(now))).toBe(expected);
+  });
+
+  test("says when the window next opens or closes", () => {
+    const at = (iso: string) =>
+      msUntilLiveWindowChange(begin, end, Date.parse(iso));
+    const opens = Date.parse("2026-10-19T16:00:00Z");
+    const before = Date.parse("2026-10-19T15:00:00Z");
+    expect(at("2026-10-19T15:00:00Z")).toBe(opens - before);
+    const wait = at("2026-10-21T16:30:00Z") ?? 0;
+    const now = Date.parse("2026-10-21T16:30:00Z");
+    expect(inLiveWindow(begin, end, now + wait - 1)).toBe(true);
+    expect(inLiveWindow(begin, end, now + wait)).toBe(false);
+    expect(at("2026-10-21T18:00:00Z")).toBeNull();
   });
 });
 

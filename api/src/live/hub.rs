@@ -106,26 +106,24 @@ impl LiveHub {
             channel
         };
         // Subscribe before reading the replay so nothing falls in between;
-        // the stream skips live rows it already replayed.
-        let rx = channel.tx.subscribe();
-        let subscription = |replay, reset| Subscription {
+        // the stream skips live rows it already replayed. The guard exists
+        // before anything fallible, so an error still unsubscribes.
+        let mut subscription = Subscription {
             event_id,
-            replay,
-            reset,
-            rx,
+            replay: Vec::new(),
+            reset: false,
+            rx: channel.tx.subscribe(),
             hub: Arc::clone(self),
         };
-
-        if since >= latest {
-            return Ok(subscription(Vec::new(), false));
-        }
+        // Always read the replay: `latest` was read before subscribing, and a
+        // pump may have broadcast a newer row in between.
         let replay = log::since(&self.pool, event_id, since, MAX_REPLAY + 1).await?;
-        let reset = replay.len() > usize::try_from(MAX_REPLAY).unwrap_or(500);
-        Ok(if reset {
-            subscription(Vec::new(), true)
+        if replay.len() > usize::try_from(MAX_REPLAY).unwrap_or(500) {
+            subscription.reset = true;
         } else {
-            subscription(replay, false)
-        })
+            subscription.replay = replay;
+        }
+        Ok(subscription)
     }
 
     fn unsubscribe(&self, event_id: i32) {

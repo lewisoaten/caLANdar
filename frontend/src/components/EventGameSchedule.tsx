@@ -19,8 +19,7 @@ import { GameScheduleEntry } from "../types/game_schedule";
 import GameScheduleDetails, { TimingControls } from "./GameScheduleDetails";
 import { EmptyState, PageHeader, colors, tint, useIsMobile } from "./hl";
 import { useScheduleData } from "./schedule/useScheduleData";
-import { useLive } from "../live/useLive";
-import { inLiveWindow } from "../live/connection";
+import { useInLiveWindow, useLive } from "../live/useLive";
 import ScheduleTimeline from "./schedule/ScheduleTimeline";
 import ScheduleDayCards from "./schedule/ScheduleDayCards";
 import AddToScheduleDialog, {
@@ -98,15 +97,12 @@ export default function EventGameSchedule() {
 
   // One schedule, two views: while the event is live, follow the Live
   // stream and refetch when anything on the schedule changes there.
-  const liveEventId =
-    event &&
-    inLiveWindow(
-      moment(event.timeBegin).toISOString(),
-      moment(event.timeEnd).toISOString(),
-      Date.now(),
-    )
-      ? event.id
-      : null;
+  // Re-checked when the window opens, for a page left open before the event.
+  const inWindow = useInLiveWindow(
+    event ? moment(event.timeBegin).toISOString() : null,
+    event ? moment(event.timeEnd).toISOString() : null,
+  );
+  const liveEventId = event && inWindow ? event.id : null;
   const { state: live } = useLive(liveEventId);
   const liveSeq = React.useRef(0);
   React.useEffect(() => {

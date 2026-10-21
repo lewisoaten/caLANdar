@@ -1248,10 +1248,12 @@ pub async fn places(
     Ok(Json(PlacesResponse { places }))
 }
 
-/// A place photo: redirects to a short-lived Google URL.
-#[get("/live/places/photo?<name>", rank = 1)]
-pub async fn place_photo(name: &str, _user: User) -> Result<rocket::response::Redirect, LiveError> {
-    let uri = crate::live::places::photo_uri(name)
+/// A place photo: redirects to a short-lived Google URL. No login: photos
+/// load as CSS backgrounds, so the signed URL (from a food search) is the
+/// permission.
+#[get("/live/places/photo?<name>&<sig>", rank = 1)]
+pub async fn place_photo(name: &str, sig: &str) -> Result<rocket::response::Redirect, LiveError> {
+    let uri = crate::live::places::photo_uri(name, sig)
         .await
         .map_err(LiveError::NotFound)?;
     Ok(rocket::response::Redirect::to(uri))
