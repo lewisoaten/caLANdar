@@ -8,6 +8,7 @@
 import * as React from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
+import { keyframes } from "@mui/material/styles";
 import { Panel } from "../hl/Panel";
 import { UserAvatar } from "../hl/UserAvatar";
 import { colors, tint } from "../hl/tokens";
@@ -40,6 +41,10 @@ const TV_HEADER = 30;
 const BORDER = 1;
 /** Smallest seat that still reads; tighter panels scale the whole plan instead. */
 const MIN_CELL = 12;
+/** Room under the wall-board's plan for the bar counting down to the next room. */
+const BAR_SPACE = 6;
+
+const fill = keyframes`from { transform: scaleX(0); } to { transform: scaleX(1); }`;
 
 type Group = ReturnType<typeof floorGroups>[number];
 
@@ -167,6 +172,9 @@ function RoomFloor({
                 gridRow: c.row + 1,
                 position: "relative",
                 display: "grid",
+                // One track no wider than the seat, so contents can't widen it.
+                gridTemplateColumns: "minmax(0, 1fr)",
+                minWidth: 0,
                 placeItems: "center",
                 border: group
                   ? `1.5px solid ${group.color}`
@@ -191,6 +199,16 @@ function RoomFloor({
                   size={Math.max(9, Math.round(cell / 4))}
                   color={colors.textDim}
                   weight={500}
+                  sx={{
+                    // Long seat names stay inside the seat.
+                    minWidth: 0,
+                    maxWidth: "100%",
+                    px: "2px",
+                    boxSizing: "border-box",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
                 >
                   {seat.label}
                 </Mono>
@@ -202,11 +220,16 @@ function RoomFloor({
                   sx={{
                     position: "absolute",
                     bottom: "100%",
-                    left: -2,
+                    // Open towards the middle so it stays on the plan.
+                    ...(c.col < GRID_COLS / 2 ? { left: -2 } : { right: -2 }),
+                    maxWidth: (cell + GAP) * (GRID_COLS / 2),
                     backgroundColor: group.color,
                     px: "4px",
                     zIndex: 1,
                     whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    boxSizing: "border-box",
                   }}
                 >
                   {group.label}
@@ -266,7 +289,7 @@ function TvFloor({
     ) as unknown as FloorPlanSeat[],
   ).rows;
   // `size` is the area under the room name, so the header is already out.
-  const { cell, scale } = fitRoom(size.width, size.height, rows);
+  const { cell, scale } = fitRoom(size.width, size.height - BAR_SPACE, rows);
   const extent = roomExtent(cell, rows);
   return (
     <Box
@@ -321,8 +344,9 @@ function TvFloor({
           // Lay out at the scaled size so the plan stays centred in the panel.
           <Box
             sx={{
+              position: "relative",
               width: extent.width * scale,
-              height: extent.height * scale,
+              height: extent.height * scale + BAR_SPACE,
             }}
           >
             <Box
@@ -341,6 +365,32 @@ function TvFloor({
                 groups={groups}
               />
             </Box>
+            {count > 1 && (
+              // Fills up until the next room.
+              <Box
+                data-testid="room-cycle-progress"
+                aria-hidden="true"
+                sx={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 2,
+                  backgroundColor: tint("cyan", 0.12),
+                  overflow: "hidden",
+                }}
+              >
+                <Box
+                  key={turn}
+                  sx={{
+                    height: "100%",
+                    backgroundColor: tint("cyan", 0.6),
+                    transformOrigin: "left",
+                    animation: `${fill} ${ROOM_CYCLE_MS}ms linear forwards`,
+                  }}
+                />
+              </Box>
+            )}
           </Box>
         )}
       </Box>

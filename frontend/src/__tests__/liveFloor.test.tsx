@@ -114,5 +114,26 @@ describe("LiveFloor", () => {
       });
       expect(screen.getByText("Main hall")).toBeTruthy();
     });
+
+    test("shows a bar counting down to the next room, only with two or more", () => {
+      const two = stateWith(
+        [room(1, "Main hall"), room(2, "Lounge")],
+        [seat(1, 1), seat(2, 2)],
+      );
+      const one = stateWith([room(1, "Main hall")], [seat(1, 1)]);
+      // jsdom has no layout: give the panel a size so the plan renders.
+      const size = vi
+        .spyOn(HTMLElement.prototype, "clientWidth", "get")
+        .mockReturnValue(468);
+      const height = vi
+        .spyOn(HTMLElement.prototype, "clientHeight", "get")
+        .mockReturnValue(500);
+      const { rerender } = render(<LiveFloor state={two} tv />);
+      expect(screen.queryByTestId("room-cycle-progress")).not.toBeNull();
+      rerender(<LiveFloor state={one} tv />);
+      expect(screen.queryByTestId("room-cycle-progress")).toBeNull();
+      size.mockRestore();
+      height.mockRestore();
+    });
   });
 });
