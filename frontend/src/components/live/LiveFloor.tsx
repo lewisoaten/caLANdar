@@ -36,6 +36,10 @@ export const ROOM_CYCLE_MS = 15_000;
 const LABEL_SPACE = 14;
 /** Height of the wall-board's room name line, with its gap. */
 const TV_HEADER = 30;
+/** The room grid's border, each side. */
+const BORDER = 1;
+/** Smallest seat that still reads; tighter panels scale the whole plan instead. */
+const MIN_CELL = 12;
 
 type Group = ReturnType<typeof floorGroups>[number];
 
@@ -46,12 +50,41 @@ export function floorRooms(state: LiveState): FloorRoom[] {
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 }
 
+/** Rendered size (px) of a 12-column room of `rows` rows at `cell` px per seat. */
+export function roomExtent(
+  cell: number,
+  rows: number,
+): { width: number; height: number } {
+  const frame = PAD * 2 + BORDER * 2;
+  return {
+    width: GRID_COLS * cell + GAP * (GRID_COLS - 1) + frame,
+    height: LABEL_SPACE + rows * cell + GAP * (rows - 1) + frame,
+  };
+}
+
 /** Largest cell (px) that fits a 12-column room of `rows` rows in `width`×`height`. */
 export function fitCell(width: number, height: number, rows: number): number {
-  const across = (width - PAD * 2 - GAP * (GRID_COLS - 1)) / GRID_COLS;
-  const down =
-    (height - LABEL_SPACE - PAD * 2 - GAP * (rows - 1)) / Math.max(1, rows);
-  return Math.max(12, Math.floor(Math.min(across, down)));
+  const frame = PAD * 2 + BORDER * 2;
+  const across = (width - frame - GAP * (GRID_COLS - 1)) / GRID_COLS;
+  const r = Math.max(1, rows);
+  const down = (height - LABEL_SPACE - frame - GAP * (r - 1)) / r;
+  return Math.max(MIN_CELL, Math.floor(Math.min(across, down)));
+}
+
+/**
+ * How to show a room in a `width`×`height` panel: the fitted cell, and a
+ * scale (at most 1) for a room too big even at the smallest cell, so every
+ * row stays on screen.
+ */
+export function fitRoom(
+  width: number,
+  height: number,
+  rows: number,
+): { cell: number; scale: number } {
+  const cell = fitCell(width, height, rows);
+  const extent = roomExtent(cell, Math.max(1, rows));
+  const scale = Math.min(1, width / extent.width, height / extent.height);
+  return { cell, scale };
 }
 
 function RoomFloor({
@@ -94,7 +127,7 @@ function RoomFloor({
           gap: `${GAP}px`,
           p: `${PAD}px`,
           backgroundColor: GRID_BASE,
-          border: `1px solid ${tint("cyan", 0.12)}`,
+          border: `${BORDER}px solid ${tint("cyan", 0.12)}`,
         }}
       >
         <BackgroundLayers room={plan} />
@@ -232,7 +265,9 @@ function TvFloor({
       (s) => s.roomId === room.id,
     ) as unknown as FloorPlanSeat[],
   ).rows;
-  const cell = fitCell(size.width, size.height - TV_HEADER, rows);
+  // `size` is the area under the room name, so the header is already out.
+  const { cell, scale } = fitRoom(size.width, size.height, rows);
+  const extent = roomExtent(cell, rows);
   return (
     <Box
       sx={{
@@ -283,14 +318,30 @@ function TvFloor({
         }}
       >
         {size.width > 0 && (
-          <RoomFloor
-            key={room.id}
-            state={state}
-            room={room}
-            cell={cell}
-            groupOf={groupOf}
-            groups={groups}
-          />
+          // Lay out at the scaled size so the plan stays centred in the panel.
+          <Box
+            sx={{
+              width: extent.width * scale,
+              height: extent.height * scale,
+            }}
+          >
+            <Box
+              sx={{
+                width: extent.width,
+                transform: scale < 1 ? `scale(${scale})` : undefined,
+                transformOrigin: "top left",
+              }}
+            >
+              <RoomFloor
+                key={room.id}
+                state={state}
+                room={room}
+                cell={cell}
+                groupOf={groupOf}
+                groups={groups}
+              />
+            </Box>
+          </Box>
         )}
       </Box>
     </Box>

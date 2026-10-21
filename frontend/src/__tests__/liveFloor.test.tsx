@@ -6,7 +6,9 @@ import {
   LiveFloor,
   ROOM_CYCLE_MS,
   fitCell,
+  fitRoom,
   floorRooms,
+  roomExtent,
 } from "../components/live/LiveFloor";
 
 const room = (id: number, name: string, extra: Partial<FloorRoom> = {}) =>
@@ -52,6 +54,31 @@ describe("LiveFloor", () => {
     expect(fitCell(468, 2000, 4)).toBe(34);
     // Never collapses to nothing.
     expect(fitCell(0, 0, 4)).toBe(12);
+  });
+
+  test("a fitted room, borders and all, never exceeds its panel", () => {
+    for (const [w, h, rows] of [
+      [320, 10_000, 4],
+      [1000, 200, 4],
+      [468, 2000, 4],
+      [500, 700, 9],
+    ]) {
+      const extent = roomExtent(fitCell(w, h, rows), rows);
+      expect(extent.width).toBeLessThanOrEqual(w);
+      expect(extent.height).toBeLessThanOrEqual(h);
+    }
+    // 40px cells fill 200px exactly: label, padding, borders and gaps included.
+    expect(roomExtent(40, 4).height).toBe(200);
+  });
+
+  test("scales a room too tall even at the smallest seat to fit", () => {
+    expect(fitRoom(468, 2000, 4).scale).toBe(1);
+    const { cell, scale } = fitRoom(468, 500, 50);
+    expect(cell).toBe(12);
+    expect(scale).toBeLessThan(1);
+    const extent = roomExtent(cell, 50);
+    expect(extent.height * scale).toBeLessThanOrEqual(500);
+    expect(extent.width * scale).toBeLessThanOrEqual(468);
   });
 
   test("draws the room's background plan behind the seats", () => {
