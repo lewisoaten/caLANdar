@@ -19,7 +19,9 @@ import {
   pct,
   placementLabel,
   spanLong,
+  packRowLanes,
 } from "./scheduleModel";
+import { isPlayed, isRunning } from "../../types/game_schedule";
 
 /** Pointer travel (px) below which a press counts as a tap. */
 export const TAP_THRESHOLD_PX = 5;
@@ -115,12 +117,29 @@ const variantSx = {
     boxShadow: `0 0 0 2px ${colors.cyan}, 0 0 28px -2px ${tint("cyan", 0.9)}`,
     zIndex: 2,
   },
+  /** Played on Live: history, drawn quietly. */
+  played: {
+    backgroundColor: tint("neutral", 0.12),
+    border: `1px solid ${tint("neutral", 0.35)}`,
+    color: colors.textMuted,
+    "&:hover": { backgroundColor: tint("neutral", 0.2) },
+  },
+  /** Running on Live right now. */
+  live: {
+    fontWeight: 700,
+    backgroundColor: tint("lime", 0.16),
+    border: `1px solid ${colors.lime}`,
+    color: colors.lime,
+    boxShadow: `0 0 16px -6px ${colors.lime}`,
+    "&:hover": { backgroundColor: tint("lime", 0.26) },
+  },
+  /** Overlaps a planned session: allowed, but called out while dragging. */
   clash: {
     fontWeight: 700,
     backgroundColor: tint("pink", 0.3),
     border: `1px solid ${colors.pink}`,
     color: "#ffd1e3",
-    cursor: "not-allowed",
+    cursor: "grabbing",
     boxShadow: `0 0 24px -2px ${tint("pink", 0.8)}`,
     zIndex: 2,
   },
@@ -432,6 +451,8 @@ export function ScheduleTimeline({
                     : s,
                 )
                 .filter((s) => s.day === day.index);
+              const { lanes: laneOf, count: laneCount } =
+                packRowLanes(rowSessions);
               const dg = drag && drag.day === day.index ? drag : null;
               return (
                 <Box
@@ -466,7 +487,8 @@ export function ScheduleTimeline({
                     }
                     sx={{
                       position: "relative",
-                      height: TRACK_HEIGHT,
+                      height:
+                        TRACK_HEIGHT + (laneCount - 1) * (BLOCK_HEIGHT + 4),
                       backgroundColor: tint("neutral", 0.04),
                       cursor: isAdmin ? "copy" : "default",
                     }}
@@ -513,11 +535,15 @@ export function ScheduleTimeline({
                         ? drag.clash
                           ? "clash"
                           : "drag"
-                        : s.pinned
-                          ? "pinned"
-                          : "suggested";
+                        : isPlayed(s.entry)
+                          ? "played"
+                          : isRunning(s.entry)
+                            ? "live"
+                            : s.pinned
+                              ? "pinned"
+                              : "suggested";
                       const name = s.entry.gameName;
-                      const aria = `${name}, ${spanLong(day, s.st, s.dur)}, ${s.pinned ? "pinned" : "suggested"}${
+                      const aria = `${name}, ${spanLong(day, s.st, s.dur)}, ${v === "played" ? "played" : v === "live" ? "live now" : s.pinned ? "pinned" : "suggested"}${
                         rank ? `, number ${rank} most voted` : ""
                       }`;
                       return (
@@ -546,12 +572,13 @@ export function ScheduleTimeline({
                             ...blockBase,
                             ...variantSx[v],
                             position: "absolute",
-                            top: 4,
+                            top:
+                              4 + (laneOf.get(s.key) ?? 0) * (BLOCK_HEIGHT + 4),
                             left: label(s.st),
                             width: `${((s.dur / range.span) * 100).toFixed(3)}%`,
                             cursor:
                               v === "clash"
-                                ? "not-allowed"
+                                ? "grabbing"
                                 : isAdmin
                                   ? isDrag
                                     ? "grabbing"

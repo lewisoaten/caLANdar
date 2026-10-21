@@ -1,0 +1,121 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            egs.id,\n            egs.event_id,\n            COALESCE(egs.game_id, 0) AS \"game_id!\",\n            COALESCE(sg.name, egs.food->>'name', '') AS \"game_name!\",\n            egs.start_time,\n            egs.duration_minutes,\n            egs.is_pinned,\n            egs.created_at,\n            egs.last_modified,\n            egs.kind,\n            egs.status,\n            egs.source,\n            egs.planned_start,\n            egs.planned_minutes,\n            egs.actual_start,\n            egs.actual_end,\n            egs.max_players\n        FROM event_game_schedule egs\n        LEFT JOIN steam_game sg ON egs.game_id = sg.appid\n        WHERE (egs.event_id = $1 OR $2)\n        AND (egs.is_pinned = $3 OR $4)\n        AND egs.status <> 'removed'\n        ORDER BY egs.start_time ASC\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_id",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "game_id!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "game_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "start_time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "duration_minutes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "is_pinned",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "last_modified",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "source",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "planned_start",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "planned_minutes",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 14,
+        "name": "actual_start",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "actual_end",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "max_players",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Bool",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "099c417d05a6a5b92d2eb342cd1a8aa83f25957efe944d83c88fd0fd691cf001"
+}

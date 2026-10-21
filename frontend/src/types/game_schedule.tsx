@@ -11,7 +11,33 @@ export type GameScheduleEntry = {
   isSuggested: boolean;
   createdAt: moment.Moment;
   lastModified: moment.Moment;
+  /** `game` or `food` (food comes from Live proposals). */
+  kind?: "game" | "food";
+  /** Live status (`planned`, `confirmed`, `live`, `done`...). */
+  status?: string;
+  /** Where it came from: `plan`, `suggestion`, `proposal`, `steam`... */
+  source?: string;
+  plannedStart?: moment.Moment | null;
+  plannedMinutes?: number | null;
+  actualStart?: moment.Moment | null;
+  actualEnd?: moment.Moment | null;
+  maxPlayers?: number | null;
 };
+
+/** Played (or playing) entries: history, edited with care. */
+export const isPlayed = (e: Pick<GameScheduleEntry, "status">) =>
+  e.status === "done";
+
+/** Running on Live right now. */
+export const isRunning = (e: Pick<GameScheduleEntry, "status">) =>
+  e.status === "live" || e.status === "grace" || e.status === "empty";
+
+/**
+ * Created by Live (Steam, proposals, splits, votes) rather than planned:
+ * these may overlap anything, because reality has parallel lobbies.
+ */
+export const isFromLive = (e: Pick<GameScheduleEntry, "source">) =>
+  e.source != null && e.source !== "plan" && e.source !== "suggestion";
 
 export const defaultGameScheduleEntry: GameScheduleEntry = {
   id: 0,

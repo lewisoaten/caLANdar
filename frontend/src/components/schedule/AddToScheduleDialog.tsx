@@ -383,7 +383,8 @@ export function AddToScheduleDialog({
     timeBegin,
     timeEnd,
   );
-  const canConfirm = !!picked && !clash && !outsideEvent && !saving;
+  // A clash is a warning: overlapping sessions go into lanes.
+  const canConfirm = !!picked && !outsideEvent && !saving;
 
   const pick = (appid: number, name: string, isNew: boolean) => {
     setPicked({ appid, name, isNew });
@@ -834,8 +835,8 @@ export function AddToScheduleDialog({
             </ScheduleNote>
           ) : clash ? (
             <ScheduleNote tone="pink" icon={<BlockSharp />}>
-              Clashes with {clash.entry.gameName} ({fmtClock(clash.st)}–
-              {fmtClock(clash.st + clash.dur)}). Pick another time.
+              Overlaps {clash.entry.gameName} ({fmtClock(clash.st)}–
+              {fmtClock(clash.st + clash.dur)}). It will run alongside.
             </ScheduleNote>
           ) : null}
           <Box

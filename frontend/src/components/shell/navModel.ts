@@ -9,6 +9,7 @@ export type ShellSection =
   | "verify"
   | "events"
   | "lobby"
+  | "live"
   | "games"
   | "seatmap"
   | "schedule"
@@ -17,6 +18,7 @@ export type ShellSection =
   | "adminEvent"
   | "gamers"
   | "audit"
+  | "wallboard"
   | "unknown";
 
 export interface ShellRoute {
@@ -27,9 +29,10 @@ export interface ShellRoute {
   rooms?: boolean;
 }
 
-/** The four per-event pages (they get the event sub-nav and live ticker). */
+/** The per-event pages (they get the event sub-nav and live ticker). */
 export const EVENT_SECTIONS = [
   "lobby",
+  "live",
   "games",
   "seatmap",
   "schedule",
@@ -46,7 +49,10 @@ export function parseRoute(pathname: string): ShellRoute {
   if (path === "/verify_email" || path.startsWith("/verify_email/"))
     return { section: "verify" };
   if (path === "/events") return { section: "events" };
-  const ev = /^\/events\/([^/]+)(?:\/(games|seat-map|schedule))?$/.exec(path);
+  if (/^\/live\/[^/]+$/.test(path)) return { section: "wallboard" };
+  const ev = /^\/events\/([^/]+)(?:\/(games|seat-map|schedule|live))?$/.exec(
+    path,
+  );
   if (ev) {
     const sub = ev[2];
     const section: EventSection =
@@ -56,7 +62,9 @@ export function parseRoute(pathname: string): ShellRoute {
           ? "seatmap"
           : sub === "schedule"
             ? "schedule"
-            : "lobby";
+            : sub === "live"
+              ? "live"
+              : "lobby";
     return { section, eventId: ev[1] };
   }
   if (path === "/account") return { section: "account" };
@@ -73,15 +81,16 @@ export function parseRoute(pathname: string): ShellRoute {
   return { section: "unknown" };
 }
 
-/** Sections rendered without the app chrome (full-screen auth pages). */
+/** Sections rendered without the app chrome (auth pages, the wall-board). */
 export const isBareSection = (s: ShellSection) =>
-  s === "signin" || s === "verify";
+  s === "signin" || s === "verify" || s === "wallboard";
 
 const LABELS: Record<ShellSection, string> = {
   signin: "Sign in",
   verify: "Verify",
   events: "Events",
   lobby: "Lobby",
+  live: "Live",
   games: "Games",
   seatmap: "Seat map",
   schedule: "Schedule",
@@ -90,6 +99,7 @@ const LABELS: Record<ShellSection, string> = {
   adminEvent: "Manage events",
   gamers: "Gamers",
   audit: "Audit log",
+  wallboard: "Wall-board",
   unknown: "",
 };
 
@@ -156,6 +166,13 @@ export interface NavItem {
 
 export const eventNavItems = (eventId: string | number): NavItem[] => [
   { key: "lobby", label: "Lobby", short: "Lobby", to: `/events/${eventId}` },
+  {
+    key: "live",
+    label: "Live",
+    short: "Live",
+    to: `/events/${eventId}/live`,
+    requiresRsvp: true,
+  },
   {
     key: "games",
     label: "Games",

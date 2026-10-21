@@ -48,6 +48,9 @@ pub struct Game {
     pub voter_ids: Vec<String>,
     /// Number of attending (yes/maybe) guests whose Steam library contains the game
     pub owner_count: usize,
+    /// How long a session of this game lasts (its learned typical length,
+    /// DESIGN.md §5.6); `None` uses the default.
+    pub duration_minutes: Option<i32>,
 }
 
 /// Represents a voter and their availability
@@ -85,6 +88,9 @@ pub struct SchedulerInput {
     pub default_game_duration: i32,
     /// Zone whose wall clock defines the night (see [`NIGHT_START_HOUR`]).
     pub tz: Tz,
+    /// Plan only sessions starting at or after this (Live re-plans from
+    /// what's left of the event; nothing is suggested in the past).
+    pub plan_from: Option<DateTime<Utc>>,
 }
 
 /// A suggested game schedule
@@ -111,8 +117,6 @@ pub struct SchedulerOutput {
 /// sessions included) the start time where the most of its voters are around.
 pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
     let mut suggested_schedules = Vec::new();
-    let duration = Duration::minutes(i64::from(input.default_game_duration));
-
     if input.default_game_duration <= 0 || input.event_end <= input.event_start {
         return SchedulerOutput {
             suggested_schedules,
@@ -145,7 +149,10 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
         .collect();
     sorted_games.sort_by_key(|game| std::cmp::Reverse(game.votes));
 
-    let candidates = build_start_times(input.event_start, input.event_end, input.tz);
+    let mut candidates = build_start_times(input.event_start, input.event_end, input.tz);
+    if let Some(from) = input.plan_from {
+        candidates.retain(|&start| start >= from);
+    }
 
     for _round in 0..MAX_SESSIONS_PER_GAME {
         let mut placed_any = false;
@@ -155,6 +162,11 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
                 continue;
             }
 
+            let minutes = game
+                .duration_minutes
+                .filter(|m| *m > 0)
+                .unwrap_or(input.default_game_duration);
+            let duration = Duration::minutes(i64::from(minutes));
             let mut best: Option<(DateTime<Utc>, i32)> = None;
 
             for &start in &candidates {
@@ -171,7 +183,7 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
                     &game.voter_ids,
                     input.event_start,
                     start,
-                    input.default_game_duration,
+                    minutes,
                 );
 
                 // Strictly greater: the earliest best slot wins ties
@@ -190,7 +202,7 @@ pub fn schedule_games(input: &SchedulerInput) -> SchedulerOutput {
                         game_id: game.id,
                         game_name: game.name.clone(),
                         start_time,
-                        duration_minutes: input.default_game_duration,
+                        duration_minutes: minutes,
                         availability_score: score,
                     });
                 }
@@ -410,6 +422,7 @@ mod tests {
             votes,
             voter_ids: voted_by.iter().map(ToString::to_string).collect(),
             owner_count,
+            duration_minutes: None,
         }
     }
 
@@ -431,6 +444,7 @@ mod tests {
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Game B: Only Gamer 1 wants it (votes: 1)
@@ -440,6 +454,7 @@ mod tests {
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Gamer 1: Available both days (Day 1: 10am-10pm, Day 2: 10am-10pm)
@@ -475,6 +490,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -527,6 +543,7 @@ mod tests {
             votes: 3,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         let game_b = Game {
@@ -535,6 +552,7 @@ mod tests {
             votes: 2,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         let game_c = Game {
@@ -543,6 +561,7 @@ mod tests {
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Gamer available 24/7 across the overnight period
@@ -567,6 +586,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -644,6 +664,7 @@ mod tests {
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Game with highest votes (3 votes) - SHOULD be scheduled
@@ -657,6 +678,7 @@ mod tests {
                 "gamer3".to_string(),
             ],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Game with medium votes (2 votes) - SHOULD be scheduled
@@ -666,6 +688,7 @@ mod tests {
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // All gamers available the entire time
@@ -697,6 +720,7 @@ mod tests {
             pinned_slots: vec![],
             default_game_duration: 120, // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -767,6 +791,7 @@ mod tests {
             votes: 2,
             voter_ids: vec!["gamer1".to_string(), "gamer2".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Gamers available the entire time
@@ -799,6 +824,7 @@ mod tests {
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 10am-11am
             default_game_duration: 120,      // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -860,6 +886,7 @@ mod tests {
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         let game_3 = Game {
@@ -868,6 +895,7 @@ mod tests {
             votes: 1,
             voter_ids: vec!["gamer1".to_string()],
             owner_count: 2,
+            duration_minutes: None,
         };
 
         // Gamer available 24/7
@@ -898,6 +926,7 @@ mod tests {
             pinned_slots: vec![pinned_slot], // Pinned slot blocks 1am-4am
             default_game_duration: 120,      // 2 hours per game
             tz: chrono_tz::UTC,
+            plan_from: None,
         };
 
         let output = schedule_games(&input);
@@ -987,7 +1016,62 @@ mod tests {
             pinned_slots,
             default_game_duration: 120,
             tz: chrono_tz::UTC,
+            plan_from: None,
         }
+    }
+
+    #[test]
+    fn test_uses_each_games_typical_length() {
+        // Learned lengths (DESIGN.md §5.6): Factorio needs 4h, Golf 30m.
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 24, 22, 0, 0).unwrap();
+        let mut long = game(1, 5, &["a", "b"], 2);
+        long.duration_minutes = Some(240);
+        let mut short = game(2, 3, &["a", "b"], 2);
+        short.duration_minutes = Some(30);
+        let output = schedule_games(&input_for(
+            vec![long, short],
+            all_day_voters(&["a", "b"]),
+            start,
+            end,
+            vec![],
+        ));
+        let length = |id| {
+            output
+                .suggested_schedules
+                .iter()
+                .find(|s| s.game_id == id)
+                .map(|s| s.duration_minutes)
+        };
+        assert_eq!(length(1), Some(240));
+        assert_eq!(length(2), Some(30));
+        assert_buffered(&output.suggested_schedules);
+    }
+
+    #[test]
+    fn test_plans_only_from_plan_from() {
+        // Live re-plans from what's left: no suggestion starts in the past,
+        // and the first one is on the next :00/:30 slot.
+        let start = Utc.with_ymd_and_hms(2024, 11, 24, 10, 0, 0).unwrap();
+        let end = Utc.with_ymd_and_hms(2024, 11, 24, 22, 0, 0).unwrap();
+        let mut input = input_for(
+            vec![game(1, 5, &["a", "b"], 2), game(2, 3, &["a", "b"], 2)],
+            all_day_voters(&["a", "b"]),
+            start,
+            end,
+            vec![],
+        );
+        input.plan_from = Some(Utc.with_ymd_and_hms(2024, 11, 24, 14, 10, 0).unwrap());
+        let output = schedule_games(&input);
+        assert_eq!(output.suggested_schedules.len(), 2);
+        assert_eq!(
+            output.suggested_schedules[0].start_time,
+            Utc.with_ymd_and_hms(2024, 11, 24, 14, 30, 0).unwrap()
+        );
+        assert!(output
+            .suggested_schedules
+            .iter()
+            .all(|s| s.start_time >= input.plan_from.expect("set above")));
     }
 
     #[test]

@@ -22,13 +22,16 @@ use rocket_okapi::{
     swagger_ui::{make_swagger_ui, SwaggerUIConfig},
 };
 use rusty_paseto::prelude::*;
-use sqlx::PgPool;
+use sqlx::{postgres::PgPoolOptions, PgPool};
+use std::sync::Arc;
 
 #[macro_use]
 mod error;
 
 mod auth;
 mod controllers;
+mod dev_seed;
+mod live;
 mod repositories;
 mod routes;
 mod scheduler;
@@ -215,6 +218,7 @@ fn load_secrets_and_config(
 }
 
 // Build the Rocket instance with all configuration
+#[allow(clippy::too_many_lines)]
 fn build_rocket(
     pool: PgPool,
     paseto_symmetric_key: PasetoSymmetricKey<V4, Local>,
@@ -224,18 +228,57 @@ fn build_rocket(
 ) -> rocket::Rocket<rocket::Build> {
     log::info!("Building our rocket...");
     #[allow(clippy::no_effect_underscore_binding)]
+    let hub = live::hub::LiveHub::new(pool.clone());
+    live::ticker::spawn(hub.clone(), pool.clone(), steam_api_key.clone());
     let rocket = rocket::build()
         .attach(CORS)
+        .manage::<Arc<live::hub::LiveHub>>(hub)
+        .manage::<live::LiveConfig>(live::LiveConfig::from_env())
         .manage::<PgPool>(pool)
         .manage::<PasetoSymmetricKey<V4, Local>>(paseto_symmetric_key)
         .manage::<Resend>(email_sender)
         .manage::<String>(steam_api_key)
         .manage::<Tera>(tera)
         .mount("/", routes![all_options])
+        // The SSE stream has no OpenAPI responder, so it is mounted apart.
+        .mount(
+            "/api",
+            routes![live::stream::stream, routes::live::place_photo],
+        )
         .mount(
             "/api",
             openapi_get_routes![
                 healthz,
+                routes::live::stream_token,
+                routes::live::snapshot,
+                routes::live::post,
+                routes::live::checkin,
+                routes::live::settings,
+                routes::live::get_settings,
+                routes::live::tick,
+                routes::live::presence,
+                routes::live::prejoin,
+                routes::live::unprejoin,
+                routes::live::end_lobby,
+                routes::live::lobby_defaults,
+                routes::live::dev_presence,
+                routes::live::internal_tick,
+                routes::live::propose,
+                routes::live::remove_proposal,
+                routes::live::close_lobby,
+                routes::live::more_time,
+                routes::live::open_vote,
+                routes::live::ballot,
+                routes::live::add_option,
+                routes::live::resolve_vote,
+                routes::live::person_action,
+                routes::live::get_lobby_defaults,
+                routes::live::search_games,
+                routes::live::wallboard_snapshot,
+                routes::live::wallboard_stream_token,
+                routes::live::push_key,
+                routes::live::push_subscribe,
+                routes::live::places,
                 routes::activity_ticker::get_activity_ticker,
                 routes::auth::login,
                 routes::auth::verify_email,
@@ -348,6 +391,110 @@ async fn run_steam_refresh_job() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+/// Connect to Postgres with explicit pool limits, so a burst of live
+/// commands can't starve the pool (DESIGN.md §3.4).
+async fn connect_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
+    PgPoolOptions::new()
+        .max_connections(10)
+        .acquire_timeout(std::time::Duration::from_secs(5))
+        .connect(database_url)
+        .await
+}
+
+/// Largest JSON body the API accepts (an event with its cover image).
+const JSON_LIMIT: rocket::data::ByteUnit = rocket::data::ByteUnit::Mebibyte(8);
+
+/// Rocket's config from `PORT`/`BIND_ADDRESS` (Cloud Run sets `PORT`).
+fn rocket_config() -> Result<rocket::Config, Box<dyn std::error::Error>> {
+    let mut config = rocket::Config::default();
+
+    // Get port from environment variable (Cloud Run uses PORT)
+    if let Ok(port_str) = std::env::var("PORT") {
+        config.port = port_str
+            .parse()
+            .map_err(|_| "PORT environment variable must be a valid number")?;
+        log::info!("Using PORT from environment: {}", config.port);
+    } else {
+        config.port = 8080;
+        log::info!("Using default PORT: 8080");
+    }
+
+    // Get bind address from environment variable (default: 0.0.0.0)
+    let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
+    config.address = bind_address
+        .parse()
+        .map_err(|_| "BIND_ADDRESS must be a valid IP address")?;
+    log::info!("Using BIND_ADDRESS: {}", config.address);
+
+    // Event cover images travel as base64 inside the event's JSON; Rocket's
+    // 1 MiB default turned any photo over ~750 KB into a 413.
+    config.limits = rocket::data::Limits::default().limit("json", JSON_LIMIT);
+    Ok(config)
+}
+
+/// The paseto key from `PASETO_SECRET_KEY`.
+fn paseto_key() -> Result<PasetoSymmetricKey<V4, Local>, Box<dyn std::error::Error>> {
+    let paseto_secret_key = std::env::var("PASETO_SECRET_KEY")
+        .map_err(|_| "PASETO_SECRET_KEY environment variable must be set")?;
+    Ok(PasetoSymmetricKey::<V4, Local>::from(
+        Key::<32>::try_from(paseto_secret_key.as_bytes())
+            .map_err(|_| "PASETO_SECRET_KEY must be exactly 32 bytes")?,
+    ))
+}
+
+/// The dedicated stream service (`calandar-api serve-live`, DESIGN.md §3.8):
+/// only the SSE stream and the health check. Migrations are the API's job.
+async fn serve_live() -> Result<(), Box<dyn std::error::Error>> {
+    let database_url = std::env::var("DATABASE_URL")
+        .map_err(|_| "DATABASE_URL environment variable must be set")?;
+    let key = paseto_key()?;
+    let config = rocket_config()?;
+    let pool = connect_pool(&database_url).await?;
+    let hub = live::hub::LiveHub::new(pool.clone());
+    live::ticker::spawn(
+        hub.clone(),
+        pool.clone(),
+        std::env::var("STEAM_API_KEY").unwrap_or_default(),
+    );
+    let _rocket = rocket::build()
+        .attach(CORS)
+        .manage::<Arc<live::hub::LiveHub>>(hub)
+        .manage::<PgPool>(pool)
+        .manage::<PasetoSymmetricKey<V4, Local>>(key)
+        .mount("/", routes![all_options])
+        .mount("/api", routes![healthz, live::stream::stream])
+        .configure(config)
+        .launch()
+        .await?;
+    Ok(())
+}
+
+/// Print an API token for an email, for local testing without sending the
+/// sign-in email (`calandar-api dev-token you@example.com`). Store the
+/// output in the browser with the snippet it prints.
+fn dev_token(email: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let email = util::normalise_email(email);
+    let expiration =
+        ExpirationClaim::try_from((chrono::Utc::now() + chrono::Duration::days(7)).to_rfc3339())?;
+    let token = PasetoBuilder::<V4, Local>::default()
+        .set_claim(expiration)
+        .set_claim(IssuerClaim::from("calandar.org"))
+        .set_claim(TokenIdentifierClaim::from("api"))
+        .set_claim(SubjectClaim::from(email.as_str()))
+        .build(&paseto_key()?)?;
+    let context = rocket::serde::json::json!({
+        "email": email,
+        "token": token,
+        "loggedIn": true,
+        "isAdmin": auth::is_admin(&email),
+    });
+    println!("{token}");
+    eprintln!(
+        "\nIn the browser console on the frontend origin:\n  localStorage.setItem('user_context', '{context}'); location.reload();"
+    );
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
@@ -359,8 +506,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenvy::dotenv().ok();
 
     // The Cloud Run Job runs this same binary as `calandar-api refresh-steam-games`.
-    if std::env::args().nth(1).as_deref() == Some("refresh-steam-games") {
-        return run_steam_refresh_job().await;
+    match std::env::args().nth(1).as_deref() {
+        Some("refresh-steam-games") => return run_steam_refresh_job().await,
+        // The dedicated stream service runs this same binary too.
+        Some("serve-live") => return serve_live().await,
+        Some("dev-seed-live") => {
+            let database_url = std::env::var("DATABASE_URL")
+                .map_err(|_| "DATABASE_URL environment variable must be set")?;
+            let pool = connect_pool(&database_url).await?;
+            sqlx::migrate!().run(&pool).await?;
+            return dev_seed::run(&pool).await;
+        }
+        Some("dev-vapid") => {
+            // Prints a VAPID key pair for Web Push (VAPID_PRIVATE_KEY).
+            let vapid = live::push::Vapid::generate();
+            println!("VAPID_PRIVATE_KEY={}", vapid.private_base64());
+            eprintln!("public key: {}", vapid.public_base64());
+            return Ok(());
+        }
+        Some("dev-token") => {
+            let email = std::env::args()
+                .nth(2)
+                .ok_or("usage: calandar-api dev-token <email>")?;
+            return dev_token(&email);
+        }
+        _ => {}
     }
 
     // Get database URL from environment
@@ -370,7 +540,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Connecting to database...");
 
     // Create database pool
-    let pool = PgPool::connect(&database_url).await?;
+    let pool = connect_pool(&database_url).await?;
 
     log::info!("Database connected successfully");
 
@@ -398,25 +568,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         load_secrets_and_config(paseto_secret_key, resend_api_key, steam_api_key)?;
 
     // Configure Rocket
-    let mut config = rocket::Config::default();
-
-    // Get port from environment variable (Cloud Run uses PORT)
-    if let Ok(port_str) = std::env::var("PORT") {
-        config.port = port_str
-            .parse()
-            .map_err(|_| "PORT environment variable must be a valid number")?;
-        log::info!("Using PORT from environment: {}", config.port);
-    } else {
-        config.port = 8080;
-        log::info!("Using default PORT: 8080");
-    }
-
-    // Get bind address from environment variable (default: 0.0.0.0)
-    let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0".to_string());
-    config.address = bind_address
-        .parse()
-        .map_err(|_| "BIND_ADDRESS must be a valid IP address")?;
-    log::info!("Using BIND_ADDRESS: {}", config.address);
+    let config = rocket_config()?;
 
     // Store values before moving config
     let address = config.address;

@@ -267,7 +267,7 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     );
   });
 
-  it("refuses a move that clashes with another pinned session", async () => {
+  it("warns about, but allows, a move that overlaps another pinned session", async () => {
     const user = userEvent.setup();
     renderPage(true);
     const l4d = await block(/^Left 4 Dead 2, Friday 21:30/);
@@ -280,10 +280,15 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
     const moved = await block(/^Left 4 Dead 2, Friday 21:00/);
     moved.focus();
     await user.keyboard("{ArrowLeft}");
+    // Overlaps run alongside in lanes (Live has parallel lobbies).
     expect(
-      await screen.findByText(/Clashes with Counter-Strike 2 \(19:00–21:00\)/),
+      await screen.findByText(
+        /Overlaps Counter-Strike 2 \(19:00–21:00\)\. Both will run\./,
+      ),
     ).toBeInTheDocument();
-    expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(1);
+    await waitFor(() =>
+      expect(calls.filter((c) => c.method === "PATCH")).toHaveLength(2),
+    );
   });
 
   it("pins a suggested session when it is moved", async () => {
@@ -554,7 +559,7 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
       expect(screen.getAllByText(/now runs/)).toHaveLength(1);
     });
 
-    it("refuses a clash once and reverts to the saved time", async () => {
+    it("warns once about an overlap and still saves", async () => {
       renderPage(true);
       const dialog = await openDetails(/^Counter-Strike 2, Friday 19:00/);
       vi.useFakeTimers();
@@ -568,11 +573,11 @@ describe("EventGameSchedule", { timeout: 20000 }, () => {
       vi.useRealTimers();
       expect(
         await screen.findAllByText(
-          /Clashes with Left 4 Dead 2 \(21:30–22:30\)\. Not moved\./,
+          /Overlaps Left 4 Dead 2 \(21:30–22:30\)\. Both will run\./,
         ),
       ).toHaveLength(1);
-      expect(patches()).toHaveLength(0);
-      expect(output(dialog, "End")).toHaveTextContent(/^21:00$/);
+      await waitFor(() => expect(patches()).toHaveLength(1));
+      expect(output(dialog, "End")).toHaveTextContent(/^22:00$/);
     });
 
     it("sends nothing when the steps cancel out", async () => {

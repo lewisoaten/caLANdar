@@ -1,0 +1,11 @@
+{
+  "name": "calandar-live-e2e",
+  "private": true,
+  "description": "End-to-end check of caLANdar Live against a local API (:8080) and vite (:3000). See ../TESTING.md.",
+  "scripts": {
+    "test": "node final.js"
+  },
+  "dependencies": {
+    "playwright-core": "^1.64.1"
+  }
+}

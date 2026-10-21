@@ -8,7 +8,12 @@
  * is free of React so it can be unit tested directly.
  */
 import moment from "moment";
-import { GameScheduleEntry } from "../../types/game_schedule";
+import {
+  GameScheduleEntry,
+  isFromLive,
+  isPlayed,
+  isRunning,
+} from "../../types/game_schedule";
 import { Gamer } from "../../types/game_suggestions";
 import { InvitationLiteData, RSVP } from "../../types/invitations";
 import { getAttendanceBuckets } from "../../utils/attendanceBuckets";
@@ -249,6 +254,28 @@ export const dayIndexOf = (t: moment.MomentInput, days: LanDay[]): number => {
   return Math.max(0, Math.min(days.length - 1, i));
 };
 
+/**
+ * Greedy lanes for one row's sessions: each goes in the first lane that is
+ * free at its start, so overlapping sessions sit one above the other.
+ * Returns session key -> lane index, and the number of lanes.
+ */
+export const packRowLanes = (
+  rowSessions: Pick<Session, "key" | "st" | "dur">[],
+): { lanes: Map<string, number>; count: number } => {
+  const ends: number[] = [];
+  const lanes = new Map<string, number>();
+  for (const s of [...rowSessions].sort((a, b) => a.st - b.st)) {
+    let lane = ends.findIndex((end) => end <= s.st + 1e-9);
+    if (lane < 0) {
+      lane = ends.length;
+      ends.push(0);
+    }
+    ends[lane] = s.st + s.dur;
+    lanes.set(s.key, lane);
+  }
+  return { lanes, count: Math.max(1, ends.length) };
+};
+
 /** Schedule entries placed on the timeline grid (see `dedupeSchedule`). */
 export const toSessions = (
   entries: GameScheduleEntry[],
@@ -359,8 +386,11 @@ export const placementSpan = (
 };
 
 /**
- * The pinned session a placement would overlap, if any. Suggested sessions
- * never block: the backend re-plans them around pinned ones.
+ * The pinned planning session a placement would overlap, if any. This is a
+ * warning, not a block: reality has parallel lobbies (two lobbies side by
+ * side after a split), so the timeline packs overlaps into lanes. Suggested
+ * sessions never count (the backend re-plans them around pinned ones), and
+ * neither do rows created by Live or sessions already played or running.
  */
 export const findClash = (
   sessions: Session[],
@@ -374,6 +404,8 @@ export const findClash = (
   const [s, e] = placementSpan(days, day, st, dur);
   return sessions.find((o) => {
     if (!o.pinned || o.key === ignoreKey) return false;
+    if (isFromLive(o.entry) || isPlayed(o.entry) || isRunning(o.entry))
+      return false;
     const os = moment(o.entry.startTime).valueOf();
     const oe = os + o.entry.durationMinutes * 60 * 1000;
     return os < e && s < oe;

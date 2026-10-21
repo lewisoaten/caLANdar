@@ -13,6 +13,7 @@ pub mod game;
 pub mod game_schedule;
 pub mod game_suggestion;
 pub mod gamer;
+pub mod live;
 pub mod profile;
 pub mod room;
 pub mod room_layout;

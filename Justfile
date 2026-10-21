@@ -1,8 +1,13 @@
 # Load environment variables from .env file if it exists (for local development)
 set dotenv-load := true
 
+# Local ports: override with e.g. `PORT=55555 DB_PORT=55432 just dev`.
+# DB_PORT is exported so docker-compose publishes the database on it.
+API_PORT := env_var_or_default("PORT", "8080")
+export DB_PORT := env_var_or_default("DB_PORT", "5432")
+
 # Local development database URL
-LOCAL_DB_URL := "postgres://postgres:password@localhost:5432/calandar"
+LOCAL_DB_URL := "postgres://postgres:password@localhost:" + DB_PORT + "/calandar"
 
 default:
   just --list
@@ -27,9 +32,14 @@ dev-api:
     done
 
     export DATABASE_URL="{{LOCAL_DB_URL}}"
+    export PORT="{{API_PORT}}"
     export PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}"
+    # Without a real Resend key, log emails (and sign-in links) instead of sending.
+    if [[ -z "${RESEND_API_KEY:-}" ]]; then export EMAIL_TO_LOG="${EMAIL_TO_LOG:-1}"; fi
     export RESEND_API_KEY="${RESEND_API_KEY:-re_test_key}"
     export STEAM_API_KEY="${STEAM_API_KEY:-test_steam_key}"
+    # caLANdar Live: local-only simulators and the seed (never set in prod).
+    export LIVE_DEV_TOOLS="${LIVE_DEV_TOOLS:-1}"
 
     echo "Running migrations..."
     cd api && cargo sqlx migrate run --database-url "${DATABASE_URL}"
@@ -37,8 +47,16 @@ dev-api:
     echo "Starting API with cargo watch..."
     cargo watch --quiet --clear --exec 'run'
 
+# caLANdar Live: seed a local event that is running now (see docs/live-event/TESTING.md)
+live-seed:
+	cd api && DATABASE_URL="{{LOCAL_DB_URL}}" LIVE_DEV_TOOLS=1 cargo run -q -- dev-seed-live
+
+# caLANdar Live: print an API token (and a localStorage snippet) for an email
+live-token email:
+	cd api && PASETO_SECRET_KEY="${PASETO_SECRET_KEY:-wubbalubbadubdubwubbalubbadubdub}" cargo run -q -- dev-token {{email}}
+
 dev-frontend:
-    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:8080 npm start
+    cd frontend && npm install && REACT_APP_API_PROXY=http://localhost:{{API_PORT}} npm start
 
 dev-storybook:
 	cd frontend && npm install && npm run storybook
@@ -304,6 +322,59 @@ cloudrun-deploy image_url:
 		--role roles/run.developer \
 		|| echo "WARNING: could not grant ${SERVICE_ACCOUNT} permission to run ${REFRESH_JOB_NAME}"
 
+	# caLANdar Live secrets, created on first deploy (best effort: the deployer
+	# may lack Secret Manager permissions):
+	# - LIVE_TICK_SECRET authorises Cloud Scheduler's backstop tick (§3.6);
+	# - VAPID_PRIVATE_KEY signs Web Push (§8), on both services, since the
+	#   stream instance's ticks send pushes too;
+	# - GOOGLE_PLACES_API_KEY (optional, add it by hand) turns on food search.
+	ensure_secret() {
+		if ! gcloud secrets describe "$1" --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
+			head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' | gcloud secrets create "$1" \
+				--project "${GCP_PROJECT_ID}" --data-file=- >/dev/null \
+				|| echo "WARNING: could not create $1"
+		fi
+	}
+	has_secret() { gcloud secrets describe "$1" --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; }
+	ensure_secret LIVE_TICK_SECRET
+	ensure_secret VAPID_PRIVATE_KEY
+	LIVE_SECRETS=""
+	PUSH_SECRET=""
+	if has_secret LIVE_TICK_SECRET; then LIVE_SECRETS="${LIVE_SECRETS},LIVE_TICK_SECRET=LIVE_TICK_SECRET:latest"; fi
+	if has_secret VAPID_PRIVATE_KEY; then PUSH_SECRET=",VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest"; fi
+	if has_secret GOOGLE_PLACES_API_KEY; then LIVE_SECRETS="${LIVE_SECRETS},GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest"; fi
+
+	# caLANdar Live streams are served by a dedicated service from the same
+	# image (docs/live-event/DESIGN.md §3.8): long request timeout for SSE,
+	# high concurrency (an open stream costs a task, not a thread), scale to
+	# zero when nobody is watching, and at most two instances so there is
+	# effectively one stream instance doing the live ticks. The API service
+	# below keeps its 60s timeout. Streams hold no pooled connection; each
+	# instance has one LISTEN connection (session pooler, port 5432).
+	LIVE_SERVICE_NAME="${SERVICE_NAME}-live"
+	gcloud run deploy "${LIVE_SERVICE_NAME}" \
+		--image "${IMAGE_URL}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--platform managed \
+		--allow-unauthenticated \
+		--port 8080 \
+		--command /app/calandar-api \
+		--args serve-live \
+		--set-env-vars "RUST_LOG=info" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${PUSH_SECRET}" \
+		--min-instances 0 \
+		--max-instances 2 \
+		--concurrency 1000 \
+		--memory 512Mi \
+		--cpu 1 \
+		--timeout 3600
+	LIVE_STREAM_ORIGIN=$(gcloud run services describe "${LIVE_SERVICE_NAME}" \
+		--region "${GCP_REGION}" \
+		--project "${GCP_PROJECT_ID}" \
+		--format 'value(status.url)')
+	echo "Live stream origin: ${LIVE_STREAM_ORIGIN}"
+
 	# Deploy to Cloud Run (with or without --no-traffic depending on whether service exists)
 	gcloud run deploy "${SERVICE_NAME}" \
 		--image "${IMAGE_URL}" \
@@ -312,8 +383,8 @@ cloudrun-deploy image_url:
 		--platform managed \
 		--allow-unauthenticated \
 		--port 8080 \
-		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME}" \
-		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest" \
+		--set-env-vars "RUST_LOG=info,STEAM_REFRESH_JOB=projects/${GCP_PROJECT_ID}/locations/${GCP_REGION}/jobs/${REFRESH_JOB_NAME},LIVE_STREAM_ORIGIN=${LIVE_STREAM_ORIGIN}" \
+		--set-secrets "DATABASE_URL=DATABASE_URL:latest,PASETO_SECRET_KEY=PASETO_SECRET_KEY:latest,RESEND_API_KEY=RESEND_API_KEY:latest,STEAM_API_KEY=STEAM_API_KEY:latest${LIVE_SECRETS}${PUSH_SECRET}" \
 		--min-instances 0 \
 		--max-instances 10 \
 		--memory 512Mi \
@@ -332,6 +403,20 @@ cloudrun-deploy image_url:
 		--region "${GCP_REGION}" \
 		--project "${GCP_PROJECT_ID}" \
 		--format 'value(status.url)')
+
+	if has_secret LIVE_TICK_SECRET; then
+		# The recipe traces commands (set -x): keep the secret out of the logs.
+		set +x
+		TICK_SECRET=$(gcloud secrets versions access latest --secret LIVE_TICK_SECRET --project "${GCP_PROJECT_ID}")
+		TICK_JOB="${SERVICE_NAME}-live-tick"
+		SCHEDULER_ARGS=(--project "${GCP_PROJECT_ID}" --location "${GCP_REGION}" --schedule "* * * * *" \
+			--uri "${SERVICE_URL}/api/internal/live/tick" --http-method POST \
+			--headers "X-Live-Tick-Secret=${TICK_SECRET}" --attempt-deadline 60s)
+		gcloud scheduler jobs update http "${TICK_JOB}" "${SCHEDULER_ARGS[@]}" >/dev/null 2>&1 \
+			|| gcloud scheduler jobs create http "${TICK_JOB}" "${SCHEDULER_ARGS[@]}" >/dev/null \
+			|| echo "WARNING: could not set up the Cloud Scheduler job ${TICK_JOB}"
+		set -x
+	fi
 
 	# Create/Update a traffic tag that points at the new revision.
 	# This gives us a stable, direct URL to the new revision for health checks.

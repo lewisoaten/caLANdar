@@ -46,6 +46,67 @@ export const rsvpLockReason = (loading: boolean) =>
 export const displayName = (shell: Pick<ShellState, "handle" | "email">) =>
   shell.handle || shell.email.split("@")[0] || "Player";
 
+/** The Live item's badge: a countdown before the event, `LIVE` during it. */
+export interface LiveBadge {
+  label: string;
+  live: boolean;
+}
+
+/** `LIVE · 2D 3H` before the event, `LIVE` while it runs, nothing after. */
+export function liveBadgeFor(
+  timeBegin: { valueOf(): number },
+  timeEnd: { valueOf(): number },
+  now: number,
+): LiveBadge | undefined {
+  const begin = timeBegin.valueOf();
+  if (now >= timeEnd.valueOf()) return undefined;
+  if (now >= begin) return { label: "LIVE", live: true };
+  const mins = Math.floor((begin - now) / 60000);
+  const d = Math.floor(mins / 1440);
+  const h = Math.floor((mins % 1440) / 60);
+  const m = mins % 60;
+  const when = d > 0 ? `${d}D ${h}H` : h > 0 ? `${h}H ${m}M` : `${m}M`;
+  return { label: `LIVE · ${when}`, live: false };
+}
+
+function LiveBadgeTag({ badge }: { badge: LiveBadge }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        fontFamily: fonts.mono,
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: "0.1em",
+        px: "5px",
+        py: "1px",
+        whiteSpace: "nowrap",
+        ...(badge.live
+          ? { backgroundColor: colors.lime, color: colors.ink }
+          : { border: `1px solid ${colors.cyan}`, color: colors.cyan }),
+      }}
+    >
+      {badge.live && (
+        <Box
+          component="span"
+          aria-hidden="true"
+          sx={{
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            backgroundColor: colors.ink,
+            animation: "hlPulse 1.6s ease-in-out infinite",
+          }}
+        />
+      )}
+      {badge.label}
+    </Box>
+  );
+}
+
 interface RowProps {
   item: NavItem;
   index: number;
@@ -55,6 +116,7 @@ interface RowProps {
   dense?: boolean;
   sheet?: boolean;
   tag?: string;
+  badge?: LiveBadge;
   onNavigate?: () => void;
 }
 
@@ -67,6 +129,7 @@ function NavRow({
   dense,
   sheet,
   tag,
+  badge,
   onNavigate,
 }: RowProps) {
   const Icon = NAV_ICONS[item.key];
@@ -112,6 +175,7 @@ function NavRow({
       {locked && (
         <LockSharp aria-hidden="true" sx={{ fontSize: "16px !important" }} />
       )}
+      {badge && !locked && <LiveBadgeTag badge={badge} />}
       {tag ? (
         <Box
           component="span"
@@ -120,7 +184,8 @@ function NavRow({
           {tag}
         </Box>
       ) : (
-        !sheet && (
+        !sheet &&
+        !(badge && !locked) && (
           <Box
             component="span"
             aria-hidden="true"
@@ -405,6 +470,15 @@ export default function MenuItems({
                 active={isActiveItem(item, route, activeEvent.id)}
                 locked={isLocked(item)}
                 lockReason={lockReason}
+                badge={
+                  item.key === "live"
+                    ? liveBadgeFor(
+                        activeEvent.timeBegin,
+                        activeEvent.timeEnd,
+                        now,
+                      )
+                    : undefined
+                }
                 onNavigate={onNavigate}
               />
             ))}

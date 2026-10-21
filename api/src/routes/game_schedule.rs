@@ -51,6 +51,30 @@ pub struct GameScheduleEntry {
 
     /// The last time this schedule entry was modified.
     pub last_modified: DateTime<Utc>,
+
+    /// `game` or `food` (food comes from Live proposals).
+    pub kind: String,
+
+    /// Live status: `planned`, `confirmed`, `live`, `done`... (see Live).
+    pub status: String,
+
+    /// Where the entry came from: `plan`, `suggestion`, `proposal`, `steam`...
+    pub source: String,
+
+    /// The planned start, frozen when Live first changed it.
+    pub planned_start: Option<DateTime<Utc>>,
+
+    /// The planned length, frozen when Live first changed it.
+    pub planned_minutes: Option<i32>,
+
+    /// When it was actually played (from presence).
+    pub actual_start: Option<DateTime<Utc>>,
+
+    /// When play actually ended; empty while it runs.
+    pub actual_end: Option<DateTime<Utc>>,
+
+    /// Most players, if set.
+    pub max_players: Option<i32>,
 }
 
 impl SchemaExample for GameScheduleEntry {
@@ -66,6 +90,14 @@ impl SchemaExample for GameScheduleEntry {
             is_suggested: false,
             created_at: Utc::now(),
             last_modified: Utc::now(),
+            kind: "game".to_string(),
+            status: "planned".to_string(),
+            source: "plan".to_string(),
+            planned_start: None,
+            planned_minutes: None,
+            actual_start: None,
+            actual_end: None,
+            max_players: None,
         }
     }
 }
@@ -156,6 +188,7 @@ pub async fn create(
     match game_schedule::create(pool, event_id, request.into_inner(), &admin_user.email).await {
         Ok(entry) => Ok(Json(entry)),
         Err(Error::NotPermitted(e)) => Err(GameScheduleCreateError::Unauthorized(e)),
+        Err(Error::BadInput(e)) => Err(GameScheduleCreateError::BadRequest(e)),
         Err(Error::Controller(e)) if e.contains("overlap") => {
             Err(GameScheduleCreateError::BadRequest(e))
         }
@@ -175,20 +208,29 @@ custom_errors!(
 /// Update an existing scheduled game (admin only)
 #[openapi(tag = "Game Schedule")]
 #[patch(
-    "/events/<_event_id>/game_schedule/<schedule_id>",
+    "/events/<event_id>/game_schedule/<schedule_id>",
     format = "json",
     data = "<request>"
 )]
 pub async fn update(
-    _event_id: i32,
+    event_id: i32,
     schedule_id: i32,
     request: Json<GameScheduleRequest>,
     pool: &State<PgPool>,
     admin_user: AdminUser,
 ) -> Result<Json<GameScheduleEntry>, GameScheduleUpdateError> {
-    match game_schedule::update(pool, schedule_id, request.into_inner(), &admin_user.email).await {
+    match game_schedule::update(
+        pool,
+        event_id,
+        schedule_id,
+        request.into_inner(),
+        &admin_user.email,
+    )
+    .await
+    {
         Ok(entry) => Ok(Json(entry)),
         Err(Error::NotPermitted(e)) => Err(GameScheduleUpdateError::Unauthorized(e)),
+        Err(Error::BadInput(e)) => Err(GameScheduleUpdateError::BadRequest(e)),
         Err(Error::Controller(e)) if e.contains("overlap") || e.contains("not found") => {
             Err(GameScheduleUpdateError::BadRequest(e))
         }
@@ -207,14 +249,14 @@ custom_errors!(
 
 /// Delete a scheduled game (admin only)
 #[openapi(tag = "Game Schedule")]
-#[delete("/events/<_event_id>/game_schedule/<schedule_id>")]
+#[delete("/events/<event_id>/game_schedule/<schedule_id>")]
 pub async fn delete(
-    _event_id: i32,
+    event_id: i32,
     schedule_id: i32,
     pool: &State<PgPool>,
     admin_user: AdminUser,
 ) -> Result<(), GameScheduleDeleteError> {
-    match game_schedule::delete(pool, schedule_id, &admin_user.email).await {
+    match game_schedule::delete(pool, event_id, schedule_id, &admin_user.email).await {
         Ok(()) => Ok(()),
         Err(Error::NotPermitted(e)) => Err(GameScheduleDeleteError::Unauthorized(e)),
         Err(Error::Controller(e)) if e.contains("not found") => {
@@ -250,6 +292,7 @@ pub async fn pin(
     match game_schedule::pin(pool, event_id, request.into_inner(), &admin_user.email).await {
         Ok(entry) => Ok(Json(entry)),
         Err(Error::NotPermitted(e)) => Err(GameSchedulePinError::Unauthorized(e)),
+        Err(Error::BadInput(e)) => Err(GameSchedulePinError::BadRequest(e)),
         Err(Error::Controller(e)) if e.contains("overlap") => {
             Err(GameSchedulePinError::BadRequest(e))
         }

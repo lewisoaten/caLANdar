@@ -17,6 +17,10 @@ import { UserContext, UserDispatchContext } from "../UserProvider";
 import { dateParser } from "../utils";
 import { EventData } from "../types/events";
 import { eventImageSrc } from "../utils/eventImage";
+import {
+  ImageTooLargeError,
+  prepareEventImage,
+} from "../utils/prepareEventImage";
 import { colors, fonts, hairline, tint } from "./hl";
 
 interface EventsAminDialogProps {
@@ -243,9 +247,13 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
           );
         } else if (response.status === 401) {
           signOut();
+        } else if (response.status === 413) {
+          throw new Error(
+            "The cover image is too large to save. Please choose a smaller one.",
+          );
         } else {
           throw new Error(
-            "Something has gone wrong, please contact the administrator.",
+            `Something has gone wrong, please contact the administrator. More details: ${response.status}`,
           );
         }
       })
@@ -256,31 +264,22 @@ export default function EventsAdminDialog(props: EventsAminDialogProps) {
       .finally(() => setSubmitting(false));
   };
 
-  const getBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => {
-        // Remove the data URL prefix.
-        const base64 = reader.result?.toString().split(",")[1];
-        resolve(base64 as string);
-      };
-      reader.onerror = () => reject(reader.error);
-    });
-  };
-
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.currentTarget.files;
     if (!files || files.length === 0) {
       update({ image: undefined });
       return;
     }
-    getBase64(files[0])
+    prepareEventImage(files[0])
       .then((result) => update({ image: result }))
       .catch((err) => {
         console.error(err);
         update({ image: undefined });
-        setError("Couldn't read that image file.");
+        setError(
+          err instanceof ImageTooLargeError
+            ? err.message
+            : "Couldn't read that image file.",
+        );
       });
   };
 

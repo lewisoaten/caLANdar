@@ -1,6 +1,7 @@
 import type { SvgIconComponent } from "@mui/icons-material";
 import GridViewSharp from "@mui/icons-material/GridViewSharp";
 import SensorDoorSharp from "@mui/icons-material/SensorDoorSharp";
+import SensorsSharp from "@mui/icons-material/SensorsSharp";
 import SportsEsportsSharp from "@mui/icons-material/SportsEsportsSharp";
 import EventSeatSharp from "@mui/icons-material/EventSeatSharp";
 import ViewTimelineSharp from "@mui/icons-material/ViewTimelineSharp";
@@ -14,6 +15,7 @@ import type { NavKey } from "./navModel";
 export const NAV_ICONS: Record<NavKey, SvgIconComponent> = {
   events: GridViewSharp,
   lobby: SensorDoorSharp,
+  live: SensorsSharp,
   games: SportsEsportsSharp,
   seatmap: EventSeatSharp,
   schedule: ViewTimelineSharp,

@@ -18,6 +18,7 @@ describe("parseRoute", () => {
     ["/events", "events", undefined],
     ["/events/", "events", undefined],
     ["/events/7", "lobby", "7"],
+    ["/events/7/live", "live", "7"],
     ["/events/7/games", "games", "7"],
     ["/events/7/seat-map", "seatmap", "7"],
     ["/events/7/schedule", "schedule", "7"],
@@ -80,7 +81,9 @@ describe("breadcrumb", () => {
 
 describe("nav items", () => {
   test("event items only match the event being shown", () => {
-    const [lobby, games] = eventNavItems(7);
+    const [lobby, live, games] = eventNavItems(7);
+    expect(live.to).toBe("/events/7/live");
+    expect(live.requiresRsvp).toBe(true);
     expect(isActiveItem(lobby, parseRoute("/events/7"), 7)).toBe(true);
     expect(isActiveItem(lobby, parseRoute("/events/8"), 7)).toBe(false);
     expect(isActiveItem(games, parseRoute("/events/7/games"), 7)).toBe(true);
@@ -122,5 +125,25 @@ describe("active event", () => {
       3,
     );
     expect(pickActiveEvent([e(1, 10, 20)], now)).toBeNull();
+  });
+});
+
+describe("live nav badge", () => {
+  test("counts down before the event and says LIVE during it", async () => {
+    const { liveBadgeFor } = await import("../components/MenuItems");
+    const begin = Date.parse("2026-10-23T18:00:00Z");
+    const end = Date.parse("2026-10-25T16:00:00Z");
+    expect(liveBadgeFor(begin, end, begin - (2 * 24 + 3) * 3600e3)).toEqual({
+      label: "LIVE · 2D 3H",
+      live: false,
+    });
+    expect(liveBadgeFor(begin, end, begin - 90 * 60e3)?.label).toBe(
+      "LIVE · 1H 30M",
+    );
+    expect(liveBadgeFor(begin, end, begin + 1)).toEqual({
+      label: "LIVE",
+      live: true,
+    });
+    expect(liveBadgeFor(begin, end, end)).toBeUndefined();
   });
 });

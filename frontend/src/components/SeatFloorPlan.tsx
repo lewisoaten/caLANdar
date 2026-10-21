@@ -68,8 +68,8 @@ export interface SeatFloorPlanProps {
 
 const who = (o: SeatOccupant) => displayCallsign(o.name);
 
-const GAP = 4;
-const PAD = 6;
+export const GAP = 4;
+export const PAD = 6;
 
 /**
  * Default accessible name of a seat. `withScreen` adds that a screen is
@@ -138,7 +138,7 @@ export function seatSubLabel(tile: SeatTile): string {
 }
 
 /** Base of the plan, under seats and features so a background never shows through them. */
-const GRID_BASE = "#0a0d15";
+export const GRID_BASE = "#0a0d15";
 
 /**
  * A tinted fill laid over the opaque grid base: keeps seat labels readable
@@ -294,7 +294,7 @@ export const FEATURE_NAMES = {
 } as const;
 
 /** Grid squares of one screen / entrance, drawn as one shape. */
-function FeatureShape({
+export function FeatureShape({
   group,
   look,
   occupant,
@@ -393,7 +393,7 @@ function FeatureShape({
   );
 }
 
-function BackgroundLayers({ room }: { room: FloorPlanRoom }) {
+export function BackgroundLayers({ room }: { room: FloorPlanRoom }) {
   const bg = roomBackground(room);
   if (!bg) return null;
   const inset = {

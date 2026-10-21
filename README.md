@@ -88,6 +88,8 @@ These secrets are stored in GitHub and automatically upserted to Google Cloud Se
 
 **Note**: The workflow automatically creates or updates these secrets in Google Cloud Secret Manager using the values from GitHub Secrets. The service account referenced by `GCP_SERVICE_ACCOUNT` must have either the `roles/secretmanager.admin` role, or at minimum both `roles/secretmanager.secretAccessor` (to read) and `roles/secretmanager.secretVersionAdder` (to create/update) so that these operations succeed. Additionally, the Cloud Run service's runtime service account needs `roles/secretmanager.secretAccessor` to access these secrets at runtime. The database is hosted on Supabase, not Cloud SQL.
 
+The deploy also creates or updates a Cloud Scheduler job per service (`<service>-live-tick`) that calls caLANdar Live's backstop tick every minute. This needs the Cloud Scheduler API enabled on the project (`gcloud services enable cloudscheduler.googleapis.com`) and `roles/cloudscheduler.admin` for the `GCP_SERVICE_ACCOUNT` service account. Without them the deploy still succeeds, but only logs `WARNING: could not set up the Cloud Scheduler job`, and Live's deadlines then only move on while someone has Live open.
+
 **For local development**: Copy `.env.example` to `.env` and fill in your values. The `.env` file is loaded automatically by Just commands and is excluded from git to keep secrets safe.
 
 ### Cloud Run Staging Deployment
