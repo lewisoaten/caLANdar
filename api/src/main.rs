@@ -401,6 +401,9 @@ async fn connect_pool(database_url: &str) -> Result<PgPool, sqlx::Error> {
         .await
 }
 
+/// Largest JSON body the API accepts (an event with its cover image).
+const JSON_LIMIT: rocket::data::ByteUnit = rocket::data::ByteUnit::Mebibyte(8);
+
 /// Rocket's config from `PORT`/`BIND_ADDRESS` (Cloud Run sets `PORT`).
 fn rocket_config() -> Result<rocket::Config, Box<dyn std::error::Error>> {
     let mut config = rocket::Config::default();
@@ -422,6 +425,10 @@ fn rocket_config() -> Result<rocket::Config, Box<dyn std::error::Error>> {
         .parse()
         .map_err(|_| "BIND_ADDRESS must be a valid IP address")?;
     log::info!("Using BIND_ADDRESS: {}", config.address);
+
+    // Event cover images travel as base64 inside the event's JSON; Rocket's
+    // 1 MiB default turned any photo over ~750 KB into a 413.
+    config.limits = rocket::data::Limits::default().limit("json", JSON_LIMIT);
     Ok(config)
 }
 
