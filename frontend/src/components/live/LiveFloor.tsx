@@ -1,16 +1,26 @@
 /**
- * The floor, grouped by lobby (README §1c right): seats in their rooms;
+ * The floor, grouped by lobby (README §1c right): seats in their rooms, drawn
+ * like the seat map (grid backdrop, background plan, screens and entrances);
  * neighbouring seats in the same lobby share one coloured, labelled group.
- * Idle seats are dashed, AFK seats faded.
+ * Idle seats are dashed, AFK seats faded. The wall-board shows one room at a
+ * time, sized to its panel, and cycles through them.
  */
 import * as React from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import { Panel } from "../hl/Panel";
 import { UserAvatar } from "../hl/UserAvatar";
 import { colors, tint } from "../hl/tokens";
 import type { LiveState } from "../../live/store";
+import type { FloorRoom } from "../../live/types";
 import { floorGroups, personFor } from "../../live/selectors";
+import {
+  BackgroundLayers,
+  FeatureShape,
+  GAP,
+  GRID_BASE,
+  PAD,
+} from "../SeatFloorPlan";
 import {
   GRID_COLS,
   layoutRoom,
@@ -20,157 +30,368 @@ import {
 import { Mono } from "./liveUi";
 
 const CELL = 34;
+/** How long the wall-board shows each room. */
+export const ROOM_CYCLE_MS = 15_000;
+/** Room for the lobby label above the top row. */
+const LABEL_SPACE = 14;
+/** Height of the wall-board's room name line, with its gap. */
+const TV_HEADER = 30;
 
-export function LiveFloor({
+type Group = ReturnType<typeof floorGroups>[number];
+
+/** Rooms in the API's order, skipping any without seats. */
+export function floorRooms(state: LiveState): FloorRoom[] {
+  return [...state.floor.rooms]
+    .filter((r) => state.floor.seats.some((s) => s.roomId === r.id))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+}
+
+/** Largest cell (px) that fits a 12-column room of `rows` rows in `width`×`height`. */
+export function fitCell(width: number, height: number, rows: number): number {
+  const across = (width - PAD * 2 - GAP * (GRID_COLS - 1)) / GRID_COLS;
+  const down =
+    (height - LABEL_SPACE - PAD * 2 - GAP * (rows - 1)) / Math.max(1, rows);
+  return Math.max(12, Math.floor(Math.min(across, down)));
+}
+
+function RoomFloor({
   state,
-  compact = false,
-  tv = false,
+  room,
+  cell,
+  groupOf,
+  groups,
 }: {
   state: LiveState;
-  compact?: boolean;
-  /** Wall-board size: big seats, readable across the room. */
-  tv?: boolean;
+  room: FloorRoom;
+  cell: number;
+  groupOf: Map<number, Group>;
+  groups: Group[];
 }) {
-  const groups = useMemo(() => floorGroups(state), [state]);
-  const groupOf = useMemo(() => {
-    const m = new Map<number, (typeof groups)[number]>();
-    for (const g of groups) for (const id of g.seatIds) m.set(id, g);
-    return m;
-  }, [groups]);
-  const rooms = [...state.floor.rooms].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.id - b.id,
+  const plan = room as unknown as FloorPlanRoom;
+  const seats = state.floor.seats.filter((s) => s.roomId === room.id);
+  const layout = layoutRoom(plan, seats as unknown as FloorPlanSeat[]);
+  // Label each group once, on its top-left seat.
+  const labelled = new Set<string>();
+  const ordered = [...seats].sort((a, b) => {
+    const ca = layout.cells.get(a.id);
+    const cb = layout.cells.get(b.id);
+    return (ca?.row ?? 0) - (cb?.row ?? 0) || (ca?.col ?? 0) - (cb?.col ?? 0);
+  });
+  const here = groups.filter((g) =>
+    g.seatIds.some((id) => layout.cells.has(id)),
   );
-  const cell = tv ? 34 : compact ? 26 : CELL;
-
-  const content =
-    rooms.length === 0 ? (
-      <Box sx={{ p: "14px 18px", color: colors.textMuted, fontSize: 14 }}>
-        No seating plan for this event.
-      </Box>
-    ) : (
+  return (
+    <Box sx={{ pt: `${LABEL_SPACE}px`, width: "max-content" }}>
       <Box
+        role="img"
+        aria-label={`${room.name} floor: ${here.map((g) => g.label).join(", ") || "nobody in a lobby"}`}
         sx={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 2,
-          p: "14px 16px",
-          overflowX: "auto",
+          position: "relative",
+          isolation: "isolate",
+          display: "grid",
+          gridTemplateColumns: `repeat(${GRID_COLS}, ${cell}px)`,
+          gridTemplateRows: `repeat(${layout.rows}, ${cell}px)`,
+          gap: `${GAP}px`,
+          p: `${PAD}px`,
+          backgroundColor: GRID_BASE,
+          border: `1px solid ${tint("cyan", 0.12)}`,
         }}
       >
-        {rooms.map((room) => {
-          const seats = state.floor.seats.filter((s) => s.roomId === room.id);
-          const layout = layoutRoom(
-            room as unknown as FloorPlanRoom,
-            seats as unknown as FloorPlanSeat[],
-          );
-          // Label each group once, on its top-left seat.
-          const labelled = new Set<string>();
-          const ordered = [...seats].sort((a, b) => {
-            const ca = layout.cells.get(a.id);
-            const cb = layout.cells.get(b.id);
-            return (
-              (ca?.row ?? 0) - (cb?.row ?? 0) || (ca?.col ?? 0) - (cb?.col ?? 0)
-            );
-          });
+        <BackgroundLayers room={plan} />
+        <Box
+          aria-hidden="true"
+          sx={{
+            // Lines sit in the middle of the gaps between cells.
+            position: "absolute",
+            inset: `${PAD - GAP / 2}px`,
+            zIndex: -1,
+            pointerEvents: "none",
+            backgroundImage: `linear-gradient(${tint("cyan", 0.07)} 1px,transparent 1px),linear-gradient(90deg,${tint("cyan", 0.07)} 1px,transparent 1px)`,
+            backgroundSize: `calc(100% / ${GRID_COLS}) calc(100% / ${layout.rows})`,
+          }}
+        />
+        {layout.groups.map((g) => (
+          <FeatureShape key={`${g.kind}-${g.id}`} group={g} look="plain" />
+        ))}
+        {ordered.map((seat) => {
+          const c = layout.cells.get(seat.id);
+          if (!c) return null;
+          const person = personFor(state, seat.pid);
+          const group = groupOf.get(seat.id);
+          const showLabel = group && !labelled.has(group.lobbyId);
+          if (group) labelled.add(group.lobbyId);
+          const afk = person?.presence?.afk;
           return (
             <Box
-              key={room.id}
-              sx={{ display: "flex", flexDirection: "column", gap: 1 }}
+              key={seat.id}
+              title={
+                person
+                  ? `${seat.label} · ${person.handle}`
+                  : `${seat.label} · free`
+              }
+              sx={{
+                gridColumn: c.col + 1,
+                gridRow: c.row + 1,
+                position: "relative",
+                display: "grid",
+                placeItems: "center",
+                border: group
+                  ? `1.5px solid ${group.color}`
+                  : `1px dashed ${person ? tint("cyan", 0.35) : tint("neutral", 0.3)}`,
+                // Opaque base so the background plan never shows through a seat.
+                backgroundColor: GRID_BASE,
+                backgroundImage: group
+                  ? `linear-gradient(${group.color}1f, ${group.color}1f)`
+                  : "none",
+                boxShadow: group ? `0 0 12px -6px ${group.color}` : "none",
+                opacity: afk ? 0.4 : 1,
+              }}
             >
-              {rooms.length > 1 && (
-                <Mono size={10} color={colors.textDim}>
-                  {room.name}
+              {person ? (
+                <UserAvatar
+                  name={person.handle}
+                  src={person.avatarUrl}
+                  size={Math.max(8, cell - 10)}
+                />
+              ) : (
+                <Mono
+                  size={Math.max(9, Math.round(cell / 4))}
+                  color={colors.textDim}
+                  weight={500}
+                >
+                  {seat.label}
                 </Mono>
               )}
-              <Box
-                role="img"
-                aria-label={`${room.name} floor: ${groups.map((g) => g.label).join(", ") || "nobody in a lobby"}`}
-                sx={{
-                  position: "relative",
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${GRID_COLS}, ${cell}px)`,
-                  gridTemplateRows: `repeat(${layout.rows}, ${cell}px)`,
-                  gap: "3px",
-                  width: "max-content",
-                  pt: "14px",
-                }}
-              >
-                {ordered.map((seat) => {
-                  const c = layout.cells.get(seat.id);
-                  if (!c) return null;
-                  const person = personFor(state, seat.pid);
-                  const group = groupOf.get(seat.id);
-                  const showLabel = group && !labelled.has(group.lobbyId);
-                  if (group) labelled.add(group.lobbyId);
-                  const afk = person?.presence?.afk;
-                  return (
-                    <Box
-                      key={seat.id}
-                      title={
-                        person
-                          ? `${seat.label} · ${person.handle}`
-                          : `${seat.label} · free`
-                      }
-                      sx={{
-                        gridColumn: c.col + 1,
-                        gridRow: c.row + 1,
-                        position: "relative",
-                        display: "grid",
-                        placeItems: "center",
-                        border: group
-                          ? `1.5px solid ${group.color}`
-                          : `1px dashed ${person ? tint("cyan", 0.35) : tint("neutral", 0.3)}`,
-                        backgroundColor: group
-                          ? `${group.color}1f`
-                          : "transparent",
-                        boxShadow: group
-                          ? `0 0 12px -6px ${group.color}`
-                          : "none",
-                        opacity: afk ? 0.4 : 1,
-                      }}
-                    >
-                      {person ? (
-                        <UserAvatar
-                          name={person.handle}
-                          src={person.avatarUrl}
-                          size={cell - 10}
-                        />
-                      ) : (
-                        <Mono size={9} color={colors.textDim} weight={500}>
-                          {seat.label}
-                        </Mono>
-                      )}
-                      {showLabel && (
-                        <Mono
-                          size={9}
-                          color={colors.ink}
-                          sx={{
-                            position: "absolute",
-                            bottom: "100%",
-                            left: -2,
-                            backgroundColor: group.color,
-                            px: "4px",
-                            zIndex: 1,
-                          }}
-                        >
-                          {group.label}
-                        </Mono>
-                      )}
-                    </Box>
-                  );
-                })}
-              </Box>
+              {showLabel && (
+                <Mono
+                  size={Math.max(9, Math.round(cell / 4))}
+                  color={colors.ink}
+                  sx={{
+                    position: "absolute",
+                    bottom: "100%",
+                    left: -2,
+                    backgroundColor: group.color,
+                    px: "4px",
+                    zIndex: 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {group.label}
+                </Mono>
+              )}
             </Box>
           );
         })}
       </Box>
+    </Box>
+  );
+}
+
+/** Size of an element, kept up to date as it changes. */
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () =>
+      setSize({ width: el.clientWidth, height: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size] as const;
+}
+
+/** The wall-board's floor: one room at a time, as large as the panel allows. */
+function TvFloor({
+  state,
+  rooms,
+  groupOf,
+  groups,
+}: {
+  state: LiveState;
+  rooms: FloorRoom[];
+  groupOf: Map<number, Group>;
+  groups: Group[];
+}) {
+  const [ref, size] = useSize<HTMLDivElement>();
+  const [turn, setTurn] = useState(0);
+  const count = rooms.length;
+  useEffect(() => {
+    if (count < 2) return;
+    const timer = setInterval(() => setTurn((t) => t + 1), ROOM_CYCLE_MS);
+    return () => clearInterval(timer);
+  }, [count]);
+  const room = rooms[turn % count];
+  const rows = layoutRoom(
+    room as unknown as FloorPlanRoom,
+    state.floor.seats.filter(
+      (s) => s.roomId === room.id,
+    ) as unknown as FloorPlanSeat[],
+  ).rows;
+  const cell = fitCell(size.width, size.height - TV_HEADER, rows);
+  return (
+    <Box
+      sx={{
+        height: "100%",
+        boxSizing: "border-box",
+        p: "16px",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <Box
+        sx={{
+          height: TV_HEADER,
+          flex: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 2,
+        }}
+      >
+        <Mono size={20} color={colors.text} weight={700}>
+          {room.name}
+        </Mono>
+        {count > 1 && (
+          <Box sx={{ display: "flex", gap: "8px" }} aria-hidden="true">
+            {rooms.map((r, i) => (
+              <Box
+                key={r.id}
+                sx={{
+                  width: 12,
+                  height: 12,
+                  backgroundColor:
+                    i === turn % count ? colors.cyan : tint("cyan", 0.2),
+                }}
+              />
+            ))}
+          </Box>
+        )}
+      </Box>
+      <Box
+        ref={ref}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          placeItems: "center",
+          overflow: "hidden",
+        }}
+      >
+        {size.width > 0 && (
+          <RoomFloor
+            key={room.id}
+            state={state}
+            room={room}
+            cell={cell}
+            groupOf={groupOf}
+            groups={groups}
+          />
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+export function LiveFloor({
+  state,
+  tv = false,
+}: {
+  state: LiveState;
+  /** Wall-board: one room at a time, sized to fit, cycling. */
+  tv?: boolean;
+}) {
+  const groups = useMemo(() => floorGroups(state), [state]);
+  const groupOf = useMemo(() => {
+    const m = new Map<number, Group>();
+    for (const g of groups) for (const id of g.seatIds) m.set(id, g);
+    return m;
+  }, [groups]);
+  const rooms = floorRooms(state);
+
+  if (rooms.length === 0) {
+    const none = (
+      <Box
+        sx={{
+          p: "14px 18px",
+          color: colors.textMuted,
+          fontSize: tv ? 24 : 14,
+        }}
+      >
+        No seating plan for this event.
+      </Box>
+    );
+    return tv ? (
+      none
+    ) : (
+      <Panel kicker="Who's where" title="Floor" padding="none">
+        {none}
+      </Panel>
+    );
+  }
+
+  if (tv)
+    return (
+      <TvFloor state={state} rooms={rooms} groupOf={groupOf} groups={groups} />
     );
 
-  if (compact) return content;
   return (
     <Panel kicker="Who's where" title="Floor" padding="none">
-      {content}
+      <PageFloor
+        state={state}
+        rooms={rooms}
+        groupOf={groupOf}
+        groups={groups}
+      />
     </Panel>
+  );
+}
+
+/** The Live page's floor: every room, as wide as the panel (up to CELL per seat). */
+function PageFloor({
+  state,
+  rooms,
+  groupOf,
+  groups,
+}: {
+  state: LiveState;
+  rooms: FloorRoom[];
+  groupOf: Map<number, Group>;
+  groups: Group[];
+}) {
+  const [ref, size] = useSize<HTMLDivElement>();
+  const cell =
+    size.width > 0
+      ? Math.min(CELL, fitCell(size.width, Number.POSITIVE_INFINITY, 1))
+      : CELL;
+  return (
+    <Box sx={{ p: "14px 16px", overflowX: "auto" }}>
+      <Box ref={ref} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {rooms.map((room) => (
+          <Box
+            key={room.id}
+            sx={{ display: "flex", flexDirection: "column", gap: 1 }}
+          >
+            {rooms.length > 1 && (
+              <Mono size={10} color={colors.textDim}>
+                {room.name}
+              </Mono>
+            )}
+            <RoomFloor
+              state={state}
+              room={room}
+              cell={cell}
+              groupOf={groupOf}
+              groups={groups}
+            />
+          </Box>
+        ))}
+      </Box>
+    </Box>
   );
 }
 

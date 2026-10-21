@@ -317,6 +317,13 @@ pub struct FloorRoom {
     pub sort_order: i32,
     pub grid_rows: Option<i32>,
     pub features: JsonValue,
+    /// Legacy floorplan image, drawn behind the grid when there's no upload.
+    pub image: Option<String>,
+    /// Public path of the uploaded background plan (no login needed, so the
+    /// wall-board can show it).
+    pub background_url: Option<String>,
+    pub background_style: String,
+    pub background_opacity: f64,
 }
 
 #[derive(Debug, Clone, Serialize, JsonSchema)]
@@ -366,6 +373,13 @@ pub async fn floor(pool: &PgPool, state: &LiveState) -> Floor {
                 sort_order: r.sort_order,
                 grid_rows: r.grid_rows,
                 features: r.features,
+                image: r.image,
+                background_url: r
+                    .background_token
+                    .as_deref()
+                    .map(crate::controllers::room::background_url),
+                background_style: r.background_style,
+                background_opacity: r.background_opacity,
             })
             .collect(),
         seats: seats

@@ -723,6 +723,7 @@ All five phases are built, on stacked branches `live/p0-plumbing` → `live/p4-r
 - **Web Push.** RFC 8291 and RFC 8292 are implemented in pure Rust (`p256`, `aes-gcm`, `hkdf`). Pushes go out for: nobody's in, starting with the grace, your proposal backed, and nudges. "Starts in 10 minutes" stays an in-page toast only.
 - **Discord.** Vote results, backed and new proposals, and admin posts marked for Discord are posted to the webhook.
 - **Food.** Search uses Places Text Search (New), biased to the venue. Distance is shown; delivery time isn't, because Places doesn't provide it.
+- **Floor.** `LiveFloor` draws its own lobby-coloured seats, but on the seat map's backdrop: the grid, the room's background plan (uploaded or legacy, with its style and opacity) and screens and entrances, using the pieces `SeatFloorPlan` exports. The floor snapshot carries each room's background. On the Live page every room is sized to the panel's width. The wall-board shows one room at a time, as large as its panel allows, and cycles through them every 15 seconds.
 
 **Not built**
 

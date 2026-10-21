@@ -205,6 +205,11 @@ export interface FloorRoom {
   gridRows: number | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   features: any[];
+  /** Legacy floorplan image, used when there's no uploaded background. */
+  image?: string | null;
+  backgroundUrl?: string | null;
+  backgroundStyle?: string | null;
+  backgroundOpacity?: number | null;
 }
 
 export interface FloorSeat {

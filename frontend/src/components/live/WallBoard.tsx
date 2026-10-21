@@ -665,7 +665,7 @@ export default function WallBoard() {
             overflow: "hidden",
           }}
         >
-          <LiveFloor state={state} compact tv />
+          <LiveFloor state={state} tv />
         </Box>
       </Box>
     </Box>,
