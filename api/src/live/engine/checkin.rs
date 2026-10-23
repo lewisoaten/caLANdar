@@ -72,18 +72,16 @@ pub fn check_in(
         }
         out.feed.push(entry);
     }
-    returned(state, email, now, out);
+    returned(state, email);
     Ok(())
 }
 
-/// Someone is here again: Steam may already show them playing, so put them
-/// in that game's lobby now.
-fn returned(state: &mut LiveState, email: &str, now: DateTime<Utc>, out: &mut Outcome) {
-    if let Some(presence) = state.presence.get(email) {
-        if let Some(game) = presence.game_id {
-            let name = presence.game_name.clone();
-            super::presence::steam_membership(state, email, Some(game), name.as_deref(), now, out);
-        }
+/// Someone is here (again). A game Steam already shows doesn't put them in
+/// a lobby: only starting one does, so until Steam shows a different game
+/// they join a lobby themselves.
+fn returned(state: &mut LiveState, email: &str) {
+    if let Some(presence) = state.presence.get_mut(email) {
+        presence.ignore_game_id = presence.game_id;
     }
 }
 
@@ -186,7 +184,7 @@ pub fn tick(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
         out.feed
             .push(FeedEntry::new(4, "checkin.back", "is back").actor(&email));
         if state.is_checked_in(&email) {
-            returned(state, &email, now, out);
+            returned(state, &email);
         }
     }
 
@@ -206,7 +204,7 @@ pub fn tick(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
                 out.feed
                     .push(FeedEntry::new(4, "checkin.back", "is back").actor(&email));
                 if state.is_checked_in(&email) {
-                    returned(state, &email, now, out);
+                    returned(state, &email);
                 }
             }
         } else if !checkin.staying && !checkin.departed {

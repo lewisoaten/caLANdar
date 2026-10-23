@@ -384,7 +384,7 @@ fn presence_before_check_in_only_reaches_the_admin_queue() {
         presence::playing_not_checked_in(&s),
         vec![("ana@x.io".to_string(), Some("CS2".to_string()))]
     );
-    // Checking in puts them straight into a lobby.
+    // Checking in doesn't put them in a lobby: only starting a game does.
     apply(
         &mut s,
         cmd(
@@ -396,6 +396,16 @@ fn presence_before_check_in_only_reaches_the_admin_queue() {
         t(19, 5),
     )
     .expect("checked in");
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
+    apply(&mut s, Input::Tick, t(19, 10)).expect("tick");
+    assert_eq!(
+        lobby_of(&s, "ana@x.io"),
+        None,
+        "the game was already running"
+    );
+    // Quitting and launching a game (even the same one) does.
+    play(&mut s, "ana@x.io", None, t(19, 20));
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 30));
     assert!(lobby_of(&s, "ana@x.io").is_some());
 }
 
@@ -1818,11 +1828,13 @@ fn stepping_out_leaves_the_lobby_and_ends_by_itself() {
     // …and they're not nagging the admin queue either.
     assert!(playing_not_checked_in(&s).is_empty());
 
-    // The hour is up: back, and in their game again.
+    // The hour is up: back, but not in a lobby until they start a game.
     let out = apply(&mut s, Input::Tick, t(20, 11)).expect("tick");
     assert!(out.feed.iter().any(|f| f.kind == "checkin.back"));
     assert!(s.is_checked_in("ana@x.io"));
-    assert!(lobby_of(&s, "ana@x.io").is_some());
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
+    apply(&mut s, Input::Tick, t(20, 20)).expect("tick");
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
 }
 
 #[test]
@@ -1944,7 +1956,7 @@ fn your_rsvp_checks_you_out_and_back_in() {
     let out = apply(&mut s, Input::Tick, t(6, 1) + day).expect("tick");
     assert!(out.feed.iter().any(|f| f.kind == "checkin.back"));
     assert!(s.is_checked_in("ana@x.io"));
-    assert!(lobby_of(&s, "ana@x.io").is_some(), "Steam still shows CS2");
+    assert_eq!(lobby_of(&s, "ana@x.io"), None, "back isn't a game starting");
 }
 
 #[test]
