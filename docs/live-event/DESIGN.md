@@ -236,7 +236,7 @@ ALTER TABLE event ADD COLUMN discord_invite_url TEXT,
 ### 4.2 Live tables
 
 ```sql
-live_checkin   (event_id, email, checked_in_at, by_email, away_until, PRIMARY KEY (event_id, email))
+live_checkin   (event_id, email, checked_in_at, by_email, away_until, departed, staying, PRIMARY KEY (event_id, email))
 
 game_lobby_defaults (game_id BIGINT PRIMARY KEY,     -- "saved for everyone", global across events (§5.6)
                      max_players INT, teams JSONB,   -- [{name, size}]
@@ -480,8 +480,8 @@ This is the one new UI element the design needs (a two-option chip row in the sh
 ### 5.5 Check-in and attendance
 
 - Check-in opens at `event.time_begin`. It's personal only, as in the handoff.
-- **Stepping out.** Someone checked in can step out for **30 minutes, 1 hour or 2 hours** (`POST /checkout {minutes}`), for example to do something else for a while. `live_checkin.away_until` holds when they're due back. While it's set they count as not checked in: they leave their lobby, Steam doesn't put them in one, they're not asked for in the admin check-in queue, and they don't count for votes. They're back when the time is up (the tick clears it), or sooner by checking in again ("I'm back"). It's always time-limited, so nobody can forget to come back. It's capped at the end of the event.
-- **Leaving by RSVP.** Someone who checked in while their attendance said they'd be around is **checked out** (the row is removed, and they leave their lobby) once their attendance buckets say they've left, or they RSVP no. If they stay on anyway, checking in again isn't undone. Admin check-ins of people who weren't due are never undone.
+- **Stepping out.** Someone checked in can step out for **30 minutes, 1 hour or 2 hours** (`POST /checkout {minutes}`), for example to do something else for a while. `live_checkin.away_until` holds when they're due back. While it's set they count as not checked in: they leave their lobby, Steam doesn't put them in one, they're not asked for in the admin check-in queue, and they don't count for votes. They're back when the time is up (the tick clears it), or sooner by checking in again ("I'm back"). While out they can **extend** it (`{minutes, extend: true}` adds to the time they're due back). It's always time-limited, so nobody can forget to come back, and capped at the end of the event.
+- **Following your RSVP.** Check-in lasts for the event, and the tick moves it with the person's attendance: once their buckets say they've left (or they RSVP no) they're **checked out** (`departed`, and they leave their lobby), and when their attendance says they're around again they're **checked back in** without doing anything. If they stay on, checking in again sets `staying`, which sticks until their attendance next says they're around. While `staying`, the Step out button is a **Check out** button (`POST /checkout` with no minutes), which leaves them checked out until their RSVP next says so. Admin check-ins of people who weren't due count as staying.
 - **Admin "Delay arrival"** clears the person's attendance bucket that contains `now`, via the existing invitation attendance update. Eligibility and the plan then pick up the change naturally.
 - **Admin "RSVP no"** sets the invitation response, drops all of the person's pre-joins, and removes them from vote eligibility.
 - **"Nudge"** sends a personal `toast.nudge` log row (`audience=email:x`), plus Web Push if the person has subscribed (§8).
@@ -523,27 +523,27 @@ The same data can later suggest **max players**, using the peak concurrent membe
 
 All of these live under `/api/events/:id/live`, through the Netlify proxy. Admin variants take `?as_admin=true`, following the existing guard convention.
 
-| Method | Path                                                       | Notes                                                                        |
-| ------ | ---------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| GET    | ``                                                         | Snapshot (§4.3)                                                              |
-| POST   | `/stream-token`                                            | Returns `{token, streamUrl}`                                                 |
-| GET    | `/stream?st=`                                              | **Direct to Cloud Run**                                                      |
-| POST   | `/checkin`                                                 | Admin: `{email}` with `as_admin`. Also comes back from stepping out          |
-| POST   | `/checkout`                                                | Step out for `{minutes}` (30, 60 or 120); admin may pass `pid`               |
-| POST   | `/presence`                                                | Manual: `{lobbyId}` or `{none:true}`; Leave                                  |
-| POST   | `/lobbies`                                                 | Propose: `{kind, gameId/food, start, durationMin, teams?, mode: alongside    | option, voteId?}` |
-| POST   | `/lobbies/:lid/prejoin` · DELETE                           | `{team?                                                                      | random}`          |
-| PATCH  | `/lobbies/:lid`                                            | Admin edit · DELETE admin remove/end · `POST /close` proposer close-now      |
-| POST   | `/votes`                                                   | `{type, targetLobbyId?, options[]}`                                          |
-| PUT    | `/votes/:vid/ballot`                                       | `{optionId, splitOk}` (change your vote)                                     |
-| POST   | `/votes/:vid/options`                                      | Add an option                                                                |
-| POST   | `/votes/:vid/resolve?as_admin=true`                        | `{force: optionId}`, `{split:true}`, or `{veto:true}`                        |
-| POST   | `/posts?as_admin=true`                                     | `{text, ttl, tv}`                                                            |
-| POST   | `/people/:pid/{rsvp-no,delay-arrival,nudge}?as_admin=true` | Admin check-in queue                                                         |
-| PUT    | `/api/games/:gid/lobby-defaults`                           | Players and teams defaults                                                   |
-| GET    | `/api/games/search?q=`                                     | Searches the existing `steam_game` table: suggested first, then all of Steam |
-| GET    | `/api/live/:wallboardToken`                                | Wall-board snapshot (no auth); `.../stream-token`                            |
-| POST   | `/api/internal/live/tick`                                  | Cloud Scheduler OIDC                                                         |
+| Method | Path                                                       | Notes                                                                         |
+| ------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| GET    | ``                                                         | Snapshot (§4.3)                                                               |
+| POST   | `/stream-token`                                            | Returns `{token, streamUrl}`                                                  |
+| GET    | `/stream?st=`                                              | **Direct to Cloud Run**                                                       |
+| POST   | `/checkin`                                                 | Admin: `{email}` with `as_admin`. Also comes back from stepping out           |
+| POST   | `/checkout`                                                | Step out for `{minutes, extend?}` (30, 60 or 120), or check out; admin: `pid` |
+| POST   | `/presence`                                                | Manual: `{lobbyId}` or `{none:true}`; Leave                                   |
+| POST   | `/lobbies`                                                 | Propose: `{kind, gameId/food, start, durationMin, teams?, mode: alongside     | option, voteId?}` |
+| POST   | `/lobbies/:lid/prejoin` · DELETE                           | `{team?                                                                       | random}`          |
+| PATCH  | `/lobbies/:lid`                                            | Admin edit · DELETE admin remove/end · `POST /close` proposer close-now       |
+| POST   | `/votes`                                                   | `{type, targetLobbyId?, options[]}`                                           |
+| PUT    | `/votes/:vid/ballot`                                       | `{optionId, splitOk}` (change your vote)                                      |
+| POST   | `/votes/:vid/options`                                      | Add an option                                                                 |
+| POST   | `/votes/:vid/resolve?as_admin=true`                        | `{force: optionId}`, `{split:true}`, or `{veto:true}`                         |
+| POST   | `/posts?as_admin=true`                                     | `{text, ttl, tv}`                                                             |
+| POST   | `/people/:pid/{rsvp-no,delay-arrival,nudge}?as_admin=true` | Admin check-in queue                                                          |
+| PUT    | `/api/games/:gid/lobby-defaults`                           | Players and teams defaults                                                    |
+| GET    | `/api/games/search?q=`                                     | Searches the existing `steam_game` table: suggested first, then all of Steam  |
+| GET    | `/api/live/:wallboardToken`                                | Wall-board snapshot (no auth); `.../stream-token`                             |
+| POST   | `/api/internal/live/tick`                                  | Cloud Scheduler OIDC                                                          |
 
 **Stream events:** `lobby`, `lobby.delete`, `vote`, `vote.delete`, `presence`, `checkin`, `feed`, `feed.delete`, `toast.admin`, `toast.personal`, `reset`, `reconnect`.
 

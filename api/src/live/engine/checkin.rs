@@ -44,9 +44,14 @@ pub fn check_in(
     if state.is_checked_in(email) {
         return Ok(());
     }
+    // Around by their RSVP, or staying on past it (which sticks until the
+    // RSVP says they're around again).
+    let staying = !person.attending_at(&state.event, now);
     if let Some(checkin) = state.checkins.get_mut(email) {
-        // Back early from stepping out.
+        // Back early from stepping out, or staying on after leaving.
         checkin.away_until = None;
+        checkin.departed = false;
+        checkin.staying = staying;
         out.feed
             .push(FeedEntry::new(4, "checkin.back", "is back").actor(email));
     } else {
@@ -57,6 +62,8 @@ pub fn check_in(
                 at: now,
                 by: actor.email.clone(),
                 away_until: None,
+                departed: false,
+                staying,
             },
         );
         let mut entry = FeedEntry::new(4, "checkin", "checked in").actor(email);
@@ -65,23 +72,33 @@ pub fn check_in(
         }
         out.feed.push(entry);
     }
-
-    // Steam may already show them playing: put them in a lobby now.
-    if let Some(game) = state.presence.get(email).and_then(|p| p.game_id) {
-        let name = state.presence.get(email).and_then(|p| p.game_name.clone());
-        super::presence::steam_membership(state, email, Some(game), name.as_deref(), now, out);
-    }
+    returned(state, email, now, out);
     Ok(())
 }
 
-/// Step out for a while (`minutes` is one of [`AWAY_CHOICES`]). It leaves
-/// their lobby, and they stop counting for votes, until they check back in
-/// or the time is up, so nobody has to remember to come back.
+/// Someone is here again: Steam may already show them playing, so put them
+/// in that game's lobby now.
+fn returned(state: &mut LiveState, email: &str, now: DateTime<Utc>, out: &mut Outcome) {
+    if let Some(presence) = state.presence.get(email) {
+        if let Some(game) = presence.game_id {
+            let name = presence.game_name.clone();
+            super::presence::steam_membership(state, email, Some(game), name.as_deref(), now, out);
+        }
+    }
+}
+
+/// Step out for a while (`minutes` is one of [`AWAY_CHOICES`]), or with no
+/// `minutes` check out until the RSVP says they're around again (only for
+/// someone staying past it). `extend` adds the time to an existing step-out
+/// instead of counting from now. Stepping out leaves their lobby, and they
+/// stop counting for votes, until they check back in or the time is up, so
+/// nobody has to remember to come back.
 pub fn check_out(
     state: &mut LiveState,
     actor: &Actor,
     email: &str,
-    minutes: i64,
+    minutes: Option<i64>,
+    extend: bool,
     now: DateTime<Utc>,
     out: &mut Outcome,
 ) -> Result<(), Reject> {
@@ -90,18 +107,58 @@ pub fn check_out(
             "You can only check yourself out".to_string(),
         ));
     }
-    if !AWAY_CHOICES.contains(&minutes) {
+    if minutes.is_some_and(|m| !AWAY_CHOICES.contains(&m)) {
         return Err(Reject::BadInput(
             "Choose 30 minutes, 1 hour or 2 hours".to_string(),
         ));
     }
-    if !state.checkins.contains_key(email) {
+    let Some(checkin) = state.checkins.get(email) else {
         return Err(Reject::Conflict("Check in first".to_string()));
+    };
+    if checkin.departed {
+        return Err(Reject::Conflict("You're already checked out".to_string()));
     }
-    let until = (now + Duration::minutes(minutes)).min(state.event.time_end);
+    let Some(minutes) = minutes else {
+        // A full check-out: for someone staying on past their RSVP.
+        if !checkin.staying {
+            return Err(Reject::BadInput(
+                "Choose how long to step out for".to_string(),
+            ));
+        }
+        if let Some(checkin) = state.checkins.get_mut(email) {
+            checkin.staying = false;
+            checkin.departed = true;
+            checkin.away_until = None;
+        }
+        left(state, email, now, out);
+        out.feed
+            .push(FeedEntry::new(4, "checkout.left", "has left").actor(email));
+        return Ok(());
+    };
+    let base = checkin
+        .away_until
+        .filter(|_| extend)
+        .unwrap_or(now)
+        .max(now);
+    let until = (base + Duration::minutes(minutes)).min(state.event.time_end);
     if let Some(checkin) = state.checkins.get_mut(email) {
         checkin.away_until = Some(until);
     }
+    left(state, email, now, out);
+    out.feed.push(
+        FeedEntry::new(
+            4,
+            "checkout",
+            if extend { "stays out" } else { "stepped out" },
+        )
+        .actor(email)
+        .data(json!({ "until": until, "minutes": minutes })),
+    );
+    Ok(())
+}
+
+/// They're not here any more: out of their lobby.
+fn left(state: &mut LiveState, email: &str, now: DateTime<Utc>, out: &mut Outcome) {
     if let Some(lobby_id) = membership::leave_current(state, email, "away", now, out) {
         out.feed.push(
             FeedEntry::new(4, "lobby.left", "left")
@@ -109,17 +166,12 @@ pub fn check_out(
                 .lobby(lobby_id),
         );
     }
-    out.feed.push(
-        FeedEntry::new(4, "checkout", "stepped out")
-            .actor(email)
-            .data(json!({ "until": until, "minutes": minutes })),
-    );
-    Ok(())
 }
 
-/// Time passing: people who stepped out come back when their time is up, and
-/// anyone who checked in while their RSVP said they'd be around is checked
-/// out once it says they've left (or they RSVP no).
+/// Time passing: people who stepped out come back when their time is up.
+/// Checked-in people also follow their RSVP: they're checked out once it
+/// says they've left (or they RSVP no) and back in when it says they're
+/// around again. Anyone staying on past it stays until it's next due.
 pub fn tick(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     let back: Vec<String> = state
         .checkins
@@ -133,36 +185,35 @@ pub fn tick(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
         }
         out.feed
             .push(FeedEntry::new(4, "checkin.back", "is back").actor(&email));
-        // Steam may show them playing again.
-        if let Some(presence) = state.presence.get(&email) {
-            if let Some(game) = presence.game_id {
-                let name = presence.game_name.clone();
-                super::presence::steam_membership(
-                    state,
-                    &email,
-                    Some(game),
-                    name.as_deref(),
-                    now,
-                    out,
-                );
-            }
+        if state.is_checked_in(&email) {
+            returned(state, &email, now, out);
         }
     }
 
-    let left: Vec<String> = state
-        .checkins
-        .values()
-        .filter(|c| {
-            state.people.get(&c.email).is_some_and(|p| {
-                p.attending_at(&state.event, c.at) && !p.attending_at(&state.event, now)
-            })
-        })
-        .map(|c| c.email.clone())
-        .collect();
-    for email in left {
-        state.checkins.remove(&email);
-        membership::leave_current(state, &email, "departed", now, out);
-        out.feed
-            .push(FeedEntry::new(4, "checkout.left", "has left").actor(&email));
+    let emails: Vec<String> = state.checkins.keys().cloned().collect();
+    for email in emails {
+        let around = state
+            .people
+            .get(&email)
+            .is_some_and(|p| p.attending_at(&state.event, now));
+        let Some(checkin) = state.checkins.get_mut(&email) else {
+            continue;
+        };
+        if around {
+            checkin.staying = false;
+            if checkin.departed {
+                checkin.departed = false;
+                out.feed
+                    .push(FeedEntry::new(4, "checkin.back", "is back").actor(&email));
+                if state.is_checked_in(&email) {
+                    returned(state, &email, now, out);
+                }
+            }
+        } else if !checkin.staying && !checkin.departed {
+            checkin.departed = true;
+            left(state, &email, now, out);
+            out.feed
+                .push(FeedEntry::new(4, "checkout.left", "has left").actor(&email));
+        }
     }
 }

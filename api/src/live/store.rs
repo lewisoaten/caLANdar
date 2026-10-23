@@ -291,13 +291,13 @@ pub async fn load(
         );
     }
 
-    let checkins = sqlx::query_as::<_, (String, DateTime<Utc>, String, Option<DateTime<Utc>>)>(
-        "SELECT email, checked_in_at, by_email, away_until FROM live_checkin WHERE event_id = $1",
+    let checkins = sqlx::query_as::<_, (String, DateTime<Utc>, String, Option<DateTime<Utc>>, bool, bool)>(
+        "SELECT email, checked_in_at, by_email, away_until, departed, staying FROM live_checkin WHERE event_id = $1",
     )
     .bind(event_id)
     .fetch_all(&mut *conn)
     .await?;
-    for (email, at, by, away_until) in checkins {
+    for (email, at, by, away_until, departed, staying) in checkins {
         state.checkins.insert(
             email.clone(),
             CheckIn {
@@ -305,6 +305,8 @@ pub async fn load(
                 at,
                 by,
                 away_until,
+                departed,
+                staying,
             },
         );
     }
@@ -832,10 +834,10 @@ pub async fn persist(
         }
         sqlx::query(
             r"
-            INSERT INTO live_checkin (event_id, email, checked_in_at, by_email, away_until)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO live_checkin (event_id, email, checked_in_at, by_email, away_until, departed, staying)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (event_id, email) DO UPDATE
-            SET checked_in_at = $3, by_email = $4, away_until = $5
+            SET checked_in_at = $3, by_email = $4, away_until = $5, departed = $6, staying = $7
             ",
         )
         .bind(event_id)
@@ -843,6 +845,8 @@ pub async fn persist(
         .bind(checkin.at)
         .bind(&checkin.by)
         .bind(checkin.away_until)
+        .bind(checkin.departed)
+        .bind(checkin.staying)
         .execute(&mut *conn)
         .await?;
     }

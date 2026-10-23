@@ -26,8 +26,11 @@ export interface MeStripProps {
   now: number;
   busy?: boolean;
   onCheckIn: () => void;
-  /** Step out for this many minutes (checking in again comes back early). */
-  onCheckOut?: (minutes: number) => void;
+  /**
+   * Step out for this many minutes (`extend` adds them to a step-out in
+   * progress), or with none, check out. Checking in again comes back.
+   */
+  onCheckOut?: (minutes?: number, extend?: boolean) => void;
   onSelect: (id: string) => void;
   /** Leave your NOW lobby (phase 2). */
   onLeave?: (lobby: LobbyView) => void;
@@ -44,9 +47,13 @@ export const AWAY_CHOICES = [
 
 function StepOutButton({
   busy,
+  label = "Step out",
+  prefix = "For",
   onCheckOut,
 }: {
   busy?: boolean;
+  label?: string;
+  prefix?: string;
   onCheckOut: (minutes: number) => void;
 }) {
   const [anchor, setAnchor] = React.useState<HTMLElement | null>(null);
@@ -61,7 +68,7 @@ function StepOutButton({
         aria-expanded={anchor ? "true" : undefined}
         onClick={(e) => setAnchor(e.currentTarget)}
       >
-        Step out
+        {label}
       </Button>
       <Menu
         anchorEl={anchor}
@@ -76,7 +83,7 @@ function StepOutButton({
               onCheckOut(choice.minutes);
             }}
           >
-            For {choice.label}
+            {prefix} {choice.label}
           </MenuItem>
         ))}
       </Menu>
@@ -185,18 +192,21 @@ export function MeStrip({
   const open = checkInOpen(state, now);
   const attending = me?.rsvp === "yes" || me?.rsvp === "maybe";
   const away = me?.awayUntil ?? null;
+  const departed = Boolean(me?.departed);
   const needsCheckIn = Boolean(me && attending && !me.checkedIn && !away);
-  const highlight = needsCheckIn && open;
+  const highlight = needsCheckIn && open && !departed;
 
-  const status = away
-    ? `STEPPED OUT · BACK ${clock(away)}`
-    : me?.checkedIn
-      ? `CHECKED IN ${me.checkedInAt ? dayClock(me.checkedInAt) : ""}`
-      : open
-        ? "NOT CHECKED IN"
-        : state.event
-          ? `DOORS ${dayClock(state.event.timeBegin)}`
-          : "";
+  const status = departed
+    ? "CHECKED OUT · NOT DUE NOW"
+    : away
+      ? `STEPPED OUT · BACK ${clock(away)}`
+      : me?.checkedIn
+        ? `CHECKED IN ${me.checkedInAt ? dayClock(me.checkedInAt) : ""}`
+        : open
+          ? "NOT CHECKED IN"
+          : state.event
+            ? `DOORS ${dayClock(state.event.timeBegin)}`
+            : "";
   const myVia = me?.presence?.via;
 
   return (
@@ -346,9 +356,29 @@ export function MeStrip({
             I&apos;m back
           </Button>
         )}
-        {me?.checkedIn && onCheckOut && (
-          <StepOutButton busy={busy} onCheckOut={onCheckOut} />
+        {away && !departed && onCheckOut && (
+          <StepOutButton
+            busy={busy}
+            label="Extend"
+            prefix="Another"
+            onCheckOut={(minutes) => onCheckOut(minutes, true)}
+          />
         )}
+        {me?.checkedIn &&
+          onCheckOut &&
+          (me.staying ? (
+            <Button
+              variant="outlined"
+              color="inherit"
+              size="small"
+              disabled={busy}
+              onClick={() => onCheckOut()}
+            >
+              Check out
+            </Button>
+          ) : (
+            <StepOutButton busy={busy} onCheckOut={onCheckOut} />
+          ))}
         {callVote}
         {state.event?.discordInviteUrl && (
           <Button

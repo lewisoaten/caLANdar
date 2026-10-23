@@ -69,6 +69,10 @@ export interface PersonView {
   checkedInAt: string | null;
   /** Stepped out until then (`checkedIn` is false meanwhile). */
   awayUntil: string | null;
+  /** Checked out because their RSVP says they've left. */
+  departed: boolean;
+  /** Here although their RSVP says they've left. */
+  staying: boolean;
   hasSteam: boolean;
   /** Only shared once the person has checked in. */
   presence: PresenceView | null;

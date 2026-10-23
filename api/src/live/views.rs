@@ -46,6 +46,10 @@ pub struct PersonView {
     pub checked_in_at: Option<DateTime<Utc>>,
     /// Stepped out until then (`checked_in` is false meanwhile).
     pub away_until: Option<DateTime<Utc>>,
+    /// Checked out because their RSVP says they've left.
+    pub departed: bool,
+    /// Here although their RSVP says they've left.
+    pub staying: bool,
     pub has_steam: bool,
     /// Only shared once the person has checked in (Steam presence from home
     /// is nobody else's business).
@@ -167,7 +171,7 @@ const fn typical_view(t: Typical) -> TypicalView {
 pub fn person_view(state: &LiveState, email: &str, now: DateTime<Utc>) -> Option<PersonView> {
     let person = state.people.get(email)?;
     let checkin = state.checkins.get(email);
-    let presence = checkin.filter(|c| c.away_until.is_none()).and_then(|_| {
+    let presence = checkin.filter(|c| c.here()).and_then(|_| {
         let p = state.presence.get(email);
         let via = state
             .current_membership(email)
@@ -199,6 +203,8 @@ pub fn person_view(state: &LiveState, email: &str, now: DateTime<Utc>) -> Option
         checked_in: state.is_checked_in(email),
         checked_in_at: checkin.map(|c| c.at),
         away_until: checkin.and_then(|c| c.away_until),
+        departed: checkin.is_some_and(|c| c.departed),
+        staying: checkin.is_some_and(|c| c.staying),
         has_steam: person.steam_id.is_some(),
         presence,
     })

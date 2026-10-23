@@ -223,8 +223,13 @@ pub async fn checkin(
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct CheckOutRequest {
-    /// How long to step out for: 30, 60 or 120.
-    pub minutes: i64,
+    /// How long to step out for: 30, 60 or 120. Omit to check out (only when
+    /// staying on past your RSVP).
+    #[serde(default)]
+    pub minutes: Option<i64>,
+    /// Add the time to a step-out in progress instead of counting from now.
+    #[serde(default)]
+    pub extend: bool,
     /// Admins only: who to check out (their pid). Omit to check yourself out.
     #[serde(default)]
     pub pid: Option<String>,
@@ -255,6 +260,7 @@ pub async fn checkout(
         Command::CheckOut {
             email,
             minutes: request.minutes,
+            extend: request.extend,
         },
         &key,
     )

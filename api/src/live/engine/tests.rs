@@ -1791,7 +1791,8 @@ fn check_out(
             gamer(email),
             Command::CheckOut {
                 email: email.into(),
-                minutes,
+                minutes: Some(minutes),
+                extend: false,
             },
         ),
         at,
@@ -1863,7 +1864,8 @@ fn stepping_out_is_validated() {
                 gamer("bo@x.io"),
                 Command::CheckOut {
                     email: "ana@x.io".into(),
-                    minutes: 30
+                    minutes: Some(30),
+                    extend: false
                 }
             ),
             t(19, 0)
@@ -1897,17 +1899,63 @@ fn people_away_do_not_count_for_votes() {
 }
 
 #[test]
-fn leaving_by_rsvp_checks_you_out() {
+fn stepping_out_can_be_extended() {
+    let mut s = checked_in(&["ana@x.io"]);
+    check_out(&mut s, "ana@x.io", 30, t(19, 0)).expect("out");
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::CheckOut {
+                email: "ana@x.io".into(),
+                minutes: Some(60),
+                extend: true,
+            },
+        ),
+        t(19, 20),
+    )
+    .expect("extended");
+    // Added to the 19:30 return, not to now.
+    assert_eq!(s.checkins["ana@x.io"].away_until, Some(t(20, 30)));
+    apply(&mut s, Input::Tick, t(19, 45)).expect("tick");
+    assert!(s.is_away("ana@x.io"));
+    apply(&mut s, Input::Tick, t(20, 31)).expect("tick");
+    assert!(s.is_checked_in("ana@x.io"));
+}
+
+#[test]
+fn your_rsvp_checks_you_out_and_back_in() {
     let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
-    // Ana's around for the first 6 hours only.
-    s.people.get_mut("ana@x.io").expect("ana").attendance = vec![1, 0, 0, 0, 0, 0, 0, 0];
+    // Ana's around for the first 6 hours, then not for 6, then around again.
+    s.people.get_mut("ana@x.io").expect("ana").attendance = vec![1, 0, 1, 1, 1, 1, 1, 1];
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(23, 0));
     apply(&mut s, Input::Tick, t(23, 59)).expect("tick");
     assert!(s.is_checked_in("ana@x.io"));
-    let out = apply(&mut s, Input::Tick, t(0, 1) + Duration::days(1)).expect("tick");
+
+    let day = Duration::days(1);
+    let out = apply(&mut s, Input::Tick, t(0, 1) + day).expect("tick");
     assert!(out.feed.iter().any(|f| f.kind == "checkout.left"));
-    assert!(!s.checkins.contains_key("ana@x.io"));
+    assert!(!s.is_checked_in("ana@x.io"));
+    assert!(s.checkins["ana@x.io"].departed);
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
     assert!(s.is_checked_in("bo@x.io"));
-    // Checking in again later (they stayed on) isn't undone.
+
+    // Their RSVP says they're around again: back in, no check-in needed.
+    let out = apply(&mut s, Input::Tick, t(6, 1) + day).expect("tick");
+    assert!(out.feed.iter().any(|f| f.kind == "checkin.back"));
+    assert!(s.is_checked_in("ana@x.io"));
+    assert!(lobby_of(&s, "ana@x.io").is_some(), "Steam still shows CS2");
+}
+
+#[test]
+fn staying_on_past_your_rsvp_until_you_check_out() {
+    let mut s = checked_in(&["ana@x.io"]);
+    s.people.get_mut("ana@x.io").expect("ana").attendance = vec![1, 0, 1, 1, 1, 1, 1, 1];
+    let day = Duration::days(1);
+    apply(&mut s, Input::Tick, t(0, 1) + day).expect("tick");
+    assert!(!s.is_checked_in("ana@x.io"));
+
+    // Checking in again keeps them here, and it isn't undone.
     apply(
         &mut s,
         cmd(
@@ -1916,9 +1964,40 @@ fn leaving_by_rsvp_checks_you_out() {
                 email: "ana@x.io".into(),
             },
         ),
-        t(1, 0) + Duration::days(1),
+        t(0, 30) + day,
     )
-    .expect("in");
-    apply(&mut s, Input::Tick, t(2, 0) + Duration::days(1)).expect("tick");
+    .expect("stay");
+    assert!(s.checkins["ana@x.io"].staying);
+    apply(&mut s, Input::Tick, t(3, 0) + day).expect("tick");
     assert!(s.is_checked_in("ana@x.io"));
+
+    // Stepping out makes no sense there: it's a check-out instead.
+    let check_out_now = |s: &mut LiveState, at| {
+        apply(
+            s,
+            cmd(
+                gamer("ana@x.io"),
+                Command::CheckOut {
+                    email: "ana@x.io".into(),
+                    minutes: None,
+                    extend: false,
+                },
+            ),
+            at,
+        )
+    };
+    check_out_now(&mut s, t(3, 30) + day).expect("out");
+    assert!(!s.is_checked_in("ana@x.io"));
+    apply(&mut s, Input::Tick, t(4, 0) + day).expect("tick");
+    assert!(
+        !s.is_checked_in("ana@x.io"),
+        "stays out until the RSVP says so"
+    );
+    // Within the RSVP, a plain check-out isn't offered.
+    apply(&mut s, Input::Tick, t(6, 1) + day).expect("tick");
+    assert!(s.is_checked_in("ana@x.io"));
+    assert!(matches!(
+        check_out_now(&mut s, t(7, 0) + day),
+        Err(Reject::BadInput(_))
+    ));
 }

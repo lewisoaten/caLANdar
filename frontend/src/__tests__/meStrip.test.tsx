@@ -16,6 +16,8 @@ const me = (extra: Partial<PersonView> = {}): PersonView => ({
   checkedIn: true,
   checkedInAt: "2026-10-23T18:05:00Z",
   awayUntil: null,
+  departed: false,
+  staying: false,
   hasSteam: false,
   presence: null,
   ...extra,
@@ -74,5 +76,31 @@ describe("MeStrip stepping out", () => {
     strip(me({ checkedIn: false, checkedInAt: null }));
     expect(screen.queryByRole("button", { name: "Step out" })).toBeNull();
     expect(screen.getByRole("button", { name: "I'm here" })).toBeTruthy();
+  });
+
+  test("a step-out can be extended", () => {
+    const { onCheckOut } = strip(
+      me({ checkedIn: false, awayUntil: "2026-10-23T21:00:00Z" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Extend" }));
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: "Another 30 minutes" }),
+    );
+    expect(onCheckOut).toHaveBeenCalledWith(30, true);
+  });
+
+  test("staying past your RSVP, the button is a check-out", () => {
+    const { onCheckOut } = strip(me({ staying: true }));
+    expect(screen.queryByRole("button", { name: "Step out" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Check out" }));
+    expect(onCheckOut).toHaveBeenCalledWith();
+  });
+
+  test("checked out by your RSVP, you can check in to stay", () => {
+    const { onCheckIn } = strip(me({ checkedIn: false, departed: true }));
+    expect(screen.getByText(/CHECKED OUT/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Step out" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "I'm here" }));
+    expect(onCheckIn).toHaveBeenCalled();
   });
 });
