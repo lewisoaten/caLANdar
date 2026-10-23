@@ -311,6 +311,33 @@ export function defaultSelection(state: LiveState, now: number): string | null {
 export const checkedIn = (state: LiveState): PersonView[] =>
   Object.values(state.people).filter((p) => p.checkedIn);
 
+export interface HereSummary {
+  /** Checked in and here, Steam-linked first, then by handle. */
+  here: PersonView[];
+  /** How many of `here` have a Steam ID set. */
+  steam: number;
+  /** People attending (yes or maybe), checked in or not. */
+  attending: number;
+}
+
+/** Who's checked in right now, and how many are linked to Steam. */
+export function hereSummary(state: LiveState): HereSummary {
+  const people = Object.values(state.people);
+  const here = people
+    .filter((p) => p.checkedIn)
+    .sort(
+      (a, b) =>
+        Number(b.hasSteam) - Number(a.hasSteam) ||
+        a.handle.localeCompare(b.handle),
+    );
+  return {
+    here,
+    steam: here.filter((p) => p.hasSteam).length,
+    attending: people.filter((p) => p.rsvp === "yes" || p.rsvp === "maybe")
+      .length,
+  };
+}
+
 export interface FloorGroup {
   lobbyId: string;
   color: string;

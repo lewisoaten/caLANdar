@@ -36,6 +36,7 @@ import { enablePush } from "../../live/push";
 import { userFacingReason } from "../../utils/apiError";
 import { ConnectionIndicator } from "./ConnectionIndicator";
 import { MeStrip } from "./MeStrip";
+import { HereStrip } from "./HereStrip";
 import { LiveTimeline } from "./LiveTimeline";
 import { LobbyDetails } from "./LobbyDetails";
 import { UpNext } from "./UpNext";
@@ -371,6 +372,8 @@ export default function LivePage() {
           />
         }
       />
+
+      <HereStrip state={state} />
 
       <Panel
         kicker={kicker}

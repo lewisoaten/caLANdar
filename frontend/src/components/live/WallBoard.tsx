@@ -4,6 +4,7 @@
  * pink alert strip, admin posts marked for the TV, a 10-hour timeline and
  * the floor. Keeps the screen awake (Wake Lock) and can sleep overnight.
  */
+import { HereStrip } from "./HereStrip";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -470,6 +471,8 @@ export default function WallBoard() {
           {clock(now)}
         </Box>
       </Box>
+
+      <HereStrip state={state} tv />
 
       {(alert || post) && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: "12px" }}>
