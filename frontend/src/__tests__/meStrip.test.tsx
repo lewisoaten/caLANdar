@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { initialLiveState, type LiveState } from "../live/store";
-import type { EventInfo, PersonView } from "../live/types";
+import type { LiveEventInfo, PersonView } from "../live/types";
 import { MeStrip } from "../components/live/MeStrip";
 
 const NOW = Date.parse("2026-10-23T20:00:00Z");
@@ -27,7 +27,7 @@ const stateFor = (person: PersonView): LiveState => ({
   event: {
     timeBegin: "2026-10-23T18:00:00Z",
     timeEnd: "2026-10-25T16:00:00Z",
-  } as EventInfo,
+  } as LiveEventInfo,
   people: { me: person },
 });
 
