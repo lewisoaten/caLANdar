@@ -236,7 +236,7 @@ ALTER TABLE event ADD COLUMN discord_invite_url TEXT,
 ### 4.2 Live tables
 
 ```sql
-live_checkin   (event_id, email, checked_in_at, by_email, PRIMARY KEY (event_id, email))
+live_checkin   (event_id, email, checked_in_at, by_email, away_until, PRIMARY KEY (event_id, email))
 
 game_lobby_defaults (game_id BIGINT PRIMARY KEY,     -- "saved for everyone", global across events (§5.6)
                      max_players INT, teams JSONB,   -- [{name, size}]
@@ -480,6 +480,8 @@ This is the one new UI element the design needs (a two-option chip row in the sh
 ### 5.5 Check-in and attendance
 
 - Check-in opens at `event.time_begin`. It's personal only, as in the handoff.
+- **Stepping out.** Someone checked in can step out for **30 minutes, 1 hour or 2 hours** (`POST /checkout {minutes}`), for example to do something else for a while. `live_checkin.away_until` holds when they're due back. While it's set they count as not checked in: they leave their lobby, Steam doesn't put them in one, they're not asked for in the admin check-in queue, and they don't count for votes. They're back when the time is up (the tick clears it), or sooner by checking in again ("I'm back"). It's always time-limited, so nobody can forget to come back. It's capped at the end of the event.
+- **Leaving by RSVP.** Someone who checked in while their attendance said they'd be around is **checked out** (the row is removed, and they leave their lobby) once their attendance buckets say they've left, or they RSVP no. If they stay on anyway, checking in again isn't undone. Admin check-ins of people who weren't due are never undone.
 - **Admin "Delay arrival"** clears the person's attendance bucket that contains `now`, via the existing invitation attendance update. Eligibility and the plan then pick up the change naturally.
 - **Admin "RSVP no"** sets the invitation response, drops all of the person's pre-joins, and removes them from vote eligibility.
 - **"Nudge"** sends a personal `toast.nudge` log row (`audience=email:x`), plus Web Push if the person has subscribed (§8).
@@ -526,7 +528,8 @@ All of these live under `/api/events/:id/live`, through the Netlify proxy. Admin
 | GET    | ``                                                         | Snapshot (§4.3)                                                              |
 | POST   | `/stream-token`                                            | Returns `{token, streamUrl}`                                                 |
 | GET    | `/stream?st=`                                              | **Direct to Cloud Run**                                                      |
-| POST   | `/checkin`                                                 | Admin: `{email}` with `as_admin`                                             |
+| POST   | `/checkin`                                                 | Admin: `{email}` with `as_admin`. Also comes back from stepping out          |
+| POST   | `/checkout`                                                | Step out for `{minutes}` (30, 60 or 120); admin may pass `pid`               |
 | POST   | `/presence`                                                | Manual: `{lobbyId}` or `{none:true}`; Leave                                  |
 | POST   | `/lobbies`                                                 | Propose: `{kind, gameId/food, start, durationMin, teams?, mode: alongside    | option, voteId?}` |
 | POST   | `/lobbies/:lid/prejoin` · DELETE                           | `{team?                                                                      | random}`          |

@@ -291,16 +291,22 @@ pub async fn load(
         );
     }
 
-    let checkins = sqlx::query_as::<_, (String, DateTime<Utc>, String)>(
-        "SELECT email, checked_in_at, by_email FROM live_checkin WHERE event_id = $1",
+    let checkins = sqlx::query_as::<_, (String, DateTime<Utc>, String, Option<DateTime<Utc>>)>(
+        "SELECT email, checked_in_at, by_email, away_until FROM live_checkin WHERE event_id = $1",
     )
     .bind(event_id)
     .fetch_all(&mut *conn)
     .await?;
-    for (email, at, by) in checkins {
-        state
-            .checkins
-            .insert(email.clone(), CheckIn { email, at, by });
+    for (email, at, by, away_until) in checkins {
+        state.checkins.insert(
+            email.clone(),
+            CheckIn {
+                email,
+                at,
+                by,
+                away_until,
+            },
+        );
     }
 
     let lobbies = sqlx::query_as::<_, LobbyRow>(
@@ -818,22 +824,35 @@ pub async fn persist(
     persist_presence(conn, before, after).await?;
     persist_defaults(conn, before, after).await?;
 
-    // Check-ins only ever get added.
+    // Check-ins are added, paused (away) and removed when someone's due to
+    // have left.
     for (email, checkin) in &after.checkins {
-        if !before.checkins.contains_key(email) {
-            sqlx::query(
-                r"
-                INSERT INTO live_checkin (event_id, email, checked_in_at, by_email)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (event_id, email) DO NOTHING
-                ",
-            )
-            .bind(event_id)
-            .bind(email)
-            .bind(checkin.at)
-            .bind(&checkin.by)
-            .execute(&mut *conn)
-            .await?;
+        if before.checkins.get(email) == Some(checkin) {
+            continue;
+        }
+        sqlx::query(
+            r"
+            INSERT INTO live_checkin (event_id, email, checked_in_at, by_email, away_until)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (event_id, email) DO UPDATE
+            SET checked_in_at = $3, by_email = $4, away_until = $5
+            ",
+        )
+        .bind(event_id)
+        .bind(email)
+        .bind(checkin.at)
+        .bind(&checkin.by)
+        .bind(checkin.away_until)
+        .execute(&mut *conn)
+        .await?;
+    }
+    for email in before.checkins.keys() {
+        if !after.checkins.contains_key(email) {
+            sqlx::query("DELETE FROM live_checkin WHERE event_id = $1 AND email = $2")
+                .bind(event_id)
+                .bind(email)
+                .execute(&mut *conn)
+                .await?;
         }
     }
     Ok(remap)

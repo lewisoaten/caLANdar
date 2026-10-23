@@ -10,6 +10,7 @@ use super::{membership, proposals, FeedEntry, Outcome};
 use crate::live::model::{LiveState, LobbyKind, LobbyStatus, Prejoin};
 
 pub fn run(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
+    super::checkin::tick(state, now, out);
     super::proposals::expire(state, now, out);
     super::votes::tick(state, now, out);
     switch_graces(state, now);
@@ -136,7 +137,7 @@ fn afk(state: &mut LiveState, now: DateTime<Utc>, out: &mut Outcome) {
     let newly: Vec<String> = state
         .presence
         .values()
-        .filter(|p| !p.afk_noted && p.is_afk(now) && state.checkins.contains_key(&p.email))
+        .filter(|p| !p.afk_noted && p.is_afk(now) && state.is_checked_in(&p.email))
         .map(|p| p.email.clone())
         .collect();
     for email in newly {

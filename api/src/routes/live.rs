@@ -222,6 +222,47 @@ pub async fn checkin(
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(crate = "rocket::serde", rename_all = "camelCase")]
+pub struct CheckOutRequest {
+    /// How long to step out for: 30, 60 or 120.
+    pub minutes: i64,
+    /// Admins only: who to check out (their pid). Omit to check yourself out.
+    #[serde(default)]
+    pub pid: Option<String>,
+}
+
+/// Step out for a while (you check yourself back in, or it ends by itself).
+#[openapi(tag = "Live")]
+#[post(
+    "/events/<event_id>/live/checkout",
+    format = "json",
+    data = "<request>"
+)]
+pub async fn checkout(
+    event_id: i32,
+    request: Json<CheckOutRequest>,
+    key: IdempotencyKey,
+    pool: &State<PgPool>,
+    user: User,
+) -> Result<Json<CommandResponse>, LiveError> {
+    let email = match &request.pid {
+        None => user.email.clone(),
+        Some(pid) => live::email_for_pid(pool, event_id, pid).await?,
+    };
+    run(
+        pool,
+        event_id,
+        &user.email,
+        Command::CheckOut {
+            email,
+            minutes: request.minutes,
+        },
+        &key,
+    )
+    .await
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde", rename_all = "camelCase")]
 pub struct SettingsRequest {
     /// Empty string clears it; omit to leave it.
     #[serde(default)]

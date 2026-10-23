@@ -357,6 +357,7 @@ export default function LivePage() {
         now={now}
         busy={busy}
         onCheckIn={() => void command("/checkin", {})}
+        onCheckOut={(minutes) => void command("/checkout", { minutes })}
         onSelect={setSelected}
         onLeave={() => void command("/presence", { none: true })}
         callVote={

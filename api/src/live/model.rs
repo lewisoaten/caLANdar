@@ -97,6 +97,8 @@ pub struct CheckIn {
     pub email: Email,
     pub at: DateTime<Utc>,
     pub by: Email,
+    /// Stepped out until then (they count as not checked in); `None` is here.
+    pub away_until: Option<DateTime<Utc>>,
 }
 
 macro_rules! string_enum {
@@ -482,8 +484,23 @@ impl LiveState {
         i32::try_from(self.temp_id()).unwrap_or(i32::MIN)
     }
 
+    /// Checked in and here (not stepped out).
     pub fn is_checked_in(&self, email: &str) -> bool {
-        self.checkins.contains_key(email)
+        self.checkins
+            .get(email)
+            .is_some_and(|c| c.away_until.is_none())
+    }
+
+    /// Checked in but stepped out for a while.
+    pub fn is_away(&self, email: &str) -> bool {
+        self.checkins
+            .get(email)
+            .is_some_and(|c| c.away_until.is_some())
+    }
+
+    /// Whether anyone is here right now.
+    pub fn anyone_checked_in(&self) -> bool {
+        self.checkins.values().any(|c| c.away_until.is_none())
     }
 
     /// The lobby someone is in right now, as `(member id, lobby id)`.

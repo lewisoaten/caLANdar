@@ -5,6 +5,8 @@
 import * as React from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import { UserAvatar } from "../hl/UserAvatar";
 import { colors, tint } from "../hl/tokens";
 import type { LiveState } from "../../live/store";
@@ -24,11 +26,62 @@ export interface MeStripProps {
   now: number;
   busy?: boolean;
   onCheckIn: () => void;
+  /** Step out for this many minutes (checking in again comes back early). */
+  onCheckOut?: (minutes: number) => void;
   onSelect: (id: string) => void;
   /** Leave your NOW lobby (phase 2). */
   onLeave?: (lobby: LobbyView) => void;
   /** The Call vote menu (phase 3). */
   callVote?: React.ReactNode;
+}
+
+/** How long someone can step out for. */
+export const AWAY_CHOICES = [
+  { minutes: 30, label: "30 minutes" },
+  { minutes: 60, label: "1 hour" },
+  { minutes: 120, label: "2 hours" },
+];
+
+function StepOutButton({
+  busy,
+  onCheckOut,
+}: {
+  busy?: boolean;
+  onCheckOut: (minutes: number) => void;
+}) {
+  const [anchor, setAnchor] = React.useState<HTMLElement | null>(null);
+  return (
+    <>
+      <Button
+        variant="outlined"
+        color="inherit"
+        size="small"
+        disabled={busy}
+        aria-haspopup="menu"
+        aria-expanded={anchor ? "true" : undefined}
+        onClick={(e) => setAnchor(e.currentTarget)}
+      >
+        Step out
+      </Button>
+      <Menu
+        anchorEl={anchor}
+        open={Boolean(anchor)}
+        onClose={() => setAnchor(null)}
+      >
+        {AWAY_CHOICES.map((choice) => (
+          <MenuItem
+            key={choice.minutes}
+            onClick={() => {
+              setAnchor(null);
+              onCheckOut(choice.minutes);
+            }}
+          >
+            For {choice.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
+  );
 }
 
 function SlotChip({
@@ -121,6 +174,7 @@ export function MeStrip({
   now,
   busy,
   onCheckIn,
+  onCheckOut,
   onSelect,
   onLeave,
   callVote,
@@ -130,16 +184,19 @@ export function MeStrip({
   const next = myNext(state, now);
   const open = checkInOpen(state, now);
   const attending = me?.rsvp === "yes" || me?.rsvp === "maybe";
-  const needsCheckIn = Boolean(me && attending && !me.checkedIn);
+  const away = me?.awayUntil ?? null;
+  const needsCheckIn = Boolean(me && attending && !me.checkedIn && !away);
   const highlight = needsCheckIn && open;
 
-  const status = me?.checkedIn
-    ? `CHECKED IN ${me.checkedInAt ? dayClock(me.checkedInAt) : ""}`
-    : open
-      ? "NOT CHECKED IN"
-      : state.event
-        ? `DOORS ${dayClock(state.event.timeBegin)}`
-        : "";
+  const status = away
+    ? `STEPPED OUT · BACK ${clock(away)}`
+    : me?.checkedIn
+      ? `CHECKED IN ${me.checkedInAt ? dayClock(me.checkedInAt) : ""}`
+      : open
+        ? "NOT CHECKED IN"
+        : state.event
+          ? `DOORS ${dayClock(state.event.timeBegin)}`
+          : "";
   const myVia = me?.presence?.via;
 
   return (
@@ -278,6 +335,20 @@ export function MeStrip({
               {state.event ? dayClock(state.event.timeBegin) : ""}
             </Button>
           ))}
+        {away && (
+          <Button
+            variant="contained"
+            color="success"
+            size="small"
+            onClick={onCheckIn}
+            disabled={busy}
+          >
+            I&apos;m back
+          </Button>
+        )}
+        {me?.checkedIn && onCheckOut && (
+          <StepOutButton busy={busy} onCheckOut={onCheckOut} />
+        )}
         {callVote}
         {state.event?.discordInviteUrl && (
           <Button

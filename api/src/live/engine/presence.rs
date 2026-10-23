@@ -242,7 +242,9 @@ pub fn playing_not_checked_in(state: &LiveState) -> Vec<(Email, Option<String>)>
     state
         .presence
         .values()
-        .filter(|p| p.game_id.is_some() && !state.is_checked_in(&p.email))
+        .filter(|p| {
+            p.game_id.is_some() && !state.is_checked_in(&p.email) && !state.is_away(&p.email)
+        })
         .filter(|p| {
             state
                 .people

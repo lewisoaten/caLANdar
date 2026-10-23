@@ -44,6 +44,8 @@ pub struct PersonView {
     pub attendance: Vec<u8>,
     pub checked_in: bool,
     pub checked_in_at: Option<DateTime<Utc>>,
+    /// Stepped out until then (`checked_in` is false meanwhile).
+    pub away_until: Option<DateTime<Utc>>,
     pub has_steam: bool,
     /// Only shared once the person has checked in (Steam presence from home
     /// is nobody else's business).
@@ -165,7 +167,7 @@ const fn typical_view(t: Typical) -> TypicalView {
 pub fn person_view(state: &LiveState, email: &str, now: DateTime<Utc>) -> Option<PersonView> {
     let person = state.people.get(email)?;
     let checkin = state.checkins.get(email);
-    let presence = checkin.and_then(|_| {
+    let presence = checkin.filter(|c| c.away_until.is_none()).and_then(|_| {
         let p = state.presence.get(email);
         let via = state
             .current_membership(email)
@@ -194,8 +196,9 @@ pub fn person_view(state: &LiveState, email: &str, now: DateTime<Utc>) -> Option
         }),
         rsvp: person.rsvp.map(|r| r.as_str().to_string()),
         attendance: person.attendance.clone(),
-        checked_in: checkin.is_some(),
+        checked_in: state.is_checked_in(email),
         checked_in_at: checkin.map(|c| c.at),
+        away_until: checkin.and_then(|c| c.away_until),
         has_steam: person.steam_id.is_some(),
         presence,
     })
@@ -302,6 +305,7 @@ pub fn admin_queue(state: &LiveState, now: DateTime<Utc>) -> Vec<AdminQueueItem>
         for person in state.people.values() {
             let id = pid(&person.email);
             if !state.is_checked_in(&person.email)
+                && !state.is_away(&person.email)
                 && person.attending_at(&state.event, now)
                 && !items.iter().any(|i| i.pid == id)
             {

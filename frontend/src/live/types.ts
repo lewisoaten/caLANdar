@@ -67,6 +67,8 @@ export interface PersonView {
   attendance: number[];
   checkedIn: boolean;
   checkedInAt: string | null;
+  /** Stepped out until then (`checkedIn` is false meanwhile). */
+  awayUntil: string | null;
   hasSteam: boolean;
   /** Only shared once the person has checked in. */
   presence: PresenceView | null;

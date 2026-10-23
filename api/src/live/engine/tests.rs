@@ -1776,3 +1776,149 @@ fn kick_off_early_moves_the_first_lobby() {
     tick_at(&mut s, t(12, 2));
     assert_eq!(s.lobbies[&drg].start, t(18, 0));
 }
+
+// ---- stepping out ---------------------------------------------------------
+
+fn check_out(
+    s: &mut LiveState,
+    email: &str,
+    minutes: i64,
+    at: DateTime<Utc>,
+) -> Result<Outcome, Reject> {
+    apply(
+        s,
+        cmd(
+            gamer(email),
+            Command::CheckOut {
+                email: email.into(),
+                minutes,
+            },
+        ),
+        at,
+    )
+}
+
+#[test]
+fn stepping_out_leaves_the_lobby_and_ends_by_itself() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    play(&mut s, "ana@x.io", Some((CS2, "CS2")), t(19, 0));
+    assert!(lobby_of(&s, "ana@x.io").is_some());
+
+    let out = check_out(&mut s, "ana@x.io", 60, t(19, 10)).expect("out");
+    assert!(out.feed.iter().any(|f| f.kind == "checkout"));
+    assert!(!s.is_checked_in("ana@x.io"));
+    assert!(s.is_away("ana@x.io"));
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
+    assert_eq!(s.checkins["ana@x.io"].away_until, Some(t(20, 10)));
+
+    // Steam still showing the game doesn't pull them back in while away.
+    apply(&mut s, Input::Tick, t(19, 40)).expect("tick");
+    assert_eq!(lobby_of(&s, "ana@x.io"), None);
+    // …and they're not nagging the admin queue either.
+    assert!(playing_not_checked_in(&s).is_empty());
+
+    // The hour is up: back, and in their game again.
+    let out = apply(&mut s, Input::Tick, t(20, 11)).expect("tick");
+    assert!(out.feed.iter().any(|f| f.kind == "checkin.back"));
+    assert!(s.is_checked_in("ana@x.io"));
+    assert!(lobby_of(&s, "ana@x.io").is_some());
+}
+
+#[test]
+fn checking_in_again_comes_back_early() {
+    let mut s = checked_in(&["ana@x.io"]);
+    check_out(&mut s, "ana@x.io", 120, t(19, 0)).expect("out");
+    assert!(!s.is_checked_in("ana@x.io"));
+    let out = apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::CheckIn {
+                email: "ana@x.io".into(),
+            },
+        ),
+        t(19, 20),
+    )
+    .expect("back");
+    assert!(s.is_checked_in("ana@x.io"));
+    assert_eq!(s.checkins["ana@x.io"].at, t(18, 1));
+    assert_eq!(out.feed[0].kind, "checkin.back");
+}
+
+#[test]
+fn stepping_out_is_validated() {
+    let mut s = checked_in(&["ana@x.io"]);
+    assert!(matches!(
+        check_out(&mut s, "ana@x.io", 45, t(19, 0)),
+        Err(Reject::BadInput(_))
+    ));
+    assert_eq!(
+        check_out(&mut s, "bo@x.io", 30, t(19, 0)),
+        Err(Reject::Conflict("Check in first".to_string()))
+    );
+    assert!(matches!(
+        apply(
+            &mut s,
+            cmd(
+                gamer("bo@x.io"),
+                Command::CheckOut {
+                    email: "ana@x.io".into(),
+                    minutes: 30
+                }
+            ),
+            t(19, 0)
+        ),
+        Err(Reject::Forbidden(_))
+    ));
+    // It can't run past the end of the event.
+    let near_end = s.event.time_end - Duration::minutes(10);
+    check_out(&mut s, "ana@x.io", 120, near_end).expect("out");
+    assert_eq!(s.checkins["ana@x.io"].away_until, Some(s.event.time_end));
+}
+
+#[test]
+fn people_away_do_not_count_for_votes() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io", "cy@x.io"]);
+    let drg = planned(&mut s, DRG, "DRG", t(22, 0), 120);
+    propose(
+        &mut s,
+        "ana@x.io",
+        game(L4D, "L4D2"),
+        t(22, 0),
+        ProposalMode::Challenge(LobbyRef::Stored(drg)),
+        t(20, 0),
+    )
+    .expect("challenged");
+    let vote = the_vote(&s);
+    assert_eq!(involved(&s, &vote).len(), 3);
+    check_out(&mut s, "cy@x.io", 60, t(20, 5)).expect("out");
+    assert!(s.anyone_checked_in());
+    assert_eq!(involved(&s, &s.votes[&vote.id]).len(), 2);
+}
+
+#[test]
+fn leaving_by_rsvp_checks_you_out() {
+    let mut s = checked_in(&["ana@x.io", "bo@x.io"]);
+    // Ana's around for the first 6 hours only.
+    s.people.get_mut("ana@x.io").expect("ana").attendance = vec![1, 0, 0, 0, 0, 0, 0, 0];
+    apply(&mut s, Input::Tick, t(23, 59)).expect("tick");
+    assert!(s.is_checked_in("ana@x.io"));
+    let out = apply(&mut s, Input::Tick, t(0, 1) + Duration::days(1)).expect("tick");
+    assert!(out.feed.iter().any(|f| f.kind == "checkout.left"));
+    assert!(!s.checkins.contains_key("ana@x.io"));
+    assert!(s.is_checked_in("bo@x.io"));
+    // Checking in again later (they stayed on) isn't undone.
+    apply(
+        &mut s,
+        cmd(
+            gamer("ana@x.io"),
+            Command::CheckIn {
+                email: "ana@x.io".into(),
+            },
+        ),
+        t(1, 0) + Duration::days(1),
+    )
+    .expect("in");
+    apply(&mut s, Input::Tick, t(2, 0) + Duration::days(1)).expect("tick");
+    assert!(s.is_checked_in("ana@x.io"));
+}

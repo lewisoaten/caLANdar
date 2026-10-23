@@ -76,6 +76,8 @@ pub struct PlayersAndTeams {
 pub enum Command {
     /// Check in yourself, or (admins) someone else.
     CheckIn { email: Email },
+    /// Step out for `minutes` (30, 60 or 120); checking in again comes back.
+    CheckOut { email: Email, minutes: i64 },
     /// Admin: add a lobby to the schedule.
     CreateLobby(LobbyEdit),
     /// Admin: move or resize a lobby (or change its game).
@@ -287,6 +289,9 @@ fn command_step(
 ) -> Result<(), Reject> {
     match command {
         Command::CheckIn { email } => checkin::check_in(state, actor, &email, now, out),
+        Command::CheckOut { email, minutes } => {
+            checkin::check_out(state, actor, &email, minutes, now, out)
+        }
         Command::CreateLobby(edit) => {
             require_admin(actor)?;
             schedule::create_lobby(state, actor, edit, now, out)

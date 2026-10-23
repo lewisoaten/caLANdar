@@ -93,7 +93,7 @@ pub fn involved(state: &LiveState, vote: &Vote) -> Vec<Email> {
     match vote.kind {
         VoteType::Slot => {
             let at = vote.slot_start.unwrap_or(vote.opened_at);
-            let anyone_checked_in = !state.checkins.is_empty();
+            let anyone_checked_in = state.anyone_checked_in();
             for person in state.people.values() {
                 let counts = if anyone_checked_in {
                     state.is_checked_in(&person.email) && person.attending()

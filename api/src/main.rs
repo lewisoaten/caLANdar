@@ -253,6 +253,7 @@ fn build_rocket(
                 routes::live::snapshot,
                 routes::live::post,
                 routes::live::checkin,
+                routes::live::checkout,
                 routes::live::settings,
                 routes::live::get_settings,
                 routes::live::tick,
