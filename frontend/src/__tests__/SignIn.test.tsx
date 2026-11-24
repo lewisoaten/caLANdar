@@ -75,17 +75,53 @@ describe("SignIn", () => {
     expect(screen.getByLabelText(/email/i)).toHaveValue("sam@example.com");
   });
 
-  test("tells the user when the server throttles sign-in", async () => {
+  const failWith = (status: number, description: string) =>
     server.use(
-      http.post("/api/login", () => HttpResponse.json({}, { status: 429 })),
+      http.post("/api/login", () =>
+        HttpResponse.json(
+          { error: { code: status, reason: "x", description } },
+          { status },
+        ),
+      ),
     );
+
+  const submit = () => {
     renderSignIn();
     fireEvent.change(screen.getByLabelText(/email/i), {
       target: { value: "sam@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: /send login link/i }));
+  };
+
+  test("shows the server's reason when sign-in is throttled", async () => {
+    failWith(429, "Too many sign-in attempts. Please wait a while.");
+    submit();
     expect(
       await screen.findByText(/too many sign-in attempts/i),
+    ).toBeInTheDocument();
+  });
+
+  test("a failed human check is not blamed on the email address", async () => {
+    failWith(
+      400,
+      "Could not verify you are human. Please refresh and try again.",
+    );
+    submit();
+    expect(
+      await screen.findByText(/could not verify you are human/i),
+    ).toBeInTheDocument();
+    // The error under the field is the server's, not the old "check the
+    // address" guess.
+    expect(screen.getByLabelText(/email/i)).not.toHaveAccessibleDescription(
+      /invite came to/i,
+    );
+  });
+
+  test("falls back to a neutral message when the server never answers", async () => {
+    server.use(http.post("/api/login", () => HttpResponse.error()));
+    submit();
+    expect(
+      await screen.findByText(/couldn't send a login link/i),
     ).toBeInTheDocument();
   });
 

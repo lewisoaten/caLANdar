@@ -17,8 +17,20 @@ interface IUserContext {
   isAdmin: boolean;
 }
 
-/** Message of the error `signIn` rejects with when the server throttles it. */
-export const RATE_LIMITED = "rate-limited";
+/**
+ * Why `signIn` failed. `serverMessage` is the API's own explanation (throttled,
+ * CAPTCHA failed, couldn't send...), written to be shown to users; it is
+ * undefined when the request never got an answer.
+ */
+export class SignInError extends Error {
+  constructor(
+    public readonly status: number | undefined,
+    public readonly serverMessage?: string,
+  ) {
+    super(serverMessage ?? "Sign-in failed");
+    this.name = "SignInError";
+  }
+}
 
 interface IUserDispatchContext {
   signIn: (email: string, turnstileToken?: string) => Promise<Response>;
@@ -91,15 +103,24 @@ function UserProvider({ children }: Props) {
         redirect: locationRef.current.state?.from?.pathname,
         turnstileToken,
       }),
-    }).then((response) => {
-      if (response.status === 200) {
-        return response.json();
-      } else if (response.status === 429) {
-        throw new Error(RATE_LIMITED);
-      } else {
-        throw new Error("Invalid email");
-      }
-    });
+    }).then(
+      async (response) => {
+        if (response.status === 200) {
+          return response.json();
+        }
+        let serverMessage: string | undefined;
+        try {
+          const body = await response.json();
+          serverMessage = body?.error?.description;
+        } catch {
+          // Not our API's error shape (e.g. a proxy error page).
+        }
+        throw new SignInError(response.status, serverMessage);
+      },
+      () => {
+        throw new SignInError(undefined);
+      },
+    );
 
     return signin_promise;
   }

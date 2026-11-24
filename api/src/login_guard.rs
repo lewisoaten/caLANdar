@@ -86,41 +86,59 @@ pub struct LoginLimiter {
 }
 
 impl LoginLimiter {
-    /// Count a sign-in request for `email` (already normalised) from `ip`.
+    /// Would a request for `email` (already normalised) from `ip` be refused
+    /// right now? Records nothing, so it is safe to call before the CAPTCHA:
+    /// callers who have not proven they are human cannot use up anyone's
+    /// quota, only be turned away early.
+    pub fn peek(&self, email: &str, ip: Option<&str>) -> Result<(), Limited> {
+        self.peek_at(email, ip, Instant::now())
+    }
+
+    pub fn peek_at(&self, email: &str, ip: Option<&str>, now: Instant) -> Result<(), Limited> {
+        let mut w = self.windows.lock().unwrap_or_else(PoisonError::into_inner);
+        Self::refusal(&mut w, email, ip, now)
+    }
+
+    /// Count a sign-in request, atomically re-checking the limits first (they
+    /// may have filled since [`peek`](Self::peek), and two requests can race).
     /// Nothing is recorded when the request is refused, so a blocked caller
-    /// cannot extend their own lockout by hammering.
+    /// cannot extend their own lockout by hammering. Call this only for
+    /// requests that have passed the CAPTCHA and are about to send an email.
     pub fn check(&self, email: &str, ip: Option<&str>) -> Result<(), Limited> {
         self.check_at(email, ip, Instant::now())
     }
 
     pub fn check_at(&self, email: &str, ip: Option<&str>, now: Instant) -> Result<(), Limited> {
         let mut w = self.windows.lock().unwrap_or_else(PoisonError::into_inner);
-        let email_key = format!("email:{email}");
-        let ip_key = ip.map(|ip| format!("ip:{ip}"));
+        Self::refusal(&mut w, email, ip, now)?;
+        w.sweep(now);
+        w.record(&format!("email:{email}"), now);
+        if let Some(ip) = ip {
+            w.record(&format!("ip:{ip}"), now);
+        }
+        w.record("global", now);
+        drop(w);
+        Ok(())
+    }
 
+    fn refusal(
+        w: &mut Windows,
+        email: &str,
+        ip: Option<&str>,
+        now: Instant,
+    ) -> Result<(), Limited> {
         let mut worst: Option<Duration> = None;
         let mut note = |d: Option<Duration>| {
             if let Some(d) = d {
                 worst = Some(worst.map_or(d, |w| w.max(d)));
             }
         };
-        note(w.blocked(&email_key, PER_EMAIL, PER_EMAIL_WINDOW, now));
-        if let Some(key) = &ip_key {
-            note(w.blocked(key, PER_IP, HOUR, now));
+        note(w.blocked(&format!("email:{email}"), PER_EMAIL, PER_EMAIL_WINDOW, now));
+        if let Some(ip) = ip {
+            note(w.blocked(&format!("ip:{ip}"), PER_IP, HOUR, now));
         }
         note(w.blocked("global", GLOBAL, HOUR, now));
-        if let Some(retry_after) = worst {
-            return Err(Limited { retry_after });
-        }
-
-        w.sweep(now);
-        w.record(&email_key, now);
-        if let Some(key) = &ip_key {
-            w.record(key, now);
-        }
-        w.record("global", now);
-        drop(w);
-        Ok(())
+        worst.map_or(Ok(()), |retry_after| Err(Limited { retry_after }))
     }
 }
 
@@ -241,6 +259,32 @@ impl Turnstile {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn peeking_never_uses_up_quota() {
+        let (l, t) = limiter();
+        // A caller who never gets past the CAPTCHA only ever peeks.
+        for _ in 0..(GLOBAL * 2) {
+            assert!(l.peek_at("victim@x.co", Some("1.1.1.1"), t).is_ok());
+        }
+        for _ in 0..PER_EMAIL {
+            assert!(l.check_at("victim@x.co", Some("1.1.1.1"), t).is_ok());
+        }
+    }
+
+    #[test]
+    fn peek_sees_a_full_quota() {
+        let (l, t) = limiter();
+        for _ in 0..PER_EMAIL {
+            l.check_at("a@b.co", None, t).unwrap();
+        }
+        assert_eq!(
+            l.peek_at("a@b.co", None, t).unwrap_err().retry_after,
+            PER_EMAIL_WINDOW
+        );
+        // ...and still records nothing of its own.
+        assert!(l.peek_at("a@b.co", None, t + PER_EMAIL_WINDOW).is_ok());
+    }
 
     fn limiter() -> (LoginLimiter, Instant) {
         (LoginLimiter::default(), Instant::now())

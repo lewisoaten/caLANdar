@@ -46,18 +46,25 @@ pub async fn login(
     let email = crate::util::normalise_email(&login_request.email);
     crate::util::validate_email(&email).map_err(LoginError::BadRequest)?;
 
-    // Cheapest checks first: throttle before spending a Turnstile round trip,
-    // and well before anything is emailed.
-    if let Err(limited) = limiter.check(&email, client_ip.0.as_deref()) {
+    let throttled = |limited: &crate::login_guard::Limited| {
         log::warn!(
             "login throttled for {email} from {:?}, retry in {}s",
             client_ip.0,
             limited.retry_after.as_secs()
         );
-        return Err(LoginError::TooManyRequests(
+        LoginError::TooManyRequests(
             "Too many sign-in attempts. Please wait a while and try again.".to_string(),
-        ));
-    }
+        )
+    };
+
+    // Turn away callers who are already over a limit before spending a
+    // Turnstile round trip. This only looks: quota is spent further down, once
+    // the caller has proven they are human, so a script that cannot solve the
+    // CAPTCHA can't lock anyone out or use up the shared allowance.
+    limiter
+        .peek(&email, client_ip.0.as_deref())
+        .map_err(|l| throttled(&l))?;
+
     match turnstile
         .verify(
             login_request.turnstile_token.as_deref(),
@@ -77,6 +84,12 @@ pub async fn login(
             ));
         }
     }
+
+    // Re-check and record together, so two concurrent requests can't both
+    // slip under a limit that only has room for one.
+    limiter
+        .check(&email, client_ip.0.as_deref())
+        .map_err(|l| throttled(&l))?;
 
     let mut context = Context::new();
     context.insert("name", &email);

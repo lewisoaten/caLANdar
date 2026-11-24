@@ -7,7 +7,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import ArrowForwardSharp from "@mui/icons-material/ArrowForwardSharp";
 import MarkEmailReadSharp from "@mui/icons-material/MarkEmailReadSharp";
-import { RATE_LIMITED, UserDispatchContext } from "../UserProvider";
+import { SignInError, UserDispatchContext } from "../UserProvider";
 import TurnstileWidget, { TURNSTILE_SITE_KEY } from "./TurnstileWidget";
 import { colors } from "./hl";
 import AuthLayout, {
@@ -57,16 +57,19 @@ export default function SignIn() {
         setSubmitted(true);
       })
       .catch((e: unknown) => {
+        // The server says what actually went wrong (throttled, human check
+        // failed, ...); only guess when it never answered.
         setError(
-          e instanceof Error && e.message === RATE_LIMITED
-            ? "Too many sign-in attempts. Please wait a while and try again."
-            : "We couldn't send a login link to that address. Check it's the one your invite came to.",
+          e instanceof SignInError && e.serverMessage
+            ? e.serverMessage
+            : "We couldn't send a login link. Check your connection and the address, then try again.",
         );
         inputRef.current?.focus();
       })
       .finally(() => {
         setLoading(false);
-        // A Turnstile token is single use.
+        // A Turnstile token is single use: drop it and get a fresh challenge.
+        setTurnstileToken(null);
         setTurnstileReset((n) => n + 1);
       });
   };
@@ -149,10 +152,7 @@ export default function SignIn() {
                 sx={bigInputSx}
               />
             </Box>
-            <TurnstileWidget
-              onToken={setTurnstileToken}
-              resetKey={turnstileReset}
-            />
+            <TurnstileWidget key={turnstileReset} onToken={setTurnstileToken} />
             <Button
               type="submit"
               variant="contained"
