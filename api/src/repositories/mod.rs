@@ -8,6 +8,7 @@ pub mod game_suggestion;
 pub mod game_update;
 pub mod gamer;
 pub mod invitation;
+pub mod login_token;
 pub mod profile;
 pub mod room;
 pub mod seat;

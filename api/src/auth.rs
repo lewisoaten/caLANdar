@@ -26,6 +26,8 @@ pub struct PasetoToken {
     iat: String,
     nbf: String,
     pub r: Option<String>,
+    /// `"1"` on sign-in links, which can be spent only once.
+    pub su: Option<String>,
     pub sub: String,
 }
 

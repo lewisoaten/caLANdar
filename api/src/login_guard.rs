@@ -142,31 +142,49 @@ impl LoginLimiter {
     }
 }
 
-/// The caller's address as best we can tell. Netlify proxies `/api/*` to Cloud
-/// Run, so the TCP peer is always Netlify; the real client is the first
-/// `X-Forwarded-For` entry. A caller can forge that header to dodge the
-/// per-IP limit, which is why the per-address and global limits exist too.
-pub struct ClientIp(pub Option<String>);
+/// Who is calling: the address and browser string, for throttling and for the
+/// audit log. Netlify proxies `/api/*` to Cloud Run, so the TCP peer is always
+/// Netlify; the real client is the first `X-Forwarded-For` entry. A caller can
+/// forge that header to dodge the per-IP limit, which is why the per-address
+/// and global limits exist too.
+pub struct ClientMeta {
+    /// Only ever a parsed IP address, so it is safe for `audit_log.ip_address`
+    /// (`VARCHAR(45)`) however much junk a caller puts in the header.
+    pub ip: Option<String>,
+    pub user_agent: Option<String>,
+}
+
+/// Longest browser string kept; they are attacker controlled.
+const MAX_USER_AGENT: usize = 300;
+
+fn parse_forwarded_ip(header: &str) -> Option<String> {
+    header
+        .split(',')
+        .next()
+        .map(str::trim)
+        .and_then(|first| first.parse::<std::net::IpAddr>().ok())
+        .map(|ip| ip.to_string())
+}
 
 #[rocket::async_trait]
-impl<'r> FromRequest<'r> for ClientIp {
+impl<'r> FromRequest<'r> for ClientMeta {
     type Error = std::convert::Infallible;
 
     async fn from_request(request: &'r Request<'_>) -> Outcome<Self, Self::Error> {
-        let forwarded = request
+        let ip = request
             .headers()
             .get_one("X-Forwarded-For")
-            .and_then(|v| v.split(',').next())
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-            .map(str::to_string);
-        Outcome::Success(Self(
-            forwarded.or_else(|| request.remote().map(|a| a.ip().to_string())),
-        ))
+            .and_then(parse_forwarded_ip)
+            .or_else(|| request.remote().map(|a| a.ip().to_string()));
+        let user_agent = request
+            .headers()
+            .get_one("User-Agent")
+            .map(|ua| ua.chars().take(MAX_USER_AGENT).collect());
+        Outcome::Success(Self { ip, user_agent })
     }
 }
 
-impl rocket_okapi::request::OpenApiFromRequest<'_> for ClientIp {
+impl rocket_okapi::request::OpenApiFromRequest<'_> for ClientMeta {
     fn from_request_input(
         _gen: &mut rocket_okapi::gen::OpenApiGenerator,
         _name: String,
@@ -284,6 +302,22 @@ mod tests {
         );
         // ...and still records nothing of its own.
         assert!(l.peek_at("a@b.co", None, t + PER_EMAIL_WINDOW).is_ok());
+    }
+
+    #[test]
+    fn forwarded_ip_takes_the_first_valid_entry_only() {
+        assert_eq!(
+            parse_forwarded_ip("203.0.113.9, 10.0.0.1").as_deref(),
+            Some("203.0.113.9")
+        );
+        assert_eq!(
+            parse_forwarded_ip("2001:db8::1").as_deref(),
+            Some("2001:db8::1")
+        );
+        // Junk must never reach the VARCHAR(45) column.
+        assert_eq!(parse_forwarded_ip("not-an-ip, 1.2.3.4"), None);
+        assert_eq!(parse_forwarded_ip(&"9".repeat(200)), None);
+        assert_eq!(parse_forwarded_ip(""), None);
     }
 
     fn limiter() -> (LoginLimiter, Instant) {

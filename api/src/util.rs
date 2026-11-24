@@ -157,6 +157,9 @@ pub struct PreauthEmailDetails {
     pub address: String,
     pub subject: String,
     pub template: String,
+    /// Mark the link as spendable once (sign-in links). Invitation links stay
+    /// reusable for their 24 hours, as the email tells people they are.
+    pub single_use: bool,
 }
 
 pub async fn send_preauth_email(
@@ -177,6 +180,12 @@ pub async fn send_preauth_email(
     else {
         return Err("Can't create redirect claim".to_string());
     };
+    let Ok(single_use_claim) = CustomClaim::try_from((
+        String::from("su"),
+        if email.single_use { "1" } else { "0" }.to_string(),
+    )) else {
+        return Err("Can't create single-use claim".to_string());
+    };
 
     // use a default token builder with the same PASETO version and purpose
     let Ok(token) = PasetoBuilder::<V4, Local>::default()
@@ -185,6 +194,7 @@ pub async fn send_preauth_email(
         .set_claim(TokenIdentifierClaim::from("ev"))
         .set_claim(SubjectClaim::from(email.address.as_str()))
         .set_claim(redirect_claim)
+        .set_claim(single_use_claim)
         .build(key)
     else {
         return Err("Error building token".to_string());
@@ -352,6 +362,28 @@ pub async fn log_audit(
         Err(e) => {
             log::error!("Failed to write audit log: {e}");
         }
+    }
+}
+
+/// Like [`log_audit`], recording who made the request.
+pub async fn log_audit_from(
+    pool: &PgPool,
+    client: &crate::login_guard::ClientMeta,
+    user_id: Option<String>,
+    action: &str,
+    metadata: Option<JsonValue>,
+) {
+    let audit_entry = audit_log::AuditLogInsert {
+        user_id,
+        action: action.to_string(),
+        entity_type: "auth".to_string(),
+        entity_id: None,
+        metadata,
+        ip_address: client.ip.clone(),
+        user_agent: client.user_agent.clone(),
+    };
+    if let Err(e) = audit_log::insert(pool, audit_entry).await {
+        log::error!("Failed to write audit log: {e}");
     }
 }
 

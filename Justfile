@@ -85,6 +85,67 @@ migrate-revert:
 	docker-compose up -d db
 	cd api && cargo sqlx migrate revert --database-url "{{LOCAL_DB_URL}}"
 
+# Alert when POST /api/login volume spikes (login-email abuse). Idempotent.
+# Creates a log-based counter metric, an email notification channel and an
+# alert policy in the production project. Normal traffic is ~5-20 requests a
+# day, so more than 60 in an hour is not a busy LAN night, it is a script.
+# Usage: just monitoring-login-alert you@example.com
+monitoring-login-alert email project="calandar-367920" service="calandar-api-production":
+	#!/usr/bin/env bash
+	set -euo pipefail
+	METRIC=calandar_login_requests
+	CHANNEL_NAME="caLANdar login alerts ({{email}})"
+	POLICY_NAME="caLANdar: unusual /login volume"
+
+	if ! gcloud logging metrics describe "${METRIC}" --project "{{project}}" >/dev/null 2>&1; then
+		gcloud logging metrics create "${METRIC}" --project "{{project}}" \
+			--description "POST /api/login requests to {{service}}" \
+			--log-filter 'resource.type="cloud_run_revision" AND resource.labels.service_name="{{service}}" AND httpRequest.requestMethod="POST" AND httpRequest.requestUrl=~"/api/login$"'
+	fi
+
+	CHANNEL=$(gcloud alpha monitoring channels list --project "{{project}}" \
+		--filter "displayName=\"${CHANNEL_NAME}\"" --format 'value(name)')
+	if [[ -z "${CHANNEL}" ]]; then
+		CHANNEL=$(gcloud alpha monitoring channels create --project "{{project}}" \
+			--display-name "${CHANNEL_NAME}" --type email \
+			--channel-labels "email_address={{email}}" --format 'value(name)')
+	fi
+
+	if [[ -z "$(gcloud alpha monitoring policies list --project "{{project}}" \
+		--filter "displayName=\"${POLICY_NAME}\"" --format 'value(name)')" ]]; then
+		POLICY_FILE=$(mktemp)
+		cat > "${POLICY_FILE}" <<JSON
+	{
+	  "displayName": "${POLICY_NAME}",
+	  "combiner": "OR",
+	  "notificationChannels": ["${CHANNEL}"],
+	  "documentation": {
+	    "content": "More than 60 sign-in link requests in an hour. Check Cloud Run request logs for /api/login (user agent, volume) and the audit log for auth.login_requested. See the login hardening PR for background.",
+	    "mimeType": "text/markdown"
+	  },
+	  "conditions": [{
+	    "displayName": "/api/login requests > 60 per hour",
+	    "conditionThreshold": {
+	      "filter": "metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"",
+	      "comparison": "COMPARISON_GT",
+	      "thresholdValue": 60,
+	      "duration": "0s",
+	      "aggregations": [{
+	        "alignmentPeriod": "3600s",
+	        "perSeriesAligner": "ALIGN_SUM",
+	        "crossSeriesReducer": "REDUCE_SUM"
+	      }],
+	      "trigger": {"count": 1}
+	    }
+	  }],
+	  "alertStrategy": {"autoClose": "86400s"}
+	}
+	JSON
+		gcloud alpha monitoring policies create --project "{{project}}" --policy-from-file "${POLICY_FILE}"
+		rm -f "${POLICY_FILE}"
+	fi
+	echo "Login volume alert is in place -> {{email}}"
+
 update-sqlx:
 	#!/usr/bin/env bash
 	set -euxo pipefail

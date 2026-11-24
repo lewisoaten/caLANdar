@@ -84,6 +84,27 @@ test("buildAuditQuery maps filters to API params", () => {
   });
 });
 
+describe("getActionDescription sign-in events", () => {
+  const auth = (action: string, extra: object = {}) =>
+    getActionDescription(
+      entry({ action, entityType: "auth", ipAddress: "203.0.113.7", ...extra }),
+    );
+
+  test("tells requested, failed and successful sign-ins apart", () => {
+    expect(auth("auth.login")).toBe("User logged in (from 203.0.113.7)");
+    expect(auth("auth.login_requested")).toBe(
+      "Sign-in link requested (from 203.0.113.7)",
+    );
+    expect(
+      auth("auth.login_failed", { metadata: { reason: "link_already_used" } }),
+    ).toBe("Failed sign-in: link already used (from 203.0.113.7)");
+  });
+
+  test("leaves the address out when none was recorded", () => {
+    expect(auth("auth.login", { ipAddress: null })).toBe("User logged in");
+  });
+});
+
 describe("getActionDescription", () => {
   test("keeps the existing formatting", () => {
     expect(getActionDescription(entry({}))).toBe(

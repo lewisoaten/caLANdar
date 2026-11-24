@@ -148,9 +148,19 @@ export const getActionDescription = (log: AuditLogEntry): string => {
   let description = "";
 
   switch (entity) {
-    case "auth":
-      description = "User logged in";
+    case "auth": {
+      // Sign-in events carry the caller's address, which is what tells a real
+      // user from a script, so it goes in the text.
+      const from = log.ipAddress ? ` (from ${log.ipAddress})` : "";
+      if (action === "login_requested")
+        description = `Sign-in link requested${from}`;
+      else if (action === "login_failed") {
+        const reason =
+          m.reason === "link_already_used" ? "link already used" : "";
+        description = withDetail("Failed sign-in", reason || undefined) + from;
+      } else description = `User logged in${from}`;
       break;
+    }
     case "event": {
       const title = str(m.title);
       const quoted = title ? `"${title}"` : undefined;

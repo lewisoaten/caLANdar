@@ -152,6 +152,7 @@ pub async fn post(
         address: email.clone(),
         subject: format!("{} - caLANdar Invitation", event.title),
         template: "email_invitation.html.tera".to_string(),
+        single_use: false,
     };
 
     match send_preauth_email(
@@ -280,6 +281,7 @@ pub async fn resend(
         address: email.clone(),
         subject: format!("{} - caLANdar Invitation", event.title),
         template: "email_invitation.html.tera".to_string(),
+        single_use: false,
     };
 
     match send_preauth_email(

@@ -12,7 +12,8 @@ use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
 
 use crate::auth::PasetoToken;
-use crate::login_guard::{ClientIp, LoginLimiter, Turnstile, TurnstileError};
+use crate::login_guard::{ClientMeta, LoginLimiter, Turnstile, TurnstileError};
+use crate::repositories::login_token;
 
 use crate::util::{send_preauth_email, PreauthEmailDetails};
 
@@ -36,7 +37,8 @@ custom_errors!(LoginError, BadRequest, TooManyRequests);
 #[allow(clippy::too_many_arguments)]
 pub async fn login(
     login_request: Json<LoginRequest>,
-    client_ip: ClientIp,
+    client: ClientMeta,
+    pool: &State<sqlx::PgPool>,
     limiter: &State<LoginLimiter>,
     turnstile: &State<Turnstile>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
@@ -48,8 +50,9 @@ pub async fn login(
 
     let throttled = |limited: &crate::login_guard::Limited| {
         log::warn!(
-            "login throttled for {email} from {:?}, retry in {}s",
-            client_ip.0,
+            "login throttled for {email} from {:?} ({:?}), retry in {}s",
+            client.ip,
+            client.user_agent,
             limited.retry_after.as_secs()
         );
         LoginError::TooManyRequests(
@@ -62,18 +65,23 @@ pub async fn login(
     // the caller has proven they are human, so a script that cannot solve the
     // CAPTCHA can't lock anyone out or use up the shared allowance.
     limiter
-        .peek(&email, client_ip.0.as_deref())
+        .peek(&email, client.ip.as_deref())
         .map_err(|l| throttled(&l))?;
 
     match turnstile
         .verify(
             login_request.turnstile_token.as_deref(),
-            client_ip.0.as_deref(),
+            client.ip.as_deref(),
         )
         .await
     {
         Ok(()) => {}
         Err(TurnstileError::Missing | TurnstileError::Rejected) => {
+            log::warn!(
+                "login CAPTCHA failed for {email} from {:?} ({:?})",
+                client.ip,
+                client.user_agent
+            );
             return Err(LoginError::BadRequest(
                 "Could not verify you are human. Please refresh and try again.".to_string(),
             ));
@@ -88,7 +96,7 @@ pub async fn login(
     // Re-check and record together, so two concurrent requests can't both
     // slip under a limit that only has room for one.
     limiter
-        .check(&email, client_ip.0.as_deref())
+        .check(&email, client.ip.as_deref())
         .map_err(|l| throttled(&l))?;
 
     let mut context = Context::new();
@@ -100,9 +108,10 @@ pub async fn login(
         .map_or("", |redirect| redirect);
 
     let email_details = PreauthEmailDetails {
-        address: email,
+        address: email.clone(),
         subject: "Calandar Email Verification".to_string(),
         template: "email_verification.html.tera".to_string(),
+        single_use: true,
     };
 
     match send_preauth_email(
@@ -116,7 +125,11 @@ pub async fn login(
     )
     .await
     {
-        Ok(()) => Ok(Json(LoginResponse {})),
+        Ok(()) => {
+            crate::util::log_audit_from(pool, &client, Some(email), "auth.login_requested", None)
+                .await;
+            Ok(Json(LoginResponse {}))
+        }
         Err(e) => {
             // The cause (Resend, templating) is for our logs, not the caller.
             log::error!("Error sending login email: {e}");
@@ -147,6 +160,7 @@ pub struct VerifyEmailResponse {
 #[post("/verify-email", format = "json", data = "<verify_email_request>")]
 pub async fn verify_email(
     verify_email_request: Json<VerifyEmailRequest>,
+    client: ClientMeta,
     key: &State<PasetoSymmetricKey<V4, Local>>,
     pool: &State<sqlx::PgPool>,
 ) -> Result<Json<VerifyEmailResponse>, rocket::response::status::BadRequest<String>> {
@@ -157,6 +171,13 @@ pub async fn verify_email(
         .check_claim(TokenIdentifierClaim::from("ev"))
         .parse(&verify_email_request.token, key)
     else {
+        // Expired or forged: we can't tell whose, so this goes to the logs
+        // rather than the audit table, which anyone could otherwise fill.
+        log::warn!(
+            "sign-in link rejected (invalid or expired) from {:?} ({:?})",
+            client.ip,
+            client.user_agent
+        );
         return Err(rocket::response::status::BadRequest(
             "Error parsing token".to_string(),
         ));
@@ -174,6 +195,38 @@ pub async fn verify_email(
     // Verification links sent before sign-in normalised the address still
     // carry it as typed.
     let email = crate::util::normalise_email(&typed_token.sub);
+
+    // Sign-in links can be spent once. (Invitation links are reusable, and
+    // tokens issued before this check carry no flag; both expire on their own.)
+    if typed_token.su.as_deref() == Some("1") {
+        match login_token::consume(pool, &verify_email_request.token).await {
+            Ok(true) => {}
+            Ok(false) => {
+                log::warn!(
+                    "sign-in link for {email} reused from {:?} ({:?})",
+                    client.ip,
+                    client.user_agent
+                );
+                crate::util::log_audit_from(
+                    pool,
+                    &client,
+                    Some(email),
+                    "auth.login_failed",
+                    Some(json::json!({ "reason": "link_already_used" })),
+                )
+                .await;
+                return Err(rocket::response::status::BadRequest(
+                    "This sign-in link has already been used. Request a new one.".to_string(),
+                ));
+            }
+            Err(e) => {
+                log::error!("Could not record sign-in link use: {e}");
+                return Err(rocket::response::status::BadRequest(
+                    "Could not complete sign-in. Please try again.".to_string(),
+                ));
+            }
+        }
+    }
 
     // create a new long-lasting token for the user for subsequent api requests
     let Ok(expiration_claim) =
@@ -200,15 +253,7 @@ pub async fn verify_email(
     let is_admin = crate::auth::is_admin(&email);
 
     // Log successful login
-    crate::util::log_audit(
-        pool,
-        Some(email.clone()),
-        "auth.login".to_string(),
-        "auth".to_string(),
-        None,
-        None,
-    )
-    .await;
+    crate::util::log_audit_from(pool, &client, Some(email.clone()), "auth.login", None).await;
 
     Ok(Json(VerifyEmailResponse {
         token,
