@@ -32,6 +32,7 @@ mod auth;
 mod controllers;
 mod dev_seed;
 mod live;
+mod login_guard;
 mod repositories;
 mod routes;
 mod scheduler;
@@ -239,6 +240,8 @@ fn build_rocket(
         .manage::<Resend>(email_sender)
         .manage::<String>(steam_api_key)
         .manage::<Tera>(tera)
+        .manage(login_guard::LoginLimiter::default())
+        .manage(login_guard::Turnstile::from_env())
         .mount("/", routes![all_options])
         // The SSE stream has no OpenAPI responder, so it is mounted apart.
         .mount(

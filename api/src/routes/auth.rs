@@ -12,6 +12,7 @@ use rocket_okapi::openapi;
 use rusty_paseto::prelude::*;
 
 use crate::auth::PasetoToken;
+use crate::login_guard::{ClientIp, LoginLimiter, Turnstile, TurnstileError};
 
 use crate::util::{send_preauth_email, PreauthEmailDetails};
 
@@ -24,17 +25,58 @@ pub struct LoginResponse {}
 pub struct LoginRequest {
     email: String,
     redirect: Option<String>,
+    /// Cloudflare Turnstile token; required once `TURNSTILE_SECRET_KEY` is set.
+    turnstile_token: Option<String>,
 }
+
+custom_errors!(LoginError, BadRequest, TooManyRequests);
 
 #[openapi(tag = "Auth")]
 #[post("/login", format = "json", data = "<login_request>")]
+#[allow(clippy::too_many_arguments)]
 pub async fn login(
     login_request: Json<LoginRequest>,
+    client_ip: ClientIp,
+    limiter: &State<LoginLimiter>,
+    turnstile: &State<Turnstile>,
     key: &State<PasetoSymmetricKey<V4, Local>>,
     sender: &State<Resend>,
     tera: &State<Tera>,
-) -> Result<Json<LoginResponse>, rocket::response::status::BadRequest<String>> {
+) -> Result<Json<LoginResponse>, LoginError> {
     let email = crate::util::normalise_email(&login_request.email);
+    crate::util::validate_email(&email).map_err(LoginError::BadRequest)?;
+
+    // Cheapest checks first: throttle before spending a Turnstile round trip,
+    // and well before anything is emailed.
+    if let Err(limited) = limiter.check(&email, client_ip.0.as_deref()) {
+        log::warn!(
+            "login throttled for {email} from {:?}, retry in {}s",
+            client_ip.0,
+            limited.retry_after.as_secs()
+        );
+        return Err(LoginError::TooManyRequests(
+            "Too many sign-in attempts. Please wait a while and try again.".to_string(),
+        ));
+    }
+    match turnstile
+        .verify(
+            login_request.turnstile_token.as_deref(),
+            client_ip.0.as_deref(),
+        )
+        .await
+    {
+        Ok(()) => {}
+        Err(TurnstileError::Missing | TurnstileError::Rejected) => {
+            return Err(LoginError::BadRequest(
+                "Could not verify you are human. Please refresh and try again.".to_string(),
+            ));
+        }
+        Err(TurnstileError::Unavailable) => {
+            return Err(LoginError::BadRequest(
+                "Could not verify you are human right now. Please try again shortly.".to_string(),
+            ));
+        }
+    }
 
     let mut context = Context::new();
     context.insert("name", &email);
@@ -62,9 +104,13 @@ pub async fn login(
     .await
     {
         Ok(()) => Ok(Json(LoginResponse {})),
-        Err(e) => Err(rocket::response::status::BadRequest(format!(
-            "Error sending login email due to: {e}"
-        ))),
+        Err(e) => {
+            // The cause (Resend, templating) is for our logs, not the caller.
+            log::error!("Error sending login email: {e}");
+            Err(LoginError::BadRequest(
+                "Could not send the login email. Please try again.".to_string(),
+            ))
+        }
     }
 }
 

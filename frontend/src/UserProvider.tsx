@@ -17,8 +17,11 @@ interface IUserContext {
   isAdmin: boolean;
 }
 
+/** Message of the error `signIn` rejects with when the server throttles it. */
+export const RATE_LIMITED = "rate-limited";
+
 interface IUserDispatchContext {
-  signIn: (email: string) => Promise<Response>;
+  signIn: (email: string, turnstileToken?: string) => Promise<Response>;
   verifyEmail: (token: string) => Promise<Response>;
   signOut: () => void;
   isSignedIn: () => boolean;
@@ -71,7 +74,7 @@ function UserProvider({ children }: Props) {
     locationRef.current = location;
   }, [navigate, location]);
 
-  function signIn(email: string) {
+  function signIn(email: string, turnstileToken?: string) {
     const user_details = getStoredAccount();
     if (user_details.loggedIn) {
       return user_details;
@@ -86,10 +89,13 @@ function UserProvider({ children }: Props) {
       body: JSON.stringify({
         email: email,
         redirect: locationRef.current.state?.from?.pathname,
+        turnstileToken,
       }),
     }).then((response) => {
       if (response.status === 200) {
         return response.json();
+      } else if (response.status === 429) {
+        throw new Error(RATE_LIMITED);
       } else {
         throw new Error("Invalid email");
       }

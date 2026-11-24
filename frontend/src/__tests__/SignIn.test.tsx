@@ -74,4 +74,26 @@ describe("SignIn", () => {
     fireEvent.click(screen.getByRole("button", { name: /use another email/i }));
     expect(screen.getByLabelText(/email/i)).toHaveValue("sam@example.com");
   });
+
+  test("tells the user when the server throttles sign-in", async () => {
+    server.use(
+      http.post("/api/login", () => HttpResponse.json({}, { status: 429 })),
+    );
+    renderSignIn();
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: "sam@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /send login link/i }));
+    expect(
+      await screen.findByText(/too many sign-in attempts/i),
+    ).toBeInTheDocument();
+  });
+
+  test("shows no CAPTCHA when no Turnstile site key is configured", () => {
+    renderSignIn();
+    expect(screen.queryByTestId("turnstile")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /send login link/i }),
+    ).toBeEnabled();
+  });
 });

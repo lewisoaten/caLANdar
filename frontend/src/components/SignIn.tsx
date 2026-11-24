@@ -7,7 +7,8 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import ArrowForwardSharp from "@mui/icons-material/ArrowForwardSharp";
 import MarkEmailReadSharp from "@mui/icons-material/MarkEmailReadSharp";
-import { UserDispatchContext } from "../UserProvider";
+import { RATE_LIMITED, UserDispatchContext } from "../UserProvider";
+import TurnstileWidget, { TURNSTILE_SITE_KEY } from "./TurnstileWidget";
 import { colors } from "./hl";
 import AuthLayout, {
   AuthKicker,
@@ -28,6 +29,8 @@ export default function SignIn() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -49,17 +52,23 @@ export default function SignIn() {
 
     setError(null);
     setLoading(true);
-    Promise.resolve(signIn(value))
+    Promise.resolve(signIn(value, turnstileToken ?? undefined))
       .then(() => {
         setSubmitted(true);
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         setError(
-          "We couldn't send a login link to that address. Check it's the one your invite came to.",
+          e instanceof Error && e.message === RATE_LIMITED
+            ? "Too many sign-in attempts. Please wait a while and try again."
+            : "We couldn't send a login link to that address. Check it's the one your invite came to.",
         );
         inputRef.current?.focus();
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        // A Turnstile token is single use.
+        setTurnstileReset((n) => n + 1);
+      });
   };
 
   const reset = () => {
@@ -140,10 +149,15 @@ export default function SignIn() {
                 sx={bigInputSx}
               />
             </Box>
+            <TurnstileWidget
+              onToken={setTurnstileToken}
+              resetKey={turnstileReset}
+            />
             <Button
               type="submit"
               variant="contained"
               size="large"
+              disabled={Boolean(TURNSTILE_SITE_KEY) && !turnstileToken}
               loading={loading}
               loadingPosition="end"
               endIcon={<ArrowForwardSharp aria-hidden="true" />}

@@ -126,7 +126,9 @@ function VerifyProgress({ progress }: { progress: number }) {
   );
 }
 
-type Phase = "form" | "verifying" | "done" | "error";
+// "confirm" waits for a click: a link opened by a mail scanner or preview bot
+// must not sign anyone in (or spend the one-time token) on page load.
+type Phase = "form" | "confirm" | "verifying" | "done" | "error";
 
 export default function VerifyEmail() {
   const { verifyEmail, isSignedIn } = useContext(UserDispatchContext);
@@ -141,9 +143,8 @@ export default function VerifyEmail() {
   );
 
   const [token, setToken] = useState(urlToken ?? "");
-  const [phase, setPhase] = useState<Phase>(urlToken ? "verifying" : "form");
+  const [phase, setPhase] = useState<Phase>(urlToken ? "confirm" : "form");
   const [fieldError, setFieldError] = useState<string | null>(null);
-  const started = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -172,10 +173,6 @@ export default function VerifyEmail() {
   useEffect(() => {
     if (isSignedIn()) {
       navigate(location.state?.from || "/events");
-    } else if (urlToken && !started.current) {
-      // Guarded so StrictMode's double effect doesn't spend the token twice.
-      started.current = true;
-      verify(urlToken);
     }
     // Only on first render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,7 +187,36 @@ export default function VerifyEmail() {
 
   return (
     <AuthLayout>
-      {showForm ? (
+      {phase === "confirm" ? (
+        <>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <AuthKicker>Almost there</AuthKicker>
+            <AuthTitle size="clamp(30px,4vw,40px)">Confirm sign-in</AuthTitle>
+            <Typography
+              sx={{
+                m: 0,
+                fontSize: 16,
+                lineHeight: 1.6,
+                color: colors.textMuted,
+              }}
+            >
+              Press the button to finish signing in to caLANdar. If you
+              didn&apos;t ask for this, close this page.
+            </Typography>
+          </Box>
+          <Button
+            type="button"
+            variant="contained"
+            size="large"
+            fullWidth
+            autoFocus
+            sx={authCtaSx}
+            onClick={() => urlToken && verify(urlToken)}
+          >
+            Sign in
+          </Button>
+        </>
+      ) : showForm ? (
         <>
           <Box sx={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {phase === "error" ? (

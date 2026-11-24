@@ -328,6 +328,7 @@ cloudrun-deploy image_url:
 	# - VAPID_PRIVATE_KEY signs Web Push (§8), on both services, since the
 	#   stream instance's ticks send pushes too;
 	# - GOOGLE_PLACES_API_KEY (optional, add it by hand) turns on food search.
+	# - TURNSTILE_SECRET_KEY (optional, add it by hand) turns on the sign-in CAPTCHA.
 	ensure_secret() {
 		if ! gcloud secrets describe "$1" --project "${GCP_PROJECT_ID}" >/dev/null 2>&1; then
 			head -c 32 /dev/urandom | base64 | tr '+/' '-_' | tr -d '=\n' | gcloud secrets create "$1" \
@@ -343,6 +344,9 @@ cloudrun-deploy image_url:
 	if has_secret LIVE_TICK_SECRET; then LIVE_SECRETS="${LIVE_SECRETS},LIVE_TICK_SECRET=LIVE_TICK_SECRET:latest"; fi
 	if has_secret VAPID_PRIVATE_KEY; then PUSH_SECRET=",VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest"; fi
 	if has_secret GOOGLE_PLACES_API_KEY; then LIVE_SECRETS="${LIVE_SECRETS},GOOGLE_PLACES_API_KEY=GOOGLE_PLACES_API_KEY:latest"; fi
+	# Optional: create the secret by hand (Cloudflare Turnstile secret key) to put a
+	# CAPTCHA on sign-in; the frontend needs VITE_TURNSTILE_SITE_KEY to match.
+	if has_secret TURNSTILE_SECRET_KEY; then LIVE_SECRETS="${LIVE_SECRETS},TURNSTILE_SECRET_KEY=TURNSTILE_SECRET_KEY:latest"; fi
 
 	# caLANdar Live streams are served by a dedicated service from the same
 	# image (docs/live-event/DESIGN.md §3.8): long request timeout for SSE,

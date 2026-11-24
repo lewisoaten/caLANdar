@@ -88,7 +88,26 @@ describe("VerifyEmail", () => {
     expect(input).toHaveAttribute("aria-invalid", "true");
   });
 
-  test("verifies a token from the URL automatically and shows progress", async () => {
+  test("waits for a click before spending a token from the URL", async () => {
+    // Mail scanners open links in a headless browser; loading the page alone
+    // must not sign anyone in.
+    let calls = 0;
+    server.use(
+      http.post("/api/verify-email", () => {
+        calls += 1;
+        return HttpResponse.json({}, { status: 200 });
+      }),
+    );
+    renderWithRouter(routes, ["/verify_email?token=test-token-123"]);
+
+    expect(
+      screen.getByRole("heading", { name: /confirm sign-in/i }),
+    ).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(calls).toBe(0);
+  });
+
+  test("verifies the URL token on click and shows progress", async () => {
     let received: unknown = null;
     server.use(
       http.post("/api/verify-email", async ({ request }) => {
@@ -101,6 +120,7 @@ describe("VerifyEmail", () => {
     );
     renderWithRouter(routes, ["/verify_email?token=test-token-123"]);
 
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
     expect(
       screen.getByRole("progressbar", { name: /sign-in progress/i }),
     ).toBeInTheDocument();
@@ -118,6 +138,7 @@ describe("VerifyEmail", () => {
       ),
     );
     renderWithRouter(routes, ["/verify_email?token=bad-token"]);
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
     expect(
       await screen.findByRole("heading", { name: /link didn't work/i }),
